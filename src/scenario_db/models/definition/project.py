@@ -33,6 +33,10 @@ class PowerReference(BaseScenarioModel):
     # synthetic measurements are used last, after every listed source.
     source_priority: list[Literal["explicit", "measurement", "prediction"]] = Field(
         default_factory=lambda: ["explicit", "measurement", "prediction"], min_length=1, max_length=3)
+    # REF-02: current variant id -> previous project's variant id, when the names differ
+    mapping: dict[str, str] = Field(default_factory=dict)
+    # REF-02: design conditions compared with the previous variant (None = resolution, fps, HDR, sensor, IS version, bitrate ...)
+    compare_keys: list[str] | None = Field(default=None, max_length=20)
 
 
 class ThermalWatch(BaseScenarioModel):

@@ -89,6 +89,8 @@ class ReportStatusRequest(BaseModel):
     status: str = Field(pattern="^(draft|published)$")
     reviewer: str | None = Field(default=None, max_length=120)
     note: str | None = Field(default=None, max_length=2000)
+    # AUTO-02: publishing a report with blocking gaps (uncovered KPI, ...) needs an explicit acknowledgement
+    acknowledge_gaps: bool = False
 
     @model_validator(mode="after")
     def _publish_needs_review(self) -> ReportStatusRequest:

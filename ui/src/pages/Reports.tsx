@@ -31,7 +31,7 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
   }
   const regenerate = (r: ReportMeta) => created(r.scope === 'project' && r.project_ref ? archApi.createProjectReport(r.project_ref) : archApi.createReport(r.run_ids[0], r.title))
   // U16/R14: publishing records who reviewed it and why; going back to draft is one click
-  const [review, setReview] = useState<{ reviewer: string; note: string } | null>(null)
+  const [review, setReview] = useState<{ reviewer: string; note: string; acknowledge_gaps?: boolean } | null>(null)
   const [showStale, setShowStale] = useState(false)
   const frame = useRef<HTMLIFrameElement>(null)
   useEffect(() => { setReview(null); setMsg(undefined); setShowStale(false) }, [id]) // a review draft belongs to one report
@@ -100,7 +100,12 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
         <b style={{ fontSize: 13 }}>게시 검토 기록</b>
         <input className="input" placeholder="검토자" value={review.reviewer} onChange={(e) => setReview({ ...review, reviewer: e.target.value })} style={{ width: 140 }} aria-label="검토자" />
         <input className="input" placeholder="검토 의견 (예: spec · 실측 대조 확인, IQ 평가 대기 2건)" value={review.note} onChange={(e) => setReview({ ...review, note: e.target.value })} style={{ flexGrow: 1, minWidth: 260 }} aria-label="검토 의견" />
-        <button className="btn primary" disabled={!review.reviewer.trim() || !review.note.trim()} onClick={() => publish(cur)}>게시</button>
+        {(cur.summary?.blockers ?? 0) > 0 && <label className="faint" style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}
+          title="KPI 미탐색 등 게시 전 확인 항목 — 사유를 검토 의견에 남기세요">
+          <input type="checkbox" checked={!!review.acknowledge_gaps} onChange={(e) => setReview({ ...review, acknowledge_gaps: e.target.checked })} />
+          확인 필요 {cur.summary?.blockers}건을 확인함</label>}
+        <button className="btn primary" disabled={!review.reviewer.trim() || !review.note.trim() || ((cur.summary?.blockers ?? 0) > 0 && !review.acknowledge_gaps)}
+          onClick={() => publish(cur)}>게시</button>
         <button className="btn" onClick={() => setReview(null)}>취소</button>
       </div>}
       {cur?.review && <div className="faint" style={{ fontSize: 12 }}>최근 검토: {cur.review.status} · {cur.review.reviewer ?? cur.review.by ?? '—'} · {cur.review.at.slice(0, 16).replace('T', ' ')}{cur.review.note ? ` — ${cur.review.note}` : ''}{(cur.review_count ?? 0) > 1 ? ` (이력 ${cur.review_count}건)` : ''}</div>}

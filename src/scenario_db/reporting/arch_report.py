@@ -78,6 +78,10 @@ def build_snapshot(
                               if pred else rec.get("assumed_ratio")),
             # input provenance behind the verdict (RISK-01 validity, COV-01 SW timing source, DATA-02 sanity)
             "inputs": _inputs(v.get("design_conditions") or {}),
+            # REF-02/04: conditions compared with the previous project's same variant
+            "conditions": _conditions(v.get("design_conditions") or {}),
+            # SW-02/03: stage time vs frame period and the SW-growth slices (objective statistic)
+            "sw": _sw_detail(v, (run["spec"].get("objective") or {}).get("statistic")),
         })
 
     clocks = []
@@ -236,6 +240,33 @@ _INPUT_KEYS = ("sw_timing_source", "sw_timing_case", "sensor_support", "resoluti
 
 def _inputs(dc: dict[str, Any]) -> dict[str, Any]:
     return {k: dc.get(k) for k in _INPUT_KEYS if dc.get(k) is not None}
+
+
+COMPARE_KEYS = ("resolution", "fps", "hdr", "sensor_place", "sensor_board", "sensor_input_fps", "is_version",
+                "record_bitrate_mbps", "subscenario", "dvfs_sn")
+
+
+def _conditions(dc: dict[str, Any]) -> dict[str, Any]:
+    return {k: dc.get(k) for k in COMPARE_KEYS if dc.get(k) is not None}
+
+
+def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:
+    """SW-02: the worst stage's HW + SW time against the frame period (how many frames are in flight) and the longest
+    SW task; SW-03: power and fps verdict per SW-growth slice at the objective statistic."""
+    m = v.get("sw_margin") or {}
+    w = m.get("worst") or {}
+    period = v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None)
+    chain = (w.get("hw_ms") or 0) + (w.get("sw_ms") or 0) if w else None
+    stat = statistic or "max"
+    growth = sorted(({"scale": s.get("runtime_scale"), "total_mw": (s.get("power") or {}).get("total_mw"),
+                      "ok": (s.get("verdict") or {}).get("status") == "ok",
+                      "nrt_fill_pct": ((s.get("stages") or {}).get("nrt") or {}).get("fill_pct")}
+                     for s in v.get("slices") or [] if s.get("statistic") == stat and s.get("runtime_scale") is not None),
+                    key=lambda g: g["scale"])
+    return {"stage": w.get("stage"), "hw_ms": w.get("hw_ms"), "sw_ms": w.get("sw_ms"), "bottleneck_ms": w.get("bottleneck_ms"),
+            "period_ms": period, "in_flight": (int(-(-chain // period)) if chain and period else None),
+            "growth_tolerance": m.get("growth_tolerance"), "growth_tolerance_fixed": m.get("growth_tolerance_fixed"),
+            "growth_tested_max": m.get("growth_tested_max"), "growth": growth}
 
 
 def _ctx(c: dict[str, Any]) -> dict[str, Any]:
@@ -499,7 +530,11 @@ def _risk_register(reg: list[dict[str, Any]], scope: dict[str, Any]) -> str:
               + f"</td><td class=meta>{escape(', '.join(_short(a) for a in aff[:6]) + (f' 외 {len(aff) - 6}' if len(aff) > 6 else '')) or '전체'}</td>"
               + ("<td class=meta><ol style='margin:0 0 0 16px;padding:0'>" + "".join(f"<li>{escape(x)}</li>" for x in checks[:4]) + "</ol></td>"
                  if checks else "<td class=meta>—</td>")
-              + f"<td>{escape(r.get('mitigation') or '—')}</td><td>{escape(r.get('owner') or '—')}</td>"
+              + f"<td>{escape(r.get('mitigation') or '—')}"
+              + (f"<div class=ok style='font-size:12px'>종료 근거: {escape(r['closure_evidence'])}</div>" if r.get("closure_evidence") else "")
+              + f"</td><td>{escape(r.get('owner') or '—')}"
+              + (f"<div class=meta>기한 {escape(str(r['due_date']))}</div>" if r.get("due_date") else "")
+              + ("<div class=warn style='font-size:12px'>결정 필요</div>" if r.get("decision_needed") else "") + "</td>"
               f"<td>{escape(_STATUS.get(str(r.get('status')), str(r.get('status'))))}</td><td>{escape(_TREND.get(r.get('trend') or '', str(r.get('trend'))))}</td></tr>")
     return h + "</table>"
 

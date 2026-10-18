@@ -3,8 +3,21 @@
 from __future__ import annotations
 
 from sqlalchemy import (
-    BigInteger, CheckConstraint, Column, DateTime, ForeignKey, ForeignKeyConstraint, Identity, Index, Integer, Text,
-    UniqueConstraint, func, text,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Identity,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -231,6 +244,11 @@ class ReviewRisk(Base):
     # RISK-01: confirmed · model_limit · input_unverified; checks = what to confirm first (rule-generated)
     validity = Column(Text)
     checks = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    # RISK-02 rule priority (higher = check first within a severity); RISK-03 tracking kept by people
+    priority = Column(Integer, nullable=False, server_default=text("0"))
+    decision_needed = Column(Boolean, nullable=False, server_default=text("false"))
+    due_date = Column(Date)
+    closure_evidence = Column(Text)
     owner = Column(Text)
     status = Column(Text, nullable=False, server_default=text("'open'"))
     note = Column(Text)

@@ -17,6 +17,8 @@ globals:
       project_ref: proj-<전과제>     # 같은 DB의 전과제, variant id로 매칭
       values_mw: {cam-rec-r1-uhd120: 2000}   # 전과제가 DB에 없을 때 직접 지정
       source_priority: [explicit, measurement, prediction]  # 기본값. measurement = silicon 실측만, 합성 실측은 항상 마지막
+      mapping: {cam-rec-r1-uhd30-vdis: cam-rec-r1-uhd30-eis}  # (선택) 현재 id → 전과제 id (이름이 다를 때)
+      compare_keys: [resolution, fps, hdr, sensor_board]       # (선택) 조건 비교 key (없으면 해상도 · fps · HDR · sensor · IS version · bitrate 등)
       tolerance_pct: 3
     sw_growth_budget: 1.2            # (선택) 차기 SW 증가 예산 — 1쪽 요약 조건에 표시
     kpi:                             # (선택) 1쪽 요약 KPI 목록 (없으면 thermal_watch + 전과제 기준 variant)
@@ -53,3 +55,15 @@ E2600 (사외 fixture): `values_mw`는 **SAMPLE 가상 값** — 사내에서는
 | 전력 절감 순서 | ① 최적 clock(DVFS 최소 level · RT 최소 clock) → ② compression(lossless · LLC → lossy) → ③ SW 최적화(task · CPU 배치) → ④ 화질 열화 option(MTNR L0 skip · LowPower 등)은 마지막, IQ 평가 후에만. 권고 조치 · 완화안 · 1쪽 요약이 같은 순서 |
 | 화질 | power option IQ 검토 상태(candidate · iq_eval · adopted · rejected)를 보고서에 고정. 발열 표는 확정 절감(DVFS + IQ 승인)과 IQ 평가 포함 최대를 나눠 표시 |
 | 1쪽 요약 (Tier 0) | 과제 조건(SoC · board · sensor · SW · DVFS · 전과제 기준) · scenario coverage(파생 sub-variant 제외) · KPI scoreboard · 메시지 3 · Top risk · 결정 요청 · 절감 순서 |
+
+## 전과제 비교 · SW · risk 운영 (2026-10-18, 2차)
+| 항목 | 규칙 |
+|---|---|
+| 조건 차이 (REF-02) | 전과제가 DB에 있으면(`project_ref`) 같은 variant의 design_conditions를 `compare_keys`로 비교. 차이가 있으면 "조건 차이 — 판정은 참고"(Medium), fps · 해상도 · SDR→HDR 상향은 spec 상향 |
+| 증감 분해 (REF-03) | 현재 예측 − 전과제 예측의 CPU · IP · BW. 기준이 실측이면 "기준 차이"(실측 − 전과제 예측 총합)를 따로 표시. 지정값(총합)만 있으면 분해 불가 표시 |
+| 성능 (REF-04) | video latency(frame) 변화. spec 상향인데 조건부 · 초과면 `spec_up_no_headroom`(High) |
+| SW timing (SW-02/03) | 최소 여유 stage의 HW + SW 시간 ÷ frame 주기 = 동시 처리 frame 수, 최장 SW task, SW 증가 허용(DVFS 재선택 포함, ≥ = 탐색 최대까지 유지), SW 증가 배율별 전력. `sw_growth_budget`보다 허용이 작으면 `sw_growth_budget`(Medium) |
+| 우선순위 (RISK-02) | 같은 심각도 안에서 고객 기준(성능 5 · 전력/발열/coverage 4 · 화질/SW/CPU 3 · 모델 2 · 데이터 1) × KPI tier(thermal/heavy 2 · base 1.5) × 판정 민감도(예측↔실측 반대 1.0 … 일반 0.5) 순 |
+| 추적 (RISK-03) | risk별 기한 · 종료 근거 · 결정 필요. 종료(closed)는 종료 근거가 있어야 함 (alembic 0031) |
+| 데이터 품질 (DATA-02) | 조건이 다른데 결과가 같은 variant, resolution · fps 미기재, fps 미달로 power 미산출, 출처 미기록 실측, KPI 미탐색(block) |
+| 게시 (AUTO-02) | block 항목이 있으면 `acknowledge_gaps: true` + 검토 의견이 있어야 게시. 게시 기록에 확인한 항목이 남음 |

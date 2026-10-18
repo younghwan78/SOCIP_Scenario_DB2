@@ -161,3 +161,47 @@ def test_kpi_xlsx_is_available_without_previous_project_references():
     sheets = {name: (headers, rows) for name, headers, rows in report_sheets(s)}
     assert 'KPI' in sheets and sheets['KPI'][1][0][0] == 'Missing KPI'
     assert sheets['KPI'][1][0][-1] == '미커버' and '전과제 판정' not in sheets
+
+
+def test_previous_comparison_conditions_spec_up_decomposition_and_latency():
+    from scenario_db.reporting.review_verdict import compare_previous
+
+    cur = row("uhd60", 900.0, conditions={"resolution": "UHD", "fps": 60, "hdr": "HDR10"},
+              power={"total_mw": 900.0, "cpu_mw": 200.0, "hw_mw": 300.0, "bw_mw": 400.0}, latency={"video_frames": 2.5})
+    ref = {"mw": 850.0, "conditions": {"resolution": "UHD", "fps": 30, "hdr": "SDR"},
+           "split": {"cpu_mw": 180.0, "ip_mw": 320.0, "bw_mw": 350.0}, "latency_frames": 2.0}
+    out = compare_previous(cur, ref)
+    assert [d["key"] for d in out["cond_diff"]] == ["fps", "hdr"] and out["spec_up"] == ["fps 30→60", "SDR→HDR10"]
+    assert out["decomp"] == {"CPU": 20.0, "IP": -20.0, "BW": 50.0, "기준 차이": 0.0} and out["latency_delta_frames"] == 0.5
+    assert compare_previous(cur, {"mw": 850.0})["cond_diff"] is None      # explicit value: nothing to compare
+
+
+def test_spec_up_without_headroom_and_condition_diff_risks():
+    up = row("a", 700.0, conditions={"fps": 60}, distribution={"total_mw": {"min": 690.0, "max": 710.0}})
+    same = row("b", 500.0, conditions={"fps": 30, "sensor_board": "new"})
+    s = snap(scenarios=[up, same], references={"a": {"mw": 600.0, "source": "prediction", "conditions": {"fps": 30}},
+                                                "b": {"mw": 600.0, "source": "prediction", "conditions": {"fps": 30, "sensor_board": "old"}}})
+    risks = {r["key"]: r for r in build_risks(s)}
+    assert risks["spec_up_no_headroom"]["affected"] == ["a"] and risks["spec_up_no_headroom"]["severity"] == "high"
+    assert risks["reference_condition_diff"]["affected"] == ["b"]
+    assert all(isinstance(r["priority"], int) for r in risks.values()) and risks["spec_up_no_headroom"]["decision_needed"]
+
+
+def test_sw_growth_budget_and_priority_order():
+    rows = [row("kpi", sw={"growth_tolerance": 1.1}), row("other", sw={"growth_tolerance": 1.3})]
+    s = snap(scenarios=rows, review_context={"policy": {"throughput_model": "pipelined", "sw_growth_budget": 1.2,
+                                                        "kpi": [{"variant_ref": "kpi", "tier": "thermal"}]}, "rows": []})
+    r = next(x for x in build_risks(s) if x["key"] == "sw_growth_budget")
+    assert r["affected"] == ["kpi"] and "×1.2" in r["title"] and r["priority"] > 0
+
+
+def test_data_quality_flags_identical_results_missing_conditions_and_kpi_gaps():
+    from scenario_db.reporting.review_verdict import data_quality
+
+    a = row("f1-fhd120", 691.0, conditions={"resolution": "FHD", "fps": 120}, bw_mbs=3687)
+    b = row("f1-uhd120", 691.0, conditions={"resolution": "UHD", "fps": 120}, bw_mbs=3687)
+    c = row("x", 500.0, conditions={"fps": 30})
+    s = snap(scenarios=[a, b, c], review_context={"policy": {"kpi": [{"variant_ref": "apv"}]}, "rows": []})
+    dq = {d["key"]: d for d in data_quality(s)}
+    assert dq["identical_result"]["variants"] == ["f1-fhd120", "f1-uhd120"] and dq["missing_condition"]["variants"] == ["x"]
+    assert dq["kpi_uncovered"]["level"] == "block"

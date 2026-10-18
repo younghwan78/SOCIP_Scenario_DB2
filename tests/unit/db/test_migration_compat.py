@@ -44,7 +44,7 @@ def test_single_legacy_label_is_normalized_without_replaying_tables(migration_db
     assert params == {"revision": CANONICAL}
 
 
-@pytest.mark.parametrize("head", [CANONICAL, "0025", "0026", "0027", "0028", "0029", "0030"])
+@pytest.mark.parametrize("head", [CANONICAL, "0025", "0026", "0027", "0028", "0029", "0030", "0031"])
 def test_verified_descendant_preserves_its_head_and_removes_only_old_label(migration_db, head):
     db, _, scripts = migration_db
     db.execute.return_value.scalars.return_value = ["0024", head]

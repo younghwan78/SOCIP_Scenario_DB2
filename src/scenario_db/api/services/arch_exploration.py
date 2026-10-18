@@ -1134,7 +1134,8 @@ def _report_summary(snap: dict[str, Any]) -> dict[str, Any] | None:
             "power": {k: cr["power"][k] for k in ("ok", "similar", "over", "total")} | {"missing": len(cr["power"]["missing"])}
             | {"conditional": cr["power"].get("conditional", 0), "flip": len(cr["power"].get("flip") or [])},
             "thermal": {"items": len(cr["thermal"]["items"]), "reach10": sum(1 for i in cr["thermal"]["items"] if i["reach10"])},
-            "power_range_mw": (snap.get("spec_summary") or {}).get("power_range_mw")}
+            "power_range_mw": (snap.get("spec_summary") or {}).get("power_range_mw"),
+            "blockers": len(report_blockers(snap))}
 
 
 def report_detail(r: ArchReport) -> dict[str, Any]:
@@ -1152,8 +1153,17 @@ def get_report(db: Session, report_id: str) -> ArchReport:
     return r
 
 
+def report_blockers(snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """AUTO-02: gaps that must be acknowledged before publishing (frozen snapshot only)."""
+    from scenario_db.reporting.review_verdict import data_quality
+
+    if "criteria" not in snap:
+        return []
+    return [{"key": d["key"], "text": d["text"]} for d in data_quality(snap) if d["level"] == "block"]
+
+
 def set_report_status(db: Session, report_id: str, status: str, *, reviewer: str | None = None,
-                      note: str | None = None, user: str | None = None) -> dict[str, Any]:
+                      note: str | None = None, user: str | None = None, acknowledge_gaps: bool = False) -> dict[str, Any]:
     if status == "published" and (not (reviewer or "").strip() or not (note or "").strip()):
         raise UnprocessableError("publishing requires reviewer and note")
     if status not in {"draft", "published"}:
@@ -1163,9 +1173,14 @@ def set_report_status(db: Session, report_id: str, status: str, *, reviewer: str
     r = db.query(ArchReport).filter_by(id=report_id).populate_existing().with_for_update().one_or_none()
     if r is None:
         raise NotFoundError(f"report not found: {report_id}")
+    blockers = report_blockers(r.snapshot or {}) if status == "published" else []
+    if blockers and not acknowledge_gaps:
+        raise UnprocessableError("게시 전 확인 필요: " + " · ".join(b["text"] for b in blockers)
+                                 + " — 확인했다면 acknowledge_gaps와 함께 사유를 검토 의견에 남기세요")
     r.status = status
     r.review_history = [*(r.review_history or []), {"status": status, "reviewer": (reviewer or "").strip() or None,
-                                                    "note": (note or "").strip() or None, "by": user, "at": _now().isoformat()}]
+                                                    "note": (note or "").strip() or None, "by": user, "at": _now().isoformat(),
+                                                    **({"acknowledged_gaps": [b["key"] for b in blockers]} if blockers else {})}]
     db.commit()
     return _report_meta(r)
 
