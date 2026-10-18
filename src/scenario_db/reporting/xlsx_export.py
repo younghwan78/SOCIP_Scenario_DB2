@@ -124,8 +124,26 @@ def report_sheets(snap: dict[str, Any], meta: dict[str, Any] | None = None) -> l
     info += [[f"리스크 {i}", f"{r['title']} — {r['detail']}"] for i, r in enumerate(c.get("risks") or [], 1)]
     info += [["모델 한계", x] for x in o.get("model_limits") or []]
     sheets: list[Sheet] = [("요약", ["항목", "값"], info)]
-    sheets.append(("권고 조치", ["조치", "대상", "ΔPower mW", "Δ%", "근거", "필요 검증"],
-                   [[a["action"], a["target"], _r(a.get("delta_mw")), _r(a.get("delta_pct"), 2), a["basis"], a["check"]] for a in c.get("actions") or []]))
+    sheets.append(("권고 조치", ["순서", "조치", "대상", "ΔPower mW", "Δ%", "근거", "필요 검증"],
+                   [[a.get("tier_label") or "", a["action"], a["target"], _r(a.get("delta_mw")), _r(a.get("delta_pct"), 2), a["basis"], a["check"]]
+                    for a in c.get("actions") or []]))
+    if snap.get("references"):  # REF-05 / COV-03: the verdicts and KPI board behind the one-page summary
+        from scenario_db.reporting.review_verdict import STATE_LABEL, power_verdicts, scoreboard
+
+        vs = power_verdicts(snap)
+        sheets.append(("전과제 판정", ["variant", "기준 mW", "기준 출처", "예측 mW", "예측 Δ%", "등록", "범위 min", "범위 max", "보정 예측 mW",
+                                  "실측 mW", "실측 Δ%", "실측 출처", "판정 근거", "판정", "예측↔실측 반대", "사유"],
+                       [[v["variant_id"], _r(v["ref_mw"]), v.get("ref_source"), _r(v.get("pred_mw")), _r(v.get("pred_pct"), 2), v.get("registered"),
+                         _r((v.get("band_mw") or [None, None])[0]), _r((v.get("band_mw") or [None, None])[1]), _r(v.get("corr_mw")),
+                         _r(v.get("meas_mw")), _r(v.get("meas_pct"), 2), v.get("meas_origin"), v.get("basis"), STATE_LABEL[v["state"]],
+                         v.get("flip"), v.get("why")] for v in vs]))
+        sheets.append(("KPI", ["KPI", "tier", "variant", "fps", "전력 mW", "SW 여유 %", "IQ 상태", "종합"],
+                       [[k["label"], k.get("tier"), k["variant_ref"], k["fps"]["label"], _r((k.get("power") or {}).get("mw")),
+                         _r(k.get("sw_margin_pct")), (k.get("iq") or {}).get("status"), k["overall"]["label"]] for k in scoreboard(snap, vs)]))
+    if snap.get("risk_register"):
+        sheets.append(("Risk register", ["ID", "심각도", "유효성", "분류", "내용", "근거", "먼저 확인", "완화안", "owner", "상태"],
+                       [[r["label"], r["severity"], r.get("validity") or "confirmed", r.get("category"), r["title"], r.get("detail"),
+                         " → ".join(r.get("checks") or []), r.get("mitigation"), r.get("owner"), r.get("status")] for r in snap["risk_register"]]))
     sheets.append(("Scenario", ["scenario", "variant", "fps", "EIS", "spec", "total mW", "CPU mW", "IP mW", "IP BW mW", "CPU BW mW", "BW MB/s",
                                 "range min mW", "range max mW", "compression buf", "DVFS", "prediction id"],
                    [[r["scenario_id"], r["variant_id"], r["fps"], r["eis_on"], "OK" if r["spec_ok"] else "FAIL",

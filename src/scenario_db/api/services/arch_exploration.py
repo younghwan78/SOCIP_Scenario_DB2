@@ -774,7 +774,11 @@ def _review_extras(db: Session, snapshot: dict[str, Any], project_ref: str | Non
             thermal = {"items": [{
                 "scenario_id": i.get("scenario_id"), "variant_id": i["variant_id"], "label": i.get("label"), "current_mw": i.get("current_mw"),
                 "baseline": i.get("baseline"), "reference": i.get("reference"),
-                "plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked")} for p in i.get("plans") or []],
+                "plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked", "iq_pending")} for p in i.get("plans") or []],
+                # IQ-02: the same asks with levers usable today (DVFS keeping fps + IQ-adopted options)
+                "approved_plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked")}
+                                   for p in i.get("approved_plans") or []],
+                "registered": i.get("prediction_id") is not None,
                 "notes": (i.get("notes") or [])[:3]} for i in tw.get("items") or []]}
         except (NotFoundError, UnprocessableError) as exc:
             thermal = {"items": [], "reason": str(exc)[:200]}
@@ -809,7 +813,111 @@ def _review_extras(db: Session, snapshot: dict[str, Any], project_ref: str | Non
         snapshot["cpu"] = [{k: c[k] for k in ("id", "scenario_id", "variant_id", "profile_ref", "power_params_ref",
                                               "base_power_params_ref", "note", "created_by", "created_at", "summary")}
                            for c in list_cpu_snapshots(db, project_ref)]
+    snapshot["references"] = {vid: {"mw": r["mw"], "source": r.get("source")} for vid, r in refs["references"].items()}
+    _option_reviews(db, snapshot)
+    if project_ref:
+        snapshot["project_conditions"] = _project_conditions(db, project_ref, snapshot, refs)
+        snapshot["coverage"] = _coverage(db, project_ref, snapshot, preds, refs)
+    # REF-05: the customer criterion ② counts verdicts (range · bias · silicon), old keys kept for the portfolio
+    from scenario_db.reporting.review_verdict import power_verdicts
+
+    verdicts = power_verdicts(snapshot)
+    if verdicts:
+        st = [v["state"] for v in verdicts]
+        snapshot["criteria"]["power"] |= {
+            "ok": st.count("ok"), "similar": st.count("similar"), "over": st.count("over"), "conditional": st.count("conditional"),
+            "missing": [v["variant_id"] for v in verdicts if v["state"] in ("na", "uncovered")],
+            "unregistered": [v["variant_id"] for v in verdicts if v["state"] not in ("na", "uncovered") and not v["registered"]],
+            "flip": [v["variant_id"] for v in verdicts if v.get("flip")], "basis": "verdict"}
     snapshot["risks"] = build_risks(snapshot)
+    # actions follow the lever ladder and use the recorded CPU what-if results (frozen above)
+    from scenario_db.reporting.arch_conclusion import build_conclusion
+
+    snapshot["conclusion"] = build_conclusion(snapshot)
+
+
+def _option_reviews(db: Session, snapshot: dict[str, Any]) -> None:
+    """IQ-02: frozen IQ review state of each power option (best set and singles)."""
+    from scenario_db.db.models.exploration import PowerOptionReview
+
+    opts = snapshot.get("power_options") or []
+    sids = sorted({o["scenario_id"] for o in opts})
+    if not sids:
+        return
+    reviews: dict[str, dict[tuple[str, str], PowerOptionReview]] = {}
+    for r in db.query(PowerOptionReview).filter(PowerOptionReview.scenario_ref.in_(sids)).all():
+        reviews.setdefault(r.scenario_ref, {})[(r.variant_ref, r.option_key)] = r
+    for o in opts:
+        rv = reviews.get(o["scenario_id"], {})
+        if o.get("best"):
+            o["best"]["review_status"] = set_status([item_status(rv, o["variant_id"], k) for k in str(o["best"]["key"]).split("+")])
+        for x in o.get("singles") or []:
+            x["review_status"] = item_status(rv, o["variant_id"], x["key"])["status"]
+
+
+def _soc_name(soc_ref: str | None) -> str:
+    name = str(soc_ref or "").removeprefix("soc-")
+    return name[:1].upper() + name[1:] if name else "—"
+
+
+def _project_conditions(db: Session, project_ref: str, snapshot: dict[str, Any], refs: dict[str, Any]) -> dict[str, Any]:
+    """COV-01: the project conditions a reader needs to know what the report covers."""
+    project = db.get(Project, project_ref)
+    md = (project.metadata_ or {}) if project is not None else {}
+    gl = (project.globals_ or {}) if project is not None else {}
+    ctx = snapshot.get("review_context") or {}
+    policy = ctx.get("policy") or {}
+    sw_src: dict[str, int] = {}
+    for r in snapshot.get("scenarios") or []:
+        k = str((r.get("inputs") or {}).get("sw_timing_source") or "미기록")
+        sw_src[k] = sw_src.get(k, 0) + 1
+    ref_src: dict[str, int] = {}
+    for r in refs.get("references", {}).values():
+        ref_src[str(r.get("source"))] = ref_src.get(str(r.get("source")), 0) + 1
+    o = snapshot["overview"]
+    soc = md.get("soc_ref") or o.get("target_soc")
+    return {
+        "project_ref": project_ref, "project_name": md.get("name"), "soc_ref": soc, "soc_name": _soc_name(soc),
+        "board_type": md.get("board_type"), "board_name": md.get("board_name"),
+        "sensor_module_ref": md.get("sensor_module_ref"), "display_module_ref": md.get("display_module_ref"),
+        "sw_profile_ref": md.get("default_sw_profile_ref") or gl.get("default_sw_profile_ref"),
+        "dvfs_table_ref": o.get("dvfs_table_ref"), "sample_dvfs": bool(o.get("sample_dvfs")),
+        "sw_timing_source": sw_src, "sw_growth": ((o.get("objective") or {}).get("runtime_scale") or 1.0),
+        "sw_growth_budget": policy.get("sw_growth_budget"),
+        "reference": {"project_ref": (policy.get("power_reference") or {}).get("project_ref"), "sources": ref_src,
+                      "tolerance_pct": refs.get("tolerance_pct"), "note": (policy.get("power_reference") or {}).get("source_note"),
+                      "priority": refs.get("source_priority")},
+        "throughput_model": policy.get("throughput_model") or "stage", "register_baseline": policy.get("register_baseline"),
+        "battery": ctx.get("battery"),
+    }
+
+
+def _coverage(db: Session, project_ref: str, snapshot: dict[str, Any], preds: dict[tuple[str, str], dict[str, Any]],
+              refs: dict[str, Any]) -> dict[str, Any]:
+    """COV-02: per scenario of the project, how far the report covers it (product variants = not derived)."""
+    scen = db.query(Scenario.id, Scenario.metadata_).filter(Scenario.project_ref == project_ref).order_by(Scenario.id).all()
+    sids = [sid for sid, _ in scen]
+    variants = db.query(ScenarioVariant.scenario_id, ScenarioVariant.id, ScenarioVariant.derived_from_variant) \
+        .filter(ScenarioVariant.scenario_id.in_(sids)).all() if sids else []
+    meas: dict[tuple[str, str], str] = {}
+    for sid, vid, prov in db.query(Evidence.scenario_ref, Evidence.variant_ref, Evidence.provenance).filter(
+            Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(sids)).all() if sids else []:
+        meas[(sid, vid)] = "physical" if is_physical(prov) or meas.get((sid, vid)) == "physical" else "synthetic"
+    explored = {(r["scenario_id"], r["variant_id"]) for r in snapshot.get("scenarios") or []}
+    ref_vids = set(refs.get("references") or {})
+    rows = []
+    for sid, md in scen:
+        vs = [(v, d) for s, v, d in variants if s == sid]
+        prod = [v for v, d in vs if not d and not any(m in v for m in DERIVED_VARIANT_MARKERS)]
+        keys = [(sid, v) for v in prod]
+        rows.append({"scenario_id": sid, "name": (md or {}).get("name") or sid, "variants": len(prod), "derived": len(vs) - len(prod),
+                     "explored": sum(k in explored for k in keys), "registered": sum(k in preds for k in keys),
+                     "measured": sum(k in meas for k in keys), "measured_physical": sum(meas.get(k) == "physical" for k in keys),
+                     "measured_no_prediction": sum(k in meas and k not in preds for k in keys),
+                     "reference": sum(v in ref_vids for v in prod)})
+    tot = {k: sum(r[k] for r in rows) for k in ("variants", "derived", "explored", "registered", "measured", "measured_physical",
+                                                 "measured_no_prediction", "reference")}
+    return {"rows": rows, "total": tot}
 
 
 def create_report(db: Session, request: ArchReportRequest, user: str | None = None) -> dict[str, Any]:
@@ -918,7 +1026,10 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
         snapshot["previous"] = report_diff(prev.snapshot, snapshot, {"id": prev.id, "title": prev.title, "status": prev.status,
                                                                      "generated_at": _iso_dt(prev.generated_at)})
     scenario_type = request.scenario_type or latest.scenario_type
-    title = request.title or f"{run_dict.get('soc_ref') or ''} {project_ref} 과제 검토".strip()
+    pc = snapshot.get("project_conditions") or {}
+    board = " ".join(x for x in (pc.get("board_name"), f"({pc['board_type']})" if pc.get("board_type") else None) if x)
+    title = request.title or (f"{pc.get('soc_name')} · {board} 과제 검토" if board else
+                              f"{run_dict.get('soc_ref') or ''} {project_ref} 과제 검토".strip())
     html = render_html(title, snapshot)
     row = ArchReport(
         id=rid, title=title, status=request.status, target_soc_ref=run_dict.get("soc_ref"),
@@ -1020,7 +1131,8 @@ def _report_summary(snap: dict[str, Any]) -> dict[str, Any] | None:
     return {"confidence": ((snap.get("conclusion") or {}).get("confidence") or {}).get("grade"),
             "risks": risk_counts(snap.get("risk_register") or []),
             "fps": {"ok": cr["fps"]["ok"], "total": cr["fps"]["total"]},
-            "power": {k: cr["power"][k] for k in ("ok", "similar", "over", "total")} | {"missing": len(cr["power"]["missing"])},
+            "power": {k: cr["power"][k] for k in ("ok", "similar", "over", "total")} | {"missing": len(cr["power"]["missing"])}
+            | {"conditional": cr["power"].get("conditional", 0), "flip": len(cr["power"].get("flip") or [])},
             "thermal": {"items": len(cr["thermal"]["items"]), "reach10": sum(1 for i in cr["thermal"]["items"] if i["reach10"])},
             "power_range_mw": (snap.get("spec_summary") or {}).get("power_range_mw")}
 

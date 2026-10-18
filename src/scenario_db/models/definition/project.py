@@ -29,6 +29,10 @@ class PowerReference(BaseScenarioModel):
     # up to this much above the reference still counts as "similar" (medium risk); above it is high
     tolerance_pct: float = Field(default=3.0, ge=0, le=50)
     source_note: str | None = None
+    # REF-01: which previous-project value wins when several exist. "measurement" = silicon capture only;
+    # synthetic measurements are used last, after every listed source.
+    source_priority: list[Literal["explicit", "measurement", "prediction"]] = Field(
+        default_factory=lambda: ["explicit", "measurement", "prediction"], min_length=1, max_length=3)
 
 
 class ThermalWatch(BaseScenarioModel):
@@ -39,6 +43,14 @@ class ThermalWatch(BaseScenarioModel):
     # reduction asks to pre-check, % of the current prediction
     reduction_pct: list[Annotated[float, Field(gt=0, le=100, allow_inf_nan=False)]] = Field(default_factory=lambda: [10.0, 20.0])
     note: str | None = None
+
+
+class KpiVariant(BaseScenarioModel):
+    """COV-03: a customer KPI scenario shown on the one-page summary (in list order)."""
+    variant_ref: str
+    scenario_ref: DocumentId | None = None  # None = the variant id is unique in the project
+    label: str | None = None
+    tier: Literal["base", "heavy", "thermal"] = "base"
 
 
 class ReviewPolicy(BaseScenarioModel):
@@ -52,6 +64,10 @@ class ReviewPolicy(BaseScenarioModel):
     register_baseline: Literal["min_power", "iq_keep"] | None = None
     power_reference: PowerReference | None = None
     thermal_watch: list[ThermalWatch] = Field(default_factory=list)
+    # COV-03: KPI scenarios of the one-page summary; empty = thermal watch + reference variants
+    kpi: list[KpiVariant] = Field(default_factory=list, max_length=40)
+    # SW-03: SW growth the next project must absorb (shown on the summary; ×1.0 = none declared)
+    sw_growth_budget: float | None = Field(default=None, ge=1.0, le=3.0)
 
 
 class ProjectGlobals(BaseScenarioModel):

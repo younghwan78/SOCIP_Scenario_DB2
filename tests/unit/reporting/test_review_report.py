@@ -40,9 +40,9 @@ def test_project_html_preserves_criteria_and_escapes_review_annotations():
     assert '<script>' not in html and '&lt;script&gt;' in html
     assert 'source &lt;capture&gt;' in html and 'verify &lt;silicon&gt;' in html
     assert 'offload &lt;task&gt;' in html and 'pipelined 기준' in html
-    assert '미달 1건' in html and '예측 없음 1' in html
+    assert '미달 1건' in html and '판정 불가 1' in html
     assert '생략한 절' in html and 'SW margin 계산 결과 없음' in html
-    top = html.split('Top risk</h3>')[1].split('</section>')[0]
+    top = html.split('결론</h2>')[1].split('Top risk</h3>')[1].split('</section>')[0]
     assert 'risk-1' in top and 'risk-5' in top and 'risk-6' not in top
     assert '외 2건' in top
     assert all(name not in top for name in ('closed-risk', 'accepted-risk', 'resolved-risk'))

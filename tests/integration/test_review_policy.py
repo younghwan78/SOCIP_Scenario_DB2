@@ -142,3 +142,54 @@ def test_policy_registers_the_iq_keeping_case_and_builds_the_thermal_watch(engin
             db.query(Scenario).filter_by(id=sid).delete()
             db.query(Project).filter_by(id=pid).delete()
             db.commit()
+
+
+def test_previous_project_silicon_measurement_wins_over_its_prediction(engine):
+    """REF-01: a previous project in production is judged against its silicon, then its prediction, then synthetic."""
+    from datetime import datetime, timezone
+
+    from scenario_db.db.models.evidence import Evidence
+
+    token = uuid4().hex[:10]
+    prev, cur, sid, rid = f"proj-prev-{token}", f"proj-cur-{token}", f"uc-prev-{token}", f"EXP-prev-{token}"
+    with Session(engine) as db:
+        soc = db.query(Project.metadata_).first()[0]["soc_ref"]
+        db.add(Project(id=prev, schema_version="2.2", metadata_={"name": "prev", "soc_ref": soc}, yaml_sha256="test"))
+        db.add(Project(id=cur, schema_version="2.2", metadata_={"name": "cur", "soc_ref": soc}, yaml_sha256="test",
+                       globals_={"review_policy": {"power_reference": {"project_ref": prev, "tolerance_pct": 3}}}))
+        db.flush()
+        db.add(Scenario(id=sid, project_ref=prev, schema_version="1.0.0", metadata_={}, pipeline={}, yaml_sha256="test"))
+        db.flush()
+        for vid in ("both", "pred_only", "synthetic"):
+            db.add(ScenarioVariant(scenario_id=sid, id=vid, design_conditions={}))
+        db.add(ArchExplorationRun(id=rid, title="prev", scenario_type="prev", project_ref=prev,
+                                 spec={"objective": {}, "axes": {}, "constraints": {}},
+                                 variants=[summary(sid, 10) | {"variant_id": v} for v in ("both", "pred_only", "synthetic")],
+                                 errors=[], summary={"variants": 3}, engine_rev="test", input_hash="test"))
+        db.flush()
+        for vid, origin, mw in (("both", {"collection_method": "power_monitor", "device_id": "EVT1-01"}, 13.0),
+                                ("synthetic", {"collection_method": "synthetic_fixture", "device_id": "SYNTHETIC"}, 7.0)):
+            db.add(Evidence(id=f"{sid}-{vid}", scenario_ref=sid, variant_ref=vid, project_ref=prev, schema_version="1.0.0",
+                            kind="evidence.measurement", measured_at=datetime(2026, 1, 1, tzinfo=timezone.utc), provenance=origin,
+                            execution_context={}, aggregation={}, kpi={"total_power_mw": mw}, yaml_sha256="test"))
+        db.commit()
+    try:
+        with Session(engine) as db:
+            svc.promote(db, PromoteRequest(run_id=rid))
+            refs = review.power_references(db, cur)["references"]
+            assert refs["both"]["source"] == "measurement" and refs["both"]["mw"] == 13.0
+            assert refs["pred_only"]["source"] == "prediction"
+            assert refs["synthetic"]["source"] == "prediction"   # synthetic measurements come last
+            project = db.get(Project, cur)
+            project.globals_ = {"review_policy": {"power_reference": {"project_ref": prev, "source_priority": ["prediction"]}}}
+            db.commit()
+            assert review.power_references(db, cur)["references"]["both"]["source"] == "prediction"
+    finally:
+        with Session(engine) as db:
+            db.query(Evidence).filter(Evidence.scenario_ref == sid).delete(synchronize_session=False)
+            db.query(Prediction).filter(Prediction.scenario_ref == sid).delete(synchronize_session=False)
+            db.query(ArchExplorationRun).filter_by(id=rid).delete()
+            db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id == sid).delete(synchronize_session=False)
+            db.query(Scenario).filter_by(id=sid).delete()
+            db.query(Project).filter(Project.id.in_([cur, prev])).delete(synchronize_session=False)
+            db.commit()

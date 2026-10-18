@@ -23,35 +23,48 @@ from scenario_db.exceptions import NotFoundError, UnprocessableError
 
 
 def power_references(db: Session, project_ref: str) -> dict[str, Any]:
-    """Per variant id: reference mW and where it came from (explicit value > previous project's prediction > measurement)."""
+    """Per variant id: reference mW and where it came from.
+
+    REF-01: ``power_reference.source_priority`` orders explicit values, the previous project's silicon measurements
+    and its current predictions (default explicit > measurement > prediction); synthetic measurements come last.
+    A previous project already in production is therefore judged against what its silicon measured.
+    """
     policy = project_policy(db, project_ref)
     ref = policy.power_reference if policy else None
     out: dict[str, dict[str, Any]] = {}
     if ref is None:
         return {"policy": policy_view(policy), "tolerance_pct": None, "references": out}
+    by_source: dict[str, dict[str, dict[str, Any]]] = {"explicit": {}, "measurement": {}, "prediction": {}, "synthetic": {}}
     if ref.project_ref:
         scopes: dict[str, set[str]] = {}
         for p in db.query(Prediction).filter(Prediction.project_ref == ref.project_ref, Prediction.status == "current").all():
             mw = ((p.metrics or {}).get("power") or {}).get("total_mw")
             if mw is not None:
                 scopes.setdefault(p.variant_ref, set()).add(p.scenario_ref)
-                out.setdefault(p.variant_ref, {"mw": float(mw), "source": "prediction", "project_ref": ref.project_ref,
-                                               "id": p.id, "at": _iso(p.created_at)})
+                by_source["prediction"].setdefault(p.variant_ref, {"mw": float(mw), "source": "prediction", "project_ref": ref.project_ref,
+                                                                   "id": p.id, "at": _iso(p.created_at)})
         meas = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement", Evidence.project_ref == ref.project_ref).all())
         meas.sort(key=lambda m: (is_physical(m.provenance), not is_synthetic(m.provenance), _when(_iso(m.measured_at))), reverse=True)
         for m in meas:
             mw = _total(m.kpi).get("mean")
-            if mw is not None:
-                scopes.setdefault(m.variant_ref, set()).add(m.scenario_ref)
-            if mw is not None and m.variant_ref not in out:
-                out[m.variant_ref] = {"mw": float(mw), "source": "measurement" if is_physical(m.provenance) else data_origin(m.provenance),
-                                      "project_ref": ref.project_ref, "id": m.id, "at": _iso(m.measured_at)}
+            if mw is None:
+                continue
+            scopes.setdefault(m.variant_ref, set()).add(m.scenario_ref)
+            bucket = "measurement" if is_physical(m.provenance) else "synthetic"
+            by_source[bucket].setdefault(m.variant_ref, {"mw": float(mw), "source": "measurement" if bucket == "measurement"
+                                                         else data_origin(m.provenance), "project_ref": ref.project_ref,
+                                                         "id": m.id, "at": _iso(m.measured_at)})
         # Variant IDs are scenario-local. An ambiguous previous-project ID is not a usable reference.
-        out = {vid: value for vid, value in out.items() if len(scopes.get(vid, set())) == 1}
+        for src in ("measurement", "prediction", "synthetic"):
+            by_source[src] = {vid: value for vid, value in by_source[src].items() if len(scopes.get(vid, set())) == 1}
     for vid, mw in ref.values_mw.items():
-        out[vid] = {"mw": float(mw), "source": "explicit", "project_ref": ref.project_ref, "id": None, "at": None,
-                    "note": ref.source_note}
-    return {"policy": policy_view(policy), "tolerance_pct": ref.tolerance_pct, "references": out}
+        by_source["explicit"][vid] = {"mw": float(mw), "source": "explicit", "project_ref": ref.project_ref, "id": None, "at": None,
+                                      "note": ref.source_note}
+    order = [*ref.source_priority, *[s for s in ("explicit", "measurement", "prediction") if s not in ref.source_priority], "synthetic"]
+    for src in reversed(order):  # higher priority written last
+        out.update(by_source[src])
+    return {"policy": policy_view(policy), "tolerance_pct": ref.tolerance_pct, "references": out,
+            "source_priority": order}
 
 
 def judge_power(current_mw: float | None, reference: dict[str, Any] | None, tolerance_pct: float | None) -> dict[str, Any] | None:
@@ -75,11 +88,14 @@ def _run_variant(db: Session, run_id: str, scenario_id: str, variant_id: str) ->
 
 
 def _latest_run_with(db: Session, project_ref: str, scenario_id: str, variant_id: str) -> str | None:
+    """Newest run of the project that evaluated the variant (one query; a project report merges every run,
+    so a fixed window of recent runs would miss variants recomputed long ago)."""
     R = ArchExplorationRun
-    for run_id, in db.query(R.id).filter(R.project_ref == project_ref).order_by(R.created_at.desc()).limit(20):
-        if _run_variant(db, run_id, scenario_id, variant_id) is not None:
-            return run_id
-    return None
+    row = (db.query(R.id).filter(R.project_ref == project_ref, func.jsonb_path_exists(
+        R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v)'::jsonpath"),
+        func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id)))
+        .order_by(R.created_at.desc(), R.id.desc()).first())
+    return row[0] if row else None
 
 
 _REVIEW_COST = {"adopted": "IQ 승인 완료", "iq_eval": "IQ 평가 중", "rejected": "IQ 반려 — 사용 불가", "candidate": "IQ (option · 평가 필요)"}
