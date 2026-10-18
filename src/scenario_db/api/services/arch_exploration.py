@@ -813,7 +813,7 @@ def _review_extras(db: Session, snapshot: dict[str, Any], project_ref: str | Non
         snapshot["cpu"] = [{k: c[k] for k in ("id", "scenario_id", "variant_id", "profile_ref", "power_params_ref",
                                               "base_power_params_ref", "note", "created_by", "created_at", "summary")}
                            for c in list_cpu_snapshots(db, project_ref)]
-    snapshot["references"] = {vid: {"mw": r["mw"], "source": r.get("source")} for vid, r in refs["references"].items()}
+    snapshot["references"] = {vid: dict(r) for vid, r in refs["references"].items()}
     _option_reviews(db, snapshot)
     if project_ref:
         snapshot["project_conditions"] = _project_conditions(db, project_ref, snapshot, refs)

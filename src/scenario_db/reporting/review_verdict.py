@@ -72,11 +72,14 @@ def fps_validity(row: dict[str, Any]) -> tuple[str, str]:
     inputs = row.get("inputs") or {}
     codes = {e.get("code") for e in row.get("reasons_explained") or []}
     fps = float(row.get("fps") or 0)
-    if fps >= HIGH_FPS and codes & {"sw_budget", "interval", "rt_budget", "ip_clock", "other"}:
+    # Batch modelling can explain NRT/SW interval failures, not an independent RT,
+    # verification or hardware-clock failure. Keep those failures actionable.
+    independent = codes & {"rt_budget", "verify", "constraint", "no_case", "model", "other"}
+    if fps >= HIGH_FPS and codes & {"sw_budget", "interval"} and not independent:
         return "model_limit", "120 fps 이상 NRT batch · sensor 내부 buffer 미모델 (1 frame = 1 period 가정)"
     if str(inputs.get("sensor_support") or "").startswith("unverified"):
         return "input_unverified", f"sensor 지원 미확인 ({inputs['sensor_support']})"
-    if inputs.get("sw_timing_source") == "assumed" and codes & {"sw_budget", "interval"}:
+    if inputs.get("sw_timing_source") == "assumed" and codes & {"sw_budget", "interval"} and not independent:
         return "input_unverified", "SW timing 가정값 (측정 기반 아님)"
     return "confirmed", ""
 
@@ -84,7 +87,7 @@ def fps_validity(row: dict[str, Any]) -> tuple[str, str]:
 # ------------------------------------------------------------------- REF-05 power verdicts
 def _bias(snap: dict[str, Any]) -> dict[str, Any] | None:
     b = ((snap.get("model") or {}).get("bias") or {}).get("total") or {}
-    if b.get("median") is None or (b.get("n") or 0) < BIAS_MIN_N or b.get("verdict") not in ("bias", "model_common"):
+    if b.get("median") is None or float(b["median"]) <= -100 or (b.get("n") or 0) < BIAS_MIN_N or b.get("verdict") not in ("bias", "model_common"):
         return None
     return {"median": float(b["median"]), "n": b.get("n"), "same_sign_pct": b.get("same_sign_pct")}
 
@@ -130,7 +133,7 @@ def power_verdicts(snap: dict[str, Any]) -> list[dict[str, Any]]:
             state = "similar"
         else:
             state = "ok"
-        flip = bool(physical and P is not None and M is not None and (p_pct > tol) != (m_pct > tol))  # type: ignore[operator]
+        flip = bool(physical and p_pct is not None and m_pct is not None and (p_pct > tol) != (m_pct > tol))
         reasons = []
         if flip:
             reasons.append(f"예측 {p_pct:+.1f}% ↔ 실측 {m_pct:+.1f}%")
@@ -141,8 +144,8 @@ def power_verdicts(snap: dict[str, Any]) -> list[dict[str, Any]]:
                 reasons.append(f"보정 예측 {_pct(corr, R):+.1f}%")
             if M is not None and not physical and (m_pct or 0) > tol:
                 reasons.append(f"합성 실측 {m_pct:+.1f}%")
-        if not r.get("prediction_id") and P is not None:
-            reasons.append("미등록 — 탐색값")
+        if not r.get("prediction_id"):
+            reasons.append("미등록 — 탐색값" if P is not None else "미등록 — 비교 가능한 예측 없음")
         out.append({
             "scenario_id": r["scenario_id"], "variant_id": vid, "ref_mw": R, "ref_source": ref.get("source"),
             "pred_mw": P, "pred_pct": p_pct, "registered": bool(r.get("prediction_id")),
@@ -164,15 +167,16 @@ def kpi_list(snap: dict[str, Any]) -> list[dict[str, Any]]:
         return [{"variant_ref": k["variant_ref"], "scenario_ref": k.get("scenario_ref"), "label": k.get("label") or short(k["variant_ref"]),
                  "tier": k.get("tier") or "base"} for k in declared]
     out: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: set[tuple[str | None, str]] = set()
     for w in policy.get("thermal_watch") or []:
-        if w["variant_ref"] not in seen:
-            seen.add(w["variant_ref"])
+        key = (w.get("scenario_ref"), w["variant_ref"])
+        if key not in seen:
+            seen.add(key)
             out.append({"variant_ref": w["variant_ref"], "scenario_ref": w.get("scenario_ref"), "label": w.get("label") or short(w["variant_ref"]),
                         "tier": "thermal"})
     for vid in sorted(snap.get("references") or {}):
-        if vid not in seen:
-            seen.add(vid)
+        if not any(v == vid for _, v in seen):
+            seen.add((None, vid))
             out.append({"variant_ref": vid, "scenario_ref": None, "label": short(vid), "tier": "base"})
     return out
 
@@ -354,7 +358,10 @@ def messages(snap: dict[str, Any], board: list[dict[str, Any]], verdicts: list[d
               else f" 중 확정 {len(fails) - len(unv)}개는 조치 필요.")
         out.append(t)
     else:
-        out.append(f"{s.get('explored', 0)}개 전부 fps 충족.")
+        n = s.get('explored', 0)
+        out.append(f"평가 완료 {n}개 fps 충족." if n else "fps 평가 완료 결과 없음.")
+    if s.get("errors"):
+        out[0] = f"[부분 평가] 계산 실패 {len(s['errors'])}개. " + out[0]
     judged = [v for v in verdicts if v["state"] not in ("na", "uncovered")]
     if verdicts:
         flips = [v for v in judged if v.get("flip")]
@@ -392,6 +399,8 @@ _DECISION = {
 def decisions(risks: list[dict[str, Any]]) -> list[str]:
     out = []
     for r in risks:
+        if r.get("status") in ("closed", "accepted") or "resolve_candidate" in (r.get("trend"), r.get("auto_state")):
+            continue
         d = _DECISION.get(str(r.get("key")))
         if d and d not in out:
             out.append(d)

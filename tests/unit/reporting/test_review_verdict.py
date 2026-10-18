@@ -1,6 +1,7 @@
 """Review verdicts (REF-05), fps validity (RISK-01), SW-01 count, lever ladder and the KPI scoreboard."""
 from scenario_db.reporting.review_verdict import fps_validity, lever_actions, power_verdicts, scoreboard
 from scenario_db.reporting.risk_rules import build_risks
+import pytest
 
 
 def row(vid, mw=500.0, **kw):
@@ -101,3 +102,62 @@ def test_drivers_rank_common_causes():
     ds = {d["key"]: d for d in drivers(snap(scenarios=rows, overview={"sample_dvfs": True}))}
     assert ds["sw_task"]["label"] == "SW task post_irta" and ds["sw_task"]["count"] == 4
     assert ds["sw_assumed"]["count"] == 4 and ds["high_fps"]["count"] == 1 and ds["sample_dvfs"]["count"] == 5
+
+
+@pytest.mark.parametrize('median', [-100, -120])
+def test_nonpositive_bias_denominator_cannot_create_a_corrected_power(median):
+    s = snap(scenarios=[row('v')], references={'v': {'mw': 600}},
+             model={'bias': {'total': {'n': 8, 'median': median, 'verdict': 'bias'}}})
+    v = power_verdicts(s)[0]
+    assert v['corr_mw'] is None and v['bias_pct'] is None and v['state'] == 'ok'
+
+
+def test_silicon_verdict_without_a_comparable_prediction_still_builds_risks():
+    s = snap(scenarios=[row('v', spec_ok=False, prediction_id=None)],
+             calibration=[cal('v', 500)], references={'v': {'mw': 600}})
+    verdict = power_verdicts(s)[0]
+    assert verdict['basis'] == 'measurement' and verdict['state'] == 'ok' and verdict['pred_mw'] is None
+    risks = {r['key']: r for r in build_risks(s)}
+    assert '비교 가능한 예측 없음' in risks['reference_unregistered']['detail']
+
+
+def test_same_named_failures_keep_their_own_scenario_validity():
+    real = row('shared', scenario_id='a', spec_ok=False, reasons_explained=[{'code': 'rt_budget'}])
+    uncertain = row('shared', scenario_id='b', fps=240, spec_ok=False, reasons_explained=[{'code': 'sw_budget'}])
+    failed = [{'scenario_id': r['scenario_id'], 'variant_id': 'shared', 'reasons': ['timing']} for r in (real, uncertain)]
+    s = snap(scenarios=[real, uncertain], spec_summary={'explored': 2, 'failed': failed})
+    risks = {r['key']: r for r in build_risks(s)}
+    assert risks['fps_drop']['severity'] == 'critical' and '1/2' in risks['fps_drop']['title']
+    assert risks['fps_drop_unverified']['validity'] == 'model_limit' and '1/2' in risks['fps_drop_unverified']['title']
+    # Legacy reports lack scenario IDs: an ambiguous row must never downgrade a confirmed failure.
+    s['spec_summary']['failed'] = [{'variant_id': 'shared', 'reasons': ['timing']}]
+    assert next(r for r in build_risks(s) if r['rule'] == 'fps_drop')['severity'] == 'critical'
+
+
+@pytest.mark.parametrize('codes', [['rt_budget'], ['ip_clock'], ['other'], ['sw_budget', 'rt_budget']])
+def test_high_frame_rate_does_not_hide_independent_hardware_or_unknown_failures(codes):
+    r = row('hfr', fps=240, spec_ok=False, reasons_explained=[{'code': c} for c in codes])
+    assert fps_validity(r)[0] == 'confirmed'
+
+
+def test_partial_summary_and_resolved_risks_do_not_claim_completion_or_request_old_decisions():
+    from scenario_db.reporting.review_verdict import decisions, messages
+
+    s = snap(spec_summary={'explored': 0, 'spec_ok': 0, 'errors': [{'variant_id': 'v', 'error': 'bad input'}]})
+    text = messages(s, [], [])[0]
+    assert '부분 평가' in text and '계산 실패 1개' in text and '평가 완료 결과 없음' in text and '전부 fps 충족' not in text
+    risks = [{'key': 'power_over_reference', 'trend': 'resolve_candidate'},
+             {'key': 'verdict_flip', 'status': 'closed'}, {'key': 'sw_margin_low', 'auto_state': 'resolve_candidate'},
+             {'key': 'kpi_uncovered', 'status': 'open'}]
+    assert decisions(risks) == ['미커버 KPI scenario 탐색 · 등록 일정']
+
+
+def test_kpi_xlsx_is_available_without_previous_project_references():
+    from scenario_db.reporting.arch_report import build_snapshot
+    from scenario_db.reporting.xlsx_export import report_sheets
+
+    s = build_snapshot({'id': 'run', 'title': 'review', 'scenario_type': 'camera', 'spec': {}, 'variants': [], 'summary': {}}, {}, {})
+    s['review_context'] = {'policy': {'kpi': [{'variant_ref': 'missing', 'label': 'Missing KPI'}]}}
+    sheets = {name: (headers, rows) for name, headers, rows in report_sheets(s)}
+    assert 'KPI' in sheets and sheets['KPI'][1][0][0] == 'Missing KPI'
+    assert sheets['KPI'][1][0][-1] == '미커버' and '전과제 판정' not in sheets

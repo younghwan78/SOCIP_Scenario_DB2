@@ -160,7 +160,7 @@ def test_previous_project_silicon_measurement_wins_over_its_prediction(engine):
         db.flush()
         db.add(Scenario(id=sid, project_ref=prev, schema_version="1.0.0", metadata_={}, pipeline={}, yaml_sha256="test"))
         db.flush()
-        for vid in ("both", "pred_only", "synthetic"):
+        for vid in ("both", "pred_only", "synthetic", "unknown"):
             db.add(ScenarioVariant(scenario_id=sid, id=vid, design_conditions={}))
         db.add(ArchExplorationRun(id=rid, title="prev", scenario_type="prev", project_ref=prev,
                                  spec={"objective": {}, "axes": {}, "constraints": {}},
@@ -168,8 +168,9 @@ def test_previous_project_silicon_measurement_wins_over_its_prediction(engine):
                                  errors=[], summary={"variants": 3}, engine_rev="test", input_hash="test"))
         db.flush()
         for vid, origin, mw in (("both", {"collection_method": "power_monitor", "device_id": "EVT1-01"}, 13.0),
-                                ("synthetic", {"collection_method": "synthetic_fixture", "device_id": "SYNTHETIC"}, 7.0)):
-            db.add(Evidence(id=f"{sid}-{vid}", scenario_ref=sid, variant_ref=vid, project_ref=prev, schema_version="1.0.0",
+                                ("synthetic", {"collection_method": "synthetic_fixture", "device_id": "SYNTHETIC"}, 7.0),
+                                ("unknown", {}, 6.0)):
+            db.add(Evidence(id=f"{sid}-{vid}", scenario_ref=sid, variant_ref=vid, project_ref=None, schema_version="1.0.0",
                             kind="evidence.measurement", measured_at=datetime(2026, 1, 1, tzinfo=timezone.utc), provenance=origin,
                             execution_context={}, aggregation={}, kpi={"total_power_mw": mw}, yaml_sha256="test"))
         db.commit()
@@ -180,6 +181,7 @@ def test_previous_project_silicon_measurement_wins_over_its_prediction(engine):
             assert refs["both"]["source"] == "measurement" and refs["both"]["mw"] == 13.0
             assert refs["pred_only"]["source"] == "prediction"
             assert refs["synthetic"]["source"] == "prediction"   # synthetic measurements come last
+            assert 'unknown' not in refs  # missing provenance cannot establish a baseline
             project = db.get(Project, cur)
             project.globals_ = {"review_policy": {"power_reference": {"project_ref": prev, "source_priority": ["prediction"]}}}
             db.commit()

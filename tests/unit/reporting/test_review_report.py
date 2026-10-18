@@ -37,6 +37,7 @@ def test_project_html_preserves_criteria_and_escapes_review_annotations():
     before = deepcopy(snap)
     html = render_html('Review <script>alert(1)</script>', snap)
     assert snap == before
+    assert 'Tier 0 · 경영 요약' in html
     assert '<script>' not in html and '&lt;script&gt;' in html
     assert 'source &lt;capture&gt;' in html and 'verify &lt;silicon&gt;' in html
     assert 'offload &lt;task&gt;' in html and 'pipelined 기준' in html

@@ -37,10 +37,18 @@ def _names(vs: list[str], n: int = 4) -> str:
     return ", ".join(vs[:n]) + (f" 외 {len(vs) - n}" if len(vs) > n else "")
 
 
-def _validity_of(snap: dict[str, Any], vids: list[str]) -> tuple[str, list[str]]:
+def _failure_validity(snap: dict[str, Any], failure: dict[str, Any]) -> tuple[str, str]:
+    rows = [r for r in snap.get("scenarios") or [] if not r.get("spec_ok") and r["variant_id"] == failure["variant_id"]
+            and (not failure.get("scenario_id") or r.get("scenario_id") == failure["scenario_id"])]
+    found = [fps_validity(r) for r in rows]
+    if not found or any(v == "confirmed" for v, _ in found):
+        return "confirmed", ""
+    return min(found, key=lambda v: v[0] != "model_limit")
+
+
+def _validity_of(snap: dict[str, Any], failures: list[dict[str, Any]]) -> tuple[str, list[str]]:
     """RISK-01: worst-case validity of the affected variants (any confirmed → confirmed)."""
-    rows = {r["variant_id"]: r for r in snap.get("scenarios") or []}
-    found = [fps_validity(rows[v]) for v in vids if v in rows]
+    found = [_failure_validity(snap, f) for f in failures]
     if not found or any(v == "confirmed" for v, _ in found):
         return "confirmed", []
     kinds = sorted({v for v, _ in found}, key=lambda k: k != "model_limit")
@@ -65,10 +73,9 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
 
     failed = s.get("failed") or []
     if failed:
-        rows = {r["variant_id"]: r for r in snap.get("scenarios") or []}
         groups: dict[str, list[dict[str, Any]]] = {}
         for f in failed:
-            val = fps_validity(rows[f["variant_id"]])[0] if f["variant_id"] in rows else "confirmed"
+            val = _failure_validity(snap, f)[0]
             groups.setdefault("confirmed" if val == "confirmed" else "unverified", []).append(f)
         for grp, items in groups.items():
             vids = [f["variant_id"] for f in items]
@@ -82,7 +89,7 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                               "mitigation": act or "NRT batch · SW 병렬화 또는 HW 예산 재배분",
                               "checks": ["병목 stage · task 확인 (Timing Budget)", "clock 상향 여지 (DVFS)", "SW 병렬화 · batch"]})
             else:
-                validity, why = _validity_of(snap, vids)
+                validity, why = _validity_of(snap, items)
                 risks.append({"key": "fps_drop_unverified", "rule": "fps_drop", "severity": "high", "category": "성능",
                               "title": f"fps 미달 {len(items)}/{s.get('explored', len(failed))} variant — 검증 필요 ({VALIDITY_LABEL[validity]})",
                               "detail": f"{_names(vids)} — {reason}" + (f" · 근거: {'; '.join(why[:2])}" if why else ""),
@@ -120,15 +127,17 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
         if cond:
             risks.append({"key": "power_conditional", "rule": "band_cross", "severity": "medium", "category": "전력",
                           "title": f"전과제 대비 조건부 {len(cond)}건 — 범위 · 보정 시 허용 초과",
-                          "detail": "; ".join(f"{_short(v['variant_id'])} 예측 {v['pred_pct']:+.1f}% ({v['why']})" for v in cond[:3]),
+                          "detail": "; ".join(f"{_short(v['variant_id'])} ({v['why']})" for v in cond[:3]),
                           "affected": [v["variant_id"] for v in cond], "validity": "confirmed",
                           "mitigation": "SW 증가 · 통계(max)와 모델 오차를 줄이는 입력 확인 → " + LADDER_TEXT,
                           "checks": ["SW timing 통계(mean/max) · 증가 가정", "모델 total 오차 원인 rail", "여유 확보 lever (clock → compression → SW)"]})
         unreg = [v for v in verdicts if v["state"] not in ("uncovered", "na") and not v["registered"]]
         if unreg:
             risks.append({"key": "reference_unregistered", "rule": "reference_unregistered", "severity": "medium", "category": "전력",
-                          "title": f"전과제 비교 기준 variant 미등록 {len(unreg)}건 — 탐색값으로 판정",
-                          "detail": "; ".join(f"{_short(v['variant_id'])} {v['pred_mw']:.0f} mW ({v['pred_pct']:+.1f}%)" for v in unreg[:3]),
+                          "title": f"전과제 비교 기준 variant 미등록 {len(unreg)}건",
+                          "detail": "; ".join(f"{_short(v['variant_id'])} "
+                                              + (f"예측 {v['pred_mw']:.0f} mW ({v['pred_pct']:+.1f}%)" if v.get('pred_mw') is not None
+                                                 else f"실측 {v['meas_mw']:.0f} mW ({v['meas_pct']:+.1f}%) · 비교 가능한 예측 없음") for v in unreg[:3]),
                           "affected": [v["variant_id"] for v in unreg], "validity": "confirmed",
                           "mitigation": "등록 차단 사유(SW > period · clock 상한) 해소 후 등록",
                           "checks": ["미등록 사유 (spec · 검증)", "등록 후 보고서 재생성"]})

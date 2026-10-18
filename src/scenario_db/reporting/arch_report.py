@@ -200,7 +200,7 @@ def build_snapshot(
             "partial": bool(run.get("errors")),
             "power_partial": sum(1 for r in rows if r["power_coverage"] in ("partial", "none")),
             "explored": len(variants), "spec_ok": len(ok), "spec_fail": len(variants) - len(ok),
-            "failed": [{"variant_id": v["variant_id"], "reasons": compact_reasons(v["spec_reasons"])[:3],
+            "failed": [{"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "reasons": compact_reasons(v["spec_reasons"])[:3],
                         "explained": explain_all(compact_reasons(v["spec_reasons"]), v["fps"])}
                        for v in variants if not v["spec_ok"]],
             "errors": run.get("errors") or [],
@@ -360,7 +360,7 @@ def _render_tiered(title: str, snap: dict[str, Any]) -> str:
         shown[at] = (t0, b0 + "<p class='meta' style='margin-top:12px'><b>생략한 절</b> — "
                      + " · ".join(f"{escape(t)}: {escape(str(why))}" for t, why in omitted) + "</p>", k0)
     scope = snap.get("scope") or {}
-    nav, last = [], 0
+    nav, last = [], -1
     for i, (t, _, tier) in enumerate(shown, 1):
         if tier != last:
             nav.append(f"<span class='tier'>{_TIER_NAME[tier]}</span>")
@@ -419,8 +419,8 @@ def _tier1(snap: dict[str, Any]) -> str:
     if fps.get("fail") and snap.get("scenarios"):
         from scenario_db.reporting.review_verdict import fps_validity
 
-        rows = {r["variant_id"]: r for r in snap["scenarios"]}
-        if all(fps_validity(rows[v])[0] != "confirmed" for v in fps["fail"] if v in rows):
+        rows = [r for r in snap["scenarios"] if not r.get("spec_ok")]
+        if rows and all(fps_validity(r)[0] != "confirmed" for r in rows):
             fps_cls = "warn"
     pw_cls = ("fail" if pw.get("over") or pw.get("flip") else
               "warn" if pw.get("missing") or pw.get("similar") or pw.get("conditional") or pw.get("unregistered") else "ok")

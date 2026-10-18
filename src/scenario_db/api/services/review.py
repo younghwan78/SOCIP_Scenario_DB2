@@ -43,12 +43,15 @@ def power_references(db: Session, project_ref: str) -> dict[str, Any]:
                 scopes.setdefault(p.variant_ref, set()).add(p.scenario_ref)
                 by_source["prediction"].setdefault(p.variant_ref, {"mw": float(mw), "source": "prediction", "project_ref": ref.project_ref,
                                                                    "id": p.id, "at": _iso(p.created_at)})
-        meas = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement", Evidence.project_ref == ref.project_ref).all())
+        meas = (db.query(Evidence).join(Scenario, Evidence.scenario_ref == Scenario.id)
+                .filter(Evidence.kind == "evidence.measurement", Scenario.project_ref == ref.project_ref).all())
         meas.sort(key=lambda m: (is_physical(m.provenance), not is_synthetic(m.provenance), _when(_iso(m.measured_at))), reverse=True)
         for m in meas:
             mw = _total(m.kpi).get("mean")
             if mw is None:
                 continue
+            if not is_physical(m.provenance) and not is_synthetic(m.provenance):
+                continue  # unrecorded provenance cannot establish a previous-project baseline
             scopes.setdefault(m.variant_ref, set()).add(m.scenario_ref)
             bucket = "measurement" if is_physical(m.provenance) else "synthetic"
             by_source[bucket].setdefault(m.variant_ref, {"mw": float(mw), "source": "measurement" if bucket == "measurement"
