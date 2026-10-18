@@ -82,3 +82,32 @@ def test_report_renders_custom_comparison_and_sw_growth_evidence():
     # growth slices are shown as the increase over the x1.0 slice (670 - 500), never the mean statistic (400)
     assert '10.0 + 25.0' in html and '×1.10' in html and '+170' in html and '×1.4 ΔmW' in html and '400' not in html
     assert '입력 데이터 확인 항목 없음' in html
+
+
+@pytest.mark.parametrize('tested,expected', [(1.2, "meta warn"), (1.5, "meta fail")])
+def test_kpi_growth_budget_distinguishes_untested_range_from_failure(tested, expected):
+    from scenario_db.reporting.review_summary import kpi_table
+    from scenario_db.reporting.review_verdict import scoreboard
+
+    s = snap(scenarios=[row('v', sw={'growth_tolerance': 1.2, 'growth_tested_max': tested})],
+             review_context={'policy': {'kpi': [{'variant_ref': 'v'}]}})
+    html = kpi_table(scoreboard(s), 1.4)
+    assert f"class='{expected}'>증가 허용" in html
+    assert ('예산까지 미검증' in html) == (tested == 1.2)
+
+
+@pytest.mark.parametrize('base', [500, None, 'missing'])
+def test_sw_power_delta_uses_unit_scale_even_with_lower_or_missing_baseline(base):
+    from scenario_db.reporting.review_summary import sw_table
+
+    growth = [{'scale': 0.8, 'total_mw': 450, 'ok': True}, {'scale': 1.05, 'total_mw': 550, 'ok': True},
+              {'scale': 1.1, 'total_mw': 600, 'ok': True}]
+    if base != 'missing':
+        growth.append({'scale': 1.0, 'total_mw': base, 'ok': True})
+    s = snap(scenarios=[row('v', sw_margin_pct=5, sw={'hw_ms': 10, 'growth': growth})])
+    html = sw_table(s)
+    assert '×0.8 ΔmW' in html and '×1.05 ΔmW' in html and '×1.1 ΔmW' in html
+    assert '×1 ΔmW' not in html
+    assert ('>+100<' in html) == (base == 500)
+    assert ('>-50<' in html) == (base == 500)
+    assert '>+150<' not in html  # must never use the x0.8 slice as the baseline
