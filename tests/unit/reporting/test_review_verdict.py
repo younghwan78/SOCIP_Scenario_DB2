@@ -230,3 +230,19 @@ def test_sw_growth_at_tested_limit_is_unverified_rather_than_a_proven_failure():
     r['sw']['growth_tested_max'] = 1.5
     risks = {r['key']: r for r in build_risks(s)}
     assert 'sw_growth_budget' in risks and 'sw_growth_unverified' not in risks
+
+
+def test_kpi_board_marks_unregistered_and_capped_growth():
+    from scenario_db.reporting.review_summary import kpi_table, sw_table
+
+    r = row("fhd120", prediction_id=None, sw={"growth_tolerance": 1.2, "growth_tested_max": 1.2, "hw_ms": 4.6, "sw_ms": 11.1,
+                                                "period_ms": 8.33, "in_flight": 2, "stage": "nrt",
+                                                "growth": [{"scale": 1.0, "total_mw": 737.0, "ok": True},
+                                                           {"scale": 1.2, "total_mw": 792.0, "ok": True}]}, sw_margin_pct=-89.0)
+    s = snap(scenarios=[r], review_context={"policy": {"throughput_model": "pipelined", "kpi": [{"variant_ref": "fhd120", "label": "FHD120"}]},
+                                            "rows": []})
+    b = scoreboard(s)[0]
+    assert b["overall"]["label"] == "판정 불가 (기준 없음) · 미등록" and b["overall"]["cls"] == "org"
+    assert "≥×1.20" in kpi_table([b], 1.2)
+    t = sw_table(s)
+    assert "×1.2 ΔmW" in t and "+55" in t and ">737<" not in t

@@ -135,7 +135,8 @@ def kpi_table(board: list[dict[str, Any]], budget: float | None = None) -> str:
         g = k.get("sw_growth_tolerance")
         if g is not None:
             low = budget is not None and float(g) < float(budget) - 1e-6
-            sw_txt += f"<div class='meta {'fail' if low else ''}'>증가 허용 ×{float(g):.2f}</div>"
+            capped = k.get("sw_growth_tested_max") is not None and float(g) >= float(k["sw_growth_tested_max"]) - 1e-6
+            sw_txt += f"<div class='meta {'fail' if low else ''}'>증가 허용 {'≥' if capped else ''}×{float(g):.2f}</div>"
         iq = k.get("iq")
         iq_txt = "—"
         if iq:
@@ -293,10 +294,11 @@ def sw_table(snap: dict[str, Any]) -> str:
     rows.sort(key=lambda r: (r["variant_id"] not in kpi, r.get("sw_margin_pct") if r.get("sw_margin_pct") is not None else 999))
     scales = sorted({g["scale"] for r in rows for g in r["sw"].get("growth") or []})
     h = ("<h3 style='margin:12px 0 4px'>SW timing — stage 시간 · 병렬 처리 · SW 증가</h3><p class=meta>stage 시간 = HW + SW (최소 여유 stage). "
-         "frame 주기를 넘으면 그 수만큼 frame이 동시에 처리되어야 fps 유지(pipelined). 증가 허용 = DVFS 재선택 포함 timing 유지 한계 (≥ = 탐색한 최대 배율까지 유지)"
+         "frame 주기를 넘으면 그 수만큼 frame이 동시에 처리되어야 fps 유지(pipelined). 증가 허용 = DVFS 재선택 포함 timing 유지 한계 (≥ = 탐색한 최대 배율까지 유지). "
+         "ΔmW = SW 증가 slice의 전력 증가분 (기준 조합 slice 대비 — 등록 예측 절대값과 조합이 다를 수 있어 증가분만 표시)"
          + (f", 예산 ×{float(budget):.1f}" if budget else "") + ". 증가별 전력은 목적 통계 기준.</p>"
          "<table><tr><th>Variant</th><th>stage</th><th>HW + SW ms</th><th>frame ms</th><th>동시 frame</th><th>최장 task ms</th><th>여유</th><th>증가 허용</th>"
-         + "".join(f"<th>×{s:.1f} mW</th>" for s in scales) + "</tr>")
+         + "".join(f"<th>×{s:.1f} ΔmW</th>" for s in scales if s != scales[0]) + "</tr>")
     for r in rows[:25]:
         sw = r["sw"]
         g = sw.get("growth_tolerance")
@@ -312,9 +314,16 @@ def sw_table(snap: dict[str, Any]) -> str:
               f"<td class='n {'fail' if (r.get('sw_margin_pct') or 0) < 0 else ''}'>{float(r.get('sw_margin_pct') or 0):+.0f}%</td>"
               f"<td class='n {'fail' if state == 'short' else 'warn' if state == 'unverified' else ''}'>{gt}"
               + (" · 예산까지 미검증" if state == "unverified" else "") + "</td>"
-              + "".join(f"<td class='n {'' if (gm.get(s) or {}).get('ok', True) else 'fail'}'>{_mw((gm.get(s) or {}).get('total_mw'))}</td>" for s in scales)
+              + "".join(f"<td class='n {'' if (gm.get(s) or {}).get('ok', True) else 'fail'}'>{_delta(gm.get(s), gm.get(scales[0]))}</td>"
+                        for s in scales if s != scales[0])
               + "</tr>")
     return h + "</table>" + (f"<p class=meta>외 {len(rows) - 25}건 생략</p>" if len(rows) > 25 else "")
+
+
+def _delta(g: dict[str, Any] | None, base: dict[str, Any] | None) -> str:
+    if not g or not base or g.get("total_mw") is None or base.get("total_mw") is None:
+        return "—"
+    return f"{float(g['total_mw']) - float(base['total_mw']):+,.0f}"
 
 
 def dq_table(snap: dict[str, Any]) -> str:

@@ -79,5 +79,6 @@ def test_report_renders_custom_comparison_and_sw_growth_evidence():
     html = decomp_table(s) + sw_table(s) + dq_table(s)
     assert 'old-v' in html and 'sensor_mode old→&lt;new&gt;' in html and '해상도 FHD→UHD' in html
     assert '+20.0' in html and '+30.0' in html and '-150.0' in html and '+1.00' in html
-    assert '10.0 + 25.0' in html and '×1.10' in html and '670' in html and '500' in html and '400' not in html
+    # growth slices are shown as the increase over the x1.0 slice (670 - 500), never the mean statistic (400)
+    assert '10.0 + 25.0' in html and '×1.10' in html and '+170' in html and '×1.4 ΔmW' in html and '400' not in html
     assert '입력 데이터 확인 항목 없음' in html

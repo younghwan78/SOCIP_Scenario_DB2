@@ -278,6 +278,8 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
         cls = [fps["cls"]]
         if v is None:
             cls.append("mute")
+            if r.get("spec_ok") and not r.get("prediction_id"):
+                cls.append("org")  # an unregistered KPI is visible even without a reference
             label = None
         else:
             cls.append({"over": "fail", "conditional": "org", "similar": "warn", "ok": "ok", "na": "mute", "uncovered": "fail"}[v["state"]])
@@ -291,7 +293,7 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
         elif fps["state"] == "fail":
             label = "fps 미달" if fps["cls"] == "fail" else "검증 필요"
         elif v is None:
-            label = "판정 불가 (기준 없음)" if worst in ("ok", "mute", "warn") else None
+            label = ("판정 불가 (기준 없음)" + ("" if r.get("prediction_id") else " · 미등록")) if worst in ("ok", "mute", "warn", "org") else None
         else:
             label = STATE_LABEL[v["state"]] + ("" if v.get("registered") else " · 미등록")
         out.append(k | {
@@ -299,6 +301,7 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
             "power": {"mw": p, "band": [dist.get("min"), dist.get("max")] if p is not None and dist.get("min") is not None else None},
             "verdict": v, "sw_margin_pct": r.get("sw_margin_pct"), "sw_bottleneck": r.get("sw_bottleneck"), "iq": iq,
             "sw_growth_tolerance": (r.get("sw") or {}).get("growth_tolerance"),
+            "sw_growth_tested_max": (r.get("sw") or {}).get("growth_tested_max"),
             "overall": {"cls": worst if worst != "warn" or label else "warn", "label": label or ("주의" if worst == "warn" else "양호")},
         })
     return out
