@@ -21,6 +21,7 @@ def test_previous_project_prefers_physical_power_over_newer_unknown_capture(monk
                     measured_at=datetime(year, 1, 1, tzinfo=timezone.utc), provenance={"data_origin": origin})
                     for origin, mw, year in [("unknown", 200, 2026), ("physical_capture", 100, 2024)]]
     db = MagicMock()
+    db.query.return_value.join.return_value = db.query.return_value
     db.query.return_value.filter.return_value.all.side_effect = [[], measurements]
     ref = review.power_references(db, "proj-current")["references"]["v1"]
     assert ref["mw"] == 100 and ref["source"] == "measurement"
