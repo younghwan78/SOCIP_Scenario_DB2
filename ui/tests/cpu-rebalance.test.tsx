@@ -185,34 +185,6 @@ it('result first: inputs fold after the first result and the growth sweep reuses
   } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore(); localStorage.clear() }
 })
 
-it('discards a pending growth sweep when the measurement profile changes', async () => {
-  localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
-  const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
-  const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
-    profiles: ['p1', 'p2'].map((id) => ({ id, scenario_ref: null, variant_ref: null, project_ref: null, tasks })),
-    topologies: [{ id: 'pmp-e2600', version: 1, soc_ref: 'soc-exynos2600', clusters: ['MID_LF0', 'MID_LF1', 'MID_HF', 'BIG'] }],
-  })
-  const run = vi.spyOn(rebalanceApi, 'run').mockImplementation((r) => r.cpu_profile_ref === 'p1'
-    ? Promise.resolve(E2600) : new Promise(() => {}))
-  type Sweep = Awaited<ReturnType<typeof sweepApi.run>>
-  let finish!: (s: Sweep) => void
-  const growth = vi.spyOn(sweepApi, 'run').mockImplementation(() => new Promise((resolve) => { finish = resolve }))
-  const host = document.createElement('div'), root = createRoot(host)
-  try {
-    await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
-    expect(growth).toHaveBeenCalledTimes(1)
-    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('조건 편집'))!.click())
-    const profile = [...host.querySelectorAll('label')].find((l) => l.textContent?.startsWith('측정 profile'))!.querySelector('select')!
-    await act(async () => { profile.value = 'p2'; profile.dispatchEvent(new Event('change', { bubbles: true })) })
-    const split = { total_mw: 237, feasible: true, mhz: { MID_LF0: 1600, dsu: 645 }, mw: {}, moved: [] }
-    await act(async () => finish({ profile_ref: 'p1', power_params_ref: 'pmp-e2600', fps: 30,
-      points: [1, 1.1].map((g) => ({ growth: g, reference: split, best: split, strategies: [], winner: null,
-        big_gain_mw: null, cpu_bw_mbs: 870, feasible_count: 1, stages: [] })), events: [],
-      limits: { opp_step: null, opp_step_best_mw: null, timing_at: null, tolerance: null, binding: null }, elapsed_ms: 10 }))
-    expect(host.querySelector('[aria-label="CPU what-if 결론"]')).toBeNull()
-  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore(); localStorage.clear() }
-})
-
 it('refreshes the comparison sweep on topology changes and records the computed request', async () => {
   localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
   const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))

@@ -2,11 +2,46 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Ctx } from '../src/App'
-import { cpuApi, type CpuSweepRequest } from '../src/lib/cpu'
+import { cpuApi, type CpuSweep, type CpuSweepRequest } from '../src/lib/cpu'
 import { CpuWhatIfPage } from '../src/pages/CpuWhatIf'
+import { ChartTipProvider } from '../src/components/ChartTip'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+if (typeof ResizeObserver === 'undefined') Object.assign(globalThis, { ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } })
+
+it('keeps a completed sweep during manual retry but clears it when the reference changes', async () => {
+  localStorage.setItem('sdb.cpu.mode', JSON.stringify('sweep'))
+  const result = (JSON.parse(readFileSync(join(process.cwd(), 'tests/fixtures/cpu-dsu-sweeps.json'), 'utf8')) as { measured: CpuSweep }).measured
+  result.warnings = ['retained sweep result']
+  const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
+    profiles: [{ id: 'profile', scenario_ref: null, variant_ref: null, project_ref: null }],
+    topologies: [{ id: 'target', version: 1, soc_ref: 'soc-exynos2600', clusters: result.range.clusters.map((c) => c.name) }],
+  })
+  const pending: { resolve: (result: CpuSweep) => void; reject: (reason: Error) => void }[] = []
+  const sweep = vi.spyOn(cpuApi, 'sweep').mockImplementation(() => new Promise((resolve, reject) => {
+    pending.push({ resolve, reject })
+  }))
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
+    await act(async () => pending[0].resolve(result))
+    expect(host.textContent).toContain('retained sweep result')
+    const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === '다시 계산')!
+    await act(async () => retry.click())
+    expect(host.textContent).toContain('retained sweep result')
+    await act(async () => pending[1].reject(new Error('manual retry failed')))
+    expect(host.textContent).toContain('manual retry failed')
+    expect(host.textContent).toContain('retained sweep result')
+    await act(async () => host.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click())
+    expect(pending).toHaveLength(3)
+    expect(host.textContent).not.toContain('retained sweep result')
+    await act(async () => pending[2].reject(new Error('reference retry failed')))
+    expect(host.textContent).not.toContain('retained sweep result')
+  } finally { act(() => root.unmount()); inputs.mockRestore(); sweep.mockRestore() }
+})
 
 it('resets task edits on selection and ignores late responses, including reference changes', async () => {
   localStorage.setItem('sdb.cpu.mode', JSON.stringify('sweep'))

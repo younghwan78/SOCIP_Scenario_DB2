@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from scenario_db.api.services import analysis_inputs
 from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest
 from scenario_db.api.schemas.timing_budget import TimingBudgetFleetRequest, TimingBudgetRequest
 from scenario_db.api.services import arch_exploration as svc
@@ -44,13 +45,14 @@ def test_run_persists_summary_and_reports_partial_failure(monkeypatch, commit):
     db = MagicMock()
     monkeypatch.setattr(svc, "_scenarios", lambda *a: [scenario()])
     monkeypatch.setattr(svc, "_variant_ids", lambda *a: ["good", "bad"])
-    monkeypatch.setattr(svc, "_apply_config_profile", lambda *a: None)
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
     graph = SimpleNamespace()
-    def load(db, shim, default):
+    def load(selection, db):
+        shim = selection.request
         if shim.variant_id == "bad":
             raise ValueError("broken pipeline")
-        return graph, {}, "dvfs-test"
-    monkeypatch.setattr(svc, "_load", load)
+        return analysis_inputs.AnalysisInputs(graph, {}, "dvfs-test")
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", load)
     monkeypatch.setattr(svc, "_graph_soc_ref", lambda g: "soc-test")
     value = {"scenario_id": "uc-a", "variant_id": "good", "spec_ok": True, "input_hash": "hash",
              "counts": {"cases": 12, "eligible": 4}, "recommended": {"total_mw": 10, "verified": {"ok": True}}}
@@ -87,19 +89,20 @@ def test_fleet_rejects_unbounded_implicit_scope_before_simulation(monkeypatch):
         (str(i), None) for i in range(201)
     ]
     load = MagicMock()
-    monkeypatch.setattr(timing, "_load", load)
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", load)
     with pytest.raises(UnprocessableError, match="200 variants"):
         timing.analyze_timing_budget_fleet(db, TimingBudgetFleetRequest(scenario_id="uc-a"))
     load.assert_not_called()
 
 
 def test_fleet_deduplicates_explicit_selection_and_preserves_partial_errors(monkeypatch):
-    monkeypatch.setattr(timing, "_apply_config_profile", lambda *a: "simcfg-test")
-    def load(db, shim, default):
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: "simcfg-test")
+    def load(selection, db):
+        shim = selection.request
         if shim.variant_id == "bad":
             raise LookupError("missing")
-        return shim.variant_id, {}, "dvfs-test"
-    monkeypatch.setattr(timing, "_load", load)
+        return analysis_inputs.AnalysisInputs(shim.variant_id, {}, "dvfs-test")
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", load)
     analyze = MagicMock(return_value={"variant_id": "good"})
     monkeypatch.setattr(timing, "analyze_timing_budget", analyze)
     monkeypatch.setattr(timing, "fleet_row", lambda report: report)
@@ -115,8 +118,8 @@ def test_fleet_deduplicates_explicit_selection_and_preserves_partial_errors(monk
 
 @pytest.mark.parametrize("error, expected", [(LookupError("missing"), NotFoundError), (ValueError("invalid"), UnprocessableError)])
 def test_variant_loader_errors_are_domain_errors(monkeypatch, error, expected):
-    monkeypatch.setattr(timing, "_apply_config_profile", lambda *a: None)
-    monkeypatch.setattr(timing, "_load", MagicMock(side_effect=error))
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", MagicMock(side_effect=error))
     with pytest.raises(expected):
         timing.analyze_timing_budget_request(MagicMock(), TimingBudgetRequest(scenario_id="uc-a", variant_id="v"))
 

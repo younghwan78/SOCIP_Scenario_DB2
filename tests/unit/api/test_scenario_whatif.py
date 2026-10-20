@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from scenario_db.api.services import analysis_inputs
 from scenario_db.api.app import create_app
 from scenario_db.api.auth import ApiPrincipal, require_api_principal
 from scenario_db.api.deps import get_db
@@ -30,8 +31,8 @@ def _request(graph, **kwargs):
 
 
 def _service(monkeypatch, graph):
-    monkeypatch.setattr(service, "_load", lambda *a: (graph, {}, None))
-    monkeypatch.setattr(service, "_apply_config_profile", lambda *a: None)
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", lambda *a: analysis_inputs.AnalysisInputs(graph, {}, None))
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
     monkeypatch.setattr(service, "scenario_policy", lambda *a: None)
 
 
@@ -127,9 +128,8 @@ def test_condition_hash_keeps_baseline_config_when_candidate_overrides_it(monkey
 def test_plan_resolves_relative_clock_against_baseline_set_clock(monkeypatch):
     graph = _graph()
     _service(monkeypatch, graph)
-    monkeypatch.setattr(service, "_graph", lambda db, scope: graph)
     scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
-    base = service._baseline_clocks(MagicMock(), service.WhatIfScope(**scope))["mfc_enc"]
+    base = next(n["clock_mhz"] for n in service.targets(MagicMock(), service.WhatIfScope(**scope))["nodes"] if n["id"] == "mfc_enc")
     out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query="MFC 클럭 20% 낮추면 timing 여유는?"))
     assert out["status"] == "ready"
     assert out["changes"] == [{"target": "node_clock_mhz", "node_id": "mfc_enc", "value": round(base * 0.8, 1)}]
@@ -145,11 +145,10 @@ def test_plan_resolves_relative_clock_against_baseline_set_clock(monkeypatch):
 def test_relative_fps_uses_resolved_profile_and_explicit_reopened_settings(monkeypatch):
     graph = _graph()
     _service(monkeypatch, graph)
-    monkeypatch.setattr(service, "_graph", lambda *a: graph)
     def profile(db, shim):
         if "fps" not in shim.config.model_fields_set:
             shim.config = shim.config.model_copy(update={"fps": 60})
-    monkeypatch.setattr(service, "_apply_config_profile", profile)
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", profile)
     scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
     assert service.targets(MagicMock(), service.WhatIfScope(**scope))["fps"] == 60
     for config, expected in [({}, 30), ({"fps": 120}, 60)]:
@@ -167,9 +166,11 @@ def test_relative_fps_uses_resolved_profile_and_explicit_reopened_settings(monke
 def test_invalid_relative_clocks_are_ignored_without_shifting_sources(monkeypatch, query, expected):
     graph = _graph()
     _service(monkeypatch, graph)
-    monkeypatch.setattr(service, "_graph", lambda *a: graph)
-    monkeypatch.setattr(service, "_baseline_clocks", lambda *a: {"mfc_enc": 600, "gdc_o": 600, "gdc_nr": 600})
     scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    available = service.targets(MagicMock(), service.WhatIfScope(**scope))
+    for node in available["nodes"]:
+        node["clock_mhz"] = 600
+    monkeypatch.setattr(service, "targets", lambda *a: available)
     out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query=query))
     assert out["status"] == expected and out["ignored"] and not out["clarifications"]
     assert len(out["sources"]) == len(out["changes"])
@@ -205,12 +206,109 @@ def test_relative_clock_uses_requested_model_options_and_checks_profile_frames(m
     settings = service.WhatIfPlanRequest(**scope.model_dump(), query="clock 절반", config={"fps": 60}, options={"statistic": "mean"})
     fake = MagicMock(return_value={"report": {"ips": [{"node": "mfc_enc", "set_clock_mhz": 600}]}})
     monkeypatch.setattr(service, "_case", fake)
-    assert service._baseline_clocks(MagicMock(), scope, settings) == {"mfc_enc": 600}
+    assert next(n["clock_mhz"] for n in service.targets(MagicMock(), scope, settings)["nodes"] if n["id"] == "mfc_enc") == 600
     assert fake.call_args.args[1].fps == 60
     assert fake.call_args.args[2].statistic == "mean"
     fake.reset_mock()
-    monkeypatch.setattr(service, "_apply_config_profile", lambda db, shim: setattr(shim, "config", shim.config.model_copy(update={"timeline_frame_count": 100000})))
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda db, shim: setattr(shim, "config", shim.config.model_copy(update={"timeline_frame_count": 100000})))
     with pytest.raises(HTTPException) as exc:
-        service._baseline_clocks(MagicMock(), scope, settings)
+        service.targets(MagicMock(), scope, settings)
     assert exc.value.status_code == 422
     fake.assert_not_called()
+
+
+def test_ask_reuses_one_baseline_but_separate_preview_and_save_recalculate(monkeypatch):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    request = service.WhatIfAskRequest(**scope, changes=[{"target": "fps", "value": 60}])
+    original = deepcopy(request.model_dump())
+    original_graph = baseline_fingerprint(graph)
+    calculate = MagicMock(wraps=service.analyze_timing_budget)
+    monkeypatch.setattr(service, "analyze_timing_budget", calculate)
+    asked = service.ask(MagicMock(), request)
+    assert calculate.call_count == 2  # exactly baseline + candidate, with the real engine
+    preview_request = WhatIfPreviewRequest(**scope, changes=request.changes,
+                                          expected_baseline_hash=asked["baseline_hash"])
+    previewed = service.preview(MagicMock(), preview_request)
+    assert calculate.call_count == 4
+    assert asked["result"] == previewed
+    saved = service.save_experiment(
+        MagicMock(), WhatIfExperimentRequest(preview_request=preview_request,
+            expected_condition_hash=previewed["condition_hash"], title="same condition"), "analyst")
+    assert calculate.call_count == 6
+    assert saved["result"] == previewed
+    assert request.model_dump() == original
+    assert baseline_fingerprint(graph) == original_graph
+
+
+def test_legacy_relative_clock_plan_evaluates_baseline_only_once(monkeypatch):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    calculate = MagicMock(wraps=service.analyze_timing_budget)
+    monkeypatch.setattr(service, "analyze_timing_budget", calculate)
+    out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query="MFC clock 20% 낮추면"))
+    calculate.assert_called_once()
+    assert out["status"] == "ready" and out["changes"][0]["target"] == "node_clock_mhz"
+    assert out["changes"][0]["value"] > 0
+
+
+def test_stale_preview_stops_before_timing_evaluation(monkeypatch):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    calculate = MagicMock()
+    monkeypatch.setattr(service, "analyze_timing_budget", calculate)
+    with pytest.raises(ConflictError, match="baseline changed"):
+        service.preview(MagicMock(), _request(graph).model_copy(update={"expected_baseline_hash": "0" * 64}))
+    calculate.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["targets", "plan", "ask", "preview"])
+def test_profile_restrictions_are_checked_before_loading_graph(monkeypatch, kind):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    load = MagicMock()
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", load)
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda db, resolved: setattr(
+        resolved, "config", resolved.config.model_copy(update={"clock_basis": "measured"})))
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    request = {
+        "targets": service.WhatIfScope(**scope),
+        "plan": service.WhatIfPlanRequest(**scope, query="FPS 절반"),
+        "ask": service.WhatIfAskRequest(**scope, changes=[{"target": "fps", "value": 60}]),
+        "preview": _request(graph),
+    }[kind]
+    with pytest.raises(UnprocessableError, match="measured clock/CPU replay"):
+        getattr(service, kind)(MagicMock(), request)
+    load.assert_not_called()
+
+
+def test_ask_candidate_lookup_failure_keeps_not_found_translation(monkeypatch):
+    from scenario_db.exceptions import NotFoundError
+
+    graph = _graph()
+    _service(monkeypatch, graph)
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    monkeypatch.setattr(service, "apply_whatif_changes", MagicMock(side_effect=LookupError("missing candidate")))
+    with pytest.raises(NotFoundError, match="missing candidate"):
+        service.ask(MagicMock(), service.WhatIfAskRequest(**scope, changes=[{"target": "fps", "value": 60}]))
+
+
+def test_preview_keeps_pre_refactor_contract_frame_limit_and_validation_model(monkeypatch):
+    """Standalone preview: no service-level frame check (targets/plan/ask keep it) and the
+    resolved config is validated as the preview request, as before the shared baseline."""
+    graph = _graph()
+    _service(monkeypatch, graph)
+    limit = MagicMock()
+    monkeypatch.setattr(service, "enforce_timeline_frame_limit", limit)
+    service.preview(MagicMock(), _request(graph))
+    limit.assert_not_called()
+    scope = service.WhatIfScope(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id,
+                                variant_id=graph.variant_id)
+    service.targets(MagicMock(), scope)
+    limit.assert_called_once()
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda db, resolved: setattr(
+        resolved, "config", resolved.config.model_copy(update={"clock_basis": "measured"})))
+    with pytest.raises(UnprocessableError, match="WhatIfPreviewRequest"):
+        service.preview(MagicMock(), _request(graph))

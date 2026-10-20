@@ -4,6 +4,7 @@ import pytest
 
 from sqlalchemy.orm import Session
 
+from scenario_db.api.services import analysis_inputs
 from scenario_db.api.schemas.arch_exploration import PromoteRequest
 from scenario_db.api.services import arch_exploration as svc
 from scenario_db.api.services import review
@@ -35,10 +36,11 @@ def test_freshness_replays_explicit_settings_and_preserves_throughput_override(e
 
     rid, ids = stored_run
     calls = []
-    def load(_db, shim, defaults):
+    def load(selection, _db):
+        shim, defaults = selection.request, selection.use_default_dvfs
         calls.append((shim.config.vbat, shim.dvfs_table_ref, defaults))
-        return object(), {}, None
-    monkeypatch.setattr(svc, "_load", load)
+        return analysis_inputs.AnalysisInputs(object(), {}, None)
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", load)
     monkeypatch.setattr(ax, "input_manifest", lambda _g, cfg, _t, *, timing: (
         {"config": str(cfg.vbat), "timing_inputs": timing.throughput_model}, {}))
     with Session(engine) as db:

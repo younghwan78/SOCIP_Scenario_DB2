@@ -11,6 +11,7 @@ from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits
 from scenario_db.reporting.arch_opinions import build_opinions, classify
 from scenario_db.reporting.reason_text import diagnose, explain_all
 from scenario_db.reporting.clock_section import clock_block
+from scenario_db.reporting.review_snapshot import ReviewEvidence, _assemble_review
 
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
 
@@ -34,11 +35,19 @@ def build_snapshot(
     predictions: dict[tuple[str, str], dict[str, Any]],
     changes: dict[tuple[str, str], dict[str, Any]],
     calibration: list[dict[str, Any]] | None = None,
+    *,
+    review: ReviewEvidence | None = None,
 ) -> dict[str, Any]:
     """run: exploration run row as dict; predictions: variant -> current prediction row dict;
     changes: variant -> attribution vs the superseded prediction;
     calibration: ``arch_conclusion.calibration_row`` per measured variant (frozen with the snapshot).
-    Classification uses the run's frozen conditions, never the mutable catalog."""
+    Classification uses the run's frozen conditions, never the mutable catalog.
+    ``review`` supplies collected facts for a complete review snapshot; its evidence,
+    criteria and risks are assembled before calculating the conclusion once."""
+    if review is not None:
+        if calibration is not None:
+            raise ValueError("review evidence already owns report calibration")
+        calibration = review.calibration
     variants = [v for v in run["variants"] if v.get("variant_id")]
     ok = [v for v in variants if v["spec_ok"]]
     sample_dvfs = bool(run.get("dvfs_table_ref") and "sample" in str(run["dvfs_table_ref"]))
@@ -231,6 +240,8 @@ def build_snapshot(
         },
         "calibration": list(calibration or []),
     }
+    if review is not None:
+        snap = _assemble_review(snap, predictions, review)
     snap["conclusion"] = build_conclusion(snap)
     return snap
 

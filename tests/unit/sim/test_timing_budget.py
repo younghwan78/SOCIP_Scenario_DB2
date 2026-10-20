@@ -366,13 +366,15 @@ def test_sw_sampling_preserves_skewed_means(mean):
     assert tb._sample_sw(rng, 0, 100, 100) == 100
 
 
-def test_condition_hash_tracks_dvfs_content(graph_factory, dvfs):
+def test_condition_hash_tracks_dvfs_content(graph_factory, dvfs, monkeypatch):
     from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
-    from scenario_db.api.services.timing_budget import _condition_hash, _shim
+    from scenario_db.api.services.timing_budget import _condition_hash
+    from scenario_db.api.services import analysis_inputs
 
     graph = graph_factory("cam-rec-r1-uhd30-vdis")
     request = TimingBudgetRequest(scenario_id=graph.scenario_id, variant_id=graph.variant_id)
-    shim = _shim(request, graph.variant_id)
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
+    shim = analysis_inputs.resolve_analysis_selection(None, request).request
     before = _condition_hash(graph, request.options, shim, dvfs)
     tables = {k: v.model_copy(deep=True) for k, v in dvfs.items()}
     first = next(iter(tables.values()))

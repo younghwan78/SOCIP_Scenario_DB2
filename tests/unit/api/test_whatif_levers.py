@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
+from scenario_db.api.services import analysis_inputs
 from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfChange, WhatIfPreviewRequest, WhatIfScope
 from scenario_db.api.services import scenario_whatif as service
 from scenario_db.api.services.whatif_levers import _reshape, scaled_size
@@ -33,8 +34,8 @@ def _graph():
 def env():
     graph = _graph()
     mp = pytest.MonkeyPatch()
-    mp.setattr(service, "_load", lambda *a: (graph, {}, None))
-    mp.setattr(service, "_apply_config_profile", lambda *a: None)
+    mp.setattr(analysis_inputs.AnalysisSelection, "load", lambda *a: analysis_inputs.AnalysisInputs(graph, {}, None))
+    mp.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
     mp.setattr(service, "scenario_policy", lambda *a: None)
     scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
     targets = service.targets(MagicMock(), WhatIfScope(**scope))

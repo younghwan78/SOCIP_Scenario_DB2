@@ -9,6 +9,9 @@ from sqlalchemy import func, literal, tuple_
 from sqlalchemy.orm import Session, defer, load_only
 
 from scenario_db.comparison.calibration import CATEGORIES, category_fit, compare_split, measured_split, pct
+from scenario_db.comparison.measurement_selection import (
+    DATA_ORIGINS, data_origin, is_physical, is_synthetic, representative_measurement,
+)
 from scenario_db.db.models.capability import SimConfigProfile
 from scenario_db.db.models.definition import Scenario
 from scenario_db.db.models.evidence import Evidence
@@ -23,36 +26,6 @@ def _total(kpi: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(t, (int, float)):
         return {"mean": float(t), "std": None, "p95": None, "ci_95": None, "n": None}
     return {"mean": None, "std": None, "p95": None, "ci_95": None, "n": None}
-
-
-DATA_ORIGINS = ("synthetic", "physical_capture", "unknown")
-
-
-def data_origin(provenance: dict[str, Any] | None) -> str:
-    """synthetic / physical_capture / unknown.
-
-    An explicit ``provenance.data_origin`` wins. Legacy documents: the synthetic naming rules
-    (see scripts/generate_rear_recording_evidence.py); a capture needs a recorded collection method
-    *and* device; anything else is unknown and never counts as silicon evidence.
-    """
-    p = provenance or {}
-    explicit = p.get("data_origin")
-    if explicit in DATA_ORIGINS:
-        return str(explicit)
-    if str(p.get("collection_method") or "").startswith("synthetic") or p.get("device_id") == "SYNTHETIC":
-        return "synthetic"
-    if p.get("collection_method") and p.get("device_id"):
-        return "physical_capture"
-    return "unknown"
-
-
-def is_synthetic(provenance: dict[str, Any] | None) -> bool:
-    """Generated fixture, not a silicon capture."""
-    return data_origin(provenance) == "synthetic"
-
-
-def is_physical(provenance: dict[str, Any] | None) -> bool:
-    return data_origin(provenance) == "physical_capture"
 
 
 def _origin_bucket(provenance: dict[str, Any] | None) -> str:
@@ -699,20 +672,6 @@ def _bw_comparability(sim: Evidence | None, meas: Evidence | None) -> dict[str, 
 
 
 # ------------------------------------------------------------------- summary (CAL-01..06)
-def _rep_rank(m: Evidence) -> tuple[int, int, int, datetime]:
-    """Representative capture of a variant: comparable (has total) > silicon > not synthetic > newest.
-
-    Same order as the report's ``_meas_rank`` (arch_exploration) so the page and the report pick
-    the same measurement.
-    """
-    has_total = _total(m.kpi)["mean"] is not None
-    origin = data_origin(m.provenance)
-    when = m.measured_at if m.measured_at is not None else datetime.min
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
-    return (int(has_total), int(origin == "physical_capture"), int(origin != "synthetic"), when)
-
-
 def calibration_summary(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None,
                         include_synthetic: bool = True) -> dict[str, Any]:
     """Model-level view of prediction ↔ measurement: one representative capture per variant,
@@ -735,13 +694,17 @@ def calibration_summary(db: Session, *, scenario_id: str | None = None, project_
                 .filter(ScenarioVariant.scenario_id.in_(ids)).scalar() if ids else 0)
     ms = (db.query(Evidence).options(load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
                                                 Evidence.measured_at, Evidence.kpi, Evidence.provenance))
-          .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(ids)).all()) if ids else []
+          .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(ids))
+          .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all()) if ids else []
     groups: dict[tuple[str, str], list[Evidence]] = {}
     for m in ms:
         if not include_synthetic and is_synthetic(m.provenance):
             continue
         groups.setdefault((m.scenario_ref, m.variant_ref), []).append(m)
-    reps = {k: max(v, key=_rep_rank) for k, v in groups.items()}
+    # Calibration compares numeric totals only (``_total``); the report keeps its own rule.
+    reps = {k: selected for k, captures in groups.items()
+            if (selected := representative_measurement(
+                captures, has_total=lambda m: _total(m.kpi)["mean"] is not None)) is not None}
     reps = {k: m for k, m in reps.items() if _total(m.kpi)["mean"] is not None}
     with_pred = (db.query(func.count()).select_from(Prediction)
                  .filter(Prediction.status == "current", Prediction.scenario_ref.in_(ids)).scalar() if ids else 0)
