@@ -25,8 +25,10 @@ graph and Timing Budget model; capability notes distinguish a reviewed platform
 profile from generic policy and do not certify model calibration.
 
 Target interpretation and candidate execution within one request share its
-resolved baseline. A separate preview or save resolves current inputs again;
-request-local reuse never bypasses the expected-baseline check on saving.
+resolved baseline. A separate preview or save resolves current inputs again
+with the unchanged preview contract (validation as the preview request,
+expected-baseline check before timing evaluation); request-local reuse never
+bypasses the expected-baseline check on saving.
 
 Supported changes: `anchor_size`, `output_size`, eligible `node_size`, `fps`, and
 `node_clock_mhz`, anchorless `stream_size`, and modeled `node_param` settings.

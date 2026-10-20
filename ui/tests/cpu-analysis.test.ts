@@ -76,14 +76,15 @@ it('clears the sweep on a selection transition while optionally retaining the re
   await c.sweeps[0].response.resolve(sweep)
   await initial
   const pending = analysis.execute({ mode: 'sweep', request: request() })
-  analysis.reset({ keepRebalance: true })
+  // page effect: cleanup cancels, body resets; busy is left for the next run (pre-module behavior)
+  analysis.cancel(); analysis.reset({ keepRebalance: true })
   expect(analysis.getSnapshot()).toMatchObject({
-    result: null, rebalance, growth: { result: growth() }, busy: false, snapshotRequest: null,
+    result: null, rebalance, growth: { result: growth() }, busy: true, snapshotRequest: null,
   })
   await c.sweeps[1].response.resolve(sweep)
   await pending
   expect(analysis.getSnapshot().result).toBeNull()
-  analysis.reset()
+  analysis.cancel(); analysis.reset()
   expect(analysis.getSnapshot()).toMatchObject({ result: null, rebalance: null, growth: null })
   expect(analysis.getSnapshot().runs).toHaveLength(1)
 })
@@ -107,7 +108,8 @@ it('runs main, comparison and both growths sequentially with a captured request 
   expect(c.growths[0].request.growths).toEqual([1, 1.5])
   await c.growths[0].response.resolve(growth())
   expect(c.calls).toEqual(['rebalance:main', 'rebalance:comparison', 'growth:main', 'growth:comparison'])
-  expect(analysis.getSnapshot().snapshotRequest).toBeNull()
+  // recordable only once busy flags clear (page: canRecord = request && !busy && !growthBusy)
+  expect(analysis.getSnapshot()).toMatchObject({ snapshotRequest: c.growths[0].request, busy: true, growthBusy: true })
   await c.growths[1].response.resolve(growth('comparison'))
   await done
   const state = analysis.getSnapshot()
@@ -120,7 +122,7 @@ it('runs main, comparison and both growths sequentially with a captured request 
   expect(observed.some((s) => s.rebalance && s.busy && !s.growth)).toBe(true)
   expect(state).toMatchObject({ busy: false, growthBusy: false, error: null })
   unsubscribe()
-  analysis.cancel()
+  analysis.cancel(); analysis.reset({ keepRebalance: true })
   expect(analysis.getSnapshot().growth?.result).toEqual(growth())
   expect(analysis.getSnapshot().snapshotRequest).toBeNull()
 })
@@ -133,7 +135,7 @@ it.each(['main', 'comparison', 'growth', 'comparisonGrowth'] as const)(
     if (stage !== 'main') await c.rebalances[0].response.resolve(rebalance)
     if (stage === 'growth' || stage === 'comparisonGrowth') await c.rebalances[1].response.resolve(rebalance)
     if (stage === 'comparisonGrowth') await c.growths[0].response.resolve(growth())
-    analysis.reset()
+    analysis.cancel(); analysis.reset()
     const current = analysis.execute({ mode: 'sweep', request: { ...request(), cpu_profile_ref: 'new-profile' } })
     const count = c.calls.length
     if (stage === 'main') await c.rebalances[0].response.resolve(rebalance)
@@ -185,15 +187,57 @@ it('retries failed growth independently without duplicating history or exposing 
   expect(analysis.getSnapshot().snapshotRequest?.growths).toEqual([1, 2])
 })
 
-it('a standalone growth replaces a pending main calculation and owns the only recordable result', async () => {
+it('a standalone growth does not cancel a pending rebalance; the rebalance growth supersedes it later', async () => {
   const c = controlled(), analysis = createCpuAnalysis(c.adapter)
-  const old = analysis.execute({ mode: 'rebalance', request: request(), growths: [1, 1.5], comparison: 'comparison' })
-  const current = analysis.execute({ mode: 'growth', request: request(), growths: [1, 2] })
-  await c.rebalances[0].response.resolve(rebalance)
-  await old
+  const main = analysis.execute({ mode: 'rebalance', request: request(), growths: [1, 1.5], comparison: 'comparison' })
+  const manual = analysis.execute({ mode: 'growth', request: request(), growths: [1, 2], comparison: 'comparison' })
   expect(c.calls).toEqual(['rebalance:main', 'growth:main'])
-  expect(analysis.getSnapshot()).toMatchObject({ busy: false, growthBusy: true, rebalance: null, runs: [], snapshotRequest: null })
+  expect(analysis.getSnapshot()).toMatchObject({ busy: true, growthBusy: true })
   await c.growths[0].response.resolve(growth())
-  await current
+  expect(c.calls).toEqual(['rebalance:main', 'growth:main', 'growth:comparison'])
+  await c.growths[1].response.resolve(growth('comparison'))
+  await manual
   expect(analysis.getSnapshot().snapshotRequest?.growths).toEqual([1, 2])
+  await c.rebalances[0].response.resolve(rebalance)
+  await c.rebalances[1].response.resolve(rebalance)
+  expect(analysis.getSnapshot()).toMatchObject({ rebalance, comparison: rebalance, snapshotRequest: null, growthBusy: true })
+  expect(analysis.getSnapshot().runs).toHaveLength(1)
+  await c.growths[2].response.resolve(growth())
+  await c.growths[3].response.resolve(growth('comparison'))
+  await main
+  expect(analysis.getSnapshot()).toMatchObject({ busy: false, growthBusy: false })
+  expect(analysis.getSnapshot().snapshotRequest?.growths).toEqual([1, 1.5])
+})
+
+it('a manual growth still pending when the rebalance starts its own growth is discarded', async () => {
+  const c = controlled(), analysis = createCpuAnalysis(c.adapter)
+  const main = analysis.execute({ mode: 'rebalance', request: request(), growths: [1, 1.5] })
+  const manual = analysis.execute({ mode: 'growth', request: request(), growths: [1, 2] })
+  await c.rebalances[0].response.resolve(rebalance)
+  expect(c.calls).toEqual(['rebalance:main', 'growth:main', 'growth:main'])
+  await c.growths[0].response.resolve(growth('stale'))
+  await manual
+  expect(analysis.getSnapshot()).toMatchObject({ growth: null, snapshotRequest: null, growthBusy: true })
+  await c.growths[1].response.resolve(growth())
+  await main
+  expect(analysis.getSnapshot().growth?.result.power_params_ref).toBe('main')
+  expect(analysis.getSnapshot().snapshotRequest?.growths).toEqual([1, 1.5])
+})
+
+it('the comparison of the previous run stays visible until the new main result arrives', async () => {
+  const c = controlled(), analysis = createCpuAnalysis(c.adapter)
+  const first = analysis.execute({ mode: 'rebalance', request: request(), growths: [1], comparison: 'comparison' })
+  await c.rebalances[0].response.resolve(rebalance)
+  await c.rebalances[1].response.resolve(rebalance)
+  await c.growths[0].response.reject('growth failed')
+  await first
+  const second = analysis.execute({ mode: 'rebalance', request: request(), growths: [1], comparison: 'comparison' })
+  expect(analysis.getSnapshot()).toMatchObject({ comparison: rebalance, growthError: 'growth failed', busy: true })
+  await c.rebalances[2].response.resolve(rebalance)
+  expect(analysis.getSnapshot()).toMatchObject({ comparison: null, comparisonError: null })
+  await c.rebalances[3].response.resolve(rebalance)
+  await c.growths[1].response.resolve(growth())
+  await c.growths[2].response.resolve(growth('comparison'))
+  await second
+  expect(analysis.getSnapshot()).toMatchObject({ comparison: rebalance, growthError: null, busy: false })
 })

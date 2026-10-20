@@ -1,8 +1,10 @@
 # Analysis module ownership
 
 The modules below concentrate rules shared by analysis callers. Domain terms are
-defined in the [glossary](../../GLOSSARY.md). Public request/response formats,
-stored report formats, simulation equations and publication rules are unchanged.
+defined in the [glossary](../../GLOSSARY.md). This is a structural change: public
+request/response formats, stored report formats, simulation equations, selection
+results, error contracts and UI state transitions are unchanged. The only intended
+runtime difference is fewer repeated calculations within one request.
 
 ## Report snapshot
 
@@ -27,13 +29,18 @@ frozen report persistence. A fake database is not a replacement for those tests.
 captures already scoped by its caller. Calibration and report collection use
 the same ordering:
 
-1. A total-power value is present, including zero. A scalar or `mean` value is
-   sufficient; this does not assert completeness of other KPI fields.
+1. A total-power value is present, including zero. The rule stays caller-owned,
+   as before: the report counts any non-`None` scalar or `mean`; calibration
+   passes its numeric `_total` rule (`has_total=`).
 2. Origin is physical capture, then unknown, then synthetic.
 3. Measurement time is newest first; absent time is oldest.
-4. Equal candidates use ascending evidence ID.
+4. Ties keep input order. Both callers read captures as
+   `measured_at DESC NULLS LAST, id`, so ties resolve with the database order the
+   report already used. Calibration previously had no `ORDER BY` (tie result was
+   unspecified); it now reads with the same one.
 
-The selector does not query the database or widen scope. Batched measurement
+The selector computes each capture's priority once. It does not query the
+database or widen scope. Batched measurement
 detail loading remains separate. Previous-project references have their own
 explicit/source-priority/mapping policy and do not use this selector.
 
@@ -57,7 +64,13 @@ continues to reject measured replay. PostgreSQL remains the runtime authority.
 
 Each request prepares and evaluates one baseline. Target discovery, interpretation
 and candidate evaluation use that same resolved baseline. Legacy relative-clock
-planning uses clocks already present in its target catalog.
+planning uses clocks already present in its target catalog (the same
+`set_clock_mhz` values it previously recalculated).
+
+A standalone preview keeps its previous contract: the resolved config is validated
+as `WhatIfPreviewRequest`, the service-level timeline frame check is not applied
+(the router still checks the requested frames), and the expected baseline hash is
+compared before any timing evaluation.
 
 This lifetime ends with the request. A separate preview or save resolves current
 inputs again and checks the expected baseline hash. Candidate changes remain
@@ -72,9 +85,13 @@ module to React. The page retains input editing, selection and DSU display
 experiments.
 
 One run executes main, comparison, growth and comparison growth sequentially.
-Replacing or cancelling a run prevents stale responses from publishing or
-starting later stages. A review snapshot uses the request associated with the
-calculated growth result, never the currently edited inputs.
+Two tokens keep the previous page semantics: the workflow token (former
+`requestId`) is replaced by a new sweep/rebalance or `cancel`; the growth token
+(former `sweepId`) is replaced by any growth start, a rebalance start or `reset`.
+A standalone growth therefore does not cancel an in-flight rebalance; the
+rebalance's own growth later supersedes it. The previous comparison stays visible
+until the new main result arrives. A review snapshot uses the request associated
+with the calculated growth result, never the currently edited inputs.
 
 The production adapter uses existing HTTP calls and their admission/retry
 behavior. Controlled test adapters exercise delayed responses and partial

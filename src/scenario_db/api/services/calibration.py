@@ -694,14 +694,17 @@ def calibration_summary(db: Session, *, scenario_id: str | None = None, project_
                 .filter(ScenarioVariant.scenario_id.in_(ids)).scalar() if ids else 0)
     ms = (db.query(Evidence).options(load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
                                                 Evidence.measured_at, Evidence.kpi, Evidence.provenance))
-          .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(ids)).all()) if ids else []
+          .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(ids))
+          .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all()) if ids else []
     groups: dict[tuple[str, str], list[Evidence]] = {}
     for m in ms:
         if not include_synthetic and is_synthetic(m.provenance):
             continue
         groups.setdefault((m.scenario_ref, m.variant_ref), []).append(m)
+    # Calibration compares numeric totals only (``_total``); the report keeps its own rule.
     reps = {k: selected for k, captures in groups.items()
-            if (selected := representative_measurement(captures)) is not None}
+            if (selected := representative_measurement(
+                captures, has_total=lambda m: _total(m.kpi)["mean"] is not None)) is not None}
     reps = {k: m for k, m in reps.items() if _total(m.kpi)["mean"] is not None}
     with_pred = (db.query(func.count()).select_from(Prediction)
                  .filter(Prediction.status == "current", Prediction.scenario_ref.in_(ids)).scalar() if ids else 0)

@@ -37,7 +37,7 @@ export interface CpuAnalysisState {
   comparisonGrowthError: string | null
   busy: boolean
   growthBusy: boolean
-  /** Only the latest completed workflow may supply a review snapshot. */
+  /** Request of the last growth that completed for the current workflow; cleared when a new one starts. */
   snapshotRequest: GrowthRequest | null
   runs: CpuRun[]
 }
@@ -60,54 +60,60 @@ function onComparison(request: CpuRebalanceRequest, comparison: string): CpuReba
 
 /**
  * Owns one CPU analysis at a time, including its downstream comparison and growth calculations.
- * Replacing/cancelling an operation prevents every remaining stage from publishing or starting.
+ *
+ * Two tokens keep the pre-module page semantics exactly:
+ * - `generation` (the page's former `requestId`): a sweep/rebalance workflow. A new workflow or
+ *   `cancel` stops every remaining stage of the previous one from publishing or starting.
+ * - `growthToken` (the former `sweepId`): one growth stage. A standalone growth run supersedes only
+ *   the pending growth; an in-flight rebalance keeps running and later starts its own growth.
  * Admission/retries remain the adapter's responsibility; stages are deliberately sequential.
  */
 export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuRun[] = []) {
   let state = empty(structuredClone(initialRuns))
   let generation = 0
-  let growthGeneration = -1
+  let growthToken = 0
   const listeners = new Set<() => void>()
   const publish = (patch: Partial<CpuAnalysisState>) => {
-    const next = { ...state, ...patch }
-    next.snapshotRequest = !next.busy && !next.growthBusy && growthGeneration === generation
-      ? next.growth?.request ?? null : null
-    state = next
+    state = { ...state, ...patch }
     listeners.forEach((listener) => listener())
   }
-  const cancel = () => {
-    ++generation
-    publish({ busy: false, growthBusy: false })
-  }
+  /** Stop publishing for the current workflow and growth; displayed state is left as is. */
+  const cancel = () => { ++generation; ++growthToken }
   const runGrowth = async (request: GrowthRequest, comparison: string | undefined, id: number) => {
-    publish({ growthBusy: true, growthError: null, comparisonGrowth: null, comparisonGrowthError: null })
+    const token = ++growthToken
+    const live = () => token === growthToken && id === generation
+    publish({ growthBusy: true, growthError: null, snapshotRequest: null, comparisonGrowth: null, comparisonGrowthError: null })
     try {
       const result = await adapter.growth(request)
-      if (id !== generation) return
-      growthGeneration = id
-      publish({ growth: { result, request } })
+      if (!live()) return
+      publish({ growth: { result, request }, snapshotRequest: request })
       if (comparison && comparison !== request.power_params_ref) {
         try {
           const result = await adapter.growth({ ...onComparison(request, comparison), growths: request.growths })
-          if (id === generation) publish({ comparisonGrowth: result })
+          if (live()) publish({ comparisonGrowth: result })
         } catch (error) {
-          if (id === generation) publish({ comparisonGrowthError: message(error) })
+          if (live()) publish({ comparisonGrowthError: message(error) })
         }
       }
     } catch (error) {
-      if (id === generation) publish({ growth: null, growthError: message(error) })
+      if (live()) publish({ growthError: message(error), growth: null })
     } finally {
-      if (id === generation) publish({ growthBusy: false })
+      if (token === growthToken) publish({ growthBusy: false })
     }
   }
   const execute = async (input: CpuAnalysisPlan) => {
     // Freeze the calculation's inputs before the first await, including nested task edits and growths.
     const plan = structuredClone(input)
+    if (plan.mode === 'growth') {
+      // A standalone growth belongs to the current workflow and does not replace it.
+      return runGrowth({ ...plan.request, growths: plan.growths }, plan.comparison, generation)
+    }
     const id = ++generation
+    if (plan.mode === 'rebalance') ++growthToken  // a rebalance owns the next growth stage
     publish({
-      busy: plan.mode !== 'growth', growthBusy: plan.mode === 'growth',
-      error: null, growthError: null, comparisonGrowth: null, comparisonGrowthError: null,
-      ...(plan.mode !== 'growth' ? { comparison: null, comparisonError: null } : {}),
+      busy: true, error: null,
+      ...(plan.mode === 'rebalance'
+        ? { growthBusy: false, snapshotRequest: null, comparisonGrowth: null, comparisonGrowthError: null } : {}),
     })
     try {
       if (plan.mode === 'sweep') {
@@ -115,21 +121,20 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
         if (id === generation) publish({ result })
         return
       }
-      if (plan.mode === 'rebalance') {
-        const result = await adapter.rebalance(plan.request)
-        if (id !== generation) return
-        publish({ rebalance: result })
-        let comparison: CpuRebalance | null = null
-        if (plan.comparison && plan.comparison !== plan.request.power_params_ref) {
-          try {
-            comparison = await adapter.rebalance(onComparison(plan.request, plan.comparison))
-            if (id !== generation) return
-            publish({ comparison })
-          } catch (error) {
-            if (id !== generation) return
-            publish({ comparisonError: message(error) })
-          }
+      const result = await adapter.rebalance(plan.request)
+      if (id !== generation) return
+      // The previous comparison stays visible until the new main result arrives.
+      publish({ rebalance: result, comparison: null, comparisonError: null })
+      let comparison: CpuRebalance | null = null
+      if (plan.comparison && plan.comparison !== plan.request.power_params_ref) {
+        try {
+          const response = await adapter.rebalance(onComparison(plan.request, plan.comparison))
+          if (id === generation) { publish({ comparison: response }); comparison = response }
+        } catch (error) {
+          if (id === generation) publish({ comparisonError: message(error) })
         }
+      }
+      if (id === generation) {
         const { default_growth: _growth, cpu_bw_scale: _bw, ...context } = plan.request
         const run: CpuRun = {
           context: JSON.stringify(context), at: new Date().toISOString(),
@@ -156,16 +161,17 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     execute,
     cancel,
-    // Selection transitions clear the sweep; retries retain the last successful result.
-    // Reference/mode/comparison changes keep rebalance and growth visible until replaced.
+    /**
+     * Selection/mode transition: clears the sweep and the growth stage. A changed input selection
+     * (`keepRebalance: false`) also drops the rebalance and growth results; errors, the comparison
+     * and the busy flag are left to the next run, as before.
+     */
     reset: ({ keepRebalance = false }: { keepRebalance?: boolean } = {}) => {
-      ++generation
+      ++growthToken
       publish({
-        ...empty(state.runs),
-        ...(keepRebalance ? {
-          rebalance: state.rebalance, comparison: state.comparison, comparisonError: state.comparisonError,
-          growth: state.growth,
-        } : {}),
+        result: null, growthBusy: false, growthError: null, snapshotRequest: null,
+        comparisonGrowth: null, comparisonGrowthError: null,
+        ...(keepRebalance ? {} : { rebalance: null, growth: null }),
       })
     },
     clearHistory: () => publish({ runs: [] }),

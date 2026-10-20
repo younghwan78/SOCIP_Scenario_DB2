@@ -6,7 +6,7 @@ not choose previous-project references, whose source priorities are configurable
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any, Protocol, TypeVar
 
@@ -49,28 +49,36 @@ class Capture(Protocol):
 
 
 T = TypeVar("T", bound=Capture)
+_ORIGIN_RANK = {"physical_capture": 2, "unknown": 1, "synthetic": 0}
+_OLDEST = datetime.min.replace(tzinfo=UTC)
 
 
-def _priority(capture: Capture) -> tuple[bool, int, datetime]:
+def has_total_value(capture: Capture) -> bool:
+    """Report rule: a scalar or ``mean`` total that is not ``None`` (zero included)."""
     total = (capture.kpi or {}).get("total_power_mw")
-    has_total = (total.get("mean") if isinstance(total, dict) else total) is not None
-    origin = data_origin(capture.provenance)
-    when = capture.measured_at or datetime.min.replace(tzinfo=UTC)
+    return (total.get("mean") if isinstance(total, dict) else total) is not None
+
+
+def _priority(capture: Capture, has_total: Callable[[Capture], bool]) -> tuple[bool, int, datetime]:
+    when = capture.measured_at or _OLDEST
     if when.tzinfo is None:
         when = when.replace(tzinfo=UTC)
-    return has_total, {"physical_capture": 2, "unknown": 1, "synthetic": 0}[origin], when
+    return bool(has_total(capture)), _ORIGIN_RANK[data_origin(capture.provenance)], when
 
 
-def representative_measurement(captures: Iterable[T]) -> T | None:
-    """Choose total present > physical > unknown > synthetic > newest > lowest ID.
+def representative_measurement(captures: Iterable[T], *,
+                               has_total: Callable[[Capture], bool] = has_total_value) -> T | None:
+    """Choose total present > physical > unknown > synthetic > newest; ties keep input order.
 
-    Zero power is present, missing timestamps are oldest, and naive timestamps are
-    UTC. Equal-priority captures use ascending ID regardless of database row order.
+    Missing timestamps are oldest and naive timestamps are UTC. Callers pass captures in
+    database order ``measured_at DESC NULLS LAST, id`` so ties resolve with the database
+    collation, exactly as before. ``has_total`` lets a caller keep its own comparability
+    rule (calibration accepts numeric totals only). Each priority is computed once.
     """
     selected: T | None = None
+    best: tuple[bool, int, datetime] | None = None
     for capture in captures:
-        if selected is None or _priority(capture) > _priority(selected):
-            selected = capture
-        elif _priority(capture) == _priority(selected) and capture.id < selected.id:
-            selected = capture
+        rank = _priority(capture, has_total)
+        if best is None or rank > best:
+            selected, best = capture, rank
     return selected

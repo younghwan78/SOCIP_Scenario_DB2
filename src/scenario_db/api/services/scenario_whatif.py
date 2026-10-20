@@ -42,22 +42,30 @@ ASK_KINDS = [{"ask": "what_if", "label": "조건 바꿔보기", "description": "
 
 
 def _baseline(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None,
-              *, expected_baseline_hash: str | None = None) -> dict[str, Any]:
-    """Prepare and evaluate one request-local baseline; no cross-request cache."""
-    settings = settings or WhatIfModelSettings(**scope.model_dump())
+              *, preview: WhatIfPreviewRequest | None = None) -> dict[str, Any]:
+    """Prepare and evaluate one request-local baseline; no cross-request cache.
+
+    ``preview`` keeps the standalone preview contract: the resolved config is validated
+    as that preview request, the timeline frame limit is not applied (it is checked when
+    targets are discovered), and the expected baseline hash must still match.
+    """
+    settings = preview or settings or WhatIfModelSettings(**scope.model_dump())
     req = TimingBudgetRequest(scenario_id=scope.scenario_id, variant_id=scope.variant_id,
                               config=settings.config.model_copy(deep=True), options=settings.options.model_copy(deep=True))
     selection = resolve_analysis_selection(db, req)
     config = selection.request.config
     # Active model defaults can fill restricted inputs after request validation.
-    WhatIfModelSettings(**scope.model_dump(include={"project_ref", "scenario_id", "variant_id"}),
-                        config=config, options=req.options)
-    enforce_timeline_frame_limit(max(req.options.frames, req.options.timeline_frames + 4,
-                                    config.timeline_frame_count), get_settings().simulation_max_timeline_frames)
+    if preview is not None:
+        WhatIfPreviewRequest.model_validate({**preview.model_dump(), "config": config.model_dump()})
+    else:
+        WhatIfModelSettings(**scope.model_dump(include={"project_ref", "scenario_id", "variant_id"}),
+                            config=config, options=req.options)
+        enforce_timeline_frame_limit(max(req.options.frames, req.options.timeline_frames + 4,
+                                        config.timeline_frame_count), get_settings().simulation_max_timeline_frames)
     inputs = selection.load(db)
     graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
     _guard(graph, scope)
-    if expected_baseline_hash is not None and baseline_fingerprint(graph) != expected_baseline_hash:
+    if preview is not None and baseline_fingerprint(graph) != preview.expected_baseline_hash:
         raise ConflictError("What-if baseline changed; interpret and preview the condition again")
     options = apply_throughput(req.options, scenario_policy(db, scope.scenario_id))
     return {"graph": graph, "config": config, "tables": tables, "ref": ref, "options": options,
@@ -199,7 +207,7 @@ def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
     # A separate preview/save request always resolves today's inputs again.
     scope = WhatIfScope(**request.model_dump(include={"project_ref", "scenario_id", "variant_id"}))
     try:
-        base = _baseline(db, scope, request, expected_baseline_hash=request.expected_baseline_hash)
+        base = _baseline(db, scope, preview=request)
         return _preview_from(base, request)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc

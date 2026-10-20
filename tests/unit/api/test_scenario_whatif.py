@@ -293,3 +293,22 @@ def test_ask_candidate_lookup_failure_keeps_not_found_translation(monkeypatch):
     monkeypatch.setattr(service, "apply_whatif_changes", MagicMock(side_effect=LookupError("missing candidate")))
     with pytest.raises(NotFoundError, match="missing candidate"):
         service.ask(MagicMock(), service.WhatIfAskRequest(**scope, changes=[{"target": "fps", "value": 60}]))
+
+
+def test_preview_keeps_pre_refactor_contract_frame_limit_and_validation_model(monkeypatch):
+    """Standalone preview: no service-level frame check (targets/plan/ask keep it) and the
+    resolved config is validated as the preview request, as before the shared baseline."""
+    graph = _graph()
+    _service(monkeypatch, graph)
+    limit = MagicMock()
+    monkeypatch.setattr(service, "enforce_timeline_frame_limit", limit)
+    service.preview(MagicMock(), _request(graph))
+    limit.assert_not_called()
+    scope = service.WhatIfScope(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id,
+                                variant_id=graph.variant_id)
+    service.targets(MagicMock(), scope)
+    limit.assert_called_once()
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda db, resolved: setattr(
+        resolved, "config", resolved.config.model_copy(update={"clock_basis": "measured"})))
+    with pytest.raises(UnprocessableError, match="WhatIfPreviewRequest"):
+        service.preview(MagicMock(), _request(graph))

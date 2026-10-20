@@ -74,7 +74,8 @@ def test_report_and_calibration_choose_the_same_scoped_representative_on_timesta
     with Session(engine) as db:
         svc.promote(db, PromoteRequest(run_id=rid))
         try:
-            # Insert the larger ID first; selection must not depend on query order.
+            # Insert the larger ID first; both paths read measured_at DESC NULLS LAST, id, so the
+            # timestamp tie resolves by the database order, not by insertion order.
             for sid in ids:
                 for tag, origin, year, total in (
                     ("z-physical", "physical_capture", 2025, 10),

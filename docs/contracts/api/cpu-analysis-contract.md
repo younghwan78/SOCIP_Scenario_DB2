@@ -94,5 +94,6 @@ active snapshots into `snapshot.cpu` and the `cpu_growth_tolerance` risk rule
 
 The UI associates a completed growth result with the request that calculated it.
 Editing inputs does not rewrite that request. Replacing/cancelling an analysis
-invalidates pending results and snapshot eligibility; main, comparison, growth
-and comparison-growth requests remain sequential to share admission capacity.
+invalidates pending results and snapshot eligibility; a standalone growth re-run
+replaces only the pending growth, not an in-flight rebalance. Main, comparison,
+growth and comparison-growth requests remain sequential to share admission capacity.
