@@ -47,19 +47,20 @@ def test_confidence_shared_rule():
                                   input_reasons=["DVFS SAMPLE"], weak_input=True)["grade"] == "C"
 
 
-def test_representative_rank_prefers_comparable_physical_captures():
+def test_representative_selection_prefers_comparable_physical_captures():
     from datetime import UTC, datetime
     from types import SimpleNamespace
 
-    from scenario_db.api.services.calibration import _rep_rank
+    from scenario_db.comparison.measurement_selection import representative_measurement
 
-    physical = SimpleNamespace(kpi={'total_power_mw': 100},
+    physical = SimpleNamespace(id="physical", kpi={'total_power_mw': 100},
                                provenance={'device_id': 'device', 'collection_method': 'capture'},
                                measured_at=datetime(2025, 1, 1))
-    synthetic = SimpleNamespace(kpi={'total_power_mw': {'mean': 100}}, provenance={'device_id': 'SYNTHETIC'},
+    synthetic = SimpleNamespace(id="synthetic", kpi={'total_power_mw': {'mean': 100}}, provenance={'device_id': 'SYNTHETIC'},
                                 measured_at=datetime(2026, 1, 1, tzinfo=UTC))
-    missing = SimpleNamespace(kpi={}, provenance=physical.provenance, measured_at=None)
-    assert _rep_rank(physical) > _rep_rank(synthetic) > _rep_rank(missing)
-    newer = SimpleNamespace(kpi=physical.kpi, provenance=physical.provenance,
+    missing = SimpleNamespace(id="missing", kpi={}, provenance=physical.provenance, measured_at=None)
+    assert representative_measurement([missing, synthetic, physical]) is physical
+    assert representative_measurement([missing, synthetic]) is synthetic
+    newer = SimpleNamespace(id="newer", kpi=physical.kpi, provenance=physical.provenance,
                             measured_at=datetime(2026, 1, 1, tzinfo=UTC))
-    assert _rep_rank(newer) > _rep_rank(physical)
+    assert representative_measurement([physical, newer]) is newer

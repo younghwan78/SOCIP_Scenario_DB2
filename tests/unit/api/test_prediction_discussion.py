@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr, ValidationError
 
+from scenario_db.api.services import analysis_inputs
 from scenario_db.api import auth
 from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
@@ -127,8 +128,8 @@ def test_registration_guards_keep_omission_and_explicit_null_distinct():
 
 @pytest.mark.parametrize("guard", ["omitted", None, "reviewed-prediction"])
 def test_timing_registration_forwards_reviewed_current(monkeypatch, guard):
-    monkeypatch.setattr(timing_budget, "_apply_config_profile", lambda *args: None)
-    monkeypatch.setattr(timing_budget, "_load", lambda *args: (object(), {}, None))
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *args: None)
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", lambda *args: analysis_inputs.AnalysisInputs(object(), {}, None))
     monkeypatch.setattr(timing_budget, "scenario_policy", lambda *args: None)
     monkeypatch.setattr(timing_budget, "apply_throughput", lambda options, policy: options)
     monkeypatch.setattr(timing_budget, "with_cpu_profile", lambda db, options, *args: options)

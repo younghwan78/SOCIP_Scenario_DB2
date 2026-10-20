@@ -78,6 +78,11 @@ their existing recorded-review behavior.
   unknown origins. Synthetic captures do not count as silicon validation evidence.
   `GET /calibration/measurements` also accepts `project_ref`; the UI applies the
   same project and synthetic filters to the capture list and model summary.
+  Calibration and report capture selection share this order: total-power value
+  present (including zero), physical capture over unknown over synthetic, newest
+  measurement time, then ascending evidence ID. Missing time sorts oldest.
+  Total power means a scalar or `mean` value, not complete KPI coverage.
+  Previous-project reference source-priority/mapping rules remain separate.
 - `GET /arch/reports[/{id}]`, `/{id}/html`, `/{id}/stale`: metadata, snapshot, HTML,
   and comparison of frozen prediction IDs with current IDs. HTML does not change later.
 - `GET /arch/reports/{id}/xlsx`: export frozen tables as a spreadsheet with numeric cells.

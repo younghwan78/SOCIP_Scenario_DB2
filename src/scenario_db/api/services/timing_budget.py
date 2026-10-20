@@ -7,15 +7,14 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.simulation import SimulateRequest
+from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
 from scenario_db.api.schemas.timing_budget import (
     TimingBudgetFleetRequest,
     TimingBudgetFleetResponse,
     TimingBudgetRequest,
     TimingBudgetResponse,
 )
-from scenario_db.db.models.capability import SocDvfsTable
 from scenario_db.db.models.definition import ScenarioVariant
-from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.api.services.cpu import with_cpu_profile
@@ -23,12 +22,6 @@ from scenario_db.api.services.failures import variant_failure
 from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.service import (
-    _apply_config_profile,
-    _check_power_params_scope,
-    _dvfs_tables_from_row,
-    _enforce_input_limits,
-    _graph_soc_ref,
-    _resolve_dvfs_tables,
     _request_hash,
 )
 from scenario_db.sim.timing_budget import (
@@ -36,24 +29,6 @@ from scenario_db.sim.timing_budget import (
     analyze_timing_budget,
     fleet_row,
 )
-
-
-def _shim(request, variant_id: str) -> SimulateRequest:
-    return SimulateRequest(
-        scenario_id=request.scenario_id,
-        variant_id=variant_id,
-        execution_context=ExecutionContext(
-            silicon_rev="analysis", sw_baseline_ref="sw-timing-budget", thermal="n/a"
-        ),
-        config=request.config,
-        config_profile_ref=request.config_profile_ref,
-        dvfs_tables=request.dvfs_tables,
-        dvfs_table_ref=request.dvfs_table_ref,
-        soc_ref=request.soc_ref,
-        dvfs_version=request.dvfs_version,
-        basis_ref=getattr(request, "basis_ref", None),
-        basis_overrides=list(getattr(request, "basis_overrides", None) or []),
-    )
 
 
 def _basis_fields(db: Session, shim: SimulateRequest) -> dict:
@@ -66,38 +41,6 @@ def _basis_fields(db: Session, shim: SimulateRequest) -> dict:
     row = db.get(ModelBasis, ref)
     return {"basis_ref": ref, "basis_code": row.code if row is not None else None,
             "basis_overrides": sorted(set(getattr(shim, "basis_overrides", None) or []))}
-
-
-def _load(db: Session, shim: SimulateRequest, use_default_dvfs: bool):
-    graph = load_canonical_graph(db, shim.scenario_id, shim.variant_id)
-    if shim.soc_ref and _graph_soc_ref(graph) and str(shim.soc_ref) != str(_graph_soc_ref(graph)):
-        raise ValueError("soc_ref does not match the scenario project")
-    if shim.config.sw_timing_projection is not None:
-        from scenario_db.sim.sw_projection import verify_projection
-
-        verify_projection(db, graph, shim.config.sw_timing_projection)
-    if shim.config.timing_profile is not None:
-        raise ValueError("measured timing replay is not supported; use sw_timing_projection")
-    from scenario_db.sim.sensor_projection import resolve_sensor_modes
-
-    graph = resolve_sensor_modes(db, graph, shim.config)
-    _check_power_params_scope(shim.config, graph)
-    _enforce_input_limits(build_simulation_inputs(graph, shim.config))
-    tables, context = _resolve_dvfs_tables(db, graph, shim)
-    ref = context.dvfs_table_ref
-    if not tables and use_default_dvfs:
-        soc = shim.soc_ref or _graph_soc_ref(graph)
-        row = None
-        if soc:
-            row = (
-                db.query(SocDvfsTable)
-                .filter_by(soc_ref=str(soc))
-                .order_by(SocDvfsTable.dvfs_version.desc())
-                .first()
-            )
-        if row is not None:
-            tables, ref = _dvfs_tables_from_row(row), str(row.id)
-    return graph, tables, ref
 
 
 def _condition_hash(graph, options, shim, tables) -> str:
@@ -131,10 +74,11 @@ def analyze_timing_budget_request(
 ) -> TimingBudgetResponse:
     original = request
     request = apply_measured(db, request)
-    shim = _shim(request, request.variant_id)
-    profile = _apply_config_profile(db, shim)
+    selection = resolve_analysis_selection(db, request)
+    shim, profile = selection.request, selection.config_profile_ref
     try:
-        graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+        inputs = selection.load(db)
+        graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
         _validate_measured_cpu(request, options, shim.config)
@@ -183,11 +127,12 @@ def analyze_timing_budget_fleet(
         raise UnprocessableError("fleet scope exceeds 200 variants; select a bounded subset")
     out, errors, ref, profile = [], [], None, None
     for variant_id in ids:
-        shim = _shim(request, variant_id)
-        profile = _apply_config_profile(db, shim)
+        selection = resolve_analysis_selection(db, request, variant_id)
+        shim, profile = selection.request, selection.config_profile_ref
         stage = "load"
         try:
-            graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+            inputs = selection.load(db)
+            graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
             stage = "timing_budget"
             out.append(
                 fleet_row(
@@ -211,10 +156,11 @@ def analyze_dvfs_whatif_request(db: Session, request: Any) -> dict[str, Any]:
     from scenario_db.sim.timing_budget import dvfs_level_whatif
 
     request = apply_measured(db, request)
-    shim = _shim(request, request.variant_id)
-    profile = _apply_config_profile(db, shim)
+    selection = resolve_analysis_selection(db, request)
+    shim, profile = selection.request, selection.config_profile_ref
     try:
-        graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+        inputs = selection.load(db)
+        graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
         _validate_measured_cpu(request, options, shim.config)
@@ -233,10 +179,11 @@ def interval_distribution_request(db: Session, request: Any) -> dict[str, Any]:
     from scenario_db.sim.timing_budget import interval_distribution
 
     request = apply_measured(db, request)
-    shim = _shim(request, request.variant_id)
-    _apply_config_profile(db, shim)
+    selection = resolve_analysis_selection(db, request)
+    shim = selection.request
     try:
-        graph, tables, _ref = _load(db, shim, request.use_default_dvfs)
+        inputs = selection.load(db)
+        graph, tables = inputs.graph, inputs.tables
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
         _validate_measured_cpu(request, options, shim.config)
@@ -262,10 +209,11 @@ def register_condition(db: Session, request: Any, user: str | None = None, *, pr
 
     original = request
     request = apply_measured(db, request)
-    shim = _shim(request, request.variant_id)
-    _apply_config_profile(db, shim)
+    selection = resolve_analysis_selection(db, request)
+    shim = selection.request
     try:
-        graph, tables, _ref = _load(db, shim, request.use_default_dvfs)
+        inputs = selection.load(db)
+        graph, tables = inputs.graph, inputs.tables
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
         _validate_measured_cpu(request, options, shim.config)
@@ -328,8 +276,8 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
 
     original = request
     request = apply_measured(db, request)
-    shim = _shim(request, request.variant_id)
-    profile = _apply_config_profile(db, shim)
+    selection = resolve_analysis_selection(db, request)
+    shim, profile = selection.request, selection.config_profile_ref
     scenario = db.get(Scenario, request.scenario_id)
     if scenario is None:
         raise NotFoundError(f"scenario not found: {request.scenario_id}")
@@ -341,7 +289,8 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
             raise UnprocessableError("execution_context.sw_baseline_ref is required (project has no default_sw_profile_ref)")
         ctx = ExecutionContext(silicon_rev="EVT1", sw_baseline_ref=sw, thermal="nominal", method="calculation")
     try:
-        graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+        inputs = selection.load(db)
+        graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
         _validate_measured_cpu(request, options, shim.config)

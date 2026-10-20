@@ -13,18 +13,17 @@ from scenario_db.api.resource_limits import enforce_timeline_frame_limit
 from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfExperimentRequest, WhatIfModelSettings, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
-from scenario_db.api.services.timing_budget import _load, _shim
+from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
 from scenario_db.api.services.whatif_conditions import CHANGE_KINDS, apply_whatif_changes, whatif_targets
 from scenario_db.api.services.whatif_llm import LlmUnavailable, interpret as llm_interpret, llm_status
 from scenario_db.api.services.whatif_query import plan_query
 from scenario_db.db.models.definition import Project, Scenario
 from scenario_db.db.models.whatif import WhatIfExperiment
-from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.config import get_settings
 from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.measured_timing import baseline_fingerprint
-from scenario_db.sim.service import _apply_config_profile, _enforce_input_limits
+from scenario_db.sim.service import _enforce_input_limits
 from scenario_db.sim.timing_budget import _stage_slack, analyze_timing_budget
 
 ENGINE_REV = "scenario-whatif/1"
@@ -36,41 +35,33 @@ def _guard(graph, scope: WhatIfScope) -> None:
         raise UnprocessableError("What-if project does not own the selected scenario")
 
 
-def _graph(db: Session, scope: WhatIfScope):
-    try:
-        graph = load_canonical_graph(db, scope.scenario_id, scope.variant_id)
-    except LookupError as exc:
-        raise NotFoundError(str(exc)) from exc
-    _guard(graph, scope)
-    return graph
-
-
-def _planning_inputs(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None):
-    settings = settings or WhatIfModelSettings(**scope.model_dump())
-    req = TimingBudgetRequest(scenario_id=scope.scenario_id, variant_id=scope.variant_id,
-                              config=settings.config.model_copy(deep=True), options=settings.options.model_copy(deep=True))
-    shim = _shim(req, req.variant_id)
-    _apply_config_profile(db, shim)
-    WhatIfModelSettings(**scope.model_dump(), config=shim.config, options=req.options)
-    return req, shim
-
-
 ASK_KINDS = [{"ask": "what_if", "label": "조건 바꿔보기", "description": "센서 · crop/downscale · L0 skip · previous DMA 빈도 · 출력 크기 · DVFS level · IP mode · SBWC를 바꾸면 timing · 전력 · BW가 어떻게 되나"},
              {"ask": "combine", "label": "레버 조합 비교", "description": "고른 레버를 각각 · 함께(또는 모든 조합) 적용해 전력 차이와 fps 충족 여부를 한 표로 비교"},
              {"ask": "search_limit", "label": "어디까지 낮출 수 있나", "description": "DVFS domain level을 한 단계씩 낮추며 timing을 충족하는 최저 level 탐색"},
              {"ask": "diagnose", "label": "병목 찾기", "description": "기준 조건에서 가장 빠듯한 구간 · IP와 domain별 여유"}]
 
 
-def _baseline(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None) -> dict[str, Any]:
-    """One baseline Timing Budget run with the same inputs as preview's baseline case."""
-    req, shim = _planning_inputs(db, scope, settings)
+def _baseline(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None,
+              *, expected_baseline_hash: str | None = None) -> dict[str, Any]:
+    """Prepare and evaluate one request-local baseline; no cross-request cache."""
+    settings = settings or WhatIfModelSettings(**scope.model_dump())
+    req = TimingBudgetRequest(scenario_id=scope.scenario_id, variant_id=scope.variant_id,
+                              config=settings.config.model_copy(deep=True), options=settings.options.model_copy(deep=True))
+    selection = resolve_analysis_selection(db, req)
+    config = selection.request.config
+    # Active model defaults can fill restricted inputs after request validation.
+    WhatIfModelSettings(**scope.model_dump(include={"project_ref", "scenario_id", "variant_id"}),
+                        config=config, options=req.options)
     enforce_timeline_frame_limit(max(req.options.frames, req.options.timeline_frames + 4,
-                                    shim.config.timeline_frame_count), get_settings().simulation_max_timeline_frames)
-    graph, tables, ref = _load(db, shim, True)
+                                    config.timeline_frame_count), get_settings().simulation_max_timeline_frames)
+    inputs = selection.load(db)
+    graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
     _guard(graph, scope)
+    if expected_baseline_hash is not None and baseline_fingerprint(graph) != expected_baseline_hash:
+        raise ConflictError("What-if baseline changed; interpret and preview the condition again")
     options = apply_throughput(req.options, scenario_policy(db, scope.scenario_id))
-    return {"graph": graph, "config": shim.config, "tables": tables, "ref": ref, "options": options,
-            "case": _case(graph, shim.config, options, tables, ref)}
+    return {"graph": graph, "config": config, "tables": tables, "ref": ref, "options": options,
+            "case": _case(graph, config, options, tables, ref)}
 
 
 def _domains(report: dict, tables: dict) -> list[dict[str, Any]]:
@@ -118,24 +109,14 @@ def targets(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | Non
             "soc_ref": out["capability"]["soc_ref"], "asks": ASK_KINDS, "llm": llm_status()}
 
 
-def _baseline_clocks(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None) -> dict[str, float]:
-    """Set clock per IP in the baseline timing budget (same inputs as preview's baseline case)."""
-    report = _baseline(db, scope, settings)["case"]["report"]
-    return {row["node"]: float(row["set_clock_mhz"]) for row in report["ips"] if row.get("set_clock_mhz")}
-
-
-def _resolve_relative_clocks(db: Session, scope: WhatIfScope, out: dict, settings: WhatIfModelSettings | None = None) -> None:
-    """Relative IP clocks ("20% 낮추면") -> MHz against the baseline set clock, in changes and in choices."""
+def _resolve_relative_clocks(out: dict, available: dict) -> None:
+    """Resolve legacy relative clocks from the target catalog's existing baseline."""
     pending = [c for c in out["changes"] if "scale" in c] + [
         ch["change"] for cl in out["clarifications"] for ch in cl["choices"] if ch.get("change") and "scale" in ch["change"]]
     if not pending:
         return
-    try:
-        clocks = _baseline_clocks(db, scope, settings)
-    except (LookupError, ValueError) as exc:
-        clocks, reason = {}, str(exc)
-    else:
-        reason = "기준 clock 없음"
+    clocks = {node["id"]: float(node["clock_mhz"]) for node in available["nodes"] if node.get("clock_mhz")}
+    reason = "기준 clock 없음"
     noted: set[str] = set()
     for change in pending:
         base = clocks.get(change["node_id"])
@@ -185,7 +166,7 @@ def plan(db: Session, request: WhatIfPlanRequest) -> dict:
     scope = WhatIfScope(**request.model_dump(include={"project_ref", "scenario_id", "variant_id"}))
     available = targets(db, scope, request)
     out = plan_query(request.query, available)
-    _resolve_relative_clocks(db, scope, out, request)
+    _resolve_relative_clocks(out, available)
     return {**out, "baseline_hash": available["baseline_hash"], "scope": scope.model_dump()}
 
 
@@ -215,23 +196,25 @@ def _case(graph, config, options, tables, ref):
 
 
 def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
-    req = TimingBudgetRequest(scenario_id=request.scenario_id, variant_id=request.variant_id,
-                              config=request.config.model_copy(deep=True), options=request.options.model_copy(deep=True))
-    shim = _shim(req, req.variant_id)
+    # A separate preview/save request always resolves today's inputs again.
+    scope = WhatIfScope(**request.model_dump(include={"project_ref", "scenario_id", "variant_id"}))
     try:
-        _apply_config_profile(db, shim)
-        # An active basis can fill restricted inputs after the original request was validated.
-        WhatIfPreviewRequest.model_validate(
-            {**request.model_dump(), "config": shim.config.model_dump()})
-        graph, tables, ref = _load(db, shim, True)
-        _guard(graph, request)
-        baseline_hash = baseline_fingerprint(graph)
-        if baseline_hash != request.expected_baseline_hash:
-            raise ConflictError("What-if baseline changed; interpret and preview the condition again")
-        options = apply_throughput(req.options, scenario_policy(db, request.scenario_id))
-        before = _case(graph, shim.config, options, tables, ref)
-        lever_notes: list[str] = []
-        candidate, config, changes = apply_whatif_changes(graph, request.changes, shim.config,
+        base = _baseline(db, scope, request, expected_baseline_hash=request.expected_baseline_hash)
+        return _preview_from(base, request)
+    except LookupError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+
+
+def _preview_from(base: dict, request: WhatIfPreviewRequest) -> dict:
+    """Compare against the already evaluated baseline of this request."""
+    graph, baseline_config = base["graph"], base["config"]
+    tables, ref, options, before = base["tables"], base["ref"], base["options"], base["case"]
+    baseline_hash = baseline_fingerprint(graph)
+    lever_notes: list[str] = []
+    try:
+        candidate, config, changes = apply_whatif_changes(graph, request.changes, baseline_config,
                                                           _domains(before["report"], tables), lever_notes)
         after = _case(candidate, config, options, tables, ref)
     except LookupError as exc:
@@ -243,8 +226,8 @@ def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
                   "options": options.model_dump(mode="json")}
     hash_payload = {"baseline": baseline_hash, "condition": normalized, "engine": ENGINE_REV,
                     "tables": {k: t.model_dump(mode="json") for k, t in tables.items()},
-                    "baseline_config": shim.config.model_dump(mode="json"),
-                    "baseline_inputs": build_simulation_inputs(graph, shim.config).model_dump(mode="json"),
+                    "baseline_config": baseline_config.model_dump(mode="json"),
+                    "baseline_inputs": build_simulation_inputs(graph, baseline_config).model_dump(mode="json"),
                     "candidate_inputs": build_simulation_inputs(candidate, config).model_dump(mode="json"),
                     "resolved_candidate": baseline_fingerprint(candidate)}
     condition_hash = hashlib.sha256(json.dumps(hash_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -597,7 +580,7 @@ def ask(db: Session, request: WhatIfAskRequest) -> dict:
             raise UnprocessableError("바꿀 조건을 하나 이상 지정하세요")
         diag = _diagnose(base, targets_["domains"])
     else:
-        result = preview(db, WhatIfPreviewRequest(**scope.model_dump(), config=request.config, options=request.options,
+        result = _preview_from(base, WhatIfPreviewRequest(**scope.model_dump(), config=request.config, options=request.options,
                                                   changes=plan_["changes"], expected_baseline_hash=baseline_hash))
     return {**common, "interpretation": interpretation, "plan": plan_,
             "answer": _answer(plan_, targets_, result, search, diag, boundaries, combo),

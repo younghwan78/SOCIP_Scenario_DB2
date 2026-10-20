@@ -64,6 +64,45 @@ def stored_run(engine):
             db.commit()
 
 
+def test_report_and_calibration_choose_the_same_scoped_representative_on_timestamp_ties(engine, stored_run):
+    from datetime import UTC, datetime
+
+    from scenario_db.api.services.calibration import calibration_summary
+    from scenario_db.db.models.evidence import Evidence
+
+    rid, ids = stored_run
+    with Session(engine) as db:
+        svc.promote(db, PromoteRequest(run_id=rid))
+        try:
+            # Insert the larger ID first; selection must not depend on query order.
+            for sid in ids:
+                for tag, origin, year, total in (
+                    ("z-physical", "physical_capture", 2025, 10),
+                    ("a-physical", "physical_capture", 2025, 10),
+                    ("new-unknown", "unknown", 2026, 10),
+                    ("new-synthetic", "synthetic", 2026, 10),
+                    ("missing-total", "physical_capture", 2026, None),
+                ):
+                    db.add(Evidence(
+                        id=f"{sid}-{tag}", scenario_ref=sid, variant_ref="shared",
+                        kind="evidence.measurement", schema_version="1.0.0",
+                        measured_at=datetime(year, 1, 1, tzinfo=UTC),
+                        execution_context={}, aggregation={},
+                        provenance={"data_origin": origin},
+                        kpi={"total_power_mw": {"mean": total}}, yaml_sha256="test",
+                    ))
+            db.commit()
+            summaries = {sid: calibration_summary(db, scenario_id=sid)["rows"][0]["measurement_id"] for sid in ids}
+            report = svc.create_report(db, ArchReportRequest(run_id=rid))
+            captured = {r["scenario_id"]: r["measurement_id"] for r in report["snapshot"]["calibration"]}
+            assert summaries == captured == {sid: f"{sid}-a-physical" for sid in ids}
+            assert all(r["origin"] == "physical_capture" for r in report["snapshot"]["calibration"])
+        finally:
+            db.rollback()
+            db.query(Evidence).filter(Evidence.scenario_ref.in_(ids)).delete(synchronize_session=False)
+            db.commit()
+
+
 def test_promote_duplicate_variant_names_preserves_scenarios_and_report(engine, stored_run):
     rid, ids = stored_run
     with Session(engine) as db:
@@ -253,7 +292,11 @@ def test_power_options_ride_with_the_prediction_and_follow_iq_review(engine, sto
         run = svc.get_run(db, rid)
         variants = deepcopy(run.variants)
         variants[0]["power_options"] = _options(10.0)
+        variants[0]["input_sections"] = {"config": "review-config"}
         run.variants = variants
+        run.spec = dict(run.spec) | {"manifest": {"blobs": {
+            "review-config": {"vbat": 3.8, "pmic_efficiency": 0.91},
+        }}}
         db.commit()
         svc.promote(db, PromoteRequest(run_id=rid))
         rows = {r["scenario_id"]: r for r in svc.board(db)["rows"] if r["scenario_id"] in ids}
@@ -269,6 +312,15 @@ def test_power_options_ride_with_the_prediction_and_follow_iq_review(engine, sto
         assert po["best"] == {"key": L0, "labels": [L0], "delta_mw": -2.0, "delta_pct": -20.0, "review_status": "iq_eval"}
         status = {r["key"]: r["review_status"] for r in po["results"]}
         assert status == {f"{BCROP}+{L0}": "rejected", L0: "iq_eval", BCROP: "rejected"}
+        frozen = svc.create_report(db, ArchReportRequest(run_id=rid))
+        frozen_options = frozen["snapshot"]["power_options"][0]
+        assert frozen_options["best"]["review_status"] == "rejected"
+        assert {r["key"]: r["review_status"] for r in frozen_options["singles"]} == {
+            L0: "iq_eval", BCROP: "rejected",
+        }
+        assert frozen["snapshot"]["review_context"]["battery"] == {
+            "vbat": 3.8, "pmic_efficiency": 0.91, "source": "run",
+        }
         # a variant-specific decision overrides the scenario-wide one
         svc.set_option_review(db, PowerOptionReviewRequest(scenario_id=ids[0], variant_id="shared", option_key=BCROP,
                                                            status="adopted"), "iq")
@@ -283,6 +335,9 @@ def test_power_options_ride_with_the_prediction_and_follow_iq_review(engine, sto
         again = next(r for r in svc.list_option_reviews(db, scenario_id=ids[0])
                      if r["option_key"] == BCROP and r["variant_id"] == "*")
         assert again["id"] == bcrop["id"] and [h["status"] for h in again["history"]] == ["rejected", "iq_eval"]
+        updated = svc.create_report(db, ArchReportRequest(run_id=rid))
+        assert updated["snapshot"]["power_options"][0]["best"]["review_status"] == "adopted"
+        assert svc.get_report(db, frozen["id"]).snapshot["power_options"][0]["best"]["review_status"] == "rejected"
 
 
 def test_model_status_counts_predictions_from_older_engine(engine, stored_run):

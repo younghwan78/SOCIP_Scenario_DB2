@@ -91,3 +91,8 @@ supersedes it. `GET /review/cpu-snapshots?project_ref` lists active snapshots;
 `POST /review/cpu-snapshots/{id}/withdraw` withdraws one. Project reports freeze the
 active snapshots into `snapshot.cpu` and the `cpu_growth_tolerance` risk rule
 (tolerance < ×1.2, medium).
+
+The UI associates a completed growth result with the request that calculated it.
+Editing inputs does not rewrite that request. Replacing/cancelling an analysis
+invalidates pending results and snapshot eligibility; main, comparison, growth
+and comparison-growth requests remain sequential to share admission capacity.

@@ -19,7 +19,7 @@ from scenario_db.api.schemas.arch_exploration import (
     PromoteRequest,
 )
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
-from scenario_db.api.services.timing_budget import _load, _shim
+from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.exploration import (
@@ -33,13 +33,15 @@ from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableEr
 from scenario_db.reporting.arch_conclusion import calibration_row, run_lineage
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
 from scenario_db.reporting.report_package import package_zip
+from scenario_db.reporting.review_snapshot import ProjectEvidence, ReviewEvidence
+from scenario_db.comparison.measurement_selection import representative_measurement
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.api.services.calibration import data_origin, is_physical, is_synthetic, measurement_details
 from scenario_db.api.services.failures import variant_failure
 from scenario_db.sim.model_lineage import lineage_differences, run_model_lineage
-from scenario_db.sim.service import _apply_config_profile, _check_power_params_scope, _graph_soc_ref
+from scenario_db.sim.service import _graph_soc_ref
 from scenario_db.sim.timing_budget import DERIVED_VARIANT_MARKERS
 
 
@@ -162,11 +164,12 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
             dvfs_version=request.dvfs_version, use_default_dvfs=request.use_default_dvfs,
             basis_ref=request.basis_ref, basis_overrides=request.basis_overrides,
         )
-        shim = _shim(tb, variant_id)
-        _apply_config_profile(db, shim)
+        selection = resolve_analysis_selection(db, tb, variant_id)
+        shim = selection.request
         stage = "load"
         try:
-            graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+            inputs = selection.load(db)
+            graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
             from scenario_db.api.services.cpu import with_cpu_profile
 
             bounded_spec = request.spec.model_copy(update={
@@ -177,7 +180,6 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
             if budget["mw"] != request.spec.constraints.power_budget_mw:
                 bounded_spec = bounded_spec.model_copy(update={
                     "constraints": bounded_spec.constraints.model_copy(update={"power_budget_mw": budget["mw"]})})
-            _check_power_params_scope(shim.config, graph)
             applied: list[dict[str, Any]] = []
             if request.apply_options:
                 graph, applied = _apply_options(graph, request.apply_options)
@@ -745,179 +747,62 @@ def _project_run(db: Session, project_ref: str, scenario_type: str | None) -> tu
     return run, currents, runs
 
 
-def _review_extras(db: Session, snapshot: dict[str, Any], project_ref: str | None, config_profile_ref: str | None,
-                   preds: dict[tuple[str, str], dict[str, Any]], scope: dict[str, Any]) -> None:
-    """Tier-1 inputs frozen with the report: basis (RPT-05), customer criteria, references, thermal watch,
-    model bias, automatic risks."""
+def _report_evidence(db: Session, run: dict[str, Any], preds: dict[tuple[str, str], dict[str, Any]],
+                     scope: dict[str, Any], config_run: ArchExplorationRun) -> ReviewEvidence:
+    """Collect scoped facts only; build_snapshot owns all report assembly ordering."""
     from scenario_db.api.services import review as review_svc
     from scenario_db.api.services.calibration import calibration_summary
-    from scenario_db.reporting.risk_rules import build_risks
+    from scenario_db.api.services.review_cpu import list_cpu_snapshots
 
-    o, s = snapshot["overview"], snapshot["spec_summary"]
-    ctx = snapshot.get("review_context") or {}
-    policy = ctx.get("policy") or {}
-    snapshot["scope"] = scope
-    snapshot["basis"] = {"throughput_model": policy.get("throughput_model") or "stage", "policy_declared": bool(policy.get("declared")),
-                         "register_baseline": policy.get("register_baseline"), "dvfs_table_ref": o.get("dvfs_table_ref"),
-                         "sample_dvfs": o.get("sample_dvfs"), "engine_rev": o.get("engine_rev")}
-    refs = review_svc.power_references(db, project_ref) if project_ref else {"references": {}, "tolerance_pct": None}
-    pred_vids = {vid for (_, vid) in preds}
-    ref_vids = sorted(refs["references"])
-    missing = [v for v in ref_vids if v not in pred_vids]
-    snapshot["reference_check"] = {"total": len(ref_vids), "missing": missing}
-    judged = [r for r in ctx.get("rows") or [] if r.get("reference")]
-    status = [r["reference"]["status"] for r in judged]
-    thermal: dict[str, Any] | None = None
+    project_ref = run.get("project_ref")
+    blobs = ((config_run.spec or {}).get("manifest") or {}).get("blobs") or {}
+    config_hash = ((config_run.variants[0] if config_run.variants else {}).get("input_sections") or {}).get("config")
+    evidence = ReviewEvidence(
+        scope=scope,
+        context=review_svc.report_context(db, project_ref, (config_run.spec or {}).get("config_profile_ref"), preds,
+                                          frozen_config=blobs.get(config_hash)),
+        references=review_svc.power_references(db, project_ref) if project_ref else {"references": {}, "tolerance_pct": None},
+        calibration=_report_calibration(db, preds),
+        clock_residency=_report_clock(db, preds),
+    )
+    # Resolve IQ decisions while the ORM rows are available. The pure builder receives
+    # only scoped statuses, never query callbacks or mutable database objects.
+    option_sources = []
+    for variant in run["variants"]:
+        key = (variant["scenario_id"], variant["variant_id"])
+        pred = preds.get(key)
+        options = ((pred or {}).get("metrics") or {}).get("power_options") if pred else variant.get("power_options")
+        if options and options.get("status") == "ok":
+            option_sources.append((key, options))
+    scenario_ids = sorted({key[0] for key, _ in option_sources})
+    reviews = _reviews_by_scenario(db, set(scenario_ids))
+    for (sid, vid), options in option_sources:
+        states = reviews.get(sid, {})
+        for result in options.get("results") or []:
+            key = str(result["key"])
+            evidence.option_states[(sid, vid, key)] = set_status([item_status(states, vid, k) for k in key.split("+")])
     if project_ref:
         try:
-            tw = review_svc.thermal_watch(db, project_ref)
-            thermal = {"items": [{
-                "scenario_id": i.get("scenario_id"), "variant_id": i["variant_id"], "label": i.get("label"), "current_mw": i.get("current_mw"),
-                "baseline": i.get("baseline"), "reference": i.get("reference"),
-                "plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked", "iq_pending")} for p in i.get("plans") or []],
-                # IQ-02: the same asks with levers usable today (DVFS keeping fps + IQ-adopted options)
-                "approved_plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked")}
-                                   for p in i.get("approved_plans") or []],
-                "registered": i.get("prediction_id") is not None,
-                "notes": (i.get("notes") or [])[:3]} for i in tw.get("items") or []]}
+            evidence.thermal = review_svc.thermal_watch(db, project_ref)
         except (NotFoundError, UnprocessableError) as exc:
-            thermal = {"items": [], "reason": str(exc)[:200]}
-    snapshot["thermal"] = thermal or {"items": [], "reason": "과제 범위 없음"}
-
-    def reach(i: dict[str, Any], pct: int) -> bool | None:
-        p = next((p for p in i["plans"] if p["ask_pct"] == pct), None)
-        return None if p is None else bool(p["achieved"])
-
-    snapshot["criteria"] = {
-        "fps": {"ok": s.get("spec_ok", 0), "total": s.get("explored", 0), "fail": [f["variant_id"] for f in s.get("failed") or []],
-                "basis": snapshot["basis"]["throughput_model"]},
-        "power": {"total": len(ref_vids), "ok": status.count("ok"), "similar": status.count("similar"), "over": status.count("over"),
-                  "missing": missing, "tolerance_pct": refs.get("tolerance_pct"),
-                  "sample": any((r.get("source") == "explicit") for r in refs["references"].values())},
-        "thermal": {"items": [{"variant_id": i["variant_id"], "reach10": reach(i, 10), "reach20": reach(i, 20)} for i in snapshot["thermal"]["items"]],
-                    "unassessed": sum(1 for i in snapshot["thermal"]["items"] if i.get("current_mw") is None)},
-    }
-    if project_ref:
-        m = calibration_summary(db, project_ref=project_ref)
-        snapshot["model"] = {"coverage": m["coverage"], "offsetting": m["offsetting"], "flat_cpu": m["flat_cpu"],
-                             "confidence": m["confidence"],
-                             "bias": {c: {k: b.get(k) for k in ("n", "median", "same_sign_pct", "within10", "verdict", "label")}
-                                      for c, b in m["bias"].items()},
-                             "rail_bias": [{k: b.get(k) for k in ("key", "label", "category", "n", "median", "same_sign_pct", "within10",
-                                                                     "verdict", "label_verdict", "median_meas_mw", "median_abs_delta_mw")}
-                                           for b in m.get("rail_bias") or []],
-                             "latency_bias": {k: (m.get("latency_bias") or {}).get(k) for k in ("n", "median", "within10", "verdict", "label")}}
-        # CPU-11: CPU what-if results recorded for the review (server-computed sweep summaries)
-        from scenario_db.api.services.review_cpu import list_cpu_snapshots
-
-        snapshot["cpu"] = [{k: c[k] for k in ("id", "scenario_id", "variant_id", "profile_ref", "power_params_ref",
-                                              "base_power_params_ref", "note", "created_by", "created_at", "summary")}
-                           for c in list_cpu_snapshots(db, project_ref)]
-    snapshot["references"] = {vid: dict(r) for vid, r in refs["references"].items()}
-    _option_reviews(db, snapshot)
-    if project_ref:
-        snapshot["project_conditions"] = _project_conditions(db, project_ref, snapshot, refs)
-        snapshot["coverage"] = _coverage(db, project_ref, snapshot, preds, refs)
-    # REF-05: the customer criterion ② counts verdicts (range · bias · silicon), old keys kept for the portfolio
-    from scenario_db.reporting.review_verdict import power_verdicts
-
-    verdicts = power_verdicts(snapshot)
-    if verdicts:
-        st = [v["state"] for v in verdicts]
-        snapshot["criteria"]["power"] |= {
-            "ok": st.count("ok"), "similar": st.count("similar"), "over": st.count("over"), "conditional": st.count("conditional"),
-            "missing": [v["variant_id"] for v in verdicts if v["state"] in ("na", "uncovered")],
-            "unregistered": [v["variant_id"] for v in verdicts if v["state"] not in ("na", "uncovered") and not v["registered"]],
-            "flip": [v["variant_id"] for v in verdicts if v.get("flip")], "basis": "verdict"}
-    snapshot["risks"] = build_risks(snapshot)
-    # actions follow the lever ladder and use the recorded CPU what-if results (frozen above)
-    from scenario_db.reporting.arch_conclusion import build_conclusion
-
-    snapshot["conclusion"] = build_conclusion(snapshot)
-
-
-def _option_reviews(db: Session, snapshot: dict[str, Any]) -> None:
-    """IQ-02: frozen IQ review state of each power option (best set and singles)."""
-    from scenario_db.db.models.exploration import PowerOptionReview
-
-    opts = snapshot.get("power_options") or []
-    sids = sorted({o["scenario_id"] for o in opts})
-    if not sids:
-        return
-    reviews: dict[str, dict[tuple[str, str], PowerOptionReview]] = {}
-    for r in db.query(PowerOptionReview).filter(PowerOptionReview.scenario_ref.in_(sids)).all():
-        reviews.setdefault(r.scenario_ref, {})[(r.variant_ref, r.option_key)] = r
-    for o in opts:
-        rv = reviews.get(o["scenario_id"], {})
-        if o.get("best"):
-            o["best"]["review_status"] = set_status([item_status(rv, o["variant_id"], k) for k in str(o["best"]["key"]).split("+")])
-        for x in o.get("singles") or []:
-            x["review_status"] = item_status(rv, o["variant_id"], x["key"])["status"]
-
-
-def _soc_name(soc_ref: str | None) -> str:
-    name = str(soc_ref or "").removeprefix("soc-")
-    return name[:1].upper() + name[1:] if name else "—"
-
-
-def _project_conditions(db: Session, project_ref: str, snapshot: dict[str, Any], refs: dict[str, Any]) -> dict[str, Any]:
-    """COV-01: the project conditions a reader needs to know what the report covers."""
-    project = db.get(Project, project_ref)
-    md = (project.metadata_ or {}) if project is not None else {}
-    gl = (project.globals_ or {}) if project is not None else {}
-    ctx = snapshot.get("review_context") or {}
-    policy = ctx.get("policy") or {}
-    sw_src: dict[str, int] = {}
-    for r in snapshot.get("scenarios") or []:
-        k = str((r.get("inputs") or {}).get("sw_timing_source") or "미기록")
-        sw_src[k] = sw_src.get(k, 0) + 1
-    ref_src: dict[str, int] = {}
-    for r in refs.get("references", {}).values():
-        ref_src[str(r.get("source"))] = ref_src.get(str(r.get("source")), 0) + 1
-    o = snapshot["overview"]
-    soc = md.get("soc_ref") or o.get("target_soc")
-    return {
-        "project_ref": project_ref, "project_name": md.get("name"), "soc_ref": soc, "soc_name": _soc_name(soc),
-        "board_type": md.get("board_type"), "board_name": md.get("board_name"),
-        "sensor_module_ref": md.get("sensor_module_ref"), "display_module_ref": md.get("display_module_ref"),
-        "sw_profile_ref": md.get("default_sw_profile_ref") or gl.get("default_sw_profile_ref"),
-        "dvfs_table_ref": o.get("dvfs_table_ref"), "sample_dvfs": bool(o.get("sample_dvfs")),
-        "sw_timing_source": sw_src, "sw_growth": ((o.get("objective") or {}).get("runtime_scale") or 1.0),
-        "sw_growth_budget": policy.get("sw_growth_budget"),
-        "reference": {"project_ref": (policy.get("power_reference") or {}).get("project_ref"), "sources": ref_src,
-                      "tolerance_pct": refs.get("tolerance_pct"), "note": (policy.get("power_reference") or {}).get("source_note"),
-                      "priority": refs.get("source_priority")},
-        "throughput_model": policy.get("throughput_model") or "stage", "register_baseline": policy.get("register_baseline"),
-        "battery": ctx.get("battery"),
-    }
-
-
-def _coverage(db: Session, project_ref: str, snapshot: dict[str, Any], preds: dict[tuple[str, str], dict[str, Any]],
-              refs: dict[str, Any]) -> dict[str, Any]:
-    """COV-02: per scenario of the project, how far the report covers it (product variants = not derived)."""
-    scen = db.query(Scenario.id, Scenario.metadata_).filter(Scenario.project_ref == project_ref).order_by(Scenario.id).all()
-    sids = [sid for sid, _ in scen]
-    variants = db.query(ScenarioVariant.scenario_id, ScenarioVariant.id, ScenarioVariant.derived_from_variant) \
-        .filter(ScenarioVariant.scenario_id.in_(sids)).all() if sids else []
-    meas: dict[tuple[str, str], str] = {}
-    for sid, vid, prov in db.query(Evidence.scenario_ref, Evidence.variant_ref, Evidence.provenance).filter(
-            Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(sids)).all() if sids else []:
-        meas[(sid, vid)] = "physical" if is_physical(prov) or meas.get((sid, vid)) == "physical" else "synthetic"
-    explored = {(r["scenario_id"], r["variant_id"]) for r in snapshot.get("scenarios") or []}
-    ref_vids = set(refs.get("references") or {})
-    rows = []
-    for sid, md in scen:
-        vs = [(v, d) for s, v, d in variants if s == sid]
-        prod = [v for v, d in vs if not d and not any(m in v for m in DERIVED_VARIANT_MARKERS)]
-        keys = [(sid, v) for v in prod]
-        rows.append({"scenario_id": sid, "name": (md or {}).get("name") or sid, "variants": len(prod), "derived": len(vs) - len(prod),
-                     "explored": sum(k in explored for k in keys), "registered": sum(k in preds for k in keys),
-                     "measured": sum(k in meas for k in keys), "measured_physical": sum(meas.get(k) == "physical" for k in keys),
-                     "measured_no_prediction": sum(k in meas and k not in preds for k in keys),
-                     "reference": sum(v in ref_vids for v in prod)})
-    tot = {k: sum(r[k] for r in rows) for k in ("variants", "derived", "explored", "registered", "measured", "measured_physical",
-                                                 "measured_no_prediction", "reference")}
-    return {"rows": rows, "total": tot}
+            evidence.thermal = {"items": [], "reason": str(exc)[:200]}
+        project = db.get(Project, project_ref)
+        scenarios = list(db.query(Scenario.id, Scenario.metadata_).filter(Scenario.project_ref == project_ref)
+                         .order_by(Scenario.id).all())
+        sids = [sid for sid, _ in scenarios]
+        variants = list(db.query(ScenarioVariant.scenario_id, ScenarioVariant.id, ScenarioVariant.derived_from_variant)
+                        .filter(ScenarioVariant.scenario_id.in_(sids)).all()) if sids else []
+        measurements = [(sid, vid, data_origin(provenance)) for sid, vid, provenance in db.query(
+            Evidence.scenario_ref, Evidence.variant_ref, Evidence.provenance).filter(
+            Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(sids)).all()] if sids else []
+        evidence.project = ProjectEvidence(
+            project_ref=project_ref,
+            metadata=(project.metadata_ or {}) if project is not None else {},
+            globals=(project.globals_ or {}) if project is not None else {},
+            scenarios=scenarios, variants=variants, measurements=measurements,
+            model=calibration_summary(db, project_ref=project_ref), cpu=list_cpu_snapshots(db, project_ref),
+        )
+    return evidence
 
 
 def create_report(db: Session, request: ArchReportRequest, user: str | None = None) -> dict[str, Any]:
@@ -944,20 +829,10 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
         if old is not None:
             changes[key] = attribute(old.metrics, cur.metrics)
     run_dict = run_detail(run) | {"created_at": run.created_at}
-    snapshot = build_snapshot(run_dict, preds, changes, _report_calibration(db, preds))
-    clock = _report_clock(db, preds)
-    if clock:
-        snapshot["clock_residency"] = clock  # absent key = report generated before clock residency existed
-    from scenario_db.api.services.review import report_context
-
-    blobs = ((run.spec or {}).get("manifest") or {}).get("blobs") or {}
-    config_hash = ((run.variants[0] if run.variants else {}).get("input_sections") or {}).get("config")
-    snapshot["review_context"] = report_context(db, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds,
-                                                 frozen_config=blobs.get(config_hash))
-    _review_extras(db, snapshot, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds,
-                   {"kind": "run", "project_ref": run.project_ref,
-                    "runs": [{"id": run.id, "title": run.title, "created_at": _iso_dt(run.created_at), "current": len(preds),
-                              "variants": len(run.variants or [])}]})
+    scope = {"kind": "run", "project_ref": run.project_ref,
+             "runs": [{"id": run.id, "title": run.title, "created_at": _iso_dt(run.created_at), "current": len(preds),
+                       "variants": len(run.variants or [])}]}
+    snapshot = build_snapshot(run_dict, preds, changes, review=_report_evidence(db, run_dict, preds, scope, run))
     # a run report freezes the risks it sees; only project reports update the register
     snapshot["risk_register"] = [r | {"label": f"A-{i:02d}", "status": "open", "trend": None, "owner": None, "note": None}
                                  for i, r in enumerate(snapshot["risks"], 1)]
@@ -995,17 +870,7 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
         old = olds.get(cur.supersedes_ref) if cur.supersedes_ref else None
         if old is not None:
             changes[key] = attribute(old.metrics, cur.metrics)
-    snapshot = build_snapshot(run_dict, preds, changes, _report_calibration(db, preds))
-    clock = _report_clock(db, preds)
-    if clock:
-        snapshot["clock_residency"] = clock
-    from scenario_db.api.services.review import report_context as _ctx
-
     latest = runs[0]
-    cfg = (latest.spec or {}).get("config_profile_ref")
-    blobs = ((latest.spec or {}).get("manifest") or {}).get("blobs") or {}
-    config_hash = ((latest.variants[0] if latest.variants else {}).get("input_sections") or {}).get("config")
-    snapshot["review_context"] = _ctx(db, project_ref, cfg, preds, frozen_config=blobs.get(config_hash))
     used = {}
     for p in currents:
         used[p.exploration_run_ref] = used.get(p.exploration_run_ref, 0) + 1
@@ -1013,7 +878,7 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
              "runs": [{"id": r.id, "title": r.title, "created_at": _iso_dt(r.created_at), "current": used.get(r.id, 0),
                        "variants": sum(1 for v in run_dict["variants"] if any(v is x for x in r.variants or []))}
                       for r in runs if r.id in run_dict["source_run_ids"] or r is latest]}
-    _review_extras(db, snapshot, project_ref, cfg, preds, scope)
+    snapshot = build_snapshot(run_dict, preds, changes, review=_report_evidence(db, run_dict, preds, scope, latest))
     rid = f"RPT-{uuid4().hex}"
     snapshot["risk_register"] = sync_risks(db, project_ref, snapshot["risks"], report_ref=rid, user=user)
     # RPT-11: previous project report of the same project → frozen comparison
@@ -1042,22 +907,12 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
     return report_detail(row)
 
 
-def _has_total(m: Evidence) -> bool:
-    t = (m.kpi or {}).get("total_power_mw")
-    return (t.get("mean") if isinstance(t, dict) else t) is not None
-
-
-def _meas_rank(m: Evidence) -> int:
-    """Comparable capture first (has total power), then real silicon over synthetic; ties keep the newest."""
-    return 4 * _has_total(m) + 2 * is_physical(m.provenance) + (not is_synthetic(m.provenance))
-
-
 def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]]) -> list[dict[str, Any]]:
     """Latest measurement per reported variant (real silicon preferred over synthetic) vs its registered prediction."""
     if not preds:
         return []
     keys = set(preds)
-    found: dict[tuple[str, str], Evidence] = {}
+    groups: dict[tuple[str, str], list[Evidence]] = {}
     rows = (db.query(Evidence).options(load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
                                                  Evidence.measured_at, Evidence.provenance, Evidence.kpi))
             .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_({sid for sid, _ in keys}))
@@ -1066,9 +921,9 @@ def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]
         key = (m.scenario_ref, m.variant_ref)
         if key not in keys:
             continue
-        held = found.get(key)
-        if held is None or _meas_rank(m) > _meas_rank(held):
-            found[key] = m
+        groups.setdefault(key, []).append(m)
+    found = {key: selected for key, captures in groups.items()
+             if (selected := representative_measurement(captures)) is not None}
     details = measurement_details(db, [m.id for m in found.values()])  # constant query count
     out = []
     for (sid, vid), m in sorted(found.items()):
@@ -1487,9 +1342,10 @@ def prediction_freshness(db: Session, *, scenario_id: str | None = None, project
             if run.selection is None:
                 raise ValueError("run에 설정/DVFS 입력 선택 기록 없음 — 현재 입력과 비교할 수 없음")
             tb = TimingBudgetRequest(scenario_id=sid, variant_id=vid, **run.selection)
-            shim = _shim(tb, vid)
-            _apply_config_profile(db, shim)
-            graph, tables, _ = _load(db, shim, tb.use_default_dvfs)
+            selection = resolve_analysis_selection(db, tb, vid)
+            shim = selection.request
+            inputs = selection.load(db)
+            graph, tables = inputs.graph, inputs.tables
             if run.applied:
                 graph, _ = _apply_options(graph, run.applied)
             from scenario_db.api.services.cpu import with_cpu_profile

@@ -20,6 +20,9 @@
 3. [Simulation and Evidence](design/simulation-and-evidence.md)
 4. [Viewer and Projection](design/viewer-and-projection.md)
 5. [Security and Write Lifecycle](design/security-and-write-lifecycle.md)
+6. [Analysis Module Ownership](design/analysis-module-ownership.md)
+
+도메인 용어는 [ScenarioDB Glossary](../GLOSSARY.md)를 참고한다.
 
 ### API 또는 데이터 계약을 바꿀 때
 

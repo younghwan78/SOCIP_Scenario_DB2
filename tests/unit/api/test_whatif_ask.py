@@ -7,6 +7,7 @@ import pytest
 import yaml
 from pydantic import SecretStr, ValidationError
 
+from scenario_db.api.services import analysis_inputs
 from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfChange
 from scenario_db.api.services import scenario_whatif as service
 from scenario_db.api.services import whatif_llm
@@ -28,8 +29,8 @@ def tables():
 @pytest.fixture
 def scope(monkeypatch, tables):
     graph = _graph()
-    monkeypatch.setattr(service, "_load", lambda *a: (graph, tables, "dvfs-sample"))
-    monkeypatch.setattr(service, "_apply_config_profile", lambda *a: None)
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", lambda *a: analysis_inputs.AnalysisInputs(graph, tables, "dvfs-sample"))
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
     monkeypatch.setattr(service, "scenario_policy", lambda *a: None)
     return dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
 

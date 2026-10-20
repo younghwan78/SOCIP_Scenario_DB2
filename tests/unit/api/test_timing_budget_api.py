@@ -25,6 +25,7 @@ from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
 from scenario_db.api.routers import timing_budget as router
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
+from scenario_db.api.services import analysis_inputs
 from scenario_db.api.services import timing_budget as service
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
@@ -130,8 +131,8 @@ def test_service_runs_read_only_with_default_dvfs_lookup(monkeypatch):
         "cam-rec-r1-uhd30-vdis",
         catalog,
     )
-    monkeypatch.setattr(service, "load_canonical_graph", lambda db, s, v: graph)
-    monkeypatch.setattr(service, "_graph_soc_ref", lambda g: None)
+    monkeypatch.setattr(analysis_inputs, "load_canonical_graph", lambda db, s, v: graph)
+    monkeypatch.setattr(analysis_inputs, "_graph_soc_ref", lambda g: None)
     db = MagicMock()
     res = service.analyze_timing_budget_request(
         db,

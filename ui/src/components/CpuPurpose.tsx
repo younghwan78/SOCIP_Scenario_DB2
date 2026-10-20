@@ -3,16 +3,8 @@
 // "traffic shaping 0.8" or "차기 SW ×1.2" can be read against the baseline without re-running.
 import { fmt } from '../lib/timingBudget'
 import { strategyVerdict, type CpuRebalance } from '../lib/rebalance'
-
-export interface CpuRun {
-  n: number; profile: string; target: string; cmp: string | null; context: string
-  growth: number; bwScale: number; pgEff: number
-  ref_mw: number; best_mw: number | null; cmp_ref_mw: number | null; cmp_best_mw: number | null; winner: string | null
-  /** CPU → DRAM MB/s of the run (BW-only effect of the BW scale) */
-  bw_mbs?: number | null
-  /** CPU-07: when the run was made (kept across reloads with the request context) */
-  at?: string
-}
+import type { CpuRun } from '../lib/cpuAnalysis'
+export type { CpuRun } from '../lib/cpuAnalysis'
 
 const sg = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? '—' : `${v >= 0 ? '+' : ''}${fmt(v, d)}`)
 
