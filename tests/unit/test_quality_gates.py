@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import shlex
 import tomllib
+from collections import Counter
 from pathlib import Path
+
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _workflow() -> dict:
+    return yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
 
 
 def test_pyproject_declares_static_quality_gates() -> None:
@@ -52,17 +60,21 @@ def test_github_actions_runs_quality_and_test_gates() -> None:
 
 
 def test_parallel_ci_preserves_coverage_and_required_check_names() -> None:
-    import yaml
-
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    workflow = _workflow()
     jobs = workflow["jobs"]
-    unit_command = jobs["unit"]["steps"][3]["run"]
+    unit_command = next(
+        step["run"] for step in jobs["unit"]["steps"]
+        if "pytest ${{ matrix.tests }}" in step.get("run", "")
+    )
     integration_command = jobs["integration"]["steps"][-1]["run"]
     assert "-n 4" in unit_command
     assert "--cov=scenario_db" in unit_command
     shards = jobs["unit"]["strategy"]["matrix"]["include"]
-    assert {shard["tests"] for shard in shards} == {
-        "tests/unit/authoring", "tests/unit --ignore=tests/unit/authoring",
+    assert {shard["shard"]: shard["tests"] for shard in shards} == {
+        "sim": "tests/unit/sim",
+        "trace": "tests/unit/meas_import tests/unit/authoring",
+        "rest": "tests/unit --ignore=tests/unit/sim --ignore=tests/unit/meas_import"
+                " --ignore=tests/unit/authoring",
     }
     assert jobs["unit"]["strategy"]["fail-fast"] is False
     gate = jobs["quality"]
@@ -70,13 +82,53 @@ def test_parallel_ci_preserves_coverage_and_required_check_names() -> None:
     assert gate["if"] == "${{ always() }}"
     assert 'test "$STATIC_RESULT" = success' in gate["steps"][0]["run"]
     assert 'test "$UNIT_RESULT" = success' in gate["steps"][0]["run"]
-    assert gate["steps"][-3]["run"] == "test -s .coverage.authoring && test -s .coverage.remaining"
+    coverage_check = gate["steps"][-3]["run"]
+    assert coverage_check == " && ".join(
+        f"test -s .coverage.{shard['shard']}" for shard in shards
+    )
     assert gate["steps"][-2]["run"].endswith("coverage combine")
     assert gate["steps"][-1]["run"].endswith("coverage report --fail-under=80")
     assert "-n 4" in integration_command
     assert "--dist loadfile" in integration_command
     assert "github.run_id" in workflow["concurrency"]["group"]
     assert workflow["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
+
+
+def test_unit_shards_cover_every_test_file_exactly_once() -> None:
+    test_files = {
+        path for path in (ROOT / "tests/unit").rglob("*.py")
+        if path.name.startswith("test_") or path.name.endswith("_test.py")
+    }
+    owners: Counter[Path] = Counter()
+    shards = _workflow()["jobs"]["unit"]["strategy"]["matrix"]["include"]
+    for shard in shards:
+        arguments = shlex.split(shard["tests"])
+        roots = [ROOT / arg for arg in arguments if not arg.startswith("--")]
+        ignored = [ROOT / arg.removeprefix("--ignore=")
+                   for arg in arguments if arg.startswith("--ignore=")]
+        selected = {
+            path for path in test_files
+            if any(path.is_relative_to(root) for root in roots)
+            and not any(path.is_relative_to(root) for root in ignored)
+        }
+        assert selected, f"Empty unit shard: {shard['shard']}"
+        owners.update(selected)
+    assert owners == Counter({path: 1 for path in test_files})
+
+
+def test_trace_shard_caches_and_measures_the_pinned_perfetto_binary() -> None:
+    steps = _workflow()["jobs"]["unit"]["steps"]
+    cache = next(step for step in steps if step.get("name") == "Cache pinned Perfetto binary")
+    warmup = next(step for step in steps if step.get("name") == "Measure Perfetto binary setup")
+    assert cache["if"] == warmup["if"] == "matrix.shard == 'trace'"
+    assert cache["with"]["path"] == "~/.local/share/perfetto/prebuilts"
+    assert all(part in cache["with"]["key"] for part in (
+        "runner.os", "runner.arch", "hashFiles('uv.lock')",
+    ))
+    assert cache["with"]["key"].startswith(cache["with"]["restore-keys"])
+    test_index = next(i for i, step in enumerate(steps)
+                      if "pytest ${{ matrix.tests }}" in step.get("run", ""))
+    assert steps.index(cache) < steps.index(warmup) < test_index
 
 
 def test_ubuntu_runbook_matches_mutation_auth_contract() -> None:

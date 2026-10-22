@@ -146,9 +146,15 @@ def test_real_fixture_stats_hierarchy_and_timeline():
         flows = tp.query("SELECT s.name AS source, t.name AS target FROM flow f "
                          "JOIN slice s ON s.id=f.slice_out JOIN slice t ON t.id=f.slice_in")
         assert len(flows) == 18 * 450
+        # Index the fixed-width " fNNNN" suffix once instead of rescanning all
+        # 8,100 flows for each frame (particularly costly under coverage).
+        flows_by_suffix = {}
+        for flow in flows:
+            flows_by_suffix.setdefault(flow["source"][-6:], []).append(
+                (flow["source"], flow["target"]))
         for frame in range(450):
             suffix = f" f{frame:04d}"
-            pairs = [(f["source"], f["target"]) for f in flows if f["source"].endswith(suffix)]
+            pairs = flows_by_suffix.get(suffix, [])
             assert len(pairs) == 18
             assert all(target.endswith(suffix) for _, target in pairs)
             reached = {"SENSOR_READOUT" + suffix}
@@ -162,9 +168,12 @@ def test_real_fixture_stats_hierarchy_and_timeline():
                        "OR name GLOB 'MCSC_PROCESS f*'")
         assert len(nrt) == 4 * 450
         assert sum(s["dur"] for s in nrt) / len(nrt) / 1e6 == pytest.approx(8)
+        nrt_by_suffix = {}
+        for sample in nrt:
+            nrt_by_suffix.setdefault(sample["name"][-6:], set()).add(
+                (sample["ts"], sample["dur"]))
         for frame in range(450):
-            assert len({(s["ts"], s["dur"]) for s in nrt
-                        if s["name"].endswith(f" f{frame:04d}")}) == 1
+            assert len(nrt_by_suffix.get(f" f{frame:04d}", set())) == 1
         assert any(e["observation_only"] for e in events)
         tracks = tp.query("SELECT t.name, p.name AS parent FROM track t JOIN track p ON t.parent_id=p.id")
         assert any(t["name"] == "Scenario / SW / ICPU" and t["parent"] == "Scenario / SW" for t in tracks)

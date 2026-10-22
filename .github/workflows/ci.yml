@@ -63,14 +63,45 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - shard: authoring
-            tests: tests/unit/authoring
-          - shard: remaining
-            tests: tests/unit --ignore=tests/unit/authoring
+          # Isolate the slow CPU searches; pair the short trace suite with
+          # authoring so the catch-all is not the long pole. The catch-all keeps
+          # new unit tests covered without maintaining a file allowlist.
+          - shard: sim
+            tests: tests/unit/sim
+          - shard: trace
+            tests: tests/unit/meas_import tests/unit/authoring
+          - shard: rest
+            tests: tests/unit --ignore=tests/unit/sim --ignore=tests/unit/meas_import --ignore=tests/unit/authoring
     steps:
       - uses: actions/checkout@v5.1.0
       - uses: astral-sh/setup-uv@v8.3.2
       - run: uv sync --frozen --group dev --group dashboard --group sim --extra profiling
+      # Perfetto downloads its pinned native binary outside the uv cache.
+      - name: Cache pinned Perfetto binary
+        if: matrix.shard == 'trace'
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/share/perfetto/prebuilts
+          key: perfetto-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('uv.lock') }}
+          # Binaries are named by pinned SHA-256, so an older cache is safe to
+          # restore after unrelated lockfile changes; a new pin just downloads.
+          restore-keys: perfetto-${{ runner.os }}-${{ runner.arch }}-
+      - name: Measure Perfetto binary setup
+        if: matrix.shard == 'trace'
+        run: |
+          uv run --extra profiling python - <<'PY'
+          from time import perf_counter
+          from perfetto.trace_processor import TraceProcessor, TraceProcessorConfig
+          from perfetto.trace_processor.platform import PlatformDelegate
+
+          started = perf_counter()
+          binary = PlatformDelegate().get_shell_path(None)
+          print(f"Pinned Perfetto binary ready in {perf_counter() - started:.2f}s", flush=True)
+          started = perf_counter()
+          with TraceProcessor(config=TraceProcessorConfig(bin_path=binary)) as processor:
+              assert next(iter(processor.query("SELECT 1 AS ready"))).ready == 1
+              print(f"Perfetto startup/query ready in {perf_counter() - started:.2f}s", flush=True)
+          PY
       # Shard coverage is partial; quality enforces 80% on the combined result.
       - run: uv run --extra profiling pytest ${{ matrix.tests }} -n 4 --dist worksteal --durations=25 --cov=scenario_db --cov-report= --cov-fail-under=0
       - run: mv .coverage .coverage.${{ matrix.shard }}
@@ -101,8 +132,8 @@ jobs:
         with:
           pattern: coverage-*
           merge-multiple: true
-      - name: Require both coverage files
-        run: test -s .coverage.authoring && test -s .coverage.remaining
+      - name: Require every shard coverage file
+        run: test -s .coverage.sim && test -s .coverage.trace && test -s .coverage.rest
       - run: uv run --extra profiling coverage combine
       - run: uv run --extra profiling coverage report --fail-under=80
 
