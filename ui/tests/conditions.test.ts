@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cameraOf, changedKeys, kpiLabel, matrixColumns, medoidId, recordingMode, shortLabels, stabOf, varyingKeys, evidenceSource } from '../src/lib/conditions'
+import { cameraOf, changedKeys, conditionDistance, kpiLabel, matrixColumns, medoidId, recordingMode, shortLabels, stabOf, varyingKeys, evidenceSource } from '../src/lib/conditions'
 import type { VariantRow } from '../src/lib/api'
 
 const row = (id: string, dc: Record<string, unknown>, extra: Partial<VariantRow> = {}): VariantRow =>
@@ -38,6 +38,27 @@ describe('reference diff', () => {
   const byId = new Map(rows.map((r) => [r.variant_id, r]))
   it('picks the medoid instead of the alphabetical first', () => {
     expect(['uhd30', 'uhd30-sdr']).toContain(medoidId(rows))
+  })
+  it('matches the pairwise oracle for sparse, typed, derived and tied conditions', () => {
+    const oracle = (items: VariantRow[]) => {
+      const base = items.filter((r) => !r.derived_from_variant)
+      const pool = (base.length ? base : items).slice().sort((a, b) => a.variant_id.localeCompare(b.variant_id))
+      let best = '', distance = Infinity
+      for (const candidate of pool) {
+        const sum = pool.reduce((n, other) => n + conditionDistance(candidate.design_conditions, other.design_conditions), 0)
+        if (sum < distance) { best = candidate.variant_id; distance = sum }
+      }
+      return best
+    }
+    const values = [undefined, null, '', '—', 0, '0', false, 'false', { fps: 30 }, ['a', 2], 30]
+    for (let size = 0; size < 48; size++) {
+      const items = Array.from({ length: size }, (_, i) => row(`v-${size - i}`, Object.fromEntries(
+        ['fps', 'resolution', 'option', 'clock_source'].filter((_, j) => (i + j) % 3 !== 0)
+          .map((k, j) => [k, values[(i * 7 + j * 3) % values.length]])),
+      { derived_from_variant: i % 4 ? undefined : 'parent' }))
+      expect(medoidId(items)).toBe(oracle(items))
+      expect(medoidId(items.map((r) => ({ ...r, derived_from_variant: 'parent' })))).toBe(oracle(items.map((r) => ({ ...r, derived_from_variant: 'parent' }))))
+    }
   })
   it('compares derived variants with their parent', () => {
     expect(changedKeys(rows[4], byId.get('uhd60'), byId)).toEqual(['clock'])

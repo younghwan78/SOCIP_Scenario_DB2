@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic.aliases import AliasChoices
 from pydantic_settings import BaseSettings
 
@@ -25,6 +26,8 @@ class Settings(BaseSettings):
     api_port: int = 8000
     cors_origins: list[str] = ["http://localhost:8501", "http://localhost:3000"]
     log_level: str = "INFO"
+    # Structured request/SQL timings only; no middleware or DB hooks when disabled.
+    performance_log_enabled: bool = False
     db_pool_size: int = 10
     db_max_overflow: int = 20
     report_dir: str = "output_simulation"
@@ -45,8 +48,11 @@ class Settings(BaseSettings):
     query_max_evidence_rows: int = Field(default=20_000, ge=1)
     query_max_issue_rows: int = Field(default=5_000, ge=1)
     query_facets_max_candidates: int = Field(default=10_000, ge=1)
-    # CPU/memory admission controls are per API worker. Deployment-wide limits
-    # additionally require sizing the worker count.
+    # Existing per-worker controls remain unchanged. Optional global limits share
+    # OS file-lock slots between API processes on one host/local filesystem.
+    execution_budget_dir: str | None = None
+    simulation_global_max_concurrent_runs: int = Field(default=0, ge=0)
+    exploration_global_max_concurrent_requests: int = Field(default=0, ge=0)
     simulation_max_concurrent_runs: int = Field(default=2, ge=1)
     # CPU growth sweep: worker processes for the per-point rebalance (0 = min(cpu_count, 8); 1 = in-process)
     cpu_sweep_workers: int = Field(default=0, ge=0)
@@ -66,6 +72,9 @@ class Settings(BaseSettings):
     whatif_llm_timeout_s: float = Field(default=15.0, gt=0, le=120)
     # response_format={"type":"json_object"}; retried without it when the server rejects the field
     whatif_llm_json_mode: bool = True
+    # Opt in to releasing simulation admission during natural-language LLM I/O.
+    # False preserves the original whole-request capacity/429 timing.
+    whatif_release_compute_slot_during_llm: bool = False
     # API authentication is deny-by-default. Prefer role-bearing principals:
     # {"architect@example.com":{"secret":"...","roles":["writer"]}}.
     api_principals: dict[str, ApiPrincipalSettings] = Field(default_factory=dict)
@@ -76,6 +85,13 @@ class Settings(BaseSettings):
     mutation_auth_disabled: bool = False
 
     model_config = {"env_prefix": "SCENARIO_DB_", "env_file": ".env", "extra": "ignore"}
+
+    @model_validator(mode="after")
+    def _shared_execution_budget(self) -> Settings:
+        if self.simulation_global_max_concurrent_runs or self.exploration_global_max_concurrent_requests:
+            if not self.execution_budget_dir or not Path(self.execution_budget_dir).is_absolute():
+                raise ValueError("global execution limits require an absolute execution_budget_dir")
+        return self
 
 
 @lru_cache(maxsize=1)

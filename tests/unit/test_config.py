@@ -93,3 +93,20 @@ def test_execution_resource_limits_must_be_positive(monkeypatch, tmp_path):
         Settings()
 
     assert "exploration_max_cases" in str(exc_info.value)
+
+
+def test_global_execution_limits_are_opt_in_and_need_a_shared_absolute_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unused/test")
+    monkeypatch.chdir(tmp_path)
+    settings = Settings()
+    assert settings.simulation_global_max_concurrent_runs == 0
+    assert settings.exploration_global_max_concurrent_requests == 0
+    assert settings.whatif_release_compute_slot_during_llm is False
+    monkeypatch.setenv("SCENARIO_DB_SIMULATION_GLOBAL_MAX_CONCURRENT_RUNS", "2")
+    with pytest.raises(ValidationError, match="absolute execution_budget_dir"):
+        Settings()
+    monkeypatch.setenv("SCENARIO_DB_EXECUTION_BUDGET_DIR", "relative/path")
+    with pytest.raises(ValidationError, match="absolute execution_budget_dir"):
+        Settings()
+    monkeypatch.setenv("SCENARIO_DB_EXECUTION_BUDGET_DIR", str(tmp_path / "budgets"))
+    assert Settings().simulation_global_max_concurrent_runs == 2

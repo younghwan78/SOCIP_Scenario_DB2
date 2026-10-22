@@ -40,6 +40,8 @@
 - [Testing Guide](operations/testing.md)
 - [Ubuntu Deployment](operations/deployment-ubuntu.md)
 - [Linux 서버 실행 (dev_up.sh, 사내 Ubuntu)](operations/linux-server-guide-ko.md)
+- [Compute and database resource budgets](operations/performance-budgets.md)
+- [React production 정적 배포 (선택 적용)](operations/react-static-nginx.md)
 - [Write API Runbook](operations/write-api-runbook.md)
 - [Dashboard Regression Checklist](operations/dashboard-regression-checklist.md)
 - [Troubleshooting](operations/troubleshooting.md)

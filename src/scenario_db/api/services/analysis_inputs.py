@@ -43,7 +43,10 @@ class AnalysisSelection:
     def load(self, db: Session) -> AnalysisInputs:
         """Load this resolved selection; never mutate the caller's request."""
         request = self.request
-        graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
+        # Analyses resolve explicitly selected measurement/profile references
+        # below; the decision/view evidence history and rule catalog are unused.
+        graph = load_canonical_graph(db, request.scenario_id, request.variant_id,
+                                     include_decision_context=False)
         soc_ref = _graph_soc_ref(graph)
         if request.soc_ref and soc_ref and str(request.soc_ref) != str(soc_ref):
             raise ValueError("soc_ref does not match the scenario project")

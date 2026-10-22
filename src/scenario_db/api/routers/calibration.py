@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from scenario_db.api.deps import get_db
@@ -28,6 +28,13 @@ def coverage(scenario_id: str, freshness: bool = False, db: Session = Depends(ge
     ``freshness=true`` also re-checks each current prediction against today's inputs (slow; the UI uses
     /arch/predictions/freshness instead)."""
     return cal.coverage(db, scenario_id, freshness=freshness)
+
+
+@router.get("/calibration/coverage-counts")
+def coverage_counts(scenario_ids: list[str] = Query(..., min_length=1, max_length=25),
+                    project_ref: str | None = None, db: Session = Depends(get_db)):
+    """Batched count projection for Matrix/Predictions; detailed coverage remains separate."""
+    return cal.coverage_counts(db, scenario_ids, project_ref=project_ref)
 
 
 @router.get("/calibration/ip-bandwidth")

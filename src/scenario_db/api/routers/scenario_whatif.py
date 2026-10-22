@@ -46,6 +46,12 @@ def ask(request: WhatIfAskRequest, db: Session = Depends(get_db),
         _principal: ApiPrincipal = Depends(calculate_access)):
     """Question (in-house LLM) or builder conditions -> answer: what-if / DVFS level limit search / bottleneck."""
     settings = _limits(request)
+    if settings.whatif_release_compute_slot_during_llm and request.changes is None and request.ask is None:
+        return service.ask(
+            db, request,
+            compute_slot=lambda: admission_slot("simulation", settings.simulation_max_concurrent_runs),
+            llm_slot=lambda: admission_slot("whatif-llm", settings.simulation_max_concurrent_runs),
+        )
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return service.ask(db, request)
 

@@ -6,9 +6,9 @@ import { sweepApi } from './growthSweep'
 import { rebalanceApi } from './rebalance'
 
 const http: CpuAnalysisAdapter = {
-  sweep: (request) => cpuApi.sweep(request),
-  rebalance: (request) => rebalanceApi.run(request),
-  growth: (request) => sweepApi.run(request),
+  sweep: (request, signal) => cpuApi.sweep(request, signal),
+  rebalance: (request, signal) => rebalanceApi.run(request, signal),
+  growth: (request, signal) => sweepApi.run(request, signal),
 }
 
 /** React/storage wiring; all execution and result ownership lives in the analysis module. */

@@ -76,3 +76,59 @@ def test_rebalance_growth_sweep(api_client, engine):
         with Session(engine) as db:
             db.delete(db.get(PowerModelParams, "pmp-cpu-sweep-test"))
             db.commit()
+
+
+@pytest.mark.parametrize("request_owned", [False, True])
+@pytest.mark.parametrize("kind", ["whatif", "sweep", "rebalance", "growth"])
+def test_cpu_compute_connection_boundary_preserves_results(engine, cpu_topology, monkeypatch, request_owned, kind):
+    """Only HTTP-owned clean reads release PostgreSQL before the CPU phase."""
+    from scenario_db.api.schemas.cpu import (
+        CpuRebalanceRequest, CpuRebalanceSweepRequest, CpuSweepRequest, CpuWhatIfRequest,
+    )
+    from scenario_db.api.services import cpu
+    from scenario_db.api.services.compute_session import REQUEST_OWNED
+
+    with Session(engine) as setup:
+        row = setup.get(PowerModelParams, cpu_topology)
+        row.params = {"cpu": {"clusters": row.params["cpu"]["clusters"] + [
+            {"name": "MID", "cores": 2, "opps": [{"mhz": 800, "mv": 650, "mw_per_core": 50}]},
+        ]}}
+        setup.commit()
+
+    schema, service, compute_name = {
+        "whatif": (CpuWhatIfRequest, cpu.run_cpu_whatif, "cpu_whatif"),
+        "sweep": (CpuSweepRequest, cpu.run_cpu_sweep, "cpu_sweep"),
+        "rebalance": (CpuRebalanceRequest, cpu.run_cpu_rebalance, "_rebalance_compute"),
+        "growth": (CpuRebalanceSweepRequest, cpu.run_cpu_rebalance_sweep, "_compute_points"),
+    }[kind]
+    body = {"power_params_ref": f"{cpu_topology}@9876", "cpu_profile": {
+        "tasks": [{"task": "ui", "cluster": "BIG", "cycles": 1000000}],
+        "clusters": {"BIG": {"freq_residency": {"1000": 1}}},
+    }}
+    if kind == "growth":
+        body["growths"] = [1, 1.5, 2]
+    request = schema.model_validate(body)
+    monkeypatch.setattr(cpu, "_sweep_workers", lambda _: 1)
+
+    def payload(result):
+        value = result.model_dump() if hasattr(result, "model_dump") else dict(result)
+        value.pop("elapsed_ms", None)
+        return value
+
+    with Session(engine) as baseline:
+        expected = payload(service(baseline, request))
+
+    original = getattr(cpu, compute_name)
+    observed = []
+    with Session(engine) as db:
+        if request_owned:
+            db.info[REQUEST_OWNED] = True
+
+        def checked_compute(*args, **kwargs):
+            observed.append(db.in_transaction())
+            assert db.in_transaction() is not request_owned
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(cpu, compute_name, checked_compute)
+        assert payload(service(db, request)) == expected
+    assert observed

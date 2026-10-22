@@ -29,24 +29,28 @@ const deferred = <T,>() => {
 /** A real adapter: tests control every response without reaching into the analysis implementation. */
 function controlled() {
   const calls: string[] = []
+  const signals: (AbortSignal | undefined)[] = []
   const rebalances: { request: CpuRebalanceRequest; response: ReturnType<typeof deferred<CpuRebalance>> }[] = []
   const growths: { request: GrowthRequest; response: ReturnType<typeof deferred<GrowthSweep>> }[] = []
   const sweeps: { request: CpuSweepRequest; response: ReturnType<typeof deferred<CpuSweep>> }[] = []
   const adapter: CpuAnalysisAdapter = {
-    rebalance: (request) => {
+    rebalance: (request, signal) => {
+      signals.push(signal)
       calls.push(`rebalance:${request.power_params_ref}`)
       const response = deferred<CpuRebalance>(); rebalances.push({ request, response }); return response.promise
     },
-    growth: (request) => {
+    growth: (request, signal) => {
+      signals.push(signal)
       calls.push(`growth:${request.power_params_ref}`)
       const response = deferred<GrowthSweep>(); growths.push({ request, response }); return response.promise
     },
-    sweep: (request) => {
+    sweep: (request, signal) => {
+      signals.push(signal)
       calls.push(`sweep:${request.power_params_ref}`)
       const response = deferred<CpuSweep>(); sweeps.push({ request, response }); return response.promise
     },
   }
-  return { adapter, calls, rebalances, growths, sweeps }
+  return { adapter, calls, signals, rebalances, growths, sweeps }
 }
 
 it('keeps the last successful sweep visible through a pending and failed retry', async () => {
@@ -213,7 +217,10 @@ it('a manual growth still pending when the rebalance starts its own growth is di
   const c = controlled(), analysis = createCpuAnalysis(c.adapter)
   const main = analysis.execute({ mode: 'rebalance', request: request(), growths: [1, 1.5] })
   const manual = analysis.execute({ mode: 'growth', request: request(), growths: [1, 2] })
+  expect(c.signals[0]?.aborted).toBe(false) // independent growth never cancels its pending main
   await c.rebalances[0].response.resolve(rebalance)
+  expect(c.signals[1]?.aborted).toBe(true) // stop obsolete growth's HTTP/admission retry
+  expect(c.signals[2]?.aborted).toBe(false)
   expect(c.calls).toEqual(['rebalance:main', 'growth:main', 'growth:main'])
   await c.growths[0].response.resolve(growth('stale'))
   await manual
@@ -222,6 +229,22 @@ it('a manual growth still pending when the rebalance starts its own growth is di
   await main
   expect(analysis.getSnapshot().growth?.result.power_params_ref).toBe('main')
   expect(analysis.getSnapshot().snapshotRequest?.growths).toEqual([1, 1.5])
+})
+
+it('aborts obsolete HTTP work while preserving current results and suppressing downstream stages', async () => {
+  const c = controlled(), analysis = createCpuAnalysis(c.adapter)
+  const old = analysis.execute({ mode: 'rebalance', request: request(), growths: [1], comparison: 'comparison' })
+  const current = analysis.execute({ mode: 'sweep', request: request() })
+  expect(c.signals[0]?.aborted).toBe(true)
+  expect(c.signals[1]?.aborted).toBe(false)
+  await c.rebalances[0].response.resolve(rebalance)
+  await old
+  expect(c.calls).toEqual(['rebalance:main', 'sweep:main'])
+  await c.sweeps[0].response.resolve(sweep)
+  await current
+  analysis.cancel()
+  expect(c.signals[1]?.aborted).toBe(true)
+  expect(analysis.getSnapshot()).toMatchObject({ result: sweep, runs: [], error: null })
 })
 
 it('the comparison of the previous run stays visible until the new main result arrives', async () => {

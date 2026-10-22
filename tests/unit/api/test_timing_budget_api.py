@@ -131,7 +131,7 @@ def test_service_runs_read_only_with_default_dvfs_lookup(monkeypatch):
         "cam-rec-r1-uhd30-vdis",
         catalog,
     )
-    monkeypatch.setattr(analysis_inputs, "load_canonical_graph", lambda db, s, v: graph)
+    monkeypatch.setattr(analysis_inputs, "load_canonical_graph", lambda db, s, v, **kw: graph)
     monkeypatch.setattr(analysis_inputs, "_graph_soc_ref", lambda g: None)
     db = MagicMock()
     res = service.analyze_timing_budget_request(

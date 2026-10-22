@@ -42,7 +42,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const targetRaw = ctx.params.target ?? targetPref
   const target = Number(targetRaw) > 0 ? Number(targetRaw) : null
   const scenIds = [...new Set(rows.map((r) => r.scenario_id))].sort()
-  const covQ = useAsync(() => Promise.all(scenIds.map((sid) => calibrationApi.coverage(sid).then((c) => [sid, c] as const).catch(() => null)))
+  const covQ = useAsync(() => calibrationApi.coverageBatch(scenIds)
     .then((list) => { const m = new Map<string, number>(); let ok = false
       for (const x of list) { if (!x) continue; ok = true; for (const [vid, c] of Object.entries(x[1])) m.set(`${x[0]}|${vid}`, c.measurement) }
       return ok ? m : undefined }), [scenIds.join(',')])

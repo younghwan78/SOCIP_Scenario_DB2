@@ -10,6 +10,7 @@ API (read-only, 인증 불필요)
 |---|---|
 | `GET /api/v1/calibration/measurements?scenario_id=` | measurement evidence 목록: 실측 total (mean/std/p95/CI), 등록(current) 예측 Δ%, 같은 variant의 최신 simulation evidence Δ% |
 | `GET /api/v1/calibration/coverage?scenario_id=` | variant별 simulation 수 · 실제/합성 measurement 수 · current 예측 (Scenario 표의 `예측` `실측` 열) |
+| `GET /api/v1/calibration/coverage-counts?scenario_ids=…&scenario_ids=…&project_ref=…` | Matrix/Predictions용 실제 measurement 건수만 조회. scenario 최대 25개, `project_ref`는 선택(화면은 기존 coverage와 같게 미지정), scenario → variant → `{measurement}`. 합성·출처 불명은 실측 건수에 포함하지 않으며 기존 coverage와 같은 0건 variant 항목을 유지. 상세 이력·예측 기준은 기존 coverage 사용. |
 | `GET /api/v1/calibration/measurements/{id}` | rail 분류 split, 예측별 CPU/IP/BW 비교 행, rail 표, SW task 실측 |
 
 Rail → 구분 (`comparison/calibration.py`)

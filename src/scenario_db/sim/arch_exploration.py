@@ -224,8 +224,9 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
     for s in slices:
         s["domains"] = dvfs_options(s["ips"], tables, axes.dvfs_headroom_levels, config.asv_group)
 
-    comp_sets = _subset_sums(active)
-    n_comp = len(comp_sets)
+    # Count the exact same choices before materialising them: twelve buffers can
+    # otherwise allocate 3**12 dictionaries only to reject the request below.
+    n_comp = math.prod(1 + len(_selectable_modes(b)) for b in active)
     n_dvfs = math.prod(len(d["options"]) for d in obj_slice["domains"]) if obj_slice["domains"] else 1
     total_cases = n_comp * sum(math.prod(len(d["options"]) for d in s["domains"]) for s in slices)
     if total_cases > spec.max_cases_per_variant:
@@ -234,6 +235,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             f"({len(slices)} SW x {n_comp} compression x {n_dvfs} DVFS); reduce axes"
         )
 
+    comp_sets = _subset_sums(active)
     dist: dict[str, list[float]] = {k: [] for k in DIST_KEYS}
     eligible_count = 0
     cases_obj: list[dict[str, Any]] = []

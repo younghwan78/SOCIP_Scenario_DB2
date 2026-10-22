@@ -157,7 +157,28 @@ export interface PowerFit { base_params_ref: string; statistic: string; measured
 export interface PowerParamsVersion { id: string; version: number; ref: string; soc_ref: string; status: string; description: string | null; calibrated: boolean; ip_power_scale: Record<string, number> }
 export interface PowerParamsCreated { params_ref: string; id: string; version: number; applied: Partial<Record<FitCat, number>>; yaml: string; params_hash: string }
 
+type CoverageCount = Pick<Coverage, 'measurement'>
+/** Small batched projection; preserve per-scenario failure handling on older/erroring servers.
+ * Matrix/Predictions call it without `projectRef`: per-scenario coverage was never project-scoped. */
+async function coverageBatch(scenarioIds: string[], projectRef?: string): Promise<(readonly [string, Record<string, CoverageCount>] | null)[]> {
+  const out: (readonly [string, Record<string, CoverageCount>] | null)[] = []
+  const ids = [...new Set(scenarioIds)]
+  for (let i = 0; i < ids.length; i += 25) {
+    const chunk = ids.slice(i, i + 25)
+    const query = new URLSearchParams(chunk.map((id) => ['scenario_ids', id]))
+    if (projectRef) query.set('project_ref', projectRef)
+    try {
+      const batch = await getJson<Record<string, Record<string, CoverageCount>>>(`/calibration/coverage-counts?${query}`, {}, false)
+      for (const id of chunk) out.push([id, batch[id] ?? {}])
+    } catch {
+      out.push(...await Promise.all(chunk.map((id) => calibrationApi.coverage(id).then((rows) => [id, rows] as const).catch(() => null))))
+    }
+  }
+  return out
+}
+
 export const calibrationApi = {
+  coverageBatch,
   coverageSummary: () => getJson<Record<string, Record<'simulation' | 'measurement' | 'synthetic' | 'current_prediction', number>>>('/calibration/coverage-summary', {}, false),
   coverage: (scenarioId: string) => getJson<Record<string, Coverage>>('/calibration/coverage', { scenario_id: scenarioId }, false),
   measurements: (scenarioId?: string, projectRef?: string) => getJson<MeasRow[]>('/calibration/measurements', { scenario_id: scenarioId, project_ref: projectRef }, false),

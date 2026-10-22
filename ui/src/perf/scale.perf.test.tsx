@@ -50,7 +50,7 @@ describe.skipIf(!ON)('UI scale probe', () => {
     })
   }
 
-  // medoid is O(n²) over ONE scenario's variants (Explorer passes the selected scenario only)
+  // Exact frequency medoid over ONE scenario's variants (Explorer passes the selected scenario only).
   for (const n of [100, 500, 1000, 2000]) {
     it(`medoidId · ${n} variants in one scenario`, () => { out[`medoidId ${n} ms`] = ms(() => medoidId(rows(n))) }, 60_000)
   }

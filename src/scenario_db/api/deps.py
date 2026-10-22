@@ -4,11 +4,13 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from scenario_db.api.cache import RuleCache
+from scenario_db.api.services.compute_session import REQUEST_OWNED
 from scenario_db.config import get_settings
 
 
 def get_db(request: Request):
     session: Session = request.app.state.session_factory()
+    session.info[REQUEST_OWNED] = True
     try:
         yield session
     finally:

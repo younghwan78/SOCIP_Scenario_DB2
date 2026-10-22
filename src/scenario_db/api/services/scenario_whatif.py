@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import nullcontext
 from typing import Any
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfExpe
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
 from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
+from scenario_db.api.services.compute_session import release_read_connection
 from scenario_db.api.services.whatif_conditions import CHANGE_KINDS, apply_whatif_changes, whatif_targets
 from scenario_db.api.services.whatif_llm import LlmUnavailable, interpret as llm_interpret, llm_status
 from scenario_db.api.services.whatif_query import plan_query
@@ -68,6 +70,7 @@ def _baseline(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | N
     if preview is not None and baseline_fingerprint(graph) != preview.expected_baseline_hash:
         raise ConflictError("What-if baseline changed; interpret and preview the condition again")
     options = apply_throughput(req.options, scenario_policy(db, scope.scenario_id))
+    release_read_connection(db)
     return {"graph": graph, "config": config, "tables": tables, "ref": ref, "options": options,
             "case": _case(graph, config, options, tables, ref)}
 
@@ -542,11 +545,12 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
     return None
 
 
-def ask(db: Session, request: WhatIfAskRequest) -> dict:
+def ask(db: Session, request: WhatIfAskRequest, *, compute_slot=nullcontext, llm_slot=nullcontext) -> dict:
     scope = WhatIfScope(**request.model_dump(include={"project_ref", "scenario_id", "variant_id"}))
     try:
-        base = _baseline(db, scope, request)
-        targets_ = _targets_from(base)
+        with compute_slot():
+            base = _baseline(db, scope, request)
+            targets_ = _targets_from(base)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
@@ -559,7 +563,8 @@ def ask(db: Session, request: WhatIfAskRequest) -> dict:
              "search_domains": list(request.search_domains or []), "focus": []}
     if request.changes is None and request.ask is None:
         try:
-            got = llm_interpret(request.query, targets_)
+            with llm_slot():
+                got = llm_interpret(request.query, targets_)
         except LlmUnavailable as exc:
             return {**common, "interpretation": {"status": "llm_unavailable", "reason": str(exc), **llm_status()},
                     "plan": None, "answer": None, "result": None, "search": None, "diagnose": None, "combine": None}
@@ -573,26 +578,27 @@ def ask(db: Session, request: WhatIfAskRequest) -> dict:
         if status in ("clarification", "unsupported"):
             return {**common, "interpretation": interpretation, "plan": plan_, "answer": None,
                     "result": None, "search": None, "diagnose": None, "combine": None}
-    result = search = diag = combo = None
-    if plan_["ask"] == "combine" and len(plan_["changes"]) < 2:
-        plan_["ask"] = "what_if"   # a single lever (e.g. an LLM reading) is just a what-if
-    if plan_["ask"] == "combine":
-        try:
-            combo = _combine(base, targets_, plan_["changes"], request.combine)
-        except ValueError as exc:
-            raise UnprocessableError(str(exc)) from exc
-    elif plan_["ask"] == "search_limit":
-        search = _search_limit(base, targets_["domains"], plan_["search_domains"])
-    elif plan_["ask"] == "diagnose" or not plan_["changes"]:
-        if plan_["ask"] == "what_if" and not boundaries:
-            raise UnprocessableError("바꿀 조건을 하나 이상 지정하세요")
-        diag = _diagnose(base, targets_["domains"])
-    else:
-        result = _preview_from(base, WhatIfPreviewRequest(**scope.model_dump(), config=request.config, options=request.options,
-                                                  changes=plan_["changes"], expected_baseline_hash=baseline_hash))
-    return {**common, "interpretation": interpretation, "plan": plan_,
-            "answer": _answer(plan_, targets_, result, search, diag, boundaries, combo),
-            "result": result, "search": search, "diagnose": diag, "combine": combo}
+    with compute_slot():
+        result = search = diag = combo = None
+        if plan_["ask"] == "combine" and len(plan_["changes"]) < 2:
+            plan_["ask"] = "what_if"   # a single lever (e.g. an LLM reading) is just a what-if
+        if plan_["ask"] == "combine":
+            try:
+                combo = _combine(base, targets_, plan_["changes"], request.combine)
+            except ValueError as exc:
+                raise UnprocessableError(str(exc)) from exc
+        elif plan_["ask"] == "search_limit":
+            search = _search_limit(base, targets_["domains"], plan_["search_domains"])
+        elif plan_["ask"] == "diagnose" or not plan_["changes"]:
+            if plan_["ask"] == "what_if" and not boundaries:
+                raise UnprocessableError("바꿀 조건을 하나 이상 지정하세요")
+            diag = _diagnose(base, targets_["domains"])
+        else:
+            result = _preview_from(base, WhatIfPreviewRequest(**scope.model_dump(), config=request.config, options=request.options,
+                                                      changes=plan_["changes"], expected_baseline_hash=baseline_hash))
+        return {**common, "interpretation": interpretation, "plan": plan_,
+                "answer": _answer(plan_, targets_, result, search, diag, boundaries, combo),
+                "result": result, "search": search, "diagnose": diag, "combine": combo}
 
 
 def _record(row, *, detail=False):

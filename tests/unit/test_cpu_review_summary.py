@@ -46,4 +46,4 @@ def test_sweep_worker_failure_falls_back_without_changing_point_order(monkeypatc
     monkeypatch.setattr(cpu, '_rebalance_compute', lambda g, *_: {'growth': g})
     values, workers = cpu._compute_points([(g, None, None, 30, cpu.RebalanceSpec()) for g in (1, 1.5, 2)])
     assert values == [{'growth': 1}, {'growth': 1.5}, {'growth': 2}] and workers == 1
-    pool.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
+    pool.shutdown.assert_called_once_with(wait=True, cancel_futures=True)

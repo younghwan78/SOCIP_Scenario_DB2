@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
+from dataclasses import dataclass
+from threading import Condition, RLock
 from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.cpu import CpuRebalanceRequest, CpuSweepRequest, CpuWhatIfRequest, CpuWhatIfResponse
+from scenario_db.api.services.compute_session import release_read_connection
 from scenario_db.db.models.capability import PowerModelParams as PowerModelParamsRow
 from scenario_db.db.repositories.evidence import get_evidence
 from scenario_db.exceptions import NotFoundError, UnprocessableError
@@ -63,6 +67,7 @@ def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
     target = _model(db, request.power_params_ref)
     base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
     spec = SweepSpec(**_sweep_fields(request))
+    release_read_connection(db)
     try:
         result = cpu_sweep(profile, target=target, base=base, fps=request.fps, spec=spec)
     except ValueError as exc:
@@ -147,25 +152,41 @@ def scale_coupling(coupling: dict[str, Any], runtime_scale: float) -> dict[str, 
     return coupling | {"runtime_scale": runtime_scale, "stages": stages, "stretch": {t: round(v, 4) for t, v in stretch.items()}}
 
 
-def _rebalance_inputs(db: Session, request: CpuRebalanceRequest, *, coupling_base: dict[str, Any] | None = None
+@dataclass(frozen=True)
+class _RebalanceData:
+    profile: Any
+    target: CpuPowerModel
+    base: CpuPowerModel | None
+    scope: tuple[str, str] | None
+
+
+def _rebalance_data(db: Session, request: CpuRebalanceRequest) -> _RebalanceData:
+    """Resolve invariant CPU inputs once; no ORM objects escape this preparation."""
+    profile = _profile(db, request)
+    target = _model(db, request.power_params_ref)
+    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
+    row = get_evidence(db, request.cpu_profile_ref) if request.cpu_profile_ref and request.cpu_profile is None else None
+    scope = (str(row.scenario_ref), str(row.variant_ref)) if row is not None and row.scenario_ref and row.variant_ref else None
+    return _RebalanceData(profile, target, base, scope)
+
+
+def _rebalance_inputs(db: Session, request: CpuRebalanceRequest, *, coupling_base: dict[str, Any] | None = None,
+                      prepared: _RebalanceData | None = None
                       ) -> tuple[Any, CpuPowerModel, CpuPowerModel | None, RebalanceSpec, dict[str, Any] | None, bool]:
     """DB-side half of a rebalance: profile, models, Timing Budget coupling and the search spec.
 
     ``coupling_base``: a ``timing_stretch`` result of the same variant (uniform growth only) reused by a sweep.
     """
-    profile = _profile(db, request)
-    target = _model(db, request.power_params_ref)
-    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
+    data = prepared or _rebalance_data(db, request)
     # the Timing Budget of the profile's variant: enforced as task budgets (stage_slack) or only reported (off)
     enforce = request.timing_coupling != "off"
     coupling = None
     if enforce and request.cpu_profile is not None:
         raise UnprocessableError("timing_coupling needs a stored measurement profile, not an inline CPU profile")
-    row = get_evidence(db, request.cpu_profile_ref) if request.cpu_profile_ref and request.cpu_profile is None else None
-    if row is not None and row.scenario_ref and row.variant_ref:
+    if data.scope is not None:
         try:
             coupling = (scale_coupling(coupling_base, request.default_growth) if coupling_base is not None and not request.growth
-                        else timing_stretch(db, str(row.scenario_ref), str(row.variant_ref), statistic=request.timing_statistic,
+                        else timing_stretch(db, *data.scope, statistic=request.timing_statistic,
                                             runtime_scale=request.default_growth, growth=request.growth))
             if not math.isclose(coupling["period_ms"], 1000.0 / request.fps, rel_tol=1e-3):
                 if enforce:
@@ -181,7 +202,7 @@ def _rebalance_inputs(db: Session, request: CpuRebalanceRequest, *, coupling_bas
                          locks=dict(request.locks), co_move=tuple(tuple(g) for g in request.co_move),
                          verify_k=request.verify_k, max_exhaustive=request.max_exhaustive,
                          stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {})
-    return profile, target, base, spec, coupling, enforce
+    return data.profile, data.target, data.base, spec, coupling, enforce
 
 
 def _rebalance_compute(profile: Any, target: CpuPowerModel, base: CpuPowerModel | None, fps: float,
@@ -245,6 +266,7 @@ def with_bw_power(result: dict[str, Any], coeff: dict[str, Any]) -> dict[str, An
 def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest, *, coupling_base: dict[str, Any] | None = None) -> CpuWhatIfResponse:
     """``coupling_base``: a ``timing_stretch`` result of the same variant (uniform growth only) reused by a sweep."""
     profile, target, base, spec, coupling, enforce = _rebalance_inputs(db, request, coupling_base=coupling_base)
+    release_read_connection(db)
     result = _rebalance_finish(_rebalance_compute(profile, target, base, request.fps, spec), coupling, enforce)
     with_bw_power(result, bw_coefficient(db, request.cpu_profile_ref if request.cpu_profile is None else None))
     return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
@@ -259,6 +281,7 @@ def run_cpu_whatif(db: Session, request: CpuWhatIfRequest) -> CpuWhatIfResponse:
         budgets_ms=request.budgets_ms, util_cap=request.util_cap, power_gating_eff=request.power_gating_eff,
         cpu_bw_scale=request.cpu_bw_scale, max_cases=request.max_cases,
     )
+    release_read_connection(db)
     try:
         result = cpu_whatif(profile, target=target, base=base, fps=request.fps, spec=spec)
     except ValueError as exc:
@@ -432,9 +455,12 @@ def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
                                                statistic=request.timing_statistic, runtime_scale=growths[0])
             except (NotFoundError, UnprocessableError):
                 coupling_base = None  # the per-point call reports the error
-    inputs = [_rebalance_inputs(db, _Req(**(base | {"default_growth": g})), coupling_base=coupling_base) for g in growths]
+    prepared = _rebalance_data(db, request)
+    inputs = [_rebalance_inputs(db, _Req(**(base | {"default_growth": g})), coupling_base=coupling_base,
+                               prepared=prepared) for g in growths]
     from dataclasses import replace as _replace
 
+    release_read_connection(db)
     computed, workers = _compute_points([(i[0], i[1], i[2], request.fps, _replace(i[3], ratio_curves=False)) for i in inputs])
     coeff = bw_coefficient(db, request.cpu_profile_ref if request.cpu_profile is None else None)
     for g, inp, raw in zip(growths, inputs, computed, strict=True):
@@ -462,6 +488,9 @@ def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
 # ------------------------------------------------------------------- sweep worker pool
 _POOL: Any = None
 _POOL_SIZE = 0
+_POOL_USERS = 0
+_POOL_FAILED = False
+_POOL_IDLE = Condition(RLock())
 
 
 def _sweep_workers(n_points: int) -> int:
@@ -477,17 +506,73 @@ def _sweep_workers(n_points: int) -> int:
 
 def _pool(size: int) -> Any:
     """Persistent process pool (forkserver: workers do not inherit the API's threads / DB connections)."""
-    global _POOL, _POOL_SIZE
+    global _POOL, _POOL_SIZE, _POOL_FAILED
     import multiprocessing as mp
     from concurrent.futures import ProcessPoolExecutor
 
-    if _POOL is None or _POOL_SIZE < size:
+    with _POOL_IDLE:
+        # A batch owns its executor until every submitted future has stopped. Never
+        # resize underneath another request or overlap old and replacement workers.
+        while _POOL_USERS and (_POOL_FAILED or _POOL_SIZE < size):
+            _POOL_IDLE.wait()
+        if _POOL is None or _POOL_FAILED or _POOL_SIZE < size:
+            if _POOL is not None:
+                _POOL.shutdown(wait=True, cancel_futures=True)
+            _POOL = None
+            _POOL_SIZE = 0
+            method = "forkserver" if "forkserver" in mp.get_all_start_methods() else "spawn"
+            _POOL = ProcessPoolExecutor(max_workers=size, mp_context=mp.get_context(method))
+            _POOL_SIZE = size
+            _POOL_FAILED = False
+        return _POOL
+
+
+@contextmanager
+def _pool_batch(size: int):
+    global _POOL_USERS
+    with _POOL_IDLE:
+        pool = _pool(size)
+        _POOL_USERS += 1
+    try:
+        yield pool
+    finally:
+        with _POOL_IDLE:
+            _POOL_USERS -= 1
+            _POOL_IDLE.notify_all()
+
+
+def _retire_cpu_pool(expected: Any = None) -> None:
+    global _POOL, _POOL_SIZE, _POOL_FAILED
+    with _POOL_IDLE:
+        while _POOL_USERS:
+            if expected is not None and _POOL is not expected:
+                return
+            _POOL_IDLE.wait()
+        if expected is not None and _POOL is not expected:
+            return
         if _POOL is not None:
-            _POOL.shutdown(wait=False, cancel_futures=True)
-        method = "forkserver" if "forkserver" in mp.get_all_start_methods() else "spawn"
-        _POOL = ProcessPoolExecutor(max_workers=size, mp_context=mp.get_context(method))
-        _POOL_SIZE = size
-    return _POOL
+            _POOL.shutdown(wait=True, cancel_futures=True)
+        _POOL = None
+        _POOL_SIZE = 0
+        _POOL_FAILED = False
+
+
+def shutdown_cpu_pool() -> None:
+    """Lifespan cleanup; outstanding batches finish before their executor is closed."""
+    _retire_cpu_pool()
+
+
+def _drain_points(futures: list[Any], completed: dict[int, dict[str, Any]]) -> None:
+    """Cancel queued points and await running ones before any sequential fallback."""
+    for future in futures:
+        future.cancel()
+    for index, future in enumerate(futures):
+        if index in completed or future.cancelled():
+            continue
+        try:
+            completed[index] = future.result()
+        except Exception:  # failed points are recomputed by the original fallback
+            pass
 
 
 def _compute_points(jobs: list[tuple[Any, CpuPowerModel, CpuPowerModel | None, float, RebalanceSpec]]
@@ -496,16 +581,35 @@ def _compute_points(jobs: list[tuple[Any, CpuPowerModel, CpuPowerModel | None, f
 
     Any pool failure (pickling, a broken worker) falls back to the sequential path so the result never
     depends on the deployment's process limits."""
-    global _POOL
+    global _POOL_FAILED
     workers = _sweep_workers(len(jobs))
+    completed: dict[int, dict[str, Any]] = {}
     if workers > 1 and len(jobs) >= 3:
+        pool = None
         try:
-            futs = [_pool(workers).submit(_rebalance_compute, *j) for j in jobs]
-            return [f.result() for f in futs], workers
+            with _pool_batch(workers) as pool:
+                futures: list[Any] = []
+                try:
+                    for job in jobs:
+                        futures.append(pool.submit(_rebalance_compute, *job))
+                    for index, future in enumerate(futures):
+                        completed[index] = future.result()
+                    return [completed[i] for i in range(len(jobs))], workers
+                except UnprocessableError:
+                    _drain_points(futures, completed)
+                    raise
+                except Exception:
+                    with _POOL_IDLE:
+                        if pool is _POOL:
+                            _POOL_FAILED = True
+                    _drain_points(futures, completed)
+                    raise
         except UnprocessableError:
             raise
         except Exception:  # noqa: BLE001 - fall back to the in-process path
-            if _POOL is not None:
-                _POOL.shutdown(wait=False, cancel_futures=True)
-            _POOL = None
-    return [_rebalance_compute(*j) for j in jobs], 1
+            # Drain all leases before retiring this executor; a peer request may
+            # still be collecting its own point results from it.
+            if pool is not None:
+                _retire_cpu_pool(pool)
+    return [completed[i] if i in completed else _rebalance_compute(*job)
+            for i, job in enumerate(jobs)], 1
