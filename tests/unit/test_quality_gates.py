@@ -72,8 +72,9 @@ def test_parallel_ci_preserves_coverage_and_required_check_names() -> None:
     shards = jobs["unit"]["strategy"]["matrix"]["include"]
     assert {shard["shard"]: shard["tests"] for shard in shards} == {
         "sim": "tests/unit/sim",
-        "trace": "tests/unit/meas_import",
-        "rest": "tests/unit --ignore=tests/unit/sim --ignore=tests/unit/meas_import",
+        "trace": "tests/unit/meas_import tests/unit/authoring",
+        "rest": "tests/unit --ignore=tests/unit/sim --ignore=tests/unit/meas_import"
+                " --ignore=tests/unit/authoring",
     }
     assert jobs["unit"]["strategy"]["fail-fast"] is False
     gate = jobs["quality"]
@@ -124,6 +125,7 @@ def test_trace_shard_caches_and_measures_the_pinned_perfetto_binary() -> None:
     assert all(part in cache["with"]["key"] for part in (
         "runner.os", "runner.arch", "hashFiles('uv.lock')",
     ))
+    assert cache["with"]["key"].startswith(cache["with"]["restore-keys"])
     test_index = next(i for i, step in enumerate(steps)
                       if "pytest ${{ matrix.tests }}" in step.get("run", ""))
     assert steps.index(cache) < steps.index(warmup) < test_index

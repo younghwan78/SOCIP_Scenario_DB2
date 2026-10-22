@@ -63,14 +63,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Isolate the slow CPU searches and real traces; the catch-all keeps
+          # Isolate the slow CPU searches; pair the short trace suite with
+          # authoring so the catch-all is not the long pole. The catch-all keeps
           # new unit tests covered without maintaining a file allowlist.
           - shard: sim
             tests: tests/unit/sim
           - shard: trace
-            tests: tests/unit/meas_import
+            tests: tests/unit/meas_import tests/unit/authoring
           - shard: rest
-            tests: tests/unit --ignore=tests/unit/sim --ignore=tests/unit/meas_import
+            tests: tests/unit --ignore=tests/unit/sim --ignore=tests/unit/meas_import --ignore=tests/unit/authoring
     steps:
       - uses: actions/checkout@v5.1.0
       - uses: astral-sh/setup-uv@v8.3.2
@@ -82,6 +83,9 @@ jobs:
         with:
           path: ~/.local/share/perfetto/prebuilts
           key: perfetto-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('uv.lock') }}
+          # Binaries are named by pinned SHA-256, so an older cache is safe to
+          # restore after unrelated lockfile changes; a new pin just downloads.
+          restore-keys: perfetto-${{ runner.os }}-${{ runner.arch }}-
       - name: Measure Perfetto binary setup
         if: matrix.shard == 'trace'
         run: |
