@@ -39,7 +39,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
   const predQ = useAsync(() => (!showPred || !scenIds.length ? Promise.resolve(null) : Promise.all([
     archApi.board(undefined, ctx.project || undefined).catch(() => ({ rows: [] as BoardRow[] })),
     archApi.freshness(undefined, ctx.project || undefined).catch(() => null),
-    Promise.all(scenIds.map((sid) => calibrationApi.coverage(sid).then((c) => [sid, c] as const).catch(() => null))),
+    calibrationApi.coverageBatch(scenIds),
   ]).then(([b, f, cov]) => {
     const m = new Map<string, PredCell>()
     const cell = (k: string) => m.get(k) ?? (m.set(k, { row: null, fresh: null, measured: null }), m.get(k)!)

@@ -41,7 +41,7 @@ def create_run(
     enforce_request_size(request, settings.exploration_max_request_bytes)
     enforce_timeline_frame_limit(request.spec.timing.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
-        result = svc.run_exploration(db, request, principal.subject)
+        result = svc.run_exploration(db, request, principal.subject, release_connection=True)
     if view == "summary":
         result = result | {"variants": [svc.variant_summary(v) for v in result["variants"]], "view": "summary"}
     return result

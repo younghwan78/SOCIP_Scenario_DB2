@@ -200,6 +200,16 @@ the resolved `basis_ref`, `basis_code` and `basis_overrides`.
 recalculating freshness by default. Set `freshness=true` to include freshness,
 or fetch `/arch/predictions/freshness` separately to avoid delaying the table.
 
+`GET /calibration/coverage-counts` accepts 1–25 repeated `scenario_ids` query
+parameters and optional `project_ref`. It returns
+`{scenario_id: {variant_id: {measurement: count}}}` with the same real-measurement
+classification and zero-count evidence/current-prediction entries as detailed
+coverage. Duplicate scenario IDs are coalesced; missing or out-of-project scenarios
+have empty maps. It does not return history, prediction details or freshness.
+Matrix/Predictions use this additive projection without `project_ref` (the
+per-scenario coverage they replace was not project-scoped), so displayed counts are
+unchanged; the original detailed coverage contract remains available.
+
 ## Tiered review report (RPT-08..12)
 
 Snapshots with `criteria` render as Tier 1 (결론 · Risk register · 이전 보고서 대비),

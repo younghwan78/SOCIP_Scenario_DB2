@@ -239,6 +239,32 @@ def coverage(db: Session, scenario_id: str, *, freshness: bool = False) -> dict[
     return out
 
 
+def coverage_counts(db: Session, scenario_ids: list[str], *, project_ref: str | None = None
+                    ) -> dict[str, dict[str, dict[str, int]]]:
+    """The measurement counts of coverage(), without history, basis or large JSON payloads.
+
+    Preserve zero-count entries created by any evidence or a current prediction. Unknown
+    and synthetic captures are classified by the same provenance policy as detailed coverage.
+    """
+    ids = list(dict.fromkeys(scenario_ids))
+    out: dict[str, dict[str, dict[str, int]]] = {sid: {} for sid in ids}
+    if not ids:
+        return out
+    scope = db.query(Scenario.id).filter(Scenario.id.in_(ids))
+    if project_ref:
+        scope = scope.filter(Scenario.project_ref == project_ref)
+    for sid, vid, kind, provenance in db.query(
+            Evidence.scenario_ref, Evidence.variant_ref, Evidence.kind, Evidence.provenance
+    ).filter(Evidence.scenario_ref.in_(scope)).all():
+        row = out[sid].setdefault(vid, {"measurement": 0})
+        if kind == "evidence.measurement" and _origin_bucket(provenance) == "measurement":
+            row["measurement"] += 1
+    for sid, vid in db.query(Prediction.scenario_ref, Prediction.variant_ref).filter(
+            Prediction.scenario_ref.in_(scope), Prediction.status == "current").all():
+        out[sid].setdefault(vid, {"measurement": 0})
+    return out
+
+
 def coverage_summary(db: Session) -> dict[str, dict[str, int]]:
     """Per scenario: distinct variants with simulation / real measurement / synthetic measurement / current prediction."""
     sets: dict[str, dict[str, set[str]]] = {}

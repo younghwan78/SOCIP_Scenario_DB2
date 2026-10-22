@@ -24,7 +24,7 @@ def table():
 @pytest.fixture
 def source(monkeypatch):
     graph = _graph()
-    monkeypatch.setattr(analysis_inputs, "load_canonical_graph", lambda *a: graph)
+    monkeypatch.setattr(analysis_inputs, "load_canonical_graph", lambda *a, **kw: graph)
     return graph
 
 

@@ -140,6 +140,41 @@ def test_axis_constraints(graph_factory, dvfs):
         ax.explore_variant(g, ax.ArchExplorationSpec(max_cases_per_variant=100), dvfs_tables=dvfs)
 
 
+def test_case_limit_rejects_before_allocating_compression_sets(graph_factory, dvfs, monkeypatch):
+    """A legal 12-buffer input must not allocate its 531,441 choices just to reject it."""
+    buffers = [{"buffer": f"buffer-{i}", "selectable": True, "modes": [
+        {"mode": "LOSSLESS", "selectable": True}, {"mode": "LOSSY", "selectable": True}]} for i in range(12)]
+    monkeypatch.setattr(ax, "compression_candidates", lambda *args: buffers)
+
+    def unexpected_allocation(_active):
+        pytest.fail("oversized compression product was materialised")
+
+    monkeypatch.setattr(ax, "_subset_sums", unexpected_allocation)
+    spec = ax.ArchExplorationSpec.model_validate({"axes": {
+        "statistics": ["max"], "runtime_scales": [1.0], "dvfs_headroom_levels": 0,
+        "compression": {"max_buffers": 12}, "power_options": {"enabled": False}}})
+    with pytest.raises(ValueError) as error:
+        ax.explore_variant(graph_factory(UHD30), spec, dvfs_tables=dvfs)
+    assert str(error.value) == (
+        "exploration exceeds 200000 cases (1 SW x 531441 compression x 1 DVFS); reduce axes"
+    )
+
+
+def test_case_limit_accepts_exact_compression_boundary(graph_factory, dvfs):
+    """The preflight keeps the old inclusive bound, including disabled/filtered modes."""
+    for compression in [{"enabled": False}, {"modes": ["lossless"]}, {"modes": ["lossless", "lossy"]}]:
+        spec = ax.ArchExplorationSpec.model_validate({"axes": {
+            "statistics": ["max"], "runtime_scales": [1.0], "dvfs_headroom_levels": 0,
+            "compression": compression, "power_options": {"enabled": False}}})
+        expected = ax.explore_variant(graph_factory(UHD30), spec, dvfs_tables=dvfs)
+        bound = expected["counts"]["cases"]
+        actual = ax.explore_variant(graph_factory(UHD30), spec.model_copy(update={"max_cases_per_variant": bound}),
+                                    dvfs_tables=dvfs)
+        # The limit itself is part of input_hash; the actual evaluated result must not change.
+        assert {k: v for k, v in actual.items() if k != "input_hash"} == {
+            k: v for k, v in expected.items() if k != "input_hash"}
+
+
 def test_high_fps_is_spec_fail_with_reason(graph_factory, dvfs):
     r = ax.explore_variant(graph_factory("cam-rec-r1-fhd240"), ax.ArchExplorationSpec(), dvfs_tables=dvfs)
     assert not r["spec_ok"] and r["recommended"] is None

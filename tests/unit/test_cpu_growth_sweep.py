@@ -70,7 +70,7 @@ def test_sweep_orders_points_and_reuses_only_uniform_timing(overrides, monkeypat
     monkeypatch.setattr(service, 'get_evidence', lambda *_: SimpleNamespace(scenario_ref='scenario', variant_ref='variant'))
     seen = []
 
-    def inputs(db, req, *, coupling_base=None):
+    def inputs(db, req, *, coupling_base=None, prepared=None):
         g = req.default_growth
         seen.append((g, coupling_base))
         return (g, None, None, service.RebalanceSpec(), {'stages': [
@@ -90,6 +90,7 @@ def test_sweep_orders_points_and_reuses_only_uniform_timing(overrides, monkeypat
 
     # the sweep splits each point into DB inputs / pure compute (worker processes) / finish
     monkeypatch.setattr(service, '_rebalance_inputs', inputs)
+    monkeypatch.setattr(service, '_rebalance_data', lambda *_: None)
     monkeypatch.setattr(service, '_rebalance_compute', compute)
     monkeypatch.setattr(service, '_rebalance_finish', finish)
     monkeypatch.setattr(service, '_sweep_workers', lambda n: 1)

@@ -25,8 +25,9 @@ def _client(monkeypatch, **fakes):
 def test_create_run_passes_spec(monkeypatch):
     seen = {}
 
-    def fake(db, request, user):
+    def fake(db, request, user, *, release_connection=False):
         seen["req"] = request
+        seen["release_connection"] = release_connection
         return {"id": "EXP-1"}
 
     c = _client(monkeypatch, run_exploration=fake)
@@ -35,6 +36,7 @@ def test_create_run_passes_spec(monkeypatch):
         "spec": {"axes": {"runtime_scales": [1.0, 1.3], "dvfs_headroom_levels": 2}, "objective": {"statistic": "mean"}},
     })
     assert res.status_code == 200 and res.json()["id"] == "EXP-1"
+    assert seen["release_connection"] is True
     spec = seen["req"].spec
     assert spec.axes.runtime_scales == [1.0, 1.3] and spec.axes.dvfs_headroom_levels == 2
     assert spec.objective.statistic == "mean"

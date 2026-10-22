@@ -94,6 +94,7 @@ def load_canonical_graph(
     variant_id: str,
     *,
     include_evidence_details: bool = True,
+    include_decision_context: bool = True,
 ) -> CanonicalScenarioGraph:
     scenario = db.query(Scenario).filter_by(id=scenario_id).one_or_none()
     if scenario is None:
@@ -103,7 +104,8 @@ def load_canonical_graph(
     if variant is None:
         raise LookupError(f"Variant not found: {scenario_id}/{variant_id}")
 
-    return _load_graph_with_variant(db, scenario, variant, include_evidence_details=include_evidence_details)
+    return _load_graph_with_variant(db, scenario, variant, include_evidence_details=include_evidence_details,
+                                    include_decision_context=include_decision_context)
 
 
 def load_base_canonical_graph(
@@ -144,6 +146,7 @@ def _load_graph_with_variant(
     variant: ResolvedScenarioVariant,
     *,
     include_evidence_details: bool = True,
+    include_decision_context: bool = True,
 ) -> CanonicalScenarioGraph:
     project = db.query(Project).filter_by(id=scenario.project_ref).one_or_none()
     soc = None
@@ -183,7 +186,7 @@ def _load_graph_with_variant(
             Evidence.kpi, Evidence.ip_breakdown, Evidence.run_info,
             raiseload=True,
         ))
-    evidence = evidence_query.all()
+    evidence = evidence_query.all() if include_decision_context else []
     sw_refs = {
         ev.sw_baseline_ref
         for ev in evidence
@@ -194,14 +197,14 @@ def _load_graph_with_variant(
         for row in db.query(SwProfile).filter(SwProfile.id.in_(sw_refs)).all()
     } if sw_refs else {}
 
-    issues = db.query(Issue).all()
-    waivers = db.query(Waiver).all()
+    issues = db.query(Issue).all() if include_decision_context else []
+    waivers = db.query(Waiver).all() if include_decision_context else []
     reviews = (
         db.query(Review)
         .filter_by(scenario_ref=scenario.id, variant_ref=variant.id)
         .all()
-    )
-    gate_rules = db.query(GateRule).all()
+    ) if include_decision_context else []
+    gate_rules = db.query(GateRule).all() if include_decision_context else []
 
     graph = CanonicalScenarioGraph(
         scenario=scenario,

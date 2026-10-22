@@ -1,5 +1,5 @@
 // CPU what-if: the MID rebalance over SW growth factors (POST /cpu/rebalance/sweep, CPU-02..05).
-import { postAdmitted } from './timingBudget'
+import { postCalculation } from './calculation'
 import type { BwCoefficient, CpuRebalanceRequest } from './rebalance'
 
 export interface SweepSplit { total_mw: number; feasible: boolean; mhz: Record<string, number>; mw: Record<string, number>; moved: string[]; min_slack_ms?: number | null }
@@ -33,7 +33,7 @@ export function sweepYMax(sweeps: (GrowthSweep | null)[]): number {
 }
 
 export const sweepApi = {
-  run: (req: CpuRebalanceRequest & { growths: number[] }) => postAdmitted<GrowthSweep>('/cpu/rebalance/sweep', req),
+  run: (req: CpuRebalanceRequest & { growths: number[] }, signal?: AbortSignal) => postCalculation<GrowthSweep>('/cpu/rebalance/sweep', req, signal),
 }
 
 /** Growth grid: start..end with step (inclusive, ≤ 13 points, 2 decimals). */

@@ -1,5 +1,5 @@
 // CPU what-if "MID 재분배": split movable tasks over a cluster pool (POST /cpu/rebalance).
-import { postAdmitted } from './timingBudget'
+import { postCalculation } from './calculation'
 import type { CpuSweepRequest } from './cpu'
 import { dsuPower, residency, type DsuModelInfo, type DsuParams, type DsuPolicy } from './dsu'
 
@@ -77,7 +77,7 @@ export interface CpuRebalanceRequest extends CpuSweepRequest {
   timing_coupling?: 'off' | 'stage_slack'; timing_statistic?: 'min' | 'mean' | 'max'
 }
 export const rebalanceApi = {
-  run: (req: CpuRebalanceRequest) => postAdmitted<{ result: CpuRebalance }>('/cpu/rebalance', req).then((r) => r.result),
+  run: (req: CpuRebalanceRequest, signal?: AbortSignal) => postCalculation<{ result: CpuRebalance }>('/cpu/rebalance', req, signal).then((r) => r.result),
 }
 
 /** One-line reading of the concentrate / spread / BIG result for the strategy card. */

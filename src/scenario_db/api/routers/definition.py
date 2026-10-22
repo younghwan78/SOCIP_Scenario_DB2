@@ -17,7 +17,9 @@ from scenario_db.api.schemas.definition import (
     ScenarioVariantResponse,
 )
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
-from scenario_db.db.repositories.variant_resolution import resolve_variant, resolve_variant_from_rows
+from scenario_db.db.repositories.variant_resolution import (
+    include_variant_parent_rows, resolve_variant, resolve_variant_from_rows,
+)
 from scenario_db.matcher.context import MatcherContext
 
 router = APIRouter(tags=["definition"])
@@ -111,7 +113,7 @@ def list_variants_for_scenario(
     rows = q.offset(offset).limit(limit).all()
     row_map = {
         row.id: row
-        for row in db.query(ScenarioVariant).filter_by(scenario_id=scenario_id).all()
+        for row in include_variant_parent_rows(db, rows)
     }
     items = [resolve_variant_from_rows(row_map, scenario_id, row.id) for row in rows]
     return PagedResponse.from_items(items, total=total, limit=limit, offset=offset)

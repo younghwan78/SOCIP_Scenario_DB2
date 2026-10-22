@@ -181,7 +181,7 @@ def build_threads(
     source: dict[str, str] = {}
     for task, ds in need.items():
         g = growth.get(task, default_growth)
-        count = threads_override.get(task) or policies.get(task, TaskPolicy()).threads
+        count = threads_override.get(task) or policies.get(task, _DEFAULT_POLICY).threads
         ref_total = sum(d.core_cycles * d.base_ipc_rel for d in ds)
         stall_total = sum(d.stall_ms for d in ds)
         if count:
@@ -298,29 +298,30 @@ class _Ctx:
         key = (name, state, clamps)
         value = self._energy_memo.get(key)
         if value is None:
-            value = self._energy_memo[key] = _cluster_eval(self, name, cpus, policies)["energy_mw"]
+            value = self._energy_memo[key] = _cluster_energy(self, name, cpus, policies)
         return value
 
 
-def _cluster_eval(ctx: _Ctx, name: str, cpus: list[list[Thread]], policies: dict[str, TaskPolicy]) -> dict[str, Any]:
-    """schedutil frequency + power of one cluster for a given thread -> CPU assignment."""
+def _cluster_frequency(ctx: _Ctx, name: str, cpus: list[list[Thread]],
+                       policies: dict[str, TaskPolicy]) -> tuple[float, float, list[str]]:
+    """Resolve schedutil/deadline clocks once without constructing display rows."""
     c = ctx.by_name[name]
     freqs = _freqs(c, ctx.model)
-    fmax, cap, period = freqs[-1], ctx.caps[name], ctx.period
-    pg = ctx.sched.power_gating_eff
+    fmax, cap = freqs[-1], ctx.caps[name]
+    # These per-CPU clamps are invariant throughout the frequency fixed point.
+    clamped_cpus = [(ths,
+                     max(policies.get(t.task, _DEFAULT_POLICY).uclamp_min for t in ths),
+                     max(policies.get(t.task, _DEFAULT_POLICY).uclamp_max for t in ths))
+                    for ths in cpus if ths]
 
     def request(mhz: float) -> float:
         req = 0.0
-        for ths in cpus:
-            if not ths:
-                continue
+        for ths, umin, umax in clamped_cpus:
             total = sum(ctx.util(t, name, mhz) for t in ths)
-            umin = max(policies.get(t.task, TaskPolicy()).uclamp_min for t in ths)
-            umax = max(policies.get(t.task, TaskPolicy()).uclamp_max for t in ths)
             req = max(req, min(max(total, umin), umax))
         return req
 
-    if any(cpus):
+    if clamped_cpus:
         mhz = fmax
         for _ in range(16):
             target = ctx.sched.freq_margin * request(mhz) / cap * fmax
@@ -343,6 +344,32 @@ def _cluster_eval(ctx: _Ctx, name: str, cpus: list[list[Thread]], policies: dict
             else:
                 mhz = freqs[-1]
             boosted = sorted({t.task for t in late})
+    return mhz, sched_mhz, boosted
+
+
+def _cluster_energy(ctx: _Ctx, name: str, cpus: list[list[Thread]],
+                    policies: dict[str, TaskPolicy]) -> float:
+    """EAS trial energy, with the same accumulation order as the detailed report."""
+    c = ctx.by_name[name]
+    mhz, _, _ = _cluster_frequency(ctx, name, cpus, policies)
+    p_core = c.core_mw(mhz, ctx.model.fallback_mv)
+    include_static = ctx.sched.energy_includes_static
+    leak = c.leak_mw_per_core(c.voltage_mv(mhz, ctx.model.fallback_mv)) if include_static else 0.0
+    dynamic, static = 0.0, 0.0
+    for ths in cpus:
+        busy = sum(t.ms(c, mhz) for t in ths)
+        active = min(1.0, busy / ctx.period) if ctx.period > 0 else 0.0
+        dynamic += active * p_core
+        if include_static:
+            static += leak * (active + (1.0 - active) * (1.0 - ctx.sched.power_gating_eff))
+    return dynamic + static
+
+
+def _cluster_eval(ctx: _Ctx, name: str, cpus: list[list[Thread]], policies: dict[str, TaskPolicy]) -> dict[str, Any]:
+    """schedutil frequency + power of one cluster for a given thread -> CPU assignment."""
+    c = ctx.by_name[name]
+    cap, period, pg = ctx.caps[name], ctx.period, ctx.sched.power_gating_eff
+    mhz, sched_mhz, boosted = _cluster_frequency(ctx, name, cpus, policies)
     mv = c.voltage_mv(mhz, ctx.model.fallback_mv)
     p_core = c.core_mw(mhz, ctx.model.fallback_mv)
     leak = c.leak_mw_per_core(mv)
@@ -392,7 +419,7 @@ def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy],
     biggest = max(ctx.caps, key=lambda n: (ctx.caps[n], n))
     order = sorted(threads, key=lambda t: (-ctx.util(t, biggest), t.task, t.name))
     for th in order:
-        pol = policies.get(th.task, TaskPolicy())
+        pol = policies.get(th.task, _DEFAULT_POLICY)
         allowed = [thread_allowed[th]] if thread_allowed and th in thread_allowed else resolve_allowed(pol.allowed, ctx.model)
         fitting: list[tuple[str, int]] = []
         for name in allowed:

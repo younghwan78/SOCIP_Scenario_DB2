@@ -20,6 +20,7 @@ from scenario_db.api.schemas.arch_exploration import (
 )
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
+from scenario_db.api.services.compute_session import release_read_connection
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.exploration import (
@@ -129,7 +130,7 @@ def _variant_budget(spec_mw: float | None, ref: dict[str, Any] | None) -> dict[s
 
 
 def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None,
-                    *, commit: bool = True) -> dict[str, Any]:
+                    *, commit: bool = True, release_connection: bool = False) -> dict[str, Any]:
     scenarios = _scenarios(db, request)
     throughput_from_policy = "throughput_model" not in request.spec.timing.model_fields_set
     # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
@@ -185,6 +186,10 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                 graph, applied = _apply_options(graph, request.apply_options)
                 bounded_spec = bounded_spec.model_copy(update={"axes": bounded_spec.axes.model_copy(update={
                     "power_options": bounded_spec.axes.power_options.model_copy(update={"enabled": False})})})
+            # The public create route owns its read transaction. Registration
+            # and recomputation callers retain their locks/transaction by default.
+            if release_connection and commit:
+                release_read_connection(db)
             stage = "explore"
             summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
             if applied:

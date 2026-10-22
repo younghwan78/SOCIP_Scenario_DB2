@@ -10,6 +10,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import create_engine
 
 from scenario_db.api.cache import RuleCache
+from scenario_db.api.performance import PerformanceMiddleware, install_sql_observers
+from scenario_db.api.services.cpu import shutdown_cpu_pool
 from scenario_db.api.exceptions import register_handlers
 from scenario_db.api.routers import admin, capability, catalog, cdgm, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
 from scenario_db.api.routers.utility import health_router
@@ -58,8 +60,18 @@ async def lifespan(app: FastAPI):
     app.state.rule_cache = RuleCache.load_with_retry(app.state.session_factory)
     app.state.rule_cache_ttl_seconds = settings.rule_cache_ttl_seconds
     app.state.start_time = _time.time()
-    yield
-    engine.dispose()
+    remove_performance_hooks = install_sql_observers(engine) if settings.performance_log_enabled else None
+    try:
+        yield
+    finally:
+        try:
+            shutdown_cpu_pool()
+        finally:
+            try:
+                if remove_performance_hooks is not None:
+                    remove_performance_hooks()
+            finally:
+                engine.dispose()
 
 
 def create_app() -> FastAPI:
@@ -81,6 +93,8 @@ def create_app() -> FastAPI:
 
     # JSON lists (variant matrix, run summaries, prediction board) compress ~5-10x
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
+    if settings.performance_log_enabled:
+        app.add_middleware(PerformanceMiddleware)
 
     register_handlers(app)
 

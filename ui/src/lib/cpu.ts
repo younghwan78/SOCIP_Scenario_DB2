@@ -2,6 +2,7 @@ import type { DsuMode, DsuModelInfo, DsuParams, VoteTable } from './dsu'
 // CPU placement / frequency what-if (POST /cpu/whatif) and its pickers (GET /cpu/inputs).
 import { getJson } from './api'
 import { postAdmitted } from './timingBudget'
+import { postCalculation } from './calculation'
 
 export interface CpuInputs {
   topologies: { id: string; version: number; soc_ref: string; clusters: string[] }[]
@@ -125,7 +126,7 @@ export const cpuApi = {
   inputs: () => getJson<CpuInputs>('/cpu/inputs'),
   // simulation admission slots (429 when busy) are shared with exploration / timing: retry like those clients
   whatif: (req: CpuWhatIfRequest) => postAdmitted<{ result: CpuWhatIf }>('/cpu/whatif', req).then((r) => r.result),
-  sweep: (req: CpuSweepRequest) => postAdmitted<{ result: CpuSweep }>('/cpu/sweep', req).then((r) => r.result),
+  sweep: (req: CpuSweepRequest, signal?: AbortSignal) => postCalculation<{ result: CpuSweep }>('/cpu/sweep', req, signal).then((r) => r.result),
 }
 
 /** "256, 512" -> [256, 512] (0..1024 integers) */

@@ -15,6 +15,7 @@ from scenario_db.sim.exploration import ExplorationSweep, compile_exploration_sw
 from scenario_db.sim.resource_limits import enforce_sweep_case_limit
 from scenario_db.sim import service as simulation_service
 from scenario_db.exceptions import UnprocessableError
+from scenario_db.api import resource_limits
 
 
 class _Request(BaseModel):
@@ -93,3 +94,63 @@ def test_simulation_input_component_limit_is_enforced(monkeypatch):
 
     with pytest.raises(UnprocessableError, match="2 workloads"):
         simulation_service._enforce_input_limits(inputs)
+
+
+def _hold_shared_slot(directory, ready):
+    import time
+
+    with resource_limits._shared_slot(directory, "simulation", 1):
+        ready.set()
+        time.sleep(10)
+
+
+def test_shared_budget_is_process_wide_and_released_on_worker_exit(tmp_path):
+    import multiprocessing as mp
+
+    ctx = mp.get_context("spawn")
+    ready = ctx.Event()
+    process = ctx.Process(target=_hold_shared_slot, args=(str(tmp_path), ready))
+    process.start()
+    try:
+        assert ready.wait(5), "budget holder failed to start"
+        with pytest.raises(HTTPException) as exc_info:
+            with resource_limits._shared_slot(str(tmp_path), "simulation", 1):
+                pass
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail == "simulation concurrency limit reached"
+        assert exc_info.value.headers == {"Retry-After": "1"}
+        # Different operation budgets remain independent.
+        with resource_limits._shared_slot(str(tmp_path), "exploration", 1):
+            pass
+        process.terminate()
+        process.join(5)
+        assert not process.is_alive()
+        with resource_limits._shared_slot(str(tmp_path), "simulation", 1):
+            pass
+    finally:
+        if process.is_alive():
+            process.terminate()
+        process.join(5)
+
+
+def test_global_rejection_releases_local_slot(tmp_path, monkeypatch):
+    monkeypatch.setattr(resource_limits, "get_settings", lambda: SimpleNamespace(
+        execution_budget_dir=str(tmp_path), simulation_global_max_concurrent_runs=1,
+        exploration_global_max_concurrent_requests=0))
+    with resource_limits._shared_slot(str(tmp_path), "simulation", 1):
+        with pytest.raises(HTTPException) as exc_info:
+            with admission_slot("simulation", 1):
+                pass
+        assert exc_info.value.status_code == 429
+    with admission_slot("simulation", 1):
+        pass
+
+
+def test_unavailable_global_budget_fails_closed(tmp_path):
+    invalid_dir = tmp_path / "file"
+    invalid_dir.write_text("not a directory")
+    with pytest.raises(HTTPException) as exc_info:
+        with resource_limits._shared_slot(str(invalid_dir), "simulation", 1):
+            pass
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "execution budget unavailable"

@@ -233,3 +233,64 @@ def test_sw_drilldown_uses_frozen_prediction_timing_and_growth(engine):
         db.flush()
         sw = cal.measurement_detail_view(db, sid)['drilldown']['sw']
         assert sw['rows'][0]['assumed_ms'] is None and sw['rows'][0]['status'] == 'measured_only'
+
+
+def test_coverage_counts_matches_detailed_coverage_and_project_scope_with_two_queries(engine):
+    from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+
+    with Session(engine) as db:
+        project = db.query(Scenario.project_ref).first()[0]
+        ids = [f'coverage-{uuid4().hex}' for _ in range(3)]
+        for sid in ids:
+            db.add(Scenario(id=sid, project_ref=project, schema_version='1.0', metadata_={}, pipeline={}, yaml_sha256='test'))
+        db.flush()
+        for sid in ids:
+            for variant in ('physical', 'synthetic', 'unknown', 'simulation', 'prediction', 'historical', 'empty'):
+                db.add(ScenarioVariant(scenario_id=sid, id=variant, design_conditions={}))
+            for variant, origin in [('physical', {'data_origin': 'physical_capture'}),
+                                    ('physical', {'collection_method': 'power_monitor', 'device_id': 'EVT1'}),
+                                    ('synthetic', {'data_origin': 'synthetic'}), ('unknown', {})]:
+                db.add(Evidence(id=uuid4().hex, scenario_ref=sid, variant_ref=variant, kind='evidence.measurement',
+                                schema_version='1.0', provenance=origin, execution_context={}, aggregation={},
+                                kpi={}, yaml_sha256='test'))
+            db.add(Evidence(id=uuid4().hex, scenario_ref=sid, variant_ref='simulation', kind='evidence.simulation',
+                            schema_version='1.0', execution_context={}, aggregation={}, kpi={}, yaml_sha256='test'))
+            db.add(ArchExplorationRun(id=sid, title='test', scenario_type='test', project_ref=project,
+                                      spec={}, variants=[], errors=[], summary={}, engine_rev='test', input_hash='test'))
+        db.flush()
+        for sid in ids:
+            for variant, status in [('prediction', 'current'), ('historical', 'superseded')]:
+                db.add(Prediction(id=uuid4().hex, scenario_ref=sid, variant_ref=variant, project_ref=project,
+                                  status=status, exploration_run_ref=sid, case_key='base', selection_rule='auto:min-power',
+                                  selected_by='auto', input_hash='test', metrics={}))
+        db.flush()
+        expected = {sid: {vid: {'measurement': entry['measurement']} for vid, entry in cal.coverage(db, sid).items()}
+                    for sid in ids}
+        expected['absent'] = {}
+        queries = []
+        def counted(*args):
+            queries.append(args[2])
+        event.listen(engine, 'before_cursor_execute', counted)
+        try:
+            actual = cal.coverage_counts(db, [*ids, ids[0], 'absent'], project_ref=project)
+        finally:
+            event.remove(engine, 'before_cursor_execute', counted)
+        assert actual == expected
+        assert len(queries) == 2
+        assert actual[ids[0]] == {'physical': {'measurement': 2}, 'synthetic': {'measurement': 0},
+                                   'unknown': {'measurement': 0}, 'simulation': {'measurement': 0},
+                                   'prediction': {'measurement': 0}}
+        assert cal.coverage_counts(db, ids, project_ref='another-project') == {sid: {} for sid in ids}
+        assert cal.coverage_counts(db, []) == {}
+
+
+def test_coverage_counts_http_validates_batch_and_matches_read_projection(api_client, engine):
+    with Session(engine) as db:
+        ids = [s[0] for s in db.query(Scenario.id).limit(3)]
+        expected = cal.coverage_counts(db, ids)
+    response = api_client.get('/api/v1/calibration/coverage-counts', params=[('scenario_ids', sid) for sid in ids])
+    assert response.status_code == 200
+    assert response.json() == expected
+    assert api_client.get('/api/v1/calibration/coverage-counts').status_code == 422
+    assert api_client.get('/api/v1/calibration/coverage-counts',
+                          params=[('scenario_ids', str(i)) for i in range(26)]).status_code == 422

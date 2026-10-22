@@ -84,11 +84,22 @@ export function conditionDistance(a: Dict, b: Dict): number {
 export function medoidId(rows: VariantRow[]): string {
   const base = rows.filter((r) => !r.derived_from_variant)
   const pool = base.length ? base : rows
+  const keys = [...new Set(pool.flatMap((r) => Object.keys(r.design_conditions).filter((k) => !k.endsWith('_source'))))]
+  // Hamming distance is additive by axis: a value differs from N - frequency rows.
+  // Include missing values on every axis so missing/null/empty retain valueText's equivalence.
+  const values = new Map(pool.map((r) => [r, keys.map((k) => valueText(r.design_conditions[k]))]))
+  const counts = keys.map((_, i) => {
+    const count = new Map<string, number>()
+    for (const r of pool) { const value = values.get(r)![i]; count.set(value, (count.get(value) ?? 0) + 1) }
+    return count
+  })
   let best = ''
   let bestScore = Infinity
-  for (const r of [...pool].sort((x, y) => x.variant_id.localeCompare(y.variant_id))) {
-    const score = pool.reduce((s, o) => s + conditionDistance(r.design_conditions, o.design_conditions), 0)
-    if (score < bestScore) { best = r.variant_id; bestScore = score }
+  for (const r of pool) {
+    const score = values.get(r)!.reduce((s, value, i) => s + pool.length - counts[i].get(value)!, 0)
+    if (score < bestScore || (score === bestScore && r.variant_id.localeCompare(best) < 0)) {
+      best = r.variant_id; bestScore = score
+    }
   }
   return best
 }

@@ -1,5 +1,6 @@
 """What-if ask: builder conditions / in-house LLM interpretation -> executed answer (DVFS level, limit search, bottleneck)."""
 import json
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import httpx
@@ -227,6 +228,81 @@ def test_unusable_llm_reply_is_reported_not_guessed(scope, monkeypatch):
     _llm(monkeypatch, "sorry, I cannot")
     out = service.ask(None, WhatIfAskRequest(**scope, query="q"))
     assert out["interpretation"] == {"status": "llm_unavailable", "reason": "사내 LLM 응답이 JSON이 아닙니다", "available": False, "model": None}
+
+
+def test_split_admission_releases_compute_during_llm_and_preserves_full_answer(scope, monkeypatch):
+    _llm(monkeypatch, {"ask": "what_if", "changes": [{"target": "fps", "value": 24}]})
+    request = WhatIfAskRequest(**scope, query="24 fps이면?")
+    original = service.ask(None, request)
+    events = []
+    active = set()
+
+    @contextmanager
+    def slot(name):
+        assert not active
+        active.add(name)
+        events.append((name, "enter"))
+        try:
+            yield
+        finally:
+            active.remove(name)
+            events.append((name, "exit"))
+
+    interpret = service.llm_interpret
+
+    def check_llm(*args):
+        assert active == {"llm"}
+        return interpret(*args)
+
+    monkeypatch.setattr(service, "llm_interpret", check_llm)
+    split = service.ask(None, request, compute_slot=lambda: slot("compute"), llm_slot=lambda: slot("llm"))
+    assert split == original
+    assert events == [("compute", "enter"), ("compute", "exit"), ("llm", "enter"),
+                      ("llm", "exit"), ("compute", "enter"), ("compute", "exit")]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_ask_route_retains_default_admission_and_only_opts_in_natural_queries(monkeypatch, enabled):
+    from unittest.mock import MagicMock
+    from fastapi.testclient import TestClient
+    from scenario_db.api.app import create_app
+    from scenario_db.api.deps import get_db
+    from scenario_db.api.routers import scenario_whatif as router
+    from scenario_db.config import Settings
+
+    settings = Settings(whatif_release_compute_slot_during_llm=enabled)
+    monkeypatch.setattr(router, "get_settings", lambda: settings)
+    active = []
+
+    @contextmanager
+    def slot(name, limit):
+        active.append(name)
+        try:
+            yield
+        finally:
+            active.pop()
+
+    def ask(db, request, **kwargs):
+        split = enabled and request.changes is None and request.ask is None
+        assert active == ([] if split else ["simulation"])
+        assert bool(kwargs) is split
+        if split:
+            with kwargs["compute_slot"]():
+                assert active == ["simulation"]
+            with kwargs["llm_slot"]():
+                assert active == ["whatif-llm"]
+        return {"answer": "same"}
+
+    monkeypatch.setattr(router, "admission_slot", slot)
+    monkeypatch.setattr(service, "ask", ask)
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: MagicMock()
+    with TestClient(app) as client:
+        scope = dict(project_ref="p", scenario_id="s", variant_id="v")
+        for payload in ({"query": "q"}, {"ask": "diagnose"}):
+            result = client.post("/api/v1/scenario-whatif/ask", json={**scope, **payload})
+            assert result.status_code == 200
+            assert result.json() == {"answer": "same"}
 
 
 def _configured(monkeypatch):

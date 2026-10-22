@@ -16,9 +16,9 @@ export interface CpuRun {
 
 /** Owned HTTP calls in production; a controlled in-memory adapter in workflow tests. */
 export interface CpuAnalysisAdapter {
-  sweep(request: CpuSweepRequest): Promise<CpuSweep>
-  rebalance(request: CpuRebalanceRequest): Promise<CpuRebalance>
-  growth(request: GrowthRequest): Promise<GrowthSweep>
+  sweep(request: CpuSweepRequest, signal?: AbortSignal): Promise<CpuSweep>
+  rebalance(request: CpuRebalanceRequest, signal?: AbortSignal): Promise<CpuRebalance>
+  growth(request: GrowthRequest, signal?: AbortSignal): Promise<GrowthSweep>
 }
 
 export type CpuAnalysisPlan =
@@ -72,24 +72,32 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
   let state = empty(structuredClone(initialRuns))
   let generation = 0
   let growthToken = 0
+  let mainController: AbortController | undefined
+  let growthController: AbortController | undefined
   const listeners = new Set<() => void>()
   const publish = (patch: Partial<CpuAnalysisState>) => {
     state = { ...state, ...patch }
     listeners.forEach((listener) => listener())
   }
   /** Stop publishing for the current workflow and growth; displayed state is left as is. */
-  const cancel = () => { ++generation; ++growthToken }
+  const cancel = () => {
+    ++generation; ++growthToken
+    mainController?.abort()
+    growthController?.abort()
+  }
   const runGrowth = async (request: GrowthRequest, comparison: string | undefined, id: number) => {
     const token = ++growthToken
+    growthController?.abort()
+    const controller = growthController = new AbortController()
     const live = () => token === growthToken && id === generation
     publish({ growthBusy: true, growthError: null, snapshotRequest: null, comparisonGrowth: null, comparisonGrowthError: null })
     try {
-      const result = await adapter.growth(request)
+      const result = await adapter.growth(request, controller.signal)
       if (!live()) return
       publish({ growth: { result, request }, snapshotRequest: request })
       if (comparison && comparison !== request.power_params_ref) {
         try {
-          const result = await adapter.growth({ ...onComparison(request, comparison), growths: request.growths })
+          const result = await adapter.growth({ ...onComparison(request, comparison), growths: request.growths }, controller.signal)
           if (live()) publish({ comparisonGrowth: result })
         } catch (error) {
           if (live()) publish({ comparisonGrowthError: message(error) })
@@ -109,6 +117,9 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
       return runGrowth({ ...plan.request, growths: plan.growths }, plan.comparison, generation)
     }
     const id = ++generation
+    mainController?.abort()
+    growthController?.abort()
+    const controller = mainController = new AbortController()
     if (plan.mode === 'rebalance') ++growthToken  // a rebalance owns the next growth stage
     publish({
       busy: true, error: null,
@@ -117,18 +128,18 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
     })
     try {
       if (plan.mode === 'sweep') {
-        const result = await adapter.sweep(plan.request)
+        const result = await adapter.sweep(plan.request, controller.signal)
         if (id === generation) publish({ result })
         return
       }
-      const result = await adapter.rebalance(plan.request)
+      const result = await adapter.rebalance(plan.request, controller.signal)
       if (id !== generation) return
       // The previous comparison stays visible until the new main result arrives.
       publish({ rebalance: result, comparison: null, comparisonError: null })
       let comparison: CpuRebalance | null = null
       if (plan.comparison && plan.comparison !== plan.request.power_params_ref) {
         try {
-          const response = await adapter.rebalance(onComparison(plan.request, plan.comparison))
+          const response = await adapter.rebalance(onComparison(plan.request, plan.comparison), controller.signal)
           if (id === generation) { publish({ comparison: response }); comparison = response }
         } catch (error) {
           if (id === generation) publish({ comparisonError: message(error) })
@@ -168,6 +179,7 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
      */
     reset: ({ keepRebalance = false }: { keepRebalance?: boolean } = {}) => {
       ++growthToken
+      growthController?.abort()
       publish({
         result: null, growthBusy: false, growthError: null, snapshotRequest: null,
         comparisonGrowth: null, comparisonGrowthError: null,
