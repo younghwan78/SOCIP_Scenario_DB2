@@ -153,12 +153,16 @@ def test_gpu_power_from_ip_catalog_and_rails():
 
 
 # ------------------------------------------------------------------ Timing Budget coupling (stretch budgets)
-def test_stretch_budgets_keep_the_measured_placement_feasible_and_bound_the_tasks(model):
+def test_unconstrained_rebalance_can_stretch_nrt_tasks(model):
     free = cpu_rebalance(_profile("r1-8k30-psm"), target=model, fps=30, spec=RebalanceSpec())
     nrt = ("post_crta", "pre_me_rta", "post_irta")
     # unconstrained: dropping MID_LF0 one OPP slows the NRT tasks left on it (latency, not fps)
     assert free["best"]["delta_mw"] < -10
     assert any(free["best"]["task_ms"][t] > free["reference"]["task_ms"][t] * 1.05 for t in nrt)
+
+
+def test_stretch_budgets_keep_the_measured_placement_feasible_and_bound_the_tasks(model):
+    nrt = ("post_crta", "pre_me_rta", "post_irta")
     # stretch 1.0 = the NRT stage has no SW slack left: no NRT task may get slower than measured
     tight = cpu_rebalance(_profile("r1-8k30-psm"), target=model, fps=30,
                           spec=RebalanceSpec(stretch_budgets={t: 1.0 for t in nrt}))
@@ -168,6 +172,10 @@ def test_stretch_budgets_keep_the_measured_placement_feasible_and_bound_the_task
     assert all(tight["best"]["task_ms"][t] <= tight["reference"]["task_ms"][t] * (1 + 1e-6) for t in nrt)
     assert {tight["budget_source"][t] for t in nrt} == {"stretch"}
     assert {u["budget_source"] for u in tight["units"] if u["unit"] in nrt} <= {"stretch"}
+
+
+def test_loose_user_budgets_cannot_override_nrt_stretch_limits(model):
+    nrt = ("post_crta", "pre_me_rta", "post_irta")
     loose_user = cpu_rebalance(_profile("r1-8k30-psm"), target=model, fps=30,
                               spec=RebalanceSpec(budgets_ms={t: 100.0 for t in nrt}, stretch_budgets={t: 1.0 for t in nrt}))
     assert all(loose_user["best"]["task_ms"][t] <= loose_user["reference"]["task_ms"][t] * (1 + 1e-6) for t in nrt)
