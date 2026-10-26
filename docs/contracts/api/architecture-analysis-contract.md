@@ -55,6 +55,10 @@ their existing recorded-review behavior.
   registration when the selected project differs from the run's project.
 - `GET /arch/predictions/board`, `/history`, `/{id}`, `/compare`: current values,
   immutable history, detail, and attribution. Comparison requires the same scenario/variant.
+  History returns at most 100 newest entries. `/arch/predictions/history-page`
+  accepts the same scenario/variant plus `limit` (1–100, default 30) and an opaque
+  scope-bound `cursor`; returns `items` and `next_cursor`. Ordering is descending
+  timestamp then ID, and list reads project only power/BW from frozen metrics.
 - `POST /arch/reports`: freeze a snapshot and HTML from a run's current registered
   predictions; otherwise use its recommendations, explicitly without a prediction ID.
   Creation accepts `draft` only. The conclusion and scenario table distinguish registered
@@ -73,6 +77,9 @@ their existing recorded-review behavior.
   creation serializes on the project row. Migration `0028` adds `review_risks`.
 - `GET /calibration/summary` accepts `scenario_id`, `project_ref`, and
   `include_synthetic` (default true). Both scope filters apply when supplied together.
+  `physical_only=true` (default false) filters to physical captures before representative
+  selection, taking precedence over `include_synthetic`. The UI enables physical-only
+  by default and offers synthetic/unknown records separately.
   It selects one representative capture per variant, reports category bias,
   correction previews and confidence, and distinguishes physical, synthetic and
   unknown origins. Synthetic captures do not count as silicon validation evidence.

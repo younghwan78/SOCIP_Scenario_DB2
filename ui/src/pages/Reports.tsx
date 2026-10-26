@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Ctx } from '../App'
+import { CandidateReview } from '../components/CandidateReview'
 import { useAsync } from '../lib/route'
 import { archApi, type ReportMeta } from '../lib/archExplore'
 import { reportsForProject } from '../lib/provenance'
@@ -46,6 +47,7 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
   const portfolio = latestProjectReports(list.data ?? [], ctx.projects)
   return (
     <div className="page tb-page">
+      <CandidateReview scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} exportable />
       {portfolio.length > 0 && <section className="panel" style={{ padding: '10px 12px' }} aria-label="과제 현황">
         <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 6, flexWrap: 'wrap' }}>
           <b>과제 현황</b><span className="faint" style={{ fontSize: 12 }}>과제별 최신 과제 보고서 · 고객 기준 3항목 · 열린 risk · 예측 신뢰도 · 행 클릭 = 그 보고서</span>

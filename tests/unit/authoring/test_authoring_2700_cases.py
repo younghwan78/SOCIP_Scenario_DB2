@@ -78,6 +78,13 @@ def root(tmp_path: Path) -> Path:
         (r / doc).unlink(missing_ok=True)
     for doc in POST_EJECT_EDITED_2600:
         _strip_post_eject(r / doc)
+    # The inherited fixture pins the pre-eject capability values. New geometry
+    # declarations belong to the current parent, not this historical snapshot.
+    for name in ("ip-byrp-is-v15-s5e9965", "ip-yuvsc-is-v15-s5e9965"):
+        path = r / "platforms/exynos2600/docs/00_hw" / f"{name}.yaml"
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        document["capabilities"]["sim"].pop("geometry", None)
+        path.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding="utf-8")
     gpu = r / POST_EJECT_GPU_2600
     gdoc = yaml.safe_load(gpu.read_text(encoding="utf-8"))
     for key in ("vf_table_sample", "leakage_sample"):

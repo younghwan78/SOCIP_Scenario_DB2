@@ -1,5 +1,6 @@
 // Hash router with shareable query context: #/pipeline?project=…&scenario=…&variant=…
 import { useCallback, useEffect, useState } from 'react'
+import { withReadSignal } from './readRequestScope'
 
 export type Page = 'home' | 'explorer' | 'matrix' | 'pipeline' | 'compare' | 'timing' | 'timing-fleet' | 'explore' | 'predictions' | 'reports' | 'calibration' | 'cpu' | 'whatif' | 'library' | 'settings'
 export interface Route { page: Page; params: Record<string, string> }
@@ -23,7 +24,7 @@ export function formatHash(route: Route): string {
 }
 
 /** Context keys carried across pages. */
-export const CONTEXT_KEYS = ['project', 'scenario', 'variant'] as const
+export const CONTEXT_KEYS = ['project', 'scenario', 'variant', 'experiment'] as const
 
 export type NavTarget = { page?: Page; params?: Record<string, string | undefined> }
 
@@ -60,15 +61,16 @@ export function useRoute(): [Route, (next: NavTarget, replace?: boolean) => void
   return [route, navigate]
 }
 
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | undefined; error: string | undefined; loading: boolean } {
+export function useAsync<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[]): { data: T | undefined; error: string | undefined; loading: boolean } {
   const pending = { data: undefined, error: undefined, loading: true }
   const [state, setState] = useState<{ data: T | undefined; error: string | undefined; loading: boolean; deps: unknown[] }>({ ...pending, deps })
   useEffect(() => {
     let alive = true
+    const controller = new AbortController()
     setState({ ...pending, deps })
-    fn().then((data) => { if (alive) setState({ data, error: undefined, loading: false, deps }) })
+    Promise.resolve().then(() => withReadSignal(controller.signal, () => fn(controller.signal))).then((data) => { if (alive) setState({ data, error: undefined, loading: false, deps }) })
       .catch((e: unknown) => { if (alive) setState({ data: undefined, error: e instanceof Error ? e.message : String(e), loading: false, deps }) })
-    return () => { alive = false }
+    return () => { alive = false; controller.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
   // Hide the old result during the render before the new effect runs as well.

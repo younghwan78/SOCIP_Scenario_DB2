@@ -28,11 +28,14 @@ it('applies the synthetic filter to summary metrics and closes a filtered captur
   try {
     await act(async () => root.render(page(ctx)))
     expect(measurements).toHaveBeenCalledWith(undefined, 'p')
-    expect(summary).toHaveBeenLastCalledWith({ projectRef: 'p', includeSynthetic: true })
+    expect(summary).toHaveBeenLastCalledWith({ projectRef: 'p', includeSynthetic: false, physicalOnly: true })
+    expect(detail).not.toHaveBeenCalled()
+    await act(async () => root.render(page({ ...ctx, params: { ...ctx.params, real: '0' } })))
+    expect(summary).toHaveBeenLastCalledWith({ projectRef: 'p', includeSynthetic: true, physicalOnly: false })
     expect(detail).toHaveBeenCalledWith('synthetic')
     detail.mockClear()
     await act(async () => root.render(page({ ...ctx, params: { ...ctx.params, real: '1' } })))
-    expect(summary).toHaveBeenLastCalledWith({ projectRef: 'p', includeSynthetic: false })
+    expect(summary).toHaveBeenLastCalledWith({ projectRef: 'p', includeSynthetic: false, physicalOnly: true })
     expect(detail).not.toHaveBeenCalled()
     expect(host.textContent).toContain('실제 측정 evidence가 없습니다')
   } finally { act(() => root.unmount()) }

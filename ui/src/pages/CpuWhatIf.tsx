@@ -100,7 +100,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
 
   useEffect(() => {
     if (!inputs.data) return
-    // U10: open on a usable profile — task cycles present, current variant/scenario/project first
+    // U10: open on the closest scoped profile; missing task evidence remains explicit
     if (!profile && inputs.data.profiles[0]) setProfile(rankProfiles(inputs.data.profiles, ctx)[0].id)
   }, [inputs.data]) // eslint-disable-line react-hooks/exhaustive-deps
   // default topology = the one whose clusters cover the profile's measured clusters (then newest version);
@@ -264,6 +264,10 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
 
   return (
     <div className="page tb-page">
+      {prof && (prof.project_ref !== ctx.project || prof.scenario_ref !== ctx.scenario || prof.variant_ref !== ctx.variant) && <div className="workflow-note" role="status">
+        <b>선택 기준과 CPU profile 범위가 다릅니다.</b><span>현재 기준: {ctx.project} / {ctx.scenario} / {ctx.variant} · profile: {prof.project_ref ?? '과제 미상'} / {prof.scenario_ref ?? 'scenario 미상'} / {prof.variant_ref ?? 'variant 미상'}. 결과는 이 profile에만 해당합니다.</span>
+        {(inputs.data?.profiles ?? []).some((p) => p.project_ref === ctx.project && p.scenario_ref === ctx.scenario && p.variant_ref === ctx.variant) && <button className="btn" onClick={() => setProfile(rankProfiles(inputs.data?.profiles ?? [], ctx)[0].id)}>현재 기준 profile 선택</button>}
+      </div>}
       <p className="cpu-help">측정한 CPU profile(task·thread별 cycle · stall · bus)을 Android <b>EAS + schedutil</b>로 다시 배치해 보고, 기기에서 실제로 바꿀 수 있는 knob(cpuset/affinity 고정·상한, uclamp)을 자동으로 sweep 합니다. 결과는 <b>{refName}</b> 대비 전력이 낮은 순서입니다. 시계열 없이 frame 단위 정상상태로 계산합니다.</p>
       <div className="toolbar" style={{ gap: 10, marginBottom: 8 }}>
         <div className="seg" role="group" aria-label="CPU what-if 방식">
@@ -532,11 +536,11 @@ function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets }
 }
 
 type Profile = CpuInputs['profiles'][number]
-/** Profiles with task cycles first; then the current variant, scenario and project. */
-function rankProfiles(list: Profile[], ctx: Ctx): Profile[] {
+/** Scope first; usable task evidence and physical captures break ties within a scope. */
+export function rankProfiles(list: Profile[], ctx: Pick<Ctx, 'project' | 'scenario' | 'variant'>): Profile[] {
   // CPU-06: a silicon capture beats a synthetic profile of the same variant; unknown origin sits between
   const origin = (p: Profile) => (p.origin === 'physical_capture' ? 2 : p.origin === 'synthetic' ? 0 : 1)
-  const score = (p: Profile) => (p.tasks?.length ? 32 : 0) + (p.variant_ref === ctx.variant ? 16 : 0) + (p.scenario_ref === ctx.scenario ? 8 : 0) + origin(p) * 2 + (p.project_ref === ctx.project ? 1 : 0)
+  const score = (p: Profile) => (p.project_ref === ctx.project ? 128 : 0) + (p.scenario_ref === ctx.scenario ? 64 : 0) + (p.variant_ref === ctx.variant ? 32 : 0) + (p.tasks?.length ? 8 : 0) + origin(p)
   return [...list].sort((a, b) => score(b) - score(a))
 }
 

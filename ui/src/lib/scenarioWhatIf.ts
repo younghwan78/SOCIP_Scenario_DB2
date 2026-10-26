@@ -3,7 +3,11 @@ import type { IpRow, TimingReport } from './timingBudget'
 
 export interface WhatIfScope { project_ref: string; scenario_id: string; variant_id: string }
 /** ``target`` names a server-registered change kind (``WhatIfTargets.change_kinds``); the editor is driven by that metadata. */
-export interface WhatIfChange { target: string; anchor_id?: string; node_id?: string; stream_id?: string; param?: string; buffer_id?: string; option?: string; width?: number; height?: number; value?: number; domain?: string; level?: number }
+export interface SensorBinding { catalog_ref: string; catalog_sha256: string; mode_label: string; lineup_ref: string; lineup_sha256: string; board_config: string; slot: string }
+export interface WhatIfChange { target: string; anchor_id?: string; node_id?: string; stream_id?: string; param?: string; buffer_id?: string; option?: string; width?: number; height?: number; value?: number; domain?: string; level?: number; operation?: 'crop' | 'scale'; port?: string; x?: number; y?: number; sensor_binding?: SensorBinding }
+export interface ModelEvidence { status?: string; source?: string; note?: string }
+export interface GeometryCapability { min_size?: [number, number]; max_size?: [number, number]; alignment?: [number, number]; offset_alignment?: [number, number]; max_downscale?: number; max_upscale?: number; formats?: string[]; ports?: string[]; source?: string; status?: string }
+export interface GeometryMeta { operations: ('crop' | 'scale')[]; default_operation?: 'crop' | 'scale'; capabilities: Partial<Record<'crop' | 'scale', GeometryCapability>> }
 /** One selectable value of a "choice" lever (sensor mode · power option value · IP mode · compression mode). */
 export interface LeverOption {
   id: string; label?: string; current?: boolean
@@ -13,6 +17,8 @@ export interface LeverOption {
   iq_eval?: string | null; note?: string | null; explorable?: boolean; unit_power_mw_mp?: number | null; ppc?: number | null
   /** compression */
   ratio?: number; ratio_source?: string; lossy?: boolean; supported?: boolean | null; compressor?: string | null
+  fps_compatible?: boolean; reason?: string | null; evidence?: ModelEvidence
+  sensor_binding?: SensorBinding
 }
 export type LeverGroup = 'sensor' | 'size' | 'temporal' | 'clock' | 'mode' | 'compression' | 'other'
 export interface ChangeKindMeta {
@@ -27,10 +33,14 @@ export interface ChangeKindMeta {
     /** choice levers: current value + options; chain_size: IPs that follow the size; history: node · ports */
     options?: LeverOption[]; current?: string | null; mode?: string; node_id?: string; downstream?: string[]; hint?: string
     node?: string; ports?: number; format?: string; family?: string; nodes?: string[]; declared?: string[]; llc?: boolean; history?: boolean
-    readout_ms?: number | null; fps?: number | null; sensor?: string | null; hw_name?: string }[]
+    readout_ms?: number | null; fps?: number | null; sensor?: string | null; hw_name?: string
+    geometry?: GeometryMeta; affected_buffers?: string[]; evidence?: ModelEvidence }[]
 }
 export interface WhatIfTargets extends WhatIfScope {
   baseline_hash: string
+  analysis_hash?: string
+  baseline?: { metrics: WhatIfMetrics; coverage: WhatIfCoverage }
+  model_lineage?: Record<string, unknown>
   anchors: { id: string; size: [number, number]; kind: 'sensor' | 'output' | 'intermediate'; supported: boolean; role?: 'record' | 'preview' | null }[]
   nodes: { id: string; label: string; ip?: string | null; hw_name?: string; category?: string | null; size: [number, number]; size_supported: boolean; clock_supported: boolean
     /** baseline applied clock and DVFS domain (API ≥ 2026-10-16) */
@@ -66,7 +76,7 @@ export interface Diagnosis {
   top_ips: { node: string; hw_ms: number; set_clock_mhz: number; required_clock_mhz: number; domain: string | null; level: number | null }[]
   domains: { id: string; level: number; mhz: number; down: number; up: number; ips: string[] }[]
 }
-export interface AskRequest extends WhatIfScope { query?: string; changes?: WhatIfChange[]; ask?: AskKind; search_domains?: string[]; combine?: CombineMode; config?: Record<string, unknown>; options?: Record<string, unknown> }
+export interface AskRequest extends WhatIfScope { basis_ref?: string; comparison?: 'retune' | 'fixed_opp'; query?: string; changes?: WhatIfChange[]; ask?: AskKind; search_domains?: string[]; combine?: CombineMode; config?: Record<string, unknown>; options?: Record<string, unknown>; expected_baseline_hash?: string; expected_analysis_hash?: string }
 export type CombineMode = 'each' | 'factorial'
 export interface CombineRow {
   key: string; levers: number[]; metrics: WhatIfMetrics | null
@@ -95,11 +105,12 @@ export interface WhatIfPlan {
   ignored?: { text: string; reason: string; hint: string | null }[]
   kept?: string[]; notes?: string[]; focus?: FocusMetric[]
 }
-export interface PreviewRequest extends WhatIfScope { changes: WhatIfChange[]; expected_baseline_hash: string; config?: Record<string, unknown>; options?: Record<string, unknown> }
-export interface WhatIfMetrics { modeled_power_mw: number; total_power_mw: number | null; cpu_power_mw: number; ip_power_mw: number; memory_power_mw: number; bw_mbs: number; fps: number; period_ms: number; feasible: boolean }
+export interface PreviewRequest extends WhatIfScope { basis_ref?: string; comparison?: 'retune' | 'fixed_opp'; changes: WhatIfChange[]; expected_baseline_hash: string; expected_analysis_hash?: string; config?: Record<string, unknown>; options?: Record<string, unknown> }
+export type WhatIfSettings = Pick<PreviewRequest, 'config' | 'options' | 'basis_ref' | 'comparison'>
+export interface WhatIfMetrics { modeled_power_mw: number; total_power_mw: number | null; cpu_power_mw: number; ip_power_mw: number; memory_power_mw: number; bw_mbs: number; fps: number; period_ms: number; feasible: boolean; sensor_power_mw?: number | null; latency_ms?: number | null }
 export interface WhatIfCoverage { complete: boolean; scope: string; missing_components: string[]; excluded_components: string[]; cpu_model: string; assumptions: string[] }
 export interface WhatIfResult {
-  baseline_hash: string; condition_hash: string; normalized_condition: { scope: WhatIfScope; changes: WhatIfChange[]; config: Record<string, unknown>; options: Record<string, unknown> }
+  baseline_hash: string; analysis_hash?: string; condition_hash: string; normalized_condition: { scope: WhatIfScope; changes: WhatIfChange[]; comparison?: 'retune' | 'fixed_opp'; config: Record<string, unknown>; options: Record<string, unknown> }
   baseline: { report: TimingReport; metrics: WhatIfMetrics; coverage: WhatIfCoverage }; candidate: { report: TimingReport; metrics: WhatIfMetrics; coverage: WhatIfCoverage }
   delta: { metrics: Record<string, number | null>; ips: { node: string; required_clock_mhz: number; set_clock_mhz: number; power_mw: number; explanation: string }[] }
   warnings: string[]; model_lineage: Record<string, unknown>
@@ -112,21 +123,31 @@ export interface WhatIfExperiment {
   preview_request?: PreviewRequest; result?: WhatIfResult
 }
 export interface ExperimentDraft { title: string; purpose: string; description: string; assumptions: string; conclusion: string; visibility: 'private' | 'shared' }
+export interface SweepConstraints { max_power_mw?: number; max_bw_mbs?: number; max_latency_ms?: number; min_slack_ms?: number; allow_iq_required: boolean }
+export interface SweepRequest extends WhatIfScope { basis_ref?: string; config?: Record<string, unknown>; options?: Record<string, unknown>; expected_baseline_hash: string; expected_analysis_hash?: string; changes: WhatIfChange[]; axes: { label: string; values: WhatIfChange[] }[]; constraints: SweepConstraints; comparison: 'retune' | 'fixed_opp' }
+export interface SweepRow { id: string; label: string; changes: WhatIfChange[]; preview_request?: PreviewRequest; metrics: WhatIfMetrics | null; delta: Record<string, number | null> | null; feasible: boolean; eligible: boolean; reasons: string[]; iq_required: string[]; condition_hash?: string; min_slack_ms: number | null; latency_ms: number | null }
+export interface SweepResult { scope: WhatIfScope; baseline_hash: string; analysis_hash: string; comparison?: 'retune' | 'fixed_opp'; constraints?: SweepConstraints; baseline: { metrics: WhatIfMetrics; coverage: WhatIfCoverage }; rows: SweepRow[]; pareto_ids: string[]; best_id: string | null; total_cases: number; completed_cases: number; cancelled: boolean; assumptions: string[] }
+export interface SweepJob { id: string; status: 'pending' | 'queued' | 'running' | 'completed' | 'cancelled' | 'interrupted' | 'failed'; completed_cases: number; total_cases: number; result?: SweepResult | null; error?: string | null; resumable: boolean; cancel_requested?: boolean }
 const path = '/scenario-whatif'
 export const whatIfApi = {
-  targets: (scope: WhatIfScope, settings: Pick<PreviewRequest, 'config' | 'options'> = {}) => settings.config || settings.options
+  targets: (scope: WhatIfScope, settings: WhatIfSettings = {}) => settings.config || settings.options || settings.basis_ref || settings.comparison
     ? postJson<WhatIfTargets>(`${path}/targets`, { ...scope, ...settings })
     : getJson<WhatIfTargets>(`${path}/targets`, { ...scope }, false),
-  plan: (scope: WhatIfScope, query: string, settings: Pick<PreviewRequest, 'config' | 'options'> = {}) => postJson<WhatIfPlan>(`${path}/plan`, { ...scope, query, ...settings }),
+  plan: (scope: WhatIfScope, query: string, settings: WhatIfSettings = {}) => postJson<WhatIfPlan>(`${path}/plan`, { ...scope, query, ...settings }),
   preview: (body: PreviewRequest) => postJson<WhatIfResult>(`${path}/preview`, body),
   /** builder conditions or a question (in-house LLM) -> executed answer */
   ask: (body: AskRequest) => postJson<AskResponse>(`${path}/ask`, body),
   save: (previewRequest: PreviewRequest, result: WhatIfResult, draft: ExperimentDraft, query: string) => postJson<WhatIfExperiment>(`${path}/experiments`, { preview_request: previewRequest, expected_condition_hash: result.condition_hash, ...draft, query: query || null }),
   experiments: (scope: WhatIfScope, offset = 0) => getJson<{ items: WhatIfExperiment[]; total: number; limit: number; offset: number; has_next: boolean }>(`${path}/experiments`, { ...scope, limit: 20, offset }, false),
   experiment: (id: string) => getJson<WhatIfExperiment>(`${path}/experiments/${encodeURIComponent(id)}`, {}, false),
+  sweep: (body: SweepRequest) => postJson<SweepResult>(`${path}/sweeps`, body),
+  startJob: (body: SweepRequest) => postJson<SweepJob>(`${path}/jobs`, body),
+  job: (id: string) => getJson<SweepJob>(`${path}/jobs/${encodeURIComponent(id)}`, {}, false),
+  cancelJob: (id: string) => postJson<SweepJob>(`${path}/jobs/${encodeURIComponent(id)}/cancel`, {}),
+  resumeJob: (id: string) => postJson<SweepJob>(`${path}/jobs/${encodeURIComponent(id)}/resume`, {}),
 }
 export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값', dvfs_level: 'DVFS level',
-  sensor_mode: '센서 변경', chain_size: 'IP crop · downscale', power_knob: 'Power option', history_interval: 'Previous DMA 빈도', ip_mode: 'IP mode', compression: 'SBWC 압축' }
+  sensor_mode: '센서 변경', sensor_binding: '등록 센서 교체', chain_size: 'IP crop · downscale', power_knob: 'Power option', history_interval: 'Previous DMA 빈도', ip_mode: 'IP mode', compression: 'SBWC 압축' }
 /** Lever palette: the commercialization tasks in the order a project usually tries them. */
 export const LEVER_GROUPS: { id: LeverGroup; label: string; hint: string }[] = [
   { id: 'sensor', label: '센서', hint: '기존 예측 기준 sensor를 다른 sensor · mode로' },
@@ -138,7 +159,7 @@ export const LEVER_GROUPS: { id: LeverGroup; label: string; hint: string }[] = [
   { id: 'other', label: '기타', hint: '' },
 ]
 const LEGACY_GROUP: Record<string, LeverGroup> = { output_size: 'size', anchor_size: 'size', node_size: 'size', stream_size: 'size', chain_size: 'size', fps: 'clock', node_clock_mhz: 'clock', dvfs_level: 'clock',
-  sensor_mode: 'sensor', power_knob: 'temporal', history_interval: 'temporal', ip_mode: 'mode', compression: 'compression' }
+  sensor_mode: 'sensor', sensor_binding: 'sensor', power_knob: 'temporal', history_interval: 'temporal', ip_mode: 'mode', compression: 'compression' }
 export const groupOf = (k: Pick<ChangeKindMeta, 'target' | 'group'>): LeverGroup => (k.group && k.group !== 'other' ? k.group : LEGACY_GROUP[k.target] ?? 'other')
 /** Fallback metadata for API responses that predate ``change_kinds``. */
 const LEGACY_KINDS: ChangeKindMeta[] = [
@@ -168,7 +189,7 @@ export function validChange(change: WhatIfChange, kinds: ChangeKindMeta[] = LEGA
   if (!kind) return false
   if (kind.selector && !kind.selector_optional && !change[kind.selector]) return false
   if (kind.needs_param && !change.param) return false
-  if (kind.shape === 'size') return [change.width, change.height].every((size) => Number.isInteger(size) && Number(size) >= 16 && Number(size) <= 16384)
+  if (kind.shape === 'size') return !geometryError(change, kind)
   if (kind.shape === 'level') {
     const domain = kind.choices.find((c) => c.id === change.domain)
     return Number.isInteger(change.level) && (!domain?.ladder || domain.ladder.some((lv) => lv.level === change.level))
@@ -178,9 +199,65 @@ export function validChange(change: WhatIfChange, kinds: ChangeKindMeta[] = LEGA
     const inst = kind.choices.find((c) => c.id === sel) ?? (kind.selector ? undefined : kind.choices[0])
     const opt = inst?.options?.find((o) => o.id === change.option)
     if (!change.option || (inst?.options && !opt) || opt?.supported === false) return false
+    if (change.target === 'sensor_binding' && (!change.sensor_binding || !opt?.sensor_binding || Object.entries(opt.sensor_binding).some(([key, value]) => change.sensor_binding?.[key as keyof SensorBinding] !== value))) return false
     return change.value == null || (!!kind.value_optional && Number(change.value) > 0 && Number(change.value) <= 1)
   }
-  return Number.isFinite(change.value) && Number(change.value) > 0 && (kind.max_value == null || Number(change.value) <= kind.max_value)
+  return Number.isFinite(change.value) && (change.target !== 'history_interval' || Number.isInteger(change.value)) && Number(change.value) > 0 && (kind.max_value == null || Number(change.value) <= kind.max_value)
+}
+
+export function geometryError(change: WhatIfChange, kind: ChangeKindMeta): string | null {
+  if (![change.width, change.height].every((size) => Number.isInteger(size) && Number(size) >= 16 && Number(size) <= 16384)) return '너비와 높이는 16–16384 사이의 정수여야 합니다.'
+  const row = kind.selector ? kind.choices.find((c) => c.id === change[kind.selector!]) : undefined
+  if (!row?.geometry) return null
+  const operation = change.operation ?? row.geometry.default_operation ?? row.geometry.operations[0]
+  if (!row.geometry.operations.includes(operation)) return '이 IP에서 지원하지 않는 크기 변경입니다.'
+  const cap = row.geometry.capabilities[operation]
+  if (!cap) return '지원 조건이 선언되지 않았습니다.'
+  const output = [change.width!, change.height!]
+  const min = cap.min_size ?? [16, 16], max = cap.max_size ?? row.size ?? [16384, 16384], alignment = cap.alignment ?? [1, 1]
+  if (output.some((value, i) => value < min[i] || value > max[i])) return `지원 크기: ${min.join('×')}–${max.join('×')}`
+  if (row.size && output.some((value, i) => value > row.size![i])) return '입력 크기보다 큰 출력은 지원하지 않습니다.'
+  if (output.some((value, i) => value % alignment[i] !== 0)) return `크기를 ${alignment.join('×')} pixel 단위에 맞추세요.`
+  if (change.port && !cap.ports?.includes(change.port)) return '지원하지 않는 출력 port입니다.'
+  if ((cap.ports?.length ?? 0) > 1 && !change.port) return '변경할 출력 port를 선택하세요.'
+  if (row.format && cap.formats?.length && !cap.formats.includes(row.format)) return '현재 입력 형식에서 지원하지 않는 크기 변경입니다.'
+  if (operation === 'crop') {
+    const offset = [change.x ?? 0, change.y ?? 0], step = cap.offset_alignment ?? alignment
+    if (offset.some((value, i) => !Number.isInteger(value) || value < 0 || value % step[i] !== 0)) return `Crop 위치는 ${step.join('×')} pixel 단위의 0 이상 정수여야 합니다.`
+    if (row.size && offset.some((value, i) => value + output[i] > row.size![i])) return 'Crop 영역이 입력 크기를 벗어납니다.'
+  } else if (row.size) {
+    if (change.x != null || change.y != null) return 'Crop 위치는 crop에서만 지정할 수 있습니다.'
+    if (cap.max_downscale && output.some((value, i) => row.size![i] / value > cap.max_downscale!)) return `최대 축소 배율 ${cap.max_downscale}배를 넘습니다.`
+    if (cap.max_upscale && output.some((value, i) => value / row.size![i] > cap.max_upscale!)) return `최대 확대 배율 ${cap.max_upscale}배를 넘습니다.`
+  }
+  return null
+}
+export function evidenceLabel(evidence?: ModelEvidence): string {
+  const labels: Record<string, string> = { measured: '실측', calibrated: '실측 보정', verified: '검토됨', reviewed: '검토됨', borrowed: '차용 모델', assumed: '가정', synthetic: '합성 예제', unknown: '근거 미확인', unverified: '미검증', declared: '선언값', bound: 'Timing 근거 연결', missing_timing: 'Timing 근거 없음' }
+  return evidence?.status ? labels[evidence.status] ?? evidence.status : '근거 미확인'
+}
+/** A sweep is a range of values of one existing typed condition, never executable free-form code. */
+export function sweepValues(change: WhatIfChange, kind: ChangeKindMeta, raw: string): WhatIfChange[] {
+  const tokens = raw.split(kind.shape === 'choice' ? /\n+/ : /[,;\n]+/).map((s) => s.trim()).filter(Boolean)
+  if (tokens.length < 2 || tokens.length > 12) throw new Error('각 탐색 항목에는 2–12개 값을 입력하세요.')
+  const values = tokens.map((token) => {
+    let next: WhatIfChange
+    if (kind.shape === 'size') {
+      const dimensions = token.match(/^(\d+)\s*[x×]\s*(\d+)$/i)
+      if (!dimensions) throw new Error('크기는 1920×1080 형식으로 입력하세요.')
+      next = { ...change, width: Number(dimensions[1]), height: Number(dimensions[2]) }
+    } else if (kind.shape === 'choice') {
+      const instance = kind.selector ? kind.choices.find((row) => row.id === change[kind.selector!]) : kind.choices[0]
+      const binding = instance?.options?.find((option) => option.id === token)?.sensor_binding
+      next = { ...change, option: token, ...(kind.target === 'sensor_binding' ? { sensor_binding: binding } : {}) }
+    }
+    else if (kind.shape === 'level') next = { ...change, level: Number(token.replace(/^L/i, '')) }
+    else next = { ...change, value: Number(token) }
+    if (!validChange(next, [kind])) throw new Error(`지원 범위를 벗어난 값: ${token}`)
+    return next
+  })
+  if (new Set(values.map((c) => JSON.stringify(c))).size !== values.length) throw new Error('같은 탐색 값을 중복 입력하지 마세요.')
+  return values
 }
 
 const sameTarget = (a: WhatIfChange, b: WhatIfChange) => a.target === b.target && (['anchor_id', 'node_id', 'stream_id', 'param', 'domain', 'buffer_id'] as const).every((k) => (a[k] ?? '') === (b[k] ?? ''))
@@ -192,7 +269,8 @@ export function upsertChange(changes: WhatIfChange[], change: WhatIfChange): Wha
 export function describeChange(change: WhatIfChange): string {
   if (change.target === 'fps') return `FPS → ${change.value}`
   if (change.target === 'sensor_mode') return `센서 → ${change.option?.split('#').pop() ?? ''}`
-  if (change.target === 'chain_size') return `${change.node_id} crop/downscale → ${change.width}×${change.height}`
+  if (change.target === 'sensor_binding') return `${change.node_id} 센서 → ${change.sensor_binding?.catalog_ref ?? ''} · ${change.sensor_binding?.mode_label ?? change.option ?? ''}`
+  if (change.target === 'chain_size') return `${change.node_id} ${change.operation ?? 'crop/downscale'}${change.operation === 'crop' ? ` (${change.x ?? 0}, ${change.y ?? 0})` : ''} → ${change.width}×${change.height}`
   if (change.target === 'power_knob') return `${change.param} → ${change.option}`
   if (change.target === 'history_interval') return `previous DMA ${change.buffer_id ?? '전체'} → ${change.value} frame마다`
   if (change.target === 'ip_mode') return `${change.node_id} mode → ${change.option}`
@@ -249,13 +327,24 @@ export function defaultChange(kind: ChangeKindMeta, used: WhatIfChange[], fps?: 
   if (kind.shape === 'size') {
     const size = (first?.size ?? [1920, 1080]) as [number, number]
     ;[row.width, row.height] = kind.target === 'chain_size' ? shrink(size, 8) : size
+    if (first?.geometry) {
+      row.operation = first.geometry.default_operation ?? first.geometry.operations[0]
+      const cap = first.geometry.capabilities[row.operation]
+      const alignment = cap?.alignment ?? [1, 1]
+      row.width = Math.max(cap?.min_size?.[0] ?? 16, Math.floor(row.width / alignment[0]) * alignment[0])
+      row.height = Math.max(cap?.min_size?.[1] ?? 16, Math.floor(row.height / alignment[1]) * alignment[1])
+      if (row.operation === 'crop') { row.x = 0; row.y = 0 }
+      if (cap?.ports?.length === 1) row.port = cap.ports[0]
+    }
   } else if (kind.shape === 'level') {
     const ladder = first?.ladder ?? [], at = ladder.findIndex((lv) => lv.level === first?.level)
     row.level = ladder[Math.max(0, at - 1)]?.level ?? first?.level ?? 0
   } else if (kind.shape === 'choice') {
     const opts = first?.options ?? []
     const cur = opts.find((o) => o.current)?.id ?? first?.current ?? first?.mode
-    row.option = (opts.find((o) => o.id !== cur && o.supported !== false) ?? opts[0])?.id
+    const option = opts.find((o) => o.id !== cur && o.supported !== false) ?? opts[0]
+    row.option = option?.id
+    if (option?.sensor_binding) row.sensor_binding = option.sensor_binding
   } else if (kind.target === 'history_interval') row.value = 2
   else row.value = first?.value ?? (kind.target === 'node_clock_mhz' ? (clockOf?.(String(first?.id)) ?? 400) : fps ?? 30)
   return row

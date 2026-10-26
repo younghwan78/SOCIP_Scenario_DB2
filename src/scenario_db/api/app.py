@@ -12,6 +12,7 @@ from sqlalchemy import create_engine
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.performance import PerformanceMiddleware, install_sql_observers
 from scenario_db.api.services.cpu import shutdown_cpu_pool
+from scenario_db.api.services.whatif_jobs import shutdown_whatif_jobs
 from scenario_db.api.exceptions import register_handlers
 from scenario_db.api.routers import admin, capability, catalog, cdgm, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
 from scenario_db.api.routers.utility import health_router
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         try:
+            shutdown_whatif_jobs()
             shutdown_cpu_pool()
         finally:
             try:

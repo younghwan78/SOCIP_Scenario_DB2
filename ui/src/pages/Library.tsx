@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import type { Ctx } from '../App'
+import type { Dict } from '../lib/api'
+import { experimentHref } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
 import { ipSummary, libraryApi, range, type IpRow, type SensorCatalogRow, type SwTaskRow } from '../lib/library'
@@ -22,7 +24,7 @@ export function LibraryPage({ ctx }: { ctx: Ctx }) {
       {tab === 'ip' && <IpTab ctx={ctx} />}
       {tab === 'dvfs' && <DvfsTab ctx={ctx} />}
       {tab === 'comp' && <CompTab />}
-      {tab === 'sensor' && <SensorTab />}
+      {tab === 'sensor' && <SensorTab ctx={ctx} />}
       {tab === 'sw' && <SwTab ctx={ctx} />}
     </div>
   )
@@ -48,7 +50,9 @@ function IpTab({ ctx }: { ctx: Ctx }) {
       <div className="table-x"><DataTable id="lib.ip" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => ctx.navigate(undefined, { sel: r.id }, true)} rowClass={(r) => (r.id === sel?.id ? 'selected' : '')} defaultSort={{ key: 'cat', dir: 1 }} /></div>
     </Card>
     {sel && <Card id="lib-ip-detail" title={sel.id} note={ipSummary(sel).note} defaultWide>
-      <pre className="lib-json">{JSON.stringify(sel.capabilities, null, 2)}</pre>
+      <div className="workflow-actions">{[['ip_mode', 'Mode'], ['chain_size', 'Crop · scale']].map(([target, label]) => <button key={target} className="btn" onClick={() => ctx.navigate('whatif', { whatif_target: target, whatif_ip: sel.id })}>{label} 실험에서 지원 확인</button>)}</div>
+      <IpCapabilities ip={sel} />
+      <details><summary>원본 capability JSON</summary><pre className="lib-json">{JSON.stringify(sel.capabilities, null, 2)}</pre></details>
     </Card>}
   </div>
 }
@@ -95,7 +99,7 @@ function CompTab() {
   </div>
 }
 
-function SensorTab() {
+function SensorTab({ ctx }: { ctx: Ctx }) {
   const c = useAsync(() => libraryApi.sensors(), [])
   const t = useAsync(() => libraryApi.sensorTiming(), [])
   const cols: Column<SensorCatalogRow>[] = [
@@ -103,6 +107,7 @@ function SensorTab() {
     { key: 'board', label: 'Board', width: 120, sort: (r) => r.board, render: (r) => r.board },
     { key: 'modes', label: 'modes', width: 80, align: 'right', firstDir: -1, sort: (r) => r.mode_count, render: (r) => r.mode_count },
     { key: 'id', label: 'catalog', width: 220, sort: (r) => r.id, render: (r) => <span className="mono faint">{r.id}</span> },
+    { key: 'experiment', label: '현재 scenario 실험', width: 180, render: (r) => <a href={`${experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}&whatif_target=sensor_mode&whatif_catalog=${encodeURIComponent(r.id)}`}>센서 교체 지원 확인 →</a> },
   ]
   return <div className="tb-grid">
     {c.error && <div className="err">{c.error}</div>}
@@ -116,6 +121,22 @@ function SensorTab() {
       </table>
     </Card>
   </div>
+}
+
+function IpCapabilities({ ip }: { ip: IpRow }) {
+  const dict = (v: unknown): Dict => v && typeof v === 'object' && !Array.isArray(v) ? v as Dict : {}
+  const sim = dict(ip.capabilities.sim)
+  const modes = [{ role: '공통', data: sim }, ...Object.entries(dict(sim.role_modes)).map(([role, data]) => ({ role, data: dict(data) }))]
+    .flatMap(({ role, data }) => Object.entries(dict(data.modes)).map(([mode, raw]) => ({ role, mode, value: dict(raw) })))
+  const geometry = dict(sim.geometry)
+  return <>
+    <p className="faint">catalog 모델 입력입니다. 실제 변경 가능 여부와 정렬·배율·FPS 제약은 선택 scenario의 실험 화면에서 검증합니다.</p>
+    {modes.length > 0 ? <div className="table-x"><table className="tb-mini-table" style={{ width: '100%' }}>
+      <thead><tr><th>역할</th><th>Mode</th><th>PPC</th><th>단위 power mW/MP</th><th>근거 · 상태</th></tr></thead>
+      <tbody>{modes.map((m) => <tr key={`${m.role}:${m.mode}`}><td>{m.role}</td><td>{m.mode}</td><td>{String(m.value.ppc ?? sim.ppc ?? '미정')}</td><td>{String(m.value.unit_power_mw_mp ?? '미정')}</td><td>{String(dict(m.value.evidence).status ?? m.value.source ?? sim.source ?? '출처 미정')}{m.value.explorable === false ? ' · 탐색 제외' : ''}</td></tr>)}</tbody>
+    </table></div> : <p className="faint">Mode별 모델 입력 없음</p>}
+    {Object.keys(geometry).length > 0 && <details open><summary>Crop · scale 제약</summary><pre className="lib-json">{JSON.stringify(geometry, null, 2)}</pre></details>}
+  </>
 }
 
 function SwTab({ ctx }: { ctx: Ctx }) {

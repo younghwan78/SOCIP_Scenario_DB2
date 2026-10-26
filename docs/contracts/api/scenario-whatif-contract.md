@@ -16,6 +16,11 @@ analyst/writer/admin. Actor identity comes from the API principal.
 | `POST /experiments` | Recalculate and freeze the reviewed request, results, explanation, question, and actor; returns 201. |
 | `GET /experiments` | Paginated records visible to the principal within the selected project/scenario/variant. |
 | `GET /experiments/{id}` | Frozen record and request for rerunning its conditions. |
+| `POST /sweeps` | Bounded value grid on one baseline; constraint eligibility, Pareto IDs and reproducible row preview requests. |
+| `POST /jobs` | Same sweep request, durable actor-owned job (202). Identical resolved requests from the same actor reuse a job. |
+| `GET /jobs/{id}` | Status, progress and completed rows; another actor receives 404. |
+| `POST /jobs/{id}/cancel` | Cooperative stop between cases; completed rows remain available. |
+| `POST /jobs/{id}/resume` | Resume cancelled, failed or lease-expired work, after current input identity validation. |
 
 ## Conditions and result meaning
 
@@ -46,7 +51,8 @@ Commercialization levers (`whatif_levers.py`, same registry; `group` = palette g
 | target | selector · value | effect |
 | --- | --- | --- |
 | `sensor_mode` | `node_id` (active sensor) · `option` = `<ip_ref>#<mode>` | Another catalog sensor / DT mode with `sensor_fps` ≥ scenario FPS. Readout timing follows the mode; when the active size differs, downstream IPs, their anchors (pyramid levels by 2^-k) and explicit buffer sizes are reshaped |
-| `chain_size` | `node_id` · `width`/`height` | Crop / downscale at that IP (bayer crop at BYRP, YUV downscale at YUVSC): every downstream IP processing the same size, its anchors and pyramid levels follow; the IP itself keeps its input size. Must not exceed the current size |
+| `sensor_binding` | `node_id` · full `sensor_binding` from targets | Pins source catalog/lineup hashes, board config, slot and DT mode label. Revalidates installed source, single-image transport, timing when present, and final FPS. Target-board wiring remains unverified. |
+| `chain_size` | `node_id` · `width`/`height` · optional `operation`, `port`, `x`, `y` | Only declared crop/scale operations are accepted. Checks ROI, alignment, format and declared bounds. Propagates along selected data ports, stopping at fixed geometry; preserves final output surfaces. The IP keeps its input size. |
 | `power_knob` | `param` (knob) · `option` (value) | Scenario `power_options.knobs` with `explore` (e.g. `crop_strategy=byrp_bcrop`, `pyramid_l0=skip`), applied with the authoring knob engine |
 | `history_interval` | optional `buffer_id` (none = all history buffers) · `value` N (1–8) | Previous-frame DMA read/write once every N frames: `history.update_interval` → `r_w_rate = 1/N`. IP core work stays per frame |
 | `ip_mode` | `node_id` · `option` (mode) | IP catalog `capabilities.sim.modes.<mode>` (own unit power / PPC) |
@@ -117,6 +123,48 @@ processing. A model calculation does not establish measured accuracy or IQ.
 Results retain model lineage, normalized conditions, hashes, and warnings.
 Reopening an experiment loads its conditions for calculation against today's inputs.
 
+## Reproducible comparison and value grids
+
+Model settings accept `basis_ref` and `comparison: retune | fixed_opp` (default
+`retune`). Fixed OPP keeps the original baseline and applies its domain levels to
+the candidate only. It is supported by single-candidate preview/ask and sweeps;
+explicit DVFS-level changes cannot be combined with that policy. Each sweep row
+includes its complete `preview_request`, so detail calculation and saving retain
+the policy and original baseline settings.
+
+Targets expose `analysis_hash`, baseline metrics/coverage and model lineage.
+`expected_analysis_hash` is optional for backward compatibility; the UI supplies it
+to reject model/config/table drift with 409. The graph hash remains separately
+available. Candidate condition hashes include resolved inputs and comparison policy.
+
+A sweep has 1–4 `axes`, each with a label and 2–12 distinct `WhatIfChange` values
+for one target. Fixed `changes` and axis targets must be distinct, at most eight
+in total. The product is at most 256 and also respects the deployment case limit.
+Constraints are `max_power_mw`, `max_bw_mbs`, `max_latency_ms`, `min_slack_ms` and
+`allow_iq_required` (default false). Failed cases remain visible with reasons.
+Eligibility requires timing feasibility, complete IP models and the selected
+constraints. The Pareto set minimizes modeled power, BW and latency; the recommended
+row is the lowest modeled-power eligible row. Neither selection certifies IQ.
+
+Sensor power is reported separately. A measured sensor sample requires explicit
+power, source and matching FPS; otherwise it stays unknown. Rankings and power
+constraints use CPU + IP + memory subtotal, excluding unmodeled device power.
+Assumed SW runtime and bitstream bitrate remain fixed and visible in warnings.
+
+Migration `0032` adds job requests/checkpoints. A two-worker thread pool
+uses the existing simulation admission budget; the database queue is bounded to 16
+active jobs. A 120-second heartbeat lease and worker tokens fence obsolete workers.
+Restarted or cancelled work can resume only with the same input identity. Progress
+is checkpointed between cases; cancellation does not interrupt a case mid-calculation.
+Serialized requests preserve omitted configuration fields so active-profile defaults
+remain distinguishable from explicitly supplied code defaults after reopening.
+Worker calculation sessions release read connections before computing/checkpointing.
+
+Pure case caching is opt-in through `SCENARIO_DB_WHATIF_CASE_CACHE_ENTRIES`
+(default 0, maximum 256) and `_TTL_SECONDS` (default 60). Keys include resolved
+graph/config/options/DVFS inputs and engine revision; cached values are copied for
+caller isolation. Ownership, selection and hash validation always run before reuse.
+
 ## Persistence and access
 
 Migration `0024_prediction_collaboration` adds `whatif_experiments`. Frozen experiments are separate from
@@ -127,7 +175,9 @@ Unauthorized private IDs return 404. Local authentication bypass uses one local
 subject and does not distinguish people. Pagination uses bounded limit/offset and
 stable timestamp/ID order.
 
-Planning/calculation/save reuse admission slots, request bounds, and frame limits. They
-remain synchronous requests rather than durable background jobs.
+Planning/preview/save remain synchronous and reuse admission slots, request bounds,
+and frame limits. Value-grid jobs are durable and use the same computation limits.
+Experiment lists project only summary metrics from JSON; detail reads retain the
+complete frozen result.
 
 See [the user guide](../../guides/prediction-collaboration-whatif.md).

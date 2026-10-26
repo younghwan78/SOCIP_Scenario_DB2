@@ -7,9 +7,10 @@ import type { Ctx } from '../App'
 import { whatIfApi, type AskResponse, type WhatIfExperiment, type WhatIfResult, type WhatIfTargets } from '../lib/scenarioWhatIf'
 import type { TimingReport } from '../lib/timingBudget'
 import { setApiCredential } from '../lib/auth'
+import { readExperimentContext, updateExperimentContext } from '../lib/experimentContext'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-afterEach(() => { setApiCredential(null); vi.restoreAllMocks() })
+afterEach(() => { setApiCredential(null); sessionStorage.clear(); vi.restoreAllMocks() })
 const scope = { project_ref: 'project', scenario_id: 'scenario', variant_id: 'variant' }
 const hash = 'a'.repeat(64)
 const ladder = [{ level: 5, mhz: 133 }, { level: 4, mhz: 200 }, { level: 3, mhz: 400 }, { level: 2, mhz: 533 }]
@@ -63,7 +64,7 @@ it('builds a DVFS level condition from the ladder and answers first, then saves 
     expect(level.value).toBe('4')                                                             // one level down by default
     await act(async () => button(host, '답 보기').click())
     expect(ask).toHaveBeenCalledWith({ ...scope, ask: 'what_if', changes: [level4] })
-    expect(host.querySelector('.wi-headline')!.textContent).toBe('가능 INTCAM L3→L4 (200 MHz): timing 충족, 최소 여유 NRT 3.74 ms (기준 NRT 4.10 ms)')
+    expect(host.querySelector('.wi-headline')!.textContent).toBe('timing 충족 INTCAM L3→L4 (200 MHz): timing 충족, 최소 여유 NRT 3.74 ms (기준 NRT 4.10 ms)')
     expect(host.textContent).toContain('기준 대비 조건 변경 결과')
     act(() => { edit(host.querySelector<HTMLTextAreaElement>('[aria-label="실험 제목"]')!, 'intcam'); select(host.querySelector<HTMLSelectElement>('[aria-label="실험 공개 범위"]')!, 'shared') })
     await act(async () => button(host, '실험 저장').click())
@@ -94,7 +95,9 @@ it('marks the answer as outdated when conditions change and warns that a clock f
     await act(async () => button(again.host, '+ DVFS level').click())
     await act(async () => button(again.host, '답 보기').click())
     act(() => select(again.host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')!, '5'))
-    expect(again.host.textContent).toContain('조건이 바뀌었습니다')
+    expect(again.host.textContent).toContain('이전 조건 결과 · 재계산 필요')
+    expect(again.host.querySelectorAll('.wi-result-state.is-stale').length).toBe(3)
+    expect(button(again.host, '현재 결과를 후보로 담기').disabled).toBe(true)
   } finally { act(() => again.root.unmount()) }
 })
 it('runs bottleneck and limit questions without any condition rows', async () => {
@@ -181,6 +184,49 @@ it('loads experiment conditions without running and keeps the saved model settin
     expect(ask).toHaveBeenCalledWith({ ...scope, config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' }, ask: 'what_if', changes: [level4] })
   } finally { act(() => root.unmount()) }
 })
+
+const savedRecord = (id: string, level: number): WhatIfExperiment => ({ ...scope, id, title: id,
+  purpose: null, description: null, assumptions: null, conclusion: null, baseline_hash: hash, condition_hash: hash,
+  created_by: 'analyst', created_at: '2026-10-13T00:00:00Z', visibility: 'private', query: null,
+  preview_request: { ...scope, changes: [{ ...level4, level }], expected_baseline_hash: hash, config: {}, options: {} } })
+
+it('opens a new saved-record URL in the same scope and ignores the previous late load', async () => {
+  mocks()
+  const pending = new Map<string, (record: WhatIfExperiment) => void>()
+  const load = vi.spyOn(whatIfApi, 'experiment').mockImplementation((id) => new Promise((finish) => pending.set(id, finish)))
+  const { host, root } = await mount({ ...ctx, params: { experiment: 'saved-a' } })
+  try {
+    expect(load).toHaveBeenCalledWith('saved-a')
+    await act(async () => root.render(<ScenarioWhatIfPage ctx={{ ...ctx, params: { experiment: 'saved-b' } }} />))
+    expect(load).toHaveBeenCalledWith('saved-b')
+    await act(async () => pending.get('saved-b')!(savedRecord('saved-b', 5)))
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')?.value).toBe('5')
+    await act(async () => pending.get('saved-a')!(savedRecord('saved-a', 4)))
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')?.value).toBe('5')
+    expect(readExperimentContext(scope)?.changes).toEqual([{ ...level4, level: 5 }])
+    expect(button(host, '답 보기').disabled).toBe(false)
+  } finally { act(() => root.unmount()) }
+})
+
+it.each(['scope', 'principal'])('does not write a saved-record load into a changed %s draft', async (change) => {
+  mocks()
+  let finish!: (record: WhatIfExperiment) => void
+  vi.spyOn(whatIfApi, 'experiment').mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+  const { host, root } = await mount({ ...ctx, params: { experiment: 'saved-a' } })
+  try {
+    const next = change === 'scope' ? { ...ctx, variant: 'other-variant', params: {} } : ctx
+    const nextScope = { project_ref: next.project, scenario_id: next.scenario, variant_id: next.variant }
+    await act(async () => {
+      if (change === 'principal') setApiCredential({ keyId: 'other-analyst', secret: 'secret' })
+      root.render(<ScenarioWhatIfPage ctx={next} />)
+    })
+    await act(async () => finish(savedRecord('saved-a', 4)))
+    expect(host.querySelector('[aria-label="INTCAM level"]')).toBeNull()
+    expect(readExperimentContext(nextScope)?.changes).toEqual([])
+    expect(host.textContent).not.toContain('저장된 조건을 불러왔습니다')
+  } finally { act(() => root.unmount()) }
+})
+
 it('asks for the 과제 · scenario · variant before anything', async () => {
   mocks()
   const { host, root } = await mount({ ...ctx, variant: '', navigate: vi.fn() } as unknown as Ctx)
@@ -264,4 +310,66 @@ it('steps a DVFS domain ±1/±2 levels from the current OPP', async () => {
     expect(host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')!.value).toBe('2')
     expect(button(host, '+2 step').disabled).toBe(true)                                       // beyond the ladder
   } finally { act(() => root.unmount()) }
+})
+
+it('preserves candidate baseline settings across navigation and marks changed model inputs', async () => {
+  const model = { config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' }, basis_ref: 'basis-1', comparison: 'fixed_opp' as const }
+  updateExperimentContext(scope, { changes: [level4], ...model })
+  mocks({ ...targets, analysis_hash: 'analysis-1', baseline: { metrics, coverage } })
+  const ask = vi.spyOn(whatIfApi, 'ask').mockResolvedValue(answered({ result: { ...result, analysis_hash: 'analysis-1', normalized_condition: { ...result.normalized_condition, config: { dvfs_overrides: { INTCAM: 4 } } } } }))
+  const first = await mount()
+  try {
+    expect(first.host.textContent).toContain('센서 전력: 미확정')
+    expect(first.host.querySelector<HTMLSelectElement>('[aria-label="조건 비교 방식"]')?.value).toBe('fixed_opp')
+    await act(async () => button(first.host, '답 보기').click())
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ ...model, expected_baseline_hash: hash, expected_analysis_hash: 'analysis-1' }))
+    await act(async () => button(first.host, '현재 결과를 후보로 담기').click())
+    expect(readExperimentContext(scope)?.candidates[0]).toMatchObject({ config: model.config, comparison: 'fixed_opp', analysis_hash: 'analysis-1' })
+    await act(async () => select(first.host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')!, '5'))
+    expect(button(first.host, '현재 결과를 후보로 담기').disabled).toBe(true)
+  } finally { act(() => first.root.unmount()) }
+  vi.mocked(whatIfApi.targets).mockResolvedValue({ ...targets, analysis_hash: 'analysis-2' })
+  const second = await mount()
+  try {
+    expect(second.host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')?.value).toBe('5')
+    expect(second.host.textContent).toContain('기준 다름')
+    await act(async () => button(second.host, '조건 불러오기').click())
+    expect(second.host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')?.value).toBe('4')
+    expect(readExperimentContext(scope)?.comparison).toBe('fixed_opp')
+  } finally { act(() => second.root.unmount()) }
+})
+it('opens the requested pipeline node and validates crop ROI before submitting', async () => {
+  const cropKind = { target: 'chain_size', label: 'IP crop', shape: 'size' as const, selector: 'node_id' as const, selector_optional: false, needs_param: false, unit: '', max_value: null, description: '', choices: ['first', 'requested'].map((id) => ({ id, size: [3840, 2160] as [number, number], downstream: ['out'], affected_buffers: ['OUT'], geometry: { operations: ['crop' as const], default_operation: 'crop' as const, capabilities: { crop: { alignment: [16, 2] as [number, number], offset_alignment: [8, 2] as [number, number] } } } })) }
+  mocks({ ...targets, change_kinds: [cropKind] })
+  const mounted = await mount({ ...ctx, params: { whatif_target: 'chain_size', whatif_node: 'requested' } })
+  try {
+    expect(mounted.host.querySelector<HTMLSelectElement>('[aria-label="IP crop 대상"]')?.value).toBe('requested')
+    expect(mounted.host.textContent).toContain('영향 buffer: OUT')
+    const x = mounted.host.querySelector<HTMLInputElement>('[aria-label="Crop X"]')!
+    act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(x, '9'); x.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(button(mounted.host, '답 보기').disabled).toBe(true)
+    expect(mounted.host.textContent).toContain('Crop 위치는 8×2')
+  } finally { act(() => mounted.root.unmount()) }
+})
+it('groups sensor identities and selects a pinned catalog mode from a Library entry', async () => {
+  const binding = { catalog_ref: 'catalog-2', catalog_sha256: hash, mode_label: 'RAW12 full 60', lineup_ref: 'board', lineup_sha256: hash, board_config: 'production', slot: 'rear' }
+  const sensorKind = { target: 'sensor_binding', label: '등록 센서', shape: 'choice' as const, selector: 'node_id' as const, selector_optional: false, needs_param: false, unit: '', max_value: null, description: '', group: 'sensor' as const,
+    choices: [{ id: 'sensor', options: [
+      { id: 'catalog-1#RAW10 full 60', sensor: 'Sensor A', ip_ref: 'sensor-a', mode: 'RAW10 full 60', size: [4000, 3000] as [number, number], fps: 60, supported: true, sensor_binding: { ...binding, catalog_ref: 'catalog-1', mode_label: 'RAW10 full 60' } },
+      { id: 'catalog-2#RAW12 full 60', sensor: 'Sensor B', ip_ref: 'sensor-b', mode: 'RAW12 full 60', size: [4000, 3000] as [number, number], fps: 60, supported: true, sensor_binding: binding },
+      { id: 'catalog-2#RAW10 binned 30', sensor: 'Sensor B', ip_ref: 'sensor-b', mode: 'RAW10 binned 30', fps: 30, fps_compatible: false, supported: true, sensor_binding: { ...binding, mode_label: 'RAW10 binned 30' } },
+    ] }] }
+  mocks({ ...targets, change_kinds: [sensorKind] })
+  const ask = vi.spyOn(whatIfApi, 'ask').mockResolvedValue(answered())
+  const mounted = await mount({ ...ctx, params: { whatif_target: 'sensor_mode', whatif_catalog: 'catalog-2' } })
+  try {
+    const sensor = mounted.host.querySelector<HTMLSelectElement>('[aria-label="등록 센서 센서"]')!, mode = mounted.host.querySelector<HTMLSelectElement>('[aria-label="등록 센서 값"]')!
+    expect(sensor.options).toHaveLength(2)
+    expect(sensor.value).toBe('sensor-b')
+    expect(mode.value).toBe('catalog-2#RAW12 full 60')
+    expect([...mode.options].map((item) => item.value)).toEqual(['', 'catalog-2#RAW12 full 60', 'catalog-2#RAW10 binned 30'])
+    expect(mode.options[2].disabled).toBe(false) // can combine with a lower final FPS
+    await act(async () => button(mounted.host, '답 보기').click())
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ target: 'sensor_binding', node_id: 'sensor', option: 'catalog-2#RAW12 full 60', sensor_binding: binding }] }))
+  } finally { act(() => mounted.root.unmount()) }
 })

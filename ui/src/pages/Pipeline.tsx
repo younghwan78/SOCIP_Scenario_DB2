@@ -391,6 +391,11 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
               {selectedBuf.llc && <div className="kv"><span>LLC · DRAM MB/s</span><span className="mono">{llcDetail(selectedBuf.llc)} · {selectedBuf.dramMBs ?? '—'}</span></div>}
               {selectedBuf.note && <div className="faint" style={{ fontSize: 12, marginTop: 6 }}>{selectedBuf.note}</div>}
             </> : selectedIp ? <>
+              <div className="workflow-actions">
+                <button className="btn" onClick={() => ctx.navigate('whatif', { whatif_target: 'ip_mode', whatif_node: selectedIp.pid, whatif_ip: selectedIp.ipRef ?? undefined })}>Mode 실험</button>
+                <button className="btn" onClick={() => ctx.navigate('whatif', { whatif_target: 'chain_size', whatif_node: selectedIp.pid, whatif_ip: selectedIp.ipRef ?? undefined })}>Crop · scale 실험</button>
+                <button className="btn" onClick={() => ctx.navigate('whatif', { whatif_target: 'sensor_mode', whatif_node: selectedIp.pid, whatif_ip: selectedIp.ipRef ?? undefined })}>센서 지원 확인</button>
+              </div>
               <div className="kv"><span>Lane</span><span>{LANE_LABEL[selectedIp.lane]}</span></div>
               <div className="kv"><span>In → Out</span><span className="mono">{selectedIp.inSize || '—'} → {selectedIp.outSizes.join(' / ') || '—'}</span></div>
               {selectedIp.ops.length > 0 && <div className="kv"><span>Ops</span><span>{selectedIp.ops.join(' · ')}</span></div>}

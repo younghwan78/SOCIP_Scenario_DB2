@@ -1,29 +1,28 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { archApi } from '../lib/archExplore'
-import { calibrationApi } from '../lib/calibration'
-import { provenanceApi } from '../lib/provenance'
-import { libraryApi } from '../lib/library'
+import { getJson } from '../lib/api'
+import { experimentHref, listExperimentContexts } from '../lib/experimentContext'
 import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER, primaryCategory } from '../lib/guides'
 import { DOMAIN_LABEL, domainFor, type Domain } from '../lib/tunnel'
 import { PipelineTunnel } from '../components/PipelineTunnel'
 
-const quiet = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null)
 import { projLabel, socLabel } from '../lib/projects'
+
+interface Overview {
+  counts: { ip: number; dvfs: number; dvfs_sample: number; predictions: number; runs: number; reports: number; published_reports: number; measurements: number; synthetic_measurements: number }
+  coverage: { simulation: number; measurement: number; synthetic: number; unknown?: number; current_prediction: number }
+  latest_run: { id: string; title: string; created_at: string; summary: { spec_ok: number; variants: number } } | null
+  latest_report: { id: string; status: string; created_at: string } | null
+}
 
 export function HomePage({ ctx }: { ctx: Ctx }) {
   const item = ctx.catalog.find((c) => c.scenario_id === ctx.scenario)
   const [domain, setDomain] = useState<Domain>(() => domainFor(item?.category))
   const [paused, setPaused] = useState(false)
-  const runs = useAsync(() => quiet(archApi.runs()), [])
-  const reports = useAsync(() => quiet(archApi.reports()), [])
-  // count only: model-status aggregates in SQL instead of shipping every prediction row
-  const status = useAsync(() => quiet(provenanceApi.modelStatus()), [])
-  const meas = useAsync(() => quiet(calibrationApi.measurements()), [])
-  const cov = useAsync(() => quiet(calibrationApi.coverageSummary()), [])
-  const dvfs = useAsync(() => quiet(libraryApi.dvfs()), [])
-  const ips = useAsync(() => quiet(libraryApi.ips()), [])
+  const overview = useAsync(() => getJson<Overview>('/explorer/overview', { project_ref: ctx.project || undefined }), [ctx.project])
+  const recent = listExperimentContexts().filter((e) => e.scope.project_ref === ctx.project).slice(0, 3)
+  const scope = { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }
 
   // project (SoC 과제) × scenario type → scenario / variant counts
   const matrix = useMemo(() => {
@@ -41,14 +40,11 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
     return { projects: [...projects.entries()], cats: [...cats, ...extra] }
   }, [ctx.allCatalog])
 
-  const variants = ctx.allCatalog.reduce((s, c) => s + c.variant_count, 0)
-  const sum = (k: 'simulation' | 'measurement' | 'synthetic' | 'current_prediction') => Object.values(cov.data ?? {}).reduce((s, r) => s + (r[k] ?? 0), 0)
-  const run = runs.data?.[0]
-  const report = reports.data?.[0]
-  const published = (reports.data ?? []).filter((r) => r.status === 'published').length
-  const realMeas = (meas.data ?? []).filter((m) => !m.synthetic)
-  const worst = realMeas.map((m) => m.current_prediction?.delta_pct ?? m.simulation?.delta_pct).filter((x): x is number => x !== null && x !== undefined)
-  const sampleDvfs = (dvfs.data?.items ?? []).filter((t) => /sample|synthetic/i.test(`${t.id} ${JSON.stringify(t.source ?? '')}`)).length
+  const variants = ctx.catalog.reduce((s, c) => s + c.variant_count, 0)
+  const sum = (k: 'simulation' | 'measurement' | 'synthetic' | 'current_prediction') => overview.data?.coverage[k] ?? 0
+  const run = overview.data?.latest_run
+  const report = overview.data?.latest_report
+  const sampleDvfs = overview.data?.counts.dvfs_sample ?? 0
   const pct = (n: number) => (variants ? Math.round((100 * n) / variants) : 0)
 
   return (
@@ -56,10 +52,11 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
       <PipelineTunnel domain={domain} paused={paused} />
       <section className="home-card" aria-label="시작">
         <div className="home-kicker">SoC MULTIMEDIA · SCENARIO DB</div>
-        <h2>Pipeline 안으로<br />들어가 보세요</h2>
-        <p>Multimedia scenario의 pipeline, SW timing, clock · DVFS level, power와 BW를 예측하고 architecture를 검토합니다.</p>
-        <button type="button" className="home-sso" disabled title="사내 SSO 연동 예정">사내 SSO로 로그인 (연동 예정)</button>
-        <a className="home-local" href={`#/explorer?scenario=${encodeURIComponent(ctx.scenario)}`}>로컬 모드로 계속 → Scenario</a>
+        <h2>조건을 바꾸고<br />차이를 확인하세요</h2>
+        <p>기준 scenario를 고정해 IP mode, 처리 크기, 센서를 바꾸고 성능·전력·근거를 비교합니다.</p>
+        <div className="home-experiment-actions">{[['ip_mode', 'IP 모드'], ['chain_size', '크기 · crop'], ['sensor_mode', '센서']].map(([target, label]) => <a key={target} className="btn" href={`${experimentHref('whatif', scope)}&whatif_target=${target}`}>{label} 변경</a>)}</div>
+        <a className="home-local" href={`#/explorer?project=${encodeURIComponent(ctx.project)}&scenario=${encodeURIComponent(ctx.scenario)}`}>기준 Scenario 선택 →</a>
+        {recent.length > 0 && <div className="home-recent"><b>최근 실험 이어하기</b>{recent.map((e) => <a key={`${e.scope.scenario_id}:${e.scope.variant_id}`} href={experimentHref('whatif', e.scope)}>{e.scope.variant_id} · 후보 {e.candidates.length}개</a>)}</div>}
       </section>
       <div className="home-controls">
         <div className="seg sm home-seg" role="group" aria-label="pipeline 종류">
@@ -84,29 +81,30 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
             </tbody>
           </table>
         </div>
-        <a className="hd-block" href="#/calibration">
-          <h3>근거 coverage <span>variant {variants}개 중</span></h3>
-          {cov.data ? <>
+        <a className="hd-block" href={experimentHref('calibration', scope)}>
+          <h3>선택 과제 근거 coverage <span>variant {variants}개 중</span></h3>
+          {overview.data ? <>
             <Meter label="Simulation 예측" n={sum('simulation')} pct={pct(sum('simulation'))} color="#56B4E9" />
             <Meter label="등록 예측 (current)" n={sum('current_prediction')} pct={pct(sum('current_prediction'))} color="#2BB3A3" />
+            {(overview.data.coverage.unknown ?? 0) > 0 && <p className="hd-em">출처 미상 {overview.data.coverage.unknown} variant — 실측 coverage에서 제외</p>}
             <Meter label="실측" n={sum('measurement')} pct={pct(sum('measurement'))} color="#7FD6C8" note={sum('synthetic') ? `+ 합성 ${sum('synthetic')}` : undefined} />
-          </> : <p className="hd-dim">API 재시작 후 표시 (coverage-summary)</p>}
-          {worst.length > 0 && <p className="hd-em">예측↔실측 최대 |Δ| {Math.max(...worst.map(Math.abs)).toFixed(1)}%</p>}
+          </> : <p className="hd-dim">{overview.error ? '현황을 불러오지 못했습니다' : '현황 불러오는 중…'}</p>}
+          <p className="hd-dim">구성별 오차와 실제 측정 근거 확인 →</p>
         </a>
         <div className="hd-block">
           <h3>Architecture 검토</h3>
-          <a className="hd-row" href="#/predictions"><span>등록 예측</span><b>{status.data ? status.data.predictions.current : '—'}</b></a>
-          <a className="hd-row" href={run ? `#/explore?run=${encodeURIComponent(run.id)}` : '#/explore'}><span>최근 탐색</span>
+          <a className="hd-row" href={experimentHref('predictions', scope)}><span>등록 예측</span><b>{overview.data?.counts.predictions ?? '—'}</b></a>
+          <a className="hd-row" href={`${experimentHref('explore', scope)}${run ? `&run=${encodeURIComponent(run.id)}` : ''}`}><span>최근 탐색</span>
             <b className="txt" title={run?.title}>{run ? `${run.summary.spec_ok}/${run.summary.variants} 만족 · ${run.created_at?.slice(5, 10) ?? ''}` : '없음'}</b></a>
-          <a className="hd-row" href={report ? `#/reports?report=${encodeURIComponent(report.id)}` : '#/reports'}><span>보고서</span>
-            <b className="txt">{reports.data ? `${reports.data.length}건 · 게시 ${published}` : '—'}{report ? ` · 최근 ${report.status}` : ''}</b></a>
+          <a className="hd-row" href={`${experimentHref('reports', scope)}${report ? `&report=${encodeURIComponent(report.id)}` : ''}`}><span>보고서</span>
+            <b className="txt">{overview.data ? `${overview.data.counts.reports}건 · 게시 ${overview.data.counts.published_reports}` : '—'}{report ? ` · 최근 ${report.status}` : ''}</b></a>
         </div>
-        <a className="hd-block" href="#/library">
+        <a className="hd-block" href={experimentHref('library', scope)}>
           <h3>Library</h3>
-          <div className="hd-row"><span>DVFS table</span><b>{dvfs.data ? dvfs.data.total : '—'}</b></div>
+          <div className="hd-row"><span>DVFS table</span><b>{overview.data?.counts.dvfs ?? '—'}</b></div>
           {sampleDvfs > 0 && <p className="hd-em">SAMPLE/SYNTHETIC {sampleDvfs} — 사내 table 교체 필요</p>}
-          {dvfs.data && dvfs.data.total === 0 && <p className="hd-em">DVFS 미연결 — level·전압 산출 불가</p>}
-          <div className="hd-row"><span>IP catalog</span><b>{ips.data ? ips.data.total : '—'}</b></div>
+          {overview.data?.counts.dvfs === 0 && <p className="hd-em">DVFS 미연결 — level·전압 산출 불가</p>}
+          <div className="hd-row"><span>IP catalog</span><b>{overview.data?.counts.ip ?? '—'}</b></div>
         </a>
       </section>
     </div>

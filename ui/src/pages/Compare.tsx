@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
+import { CandidateReview } from '../components/CandidateReview'
 import { api, type Dict, type Evidence, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { MISSING, evidenceSource, valueText, varyingKeys } from '../lib/conditions'
@@ -402,6 +403,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         </div>
         <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 6 }}><input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} />다른 행만</label>
       </div>} main={<>
+      <CandidateReview scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} />
       {ids.length < 2 && <div className="empty panel fit">비교하려면 2개 이상 추가하세요. 과제 · scenario가 달라도 됩니다 — Ctrl K에서 과제/scenario를 바꾼 뒤 Shift+Enter, 또는 Scenario Matrix에서 여러 행 선택.</div>}
       {variantsQ.error && <div className="err">{variantsQ.error}</div>}
       {missing.length > 0 && <div className="err">DB에 없는 항목: {missing.join(', ')}</div>}

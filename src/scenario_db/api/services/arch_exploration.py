@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, literal, literal_column, text, tuple_
+from sqlalchemy import func, literal, literal_column, text, tuple_, or_, and_
 from sqlalchemy.orm import Session, defer, load_only
 
 from scenario_db.api.schemas.arch_exploration import (
@@ -350,7 +351,8 @@ def run_summary(db: Session, run_id: str) -> dict[str, Any]:
            .filter(R.id == run_id).one_or_none())
     if row is None:
         raise NotFoundError(f"exploration run not found: {run_id}")
-    spec, has_blobs = db.query(R.spec.op("-")("manifest"), R.spec["manifest"]["blobs"].isnot(None)).filter(R.id == run_id).one()
+    has_manifest = func.coalesce(R.spec["manifest"]["blobs"].astext.notin_(["{}", "[]", "false", "0", ""]), False)
+    spec, has_blobs = db.query(R.spec.op("-")("manifest"), has_manifest).filter(R.id == run_id).one()
     variants = db.execute(_SUMMARY_SQL, {"run_id": run_id}).scalar() or []
     meta = {"id": row.id, "title": row.title, "scenario_type": row.scenario_type, "project_ref": row.project_ref,
             "soc_ref": row.soc_ref, "dvfs_table_ref": row.dvfs_table_ref, "engine_rev": row.engine_rev,
@@ -655,10 +657,37 @@ def _condition(run, m: dict[str, Any]) -> dict[str, Any]:
 
 
 def history(db: Session, scenario_id: str, variant_id: str) -> list[dict[str, Any]]:
-    rows = (db.query(Prediction).filter_by(scenario_ref=scenario_id, variant_ref=variant_id)
-            .order_by(Prediction.created_at.desc()).all())
-    return [_pred_dict(p, metrics=False) | {"total_mw": p.metrics["power"]["total_mw"], "power": p.metrics["power"],
-                                            "bw_mbs": p.metrics.get("bw_mbs")} for p in rows]
+    return history_page(db, scenario_id, variant_id, limit=100)["items"]
+
+
+def history_page(db: Session, scenario_id: str, variant_id: str, *, limit=30, cursor=None) -> dict:
+    # Read only list fields plus two JSON paths, never the frozen timing payload.
+    columns = [c for c in Prediction.__table__.columns if c.name != "metrics"]
+    query = db.query(*columns, Prediction.metrics["power"].label("power"),
+                     Prediction.metrics["bw_mbs"].label("bw_mbs")).filter(
+        Prediction.scenario_ref == scenario_id, Prediction.variant_ref == variant_id)
+    if cursor:
+        try:
+            value = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+            if value["scope"] != [scenario_id, variant_id]:
+                raise ValueError("scope mismatch")
+            stamp, identity = datetime.fromisoformat(value["at"]), value["id"]
+            if not isinstance(identity, str) or stamp.tzinfo is None:
+                raise ValueError("invalid cursor")
+        except (ValueError, TypeError, KeyError, UnicodeError) as exc:
+            raise UnprocessableError("Invalid prediction history cursor") from exc
+        query = query.filter(or_(Prediction.created_at < stamp,
+            and_(Prediction.created_at == stamp, Prediction.id < identity)))
+    rows = query.order_by(Prediction.created_at.desc(), Prediction.id.desc()).limit(limit + 1).all()
+    selected = rows[:limit]
+    items = [_pred_dict(p, metrics=False) | {"total_mw": (p.power or {}).get("total_mw"),
+                "power": p.power or {}, "bw_mbs": p.bw_mbs} for p in selected]
+    next_cursor = None
+    if len(rows) > limit:
+        last = selected[-1]
+        next_cursor = base64.urlsafe_b64encode(json.dumps({"scope": [scenario_id, variant_id],
+            "at": last.created_at.isoformat(), "id": last.id}).encode()).decode()
+    return {"items": items, "next_cursor": next_cursor}
 
 
 def get_prediction(db: Session, prediction_id: str) -> dict[str, Any]:

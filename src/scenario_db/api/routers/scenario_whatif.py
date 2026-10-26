@@ -8,6 +8,9 @@ from scenario_db.api.resource_limits import admission_slot, enforce_request_size
 from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfExperimentRequest, WhatIfModelSettings, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
 from scenario_db.api.services import scenario_whatif as service
 from scenario_db.config import get_settings
+from scenario_db.api.schemas.scenario_whatif import WhatIfSweepRequest
+from scenario_db.api.services import whatif_jobs
+from scenario_db.api.services.whatif_sweep import run_sweep
 
 router = APIRouter(prefix="/scenario-whatif", tags=["scenario what-if"])
 read_access = require_roles("reader", "analyst", "writer", "admin")
@@ -94,3 +97,34 @@ def experiments(project_ref: str = Query(..., min_length=1, max_length=160),
 @router.get("/experiments/{experiment_id}")
 def experiment(experiment_id: str, db: Session = Depends(get_db), principal: ApiPrincipal = Depends(read_access)):
     return service.get_experiment(db, experiment_id, principal.subject)
+
+
+@router.post("/sweeps")
+def sweep(request: WhatIfSweepRequest, db: Session = Depends(get_db),
+          _principal: ApiPrincipal = Depends(calculate_access)):
+    settings = _limits(request)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return run_sweep(db, request)
+
+
+@router.post("/jobs", status_code=202)
+def submit_job(request: WhatIfSweepRequest, db: Session = Depends(get_db),
+               principal: ApiPrincipal = Depends(calculate_access)):
+    settings = _limits(request)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return whatif_jobs.submit(db, request, principal.subject)
+
+
+@router.get("/jobs/{job_id}")
+def get_job(job_id: str, db: Session = Depends(get_db), principal: ApiPrincipal = Depends(read_access)):
+    return whatif_jobs.get(db, job_id, principal.subject)
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str, db: Session = Depends(get_db), principal: ApiPrincipal = Depends(calculate_access)):
+    return whatif_jobs.cancel(db, job_id, principal.subject)
+
+
+@router.post("/jobs/{job_id}/resume", status_code=202)
+def resume_job(job_id: str, db: Session = Depends(get_db), principal: ApiPrincipal = Depends(calculate_access)):
+    return whatif_jobs.resume(db, job_id, principal.subject)

@@ -73,6 +73,7 @@ class _Apply:
     targets: dict
     seen: set = field(default_factory=set)
     notes: list = field(default_factory=list)
+    prepare_sensor: Callable | None = None
 
 
 def _buffers(graph):
@@ -472,7 +473,7 @@ register(ChangeKind("stream_size", "스트림 크기", "size", "stream_id", grou
                     description="size anchor가 없는 scenario: 같은 크기로 정의된 surface(decoder·layer 등)를 함께 변경",
                     discover=lambda t: [{"id": s["id"], "size": s["size"], "primary": s["primary"], "where": s["where"]} for s in t["streams"]],
                     apply=_apply_stream))
-register(ChangeKind("fps", "FPS", "value", None, unit="fps", max_value=240.0, group="clock",
+register(ChangeKind("fps", "FPS", "value", None, unit="fps", max_value=240.0, group="clock", order=5,
                     description="scenario 처리 주기 (센서 mode 지원은 검증하지 않음)",
                     discover=lambda t: [{"id": "fps", "value": t["fps"]}] if t.get("fps") else [],
                     apply=_apply_fps))
@@ -498,7 +499,8 @@ def param_max(param: str | None) -> float | None:
     return NODE_PARAMS.get(param or "", (None, None, None, None))[2]
 
 
-def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = None, notes: list | None = None):
+def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = None, notes: list | None = None,
+                         prepare_sensor: Callable | None = None):
     """Return a detached graph/config. The loaded graph and all ORM JSON remain untouched.
 
     Structural levers run first (sensor -> power option -> chain size), the rest in request order, so a later
@@ -510,6 +512,7 @@ def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = No
     variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
     variant.design_conditions = deepcopy(variant.design_conditions or {})
     ctx = _Apply(candidate, variant, config.model_copy(deep=True), whatif_targets(graph, config, domains))
+    ctx.prepare_sensor = prepare_sensor
     stream_changes = [c.model_dump(exclude_none=True) if hasattr(c, "model_dump") else dict(c)
                       for c in changes if (c.target if hasattr(c, "target") else c["target"]) == "stream_size"]
     stream_sizes = {r["id"]: tuple(r["size"]) for r in ctx.targets["streams"]}
@@ -532,10 +535,16 @@ def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = No
             raise ValueError("duplicate What-if change target")
         ctx.seen.add(key)
         normalized[index] = data
+    if ctx.config.sensor_modes:
+        if ctx.prepare_sensor is None:
+            raise ValueError("pinned sensor binding requires authoritative catalog preparation")
+        ctx.candidate = ctx.prepare_sensor(ctx.candidate, ctx.config)
+        ctx.variant = ctx.candidate.variant
     _levers.validate_sensor_fps(ctx)
+    _levers.validate_ip_modes(ctx)
     if notes is not None:
         notes.extend(ctx.notes)
-    return candidate, ctx.config, normalized
+    return ctx.candidate, ctx.config, normalized
 
 
 from scenario_db.api.services import whatif_levers as _levers  # noqa: E402,F401  (registers the lever kinds)

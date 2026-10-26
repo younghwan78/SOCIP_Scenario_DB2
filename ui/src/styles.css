@@ -988,3 +988,19 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 
 /* CPU-08 OPP gauge */
 .cpu-gauge td { vertical-align: middle; }
+
+/* Shared exploration workflow and keyboard-visible table controls. */
+.workflow-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface, #f7faf9); font-size: 12px; }
+.workflow-actions, .home-experiment-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.candidate-review { padding: 12px; flex: 0 0 auto; }
+.candidate-review p { font-size: 12px; margin: 8px 0; }
+.candidate-review td { vertical-align: top; }
+.candidate-review details { max-width: 440px; font-size: 11px; overflow-wrap: anywhere; }
+.candidate-review .badge { margin: 2px; }
+.experiment-entry { display: grid; gap: 4px; font-size: 12px; }
+.experiment-entry small { white-space: normal; color: var(--muted); font-size: 10px; }
+.home-recent { display: grid; gap: 7px; margin-top: 18px; font-size: 12px; }
+.dt-sort { border: 0; padding: 0; width: 100%; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: inherit; }
+.dt-pages { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px; position: sticky; left: 0; font-size: 12px; background: var(--surface, white); }
+.dt :focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.dt .col-resizer:focus-visible { background: var(--primary); }

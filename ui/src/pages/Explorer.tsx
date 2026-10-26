@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import type { Ctx } from '../App'
+import { ExperimentEntry } from '../components/CandidateReview'
 import { api } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { CAMERA_LABEL, MISSING, MODE_LABEL, cameraOf, changedKeys, medoidId, stabOf, valueText } from '../lib/conditions'
@@ -138,6 +139,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   ]
   const diffOf = (r: VariantRow) => new Set(changedKeys(r, refRow, byId))
   const columns: Column<VariantRow>[] = [
+    { key: 'experiment', label: '실험 · 저장 후보', width: 190, render: (r) => <ExperimentEntry scope={{ project_ref: ctx.project, scenario_id: r.scenario_id, variant_id: r.variant_id }} /> },
     { key: 'pick', label: '', width: 34, minWidth: 30, render: (r) => <input type="checkbox" aria-label={`${r.variant_id} 선택`} checked={picked.has(r.variant_id)} onChange={() => togglePick(r.variant_id)} onClick={(e) => e.stopPropagation()} /> },
     { key: 'variant', label: 'Variant', width: 290, sticky: true, sort: (r) => r.variant_id, title: (r) => r.variant_id, render: (r) => {
       const isRef = r.variant_id === reference

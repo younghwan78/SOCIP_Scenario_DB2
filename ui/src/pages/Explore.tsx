@@ -1,5 +1,7 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
+import { CandidateReview } from '../components/CandidateReview'
+import { experimentHref } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
 import { useRegistrationGuard } from '../lib/registration'
 import { RegistrationBasis } from '../components/RegistrationBasis'
@@ -39,6 +41,8 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
 
   return (
     <div className="page tb-page">
+      <div className="workflow-note"><b>탐색 범위 선택</b><span>이 화면은 scenario의 SW·DVFS 조합을 탐색합니다. IP mode·크기·센서의 범위와 제약은 조건 실험에서 설정하세요.</span><a className="btn" href={experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}>현재 기준 조건 실험 →</a></div>
+      <CandidateReview scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} />
       <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>탐색 run</span>
         <select className="input" value={runId ?? ''} onChange={(e) => pick(e.target.value || undefined)} aria-label="탐색 run" style={{ minWidth: 360 }}

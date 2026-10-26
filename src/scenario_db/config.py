@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # Opt in to releasing simulation admission during natural-language LLM I/O.
     # False preserves the original whole-request capacity/429 timing.
     whatif_release_compute_slot_during_llm: bool = False
+    # Optional exact-input pure-result reuse. Never caches DB scope/access checks.
+    whatif_case_cache_entries: int = Field(default=0, ge=0, le=256)
+    whatif_case_cache_ttl_seconds: float = Field(default=60, gt=0, le=600)
     # API authentication is deny-by-default. Prefer role-bearing principals:
     # {"architect@example.com":{"secret":"...","roles":["writer"]}}.
     api_principals: dict[str, ApiPrincipalSettings] = Field(default_factory=dict)

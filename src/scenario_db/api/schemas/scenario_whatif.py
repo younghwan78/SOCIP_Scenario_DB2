@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from scenario_db.sim.models import SimulationRunConfig
+from scenario_db.sim.models import SimulationRunConfig, SensorModeBinding
 from scenario_db.sim.timing_budget import TimingBudgetOptions
 
 
@@ -31,11 +31,22 @@ class WhatIfChange(BaseModel):
     width: int | None = Field(default=None, ge=16, le=16384)
     height: int | None = Field(default=None, ge=16, le=16384)
     value: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    operation: Literal["crop", "scale"] | None = None
+    port: str | None = Field(default=None, min_length=1, max_length=160)
+    x: int | None = Field(default=None, ge=0, le=16384, strict=True)
+    y: int | None = Field(default=None, ge=0, le=16384, strict=True)
+    sensor_binding: SensorModeBinding | None = None
 
     @model_validator(mode="after")
     def validate_target(self):
         from scenario_db.api.services.whatif_conditions import CHANGE_KINDS, param_max
         kind = CHANGE_KINDS.get(self.target)
+        if self.target != "chain_size" and any(v is not None for v in (self.operation, self.port, self.x, self.y)):
+            raise ValueError("operation/port/crop offsets require chain_size")
+        if (self.x is not None or self.y is not None) and self.operation != "crop":
+            raise ValueError("crop offsets require operation=crop")
+        if (self.target == "sensor_binding") != (self.sensor_binding is not None):
+            raise ValueError("sensor_binding is required only for the sensor_binding target")
         if kind is None:
             raise ValueError(f"unsupported What-if target: {self.target} (supported: {', '.join(CHANGE_KINDS)})")
         if kind.shape == "size" and (self.width is None or self.height is None or self.value is not None):
@@ -74,6 +85,8 @@ class WhatIfChange(BaseModel):
 
 
 class WhatIfModelSettings(WhatIfScope):
+    basis_ref: str | None = Field(default=None, min_length=1, max_length=160)
+    comparison: Literal["retune", "fixed_opp"] = "retune"
     config: SimulationRunConfig = Field(default_factory=SimulationRunConfig)
     options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
 
@@ -81,8 +94,8 @@ class WhatIfModelSettings(WhatIfScope):
     def bounded_model_settings(self):
         if self.config.timing_profile is not None or self.config.sw_timing_projection is not None:
             raise ValueError("measured replay/projection cannot be extrapolated by What-if")
-        if self.config.sensor_modes or self.config.sensor_readout:
-            raise ValueError("select catalog sensor modes in Sensor Explore before What-if")
+        if self.config.sensor_readout:
+            raise ValueError("manual sensor_readout cannot be extrapolated; use a pinned catalog binding")
         if (self.config.measured_clock_ref or self.config.measured_clocks or self.config.clock_basis == "measured"
                 or self.config.cpu_profile_ref or self.config.cpu_profile is not None):
             raise ValueError("measured clock/CPU replay cannot be extrapolated by What-if")
@@ -108,6 +121,8 @@ class WhatIfAskRequest(WhatIfModelSettings):
     search_domains: list[str] | None = Field(default=None, max_length=8)
     #: combine: "each" = baseline + every lever alone + all together; "factorial" = every subset (<= 5 levers)
     combine: Literal["each", "factorial"] = "each"
+    expected_baseline_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    expected_analysis_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def question_or_changes(self):
@@ -124,18 +139,70 @@ class WhatIfAskRequest(WhatIfModelSettings):
             raise ValueError("factorial combine supports at most 5 levers (32 cases)")
         if self.search_domains and self.ask != "search_limit":
             raise ValueError("search_domains require search_limit")
+        if self.comparison == "fixed_opp" and self.ask in ("combine", "search_limit", "diagnose"):
+            raise ValueError("fixed_opp supports a candidate comparison or a value sweep")
+        if self.comparison == "fixed_opp" and any(c.target == "dvfs_level" for c in self.changes or []):
+            raise ValueError("fixed_opp cannot override DVFS levels")
         return self
 
 
 class WhatIfPreviewRequest(WhatIfModelSettings):
     changes: list[WhatIfChange] = Field(min_length=1, max_length=8)
     expected_baseline_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_analysis_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def bounded_condition(self):
         keys = [c.key() for c in self.changes]
         if len(keys) != len(set(keys)):
             raise ValueError("each change target can appear only once")
+        if self.comparison == "fixed_opp" and any(c.target == "dvfs_level" for c in self.changes):
+            raise ValueError("fixed_opp cannot override DVFS levels")
+        return self
+
+
+class WhatIfConstraints(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    max_power_mw: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    max_bw_mbs: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    max_latency_ms: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    min_slack_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    allow_iq_required: bool = False
+
+
+class WhatIfSweepAxis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(min_length=1, max_length=120)
+    values: list[WhatIfChange] = Field(min_length=2, max_length=12)
+
+    @model_validator(mode="after")
+    def same_target(self):
+        if len({c.key() for c in self.values}) != 1:
+            raise ValueError("each sweep axis must vary one target")
+        import json
+        if len({json.dumps(c.model_dump(mode="json"), sort_keys=True) for c in self.values}) != len(self.values):
+            raise ValueError("sweep axis values must be distinct")
+        return self
+
+
+class WhatIfSweepRequest(WhatIfModelSettings):
+    expected_baseline_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_analysis_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    changes: list[WhatIfChange] = Field(default_factory=list, max_length=7)
+    axes: list[WhatIfSweepAxis] = Field(min_length=1, max_length=4)
+    constraints: WhatIfConstraints = Field(default_factory=WhatIfConstraints)
+    comparison: Literal["retune", "fixed_opp"] = "retune"
+
+    @model_validator(mode="after")
+    def bounded_product(self):
+        from math import prod
+        if prod(len(a.values) for a in self.axes) > 256:
+            raise ValueError("sweep supports at most 256 combinations")
+        keys = [c.key() for c in self.changes] + [a.values[0].key() for a in self.axes]
+        if len(keys) > 8 or len(keys) != len(set(keys)):
+            raise ValueError("fixed changes and sweep axes must name at most eight distinct targets")
+        if self.comparison == "fixed_opp" and any(k[0] == "dvfs_level" for k in keys):
+            raise ValueError("fixed_opp cannot sweep or override DVFS levels")
         return self
 
 

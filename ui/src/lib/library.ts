@@ -1,5 +1,6 @@
 // Library: reference inputs behind predictions (IP, DVFS, compression, sensor, SW timing)
 import { getJson, type Dict } from './api'
+import { currentReadSignal } from './readRequestScope'
 
 export interface Paged<T> { items: T[]; total: number }
 export interface IpRow { id: string; category: string; capabilities: Dict; hierarchy?: Dict }
@@ -19,9 +20,10 @@ export interface SwTimingSets { scenario_id: string; variant_id: string; sets: S
 export interface SwMeasured { evidence_id: string; scenario_id: string; variant_id: string; task: string; synthetic?: boolean; mean_ms?: number; p95_ms?: number; max_ms?: number; count?: number }
 
 async function catalogPages<T>(path: string): Promise<Paged<T>> {
+  const signal = currentReadSignal()
   const items: T[] = []
   for (;;) {
-    const page = await getJson<Paged<T>>(path, { limit: 500, offset: items.length })
+    const page = await getJson<Paged<T>>(path, { limit: 500, offset: items.length }, true, signal)
     items.push(...page.items)
     if (items.length >= page.total || !page.items.length) return { items, total: page.total }
   }

@@ -37,9 +37,9 @@ export interface CalSummary {
 }
 
 export const summaryApi = {
-  get: (p: { scenarioId?: string; projectRef?: string; includeSynthetic?: boolean }) =>
+  get: (p: { scenarioId?: string; projectRef?: string; includeSynthetic?: boolean; physicalOnly?: boolean }) =>
     getJson<CalSummary>('/calibration/summary', { scenario_id: p.scenarioId, project_ref: p.projectRef,
-      include_synthetic: p.includeSynthetic === false ? 'false' : undefined }, false),
+      include_synthetic: p.includeSynthetic === false ? 'false' : undefined, physical_only: p.physicalOnly ? 'true' : undefined }, false),
 }
 
 export const BIAS_CATS: { k: BiasCat; label: string; color: string }[] = [

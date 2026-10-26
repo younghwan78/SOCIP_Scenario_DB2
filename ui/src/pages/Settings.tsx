@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import type { Ctx } from '../App'
+import { listExperimentContexts } from '../lib/experimentContext'
 import { API_BASE, api } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { Card } from '../components/TimingCharts'
@@ -19,12 +21,18 @@ export const LEGACY_TOOLS: { page: string; label: string; react: string | null; 
   { page: 'Variant_Compare', label: 'Variant Compare', react: '#/compare', note: 'React로 대체 완료' },
 ]
 
-export function SettingsPage() {
+export function SettingsPage({ ctx }: { ctx?: Ctx }) {
   const activeKey = useCredentialKeyId()
   const [keyId, setKeyId] = useState(activeKey)
   const [secret, setSecret] = useState('')
   const health = useAsync(() => api.health().then(() => 'ok').catch((e: unknown) => (e instanceof Error ? e.message : String(e))), [])
   const [cleared, setCleared] = useState<number | null>(null)
+  const scopedLink = (href: string) => {
+    if (!ctx) return href
+    const [page, query] = href.split('?'), params = new URLSearchParams(query)
+    params.set('project', ctx.project); params.set('scenario', ctx.scenario); params.set('variant', ctx.variant)
+    return `${page}?${params}`
+  }
   const clearPrefs = () => {
     let n = 0
     try { Object.keys(localStorage).filter((k) => k.startsWith('sdb.')).forEach((k) => { localStorage.removeItem(k); n++ }) } catch { /* storage blocked */ }
@@ -33,12 +41,17 @@ export function SettingsPage() {
   return (
     <div className="page tb-page">
       <div className="tb-grid">
+        <Card id="set-scope" title="연결된 작업 범위" note="페이지 이동 시 유지되는 기준" defaultWide>
+          <div className="workflow-note"><b>{ctx?.project || '과제 미선택'}</b><span>{ctx?.scenario || 'Scenario 미선택'} / {ctx?.variant || 'Variant 미선택'}</span>
+            <span>브라우저 실험 초안 {listExperimentContexts().filter((item) => !ctx || item.scope.project_ref === ctx.project).length}개 범위 · API 키별로 분리 · 이 탭의 sessionStorage에만 보관</span></div>
+          <p className="faint">서버에 저장한 실험·검토 이력과 브라우저 초안은 별도입니다. API 연결 키를 변경하면 해당 키의 초안만 표시합니다.</p>
+        </Card>
         <Card id="set-legacy" title="기존 도구 (Streamlit)" note="React 대체 전까지 유지 · 대체되면 은퇴" defaultWide>
           <table className="tb-mini-table" style={{ width: '100%' }}>
             <thead><tr><th>Streamlit page</th><th>React</th><th>상태</th><th /></tr></thead>
             <tbody>{LEGACY_TOOLS.map((t) => (
               <tr key={t.page}><td>{t.label}</td>
-                <td>{t.react ? <a href={t.react}>{t.react}</a> : <span className="faint">—</span>}</td>
+                <td>{t.react ? <a href={scopedLink(t.react)}>{t.react}</a> : <span className="faint">—</span>}</td>
                 <td className="faint">{t.note}</td>
                 <td><a className="btn tb-mini" href={`${STREAMLIT}/${t.page}`} target="_blank" rel="noreferrer">Streamlit 열기</a></td></tr>))}</tbody>
           </table>

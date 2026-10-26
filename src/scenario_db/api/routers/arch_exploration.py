@@ -124,6 +124,12 @@ def history(scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
     return svc.history(db, scenario_id, variant_id)
 
 
+@router.get("/predictions/history-page")
+def history_page(scenario_id: str, variant_id: str, limit: int = Query(30, ge=1, le=100),
+                 cursor: str | None = Query(None, max_length=2048), db: Session = Depends(get_db)):
+    return svc.history_page(db, scenario_id, variant_id, limit=limit, cursor=cursor)
+
+
 @router.get("/predictions/compare")
 def compare(
     old_id: str | None = None, new_id: str | None = None,
