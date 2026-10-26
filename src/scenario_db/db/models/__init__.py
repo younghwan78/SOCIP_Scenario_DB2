@@ -46,4 +46,4 @@ from scenario_db.db.models.sensor import SensorCatalog, SensorTimingProfile, Sen
 from scenario_db.db.models.exploration import (
     ArchExplorationRun, ModelBasis, Prediction, ArchReport, PowerOptionReview, PredictionNote, PredictionComment,
 )
-from scenario_db.db.models.whatif import WhatIfExperiment
+from scenario_db.db.models.whatif import WhatIfExperiment, WhatIfJob

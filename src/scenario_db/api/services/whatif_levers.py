@@ -28,9 +28,11 @@ from scenario_db.sim.graph_edges import edge_source, edge_target, edge_type
 from scenario_db.sim.shape_propagation import _size_tuple
 
 from scenario_db.api.services.whatif_conditions import ChangeKind, _Apply, _buffers, register
+from scenario_db.api.services.whatif_geometry import (
+    evidence, geometry_for_node, geometry_path, ip_sim, mode_compatibility, validate_geometry,
+)
 
 OTHER_PLACES = ("front", "tele", "ultrawide", "uw", "wide2", "macro")
-MAX_SENSOR_CHOICES = 40
 _BAYER_TOKENS = ("BAYER", "RAW", "BGGR", "RGGB", "GRBG", "GBRG", "PDAF")
 DEFAULT_RATIO = {"LOSSY": 0.5}
 
@@ -115,15 +117,23 @@ def _anchors_on(graph, nodes: set[str]) -> set[str]:
     return out
 
 
-def _reshape(graph, nodes: list[str], anchors: set[str], old: tuple[int, int], new: tuple[int, int]) -> dict[str, Any]:
+def _reshape(graph, nodes: list[str], anchors: set[str], old: tuple[int, int], new: tuple[int, int],
+             *, preserve_outputs: bool = False, protected_anchors: set[str] | None = None) -> dict[str, Any]:
     """Rewrite ``old`` -> ``new`` (and its 2^-k pyramid levels) on the given nodes and anchors."""
     from scenario_db.api.services.whatif_conditions import _replace_sizes
     variant = graph.variant
     touched_nodes, touched_anchors = [], []
     for node_id in nodes:
         cfg = variant.node_configs.setdefault(node_id, {})
+        sim = cfg.get("sim") or {}
+        fixed = {k: sim[k] for k in ("output_width", "output_height", "width_out", "height_out", "output_size",
+                                     "scale_size", "target_size", "scale", "crop") if k in sim} if preserve_outputs else {}
+        from copy import deepcopy
+        fixed = deepcopy(fixed)
         if _replace_sizes(cfg, old, new):
             touched_nodes.append(node_id)
+        if fixed:
+            cfg["sim"].update(fixed)
     current = _all_anchors(graph)
     for key in sorted(anchors):
         size = current.get(key)
@@ -137,6 +147,8 @@ def _reshape(graph, nodes: list[str], anchors: set[str], old: tuple[int, int], n
     local_buffers = {e.get("buffer") for e in graph.pipeline_edges
                      if {str(edge_source(e)), str(edge_target(e))} & node_set}
     for buffer_id, b in _buffers(graph).items():
+        if b.get("size_ref") in (protected_anchors or set()):
+            continue
         explicit = _size_tuple(b.get("size"))
         owned = any(str((b.get(key) or {}).get("node_id") or "") in node_set for key in ("history", "dma"))
         if explicit == (0, 0) or not (buffer_id in local_buffers or owned or b.get("size_ref") in touched_anchors):
@@ -185,7 +197,6 @@ def sensor_targets(graph, fps: float | None) -> list[dict[str, Any]]:
         cur_ip, cur_mode = str(node.get("ip_ref") or ""), str(cur.get("mode_id") or "")
         place = str(cur.get("place") or _props(graph.ip_catalog.get(cur_ip)).get("place") or "") or None
         choices: list[dict[str, Any]] = []
-        seen: set[tuple] = set()
         for ip_id, row in sorted(sensors.items()):
             props = _props(row)
             raw_modes = props.get("modes")
@@ -194,21 +205,19 @@ def sensor_targets(graph, fps: float | None) -> list[dict[str, Any]]:
                 if not isinstance(mode, dict) or str(mode.get("sensor_format") or "BAYER").upper() != "BAYER":
                     continue
                 mfps = mode.get("sensor_fps")
-                if fps and isinstance(mfps, (int, float)) and mfps + 1e-6 < fps:
-                    continue
                 active, _src = _active_sensor_size(mode, graph)
                 if not active:
                     continue
                 is_cur = ip_id == cur_ip and str(mode_id) == cur_mode
-                key = (ip_id, tuple(active), mfps, mode.get("sensor_bitwidth"))
-                if key in seen and not is_cur:
-                    continue
-                seen.add(key)
                 name = str(mode.get("sensor_name") or props.get("sensor_name") or ip_id)
+                compatible = not (fps and isinstance(mfps, (int, float)) and mfps + 1e-6 < fps)
                 choices.append({"id": f"{ip_id}#{mode_id}", "ip_ref": ip_id, "mode": str(mode_id), "sensor": name,
                                 "place": props.get("place"), "size": list(active), "fps": mfps,
                                 "bitwidth": mode.get("sensor_bitwidth"), "readout_ms": _readout_ms(mode, active[1]),
-                                "current": is_cur,
+                                "current": is_cur, "fps_compatible": compatible,
+                                "reason": None if compatible else f"목표 FPS를 {mfps:g} 이하로 함께 변경해야 함",
+                                "evidence": {"status": "unverified", "source": "legacy_ip_catalog",
+                                             "note": "크기/FPS가 같은 모드도 서로 다른 readout/기능을 가질 수 있음"},
                                 "label": f"{name} · {active[0]}×{active[1]} · {mfps:g}fps · RAW{mode.get('sensor_bitwidth') or '?'}"
                                          if isinstance(mfps, (int, float)) else f"{name} · {active[0]}×{active[1]}"})
         area = cur_size[0] * cur_size[1]
@@ -217,7 +226,11 @@ def sensor_targets(graph, fps: float | None) -> list[dict[str, Any]]:
         rows.append({"id": node_id, "node_id": node_id, "ip_ref": cur_ip, "mode": cur_mode, "place": place,
                      "size": list(cur_size), "fps": cur.get("sensor_fps"), "bitwidth": cur.get("sensor_bitwidth"),
                      "readout_ms": _readout_ms(cur, cur_size[1]), "sensor": cur.get("sensor_name"),
-                     "options": choices[:MAX_SENSOR_CHOICES]})
+                     "option_count": len(choices), "truncated": False,
+                     "sensor_groups": [{"id": ip_id, "sensor": next(c["sensor"] for c in choices if c["ip_ref"] == ip_id),
+                                        "count": sum(c["ip_ref"] == ip_id for c in choices)}
+                                       for ip_id in dict.fromkeys(c["ip_ref"] for c in choices)],
+                     "options": choices})
     return rows
 
 
@@ -230,6 +243,8 @@ def _apply_sensor(ctx: _Apply, data: dict) -> tuple:
     if choice is None:
         raise ValueError(f"{node_id}: unknown sensor mode {option} (choose one listed for this variant)")
     graph = ctx.candidate
+    if node_id in ctx.config.sensor_modes:
+        raise ValueError(f"{node_id}: legacy sensor mode cannot override a pinned sensor binding")
     if choice["ip_ref"] != row["ip_ref"]:
         node = next((n for n in (graph.scenario.pipeline or {}).get("nodes") or [] if str(n.get("id")) == node_id), None)
         if node is None:
@@ -257,6 +272,25 @@ def _apply_sensor(ctx: _Apply, data: dict) -> tuple:
     return ("sensor_mode", node_id)
 
 
+def _apply_sensor_binding(ctx: _Apply, data: dict) -> tuple:
+    from scenario_db.models.sensor import SensorModeBinding
+    binding = SensorModeBinding.model_validate(data.get("sensor_binding"))
+    node_id = data["node_id"]
+    if data["option"] != f"{binding.catalog_ref}#{binding.mode_label}":
+        raise ValueError("sensor binding option does not match its pinned catalog/mode")
+    if ("sensor_mode", node_id) in ctx.seen:
+        raise ValueError("legacy and pinned sensor changes overlap")
+    if ctx.prepare_sensor is None:
+        raise ValueError("pinned sensor binding requires authoritative catalog preparation")
+    ctx.config.sensor_modes = {**ctx.config.sensor_modes, node_id: binding}
+    ctx.candidate = ctx.prepare_sensor(ctx.candidate, ctx.config)
+    ctx.variant = ctx.candidate.variant
+    resolved = ctx.variant.node_configs[node_id].get("resolved_sensor_mode") or {}
+    timing_note = "readout 근거 연결" if resolved.get("v_valid_ms") is not None else "readout timing 근거 없음"
+    ctx.notes.append(f"센서 DT binding {binding.catalog_ref} · {binding.mode_label}: source hash · 설치 · transport 검증 · {timing_note}")
+    return ("sensor_binding", node_id)
+
+
 def validate_sensor_fps(ctx: _Apply) -> None:
     """Validate explicitly selected modes against the final cadence after all conditions."""
     fps = ctx.config.fps or ctx.variant.design_conditions.get("fps")
@@ -279,18 +313,24 @@ CHAIN_HINT = (("byrp", "bayer crop"), ("yuvsc", "YUV downscale"), ("rgbp", "RGB 
 
 
 def chain_targets(graph) -> list[dict[str, Any]]:
-    """IPs whose processed size is shared by downstream IPs — a crop/scale here shrinks the whole chain."""
+    """Only IPs with an explicit geometry capability and a connected output are offered."""
     rows = []
     for node in graph.pipeline_nodes:
         node_id = str(node.get("id"))
         size = _sim_size(graph, node_id)
         if size is None:
             continue
-        down = _downstream(graph, node_id, size)
+        geometry = geometry_for_node(graph, node_id)
+        if geometry is None:
+            continue
+        ports = geometry["capabilities"][geometry["default_operation"]].get("ports") or []
+        port = ports[0] if len(ports) == 1 else None
+        down, affected_buffers = geometry_path(graph, node_id, size, port)
         if not down:
             continue
         hint = next((h for k, h in CHAIN_HINT if node_id.lower().startswith(k)), "crop / downscale")
         rows.append({"id": node_id, "size": list(size), "downstream": down, "hint": hint,
+                     "geometry": geometry, "evidence": geometry["evidence"], "affected_buffers": affected_buffers,
                      "label": f"{node_id} 이후 {len(down)}개 IP ({hint})"})
     # the usual crop / downscale points (bayer crop, YUV downscale) first, then the longest chains
     rank = {k: i for i, (k, _h) in enumerate(CHAIN_HINT)}
@@ -306,13 +346,26 @@ def _apply_chain(ctx: _Apply, data: dict) -> tuple:
     if old is None:
         raise ValueError(f"{node_id}: no processing size to crop/scale from")
     new = (data["width"], data["height"])
-    if new[0] > old[0] or new[1] > old[1]:
-        raise ValueError(f"{node_id}: crop/downscale must not exceed the current {old[0]}x{old[1]}")
-    down = _downstream(graph, node_id, old)
+    operation, port, geometry = validate_geometry(graph, node_id, data, old)
+    down, _ = geometry_path(graph, node_id, old, port)
     if not down:
         raise ValueError(f"{node_id}: no downstream IP processes {old[0]}x{old[1]}")
     anchors = _anchors_on(graph, set(down))
-    moved = _reshape(graph, down, anchors, old, new)
+    # A fixed record/preview output is an explicit product requirement, even
+    # when it happens to have the same numeric size as the original input.
+    from scenario_db.api.services.whatif_conditions import _anchor_role
+    nodes_by_id = {str(n.get("id")): n for n in graph.pipeline_nodes}
+    protected = {a for a in _all_anchors(graph) if _anchor_role(graph, a, _buffers(graph), nodes_by_id) is not None}
+    anchors -= protected
+    moved = _reshape(graph, down, anchors, old, new, preserve_outputs=True, protected_anchors=protected)
+    sim = ctx.variant.node_configs.setdefault(node_id, {}).setdefault("sim", {})
+    transform = {"width": new[0], "height": new[1]}
+    if operation == "crop":
+        transform.update(x=data.get("x") or 0, y=data.get("y") or 0)
+    sim[operation] = transform
+    sim["output_width"], sim["output_height"] = new
+    if not geometry["limits_complete"]:
+        ctx.notes.append(f"{node_id}: 선언된 모델 범위 검증 · 전체 하드웨어 크기/ratio 한계는 미검증")
     ctx.notes.append(f"{node_id} {old[0]}x{old[1]} → {new[0]}x{new[1]}: 이후 IP {', '.join(moved['nodes']) or '없음'}"
                      + (f" · anchor {', '.join(moved['anchors'])}" if moved["anchors"] else ""))
     return ("chain_size", node_id)
@@ -350,10 +403,17 @@ def mode_targets(graph) -> list[dict[str, Any]]:
     for r in po.ip_mode_table(graph):
         if not r["alternatives"]:
             continue
+        sim = ip_sim(graph, r["node"])
+        options = []
+        for a in r["alternatives"]:
+            params = (sim.get("modes") or {}).get(a["mode"]) or {}
+            supported, reason = mode_compatibility(graph, r["node"], params)
+            options.append({"id": a["mode"], "label": a.get("label") or a["mode"], "explorable": a["explorable"],
+                            "unit_power_mw_mp": a["unit_power_mw_mp"], "ppc": a["ppc"], "note": a.get("note"),
+                            "supported": supported, "reason": reason, "requires": params.get("requires"),
+                            "evidence": evidence(sim, params), "effects": ["IP unit power", "PPC / required clock"]})
         rows.append({"id": r["node"], "mode": r["mode"], "hw_name": r["hw_name"], "unit_power_mw_mp": r["unit_power_mw_mp"],
-                     "ppc": r["ppc"], "options": [{"id": a["mode"], "label": a.get("label") or a["mode"], "explorable": a["explorable"],
-                                                   "unit_power_mw_mp": a["unit_power_mw_mp"], "ppc": a["ppc"], "note": a.get("note")}
-                                                  for a in r["alternatives"]]})
+                     "ppc": r["ppc"], "options": options})
     return rows
 
 
@@ -366,6 +426,24 @@ def _apply_mode(ctx: _Apply, data: dict) -> tuple:
     cfg.setdefault("sim", {})["mode"] = mode
     cfg["selected_mode"] = mode
     return ("ip_mode", node_id)
+
+
+def validate_ip_modes(ctx: _Apply) -> None:
+    """Check final geometry and cadence, independent of condition input order."""
+    for key in ctx.seen:
+        if key[0] != "ip_mode":
+            continue
+        node_id = key[1]
+        mode = ctx.variant.node_configs[node_id]["selected_mode"]
+        sim = ip_sim(ctx.candidate, node_id)
+        params = (sim.get("modes") or {}).get(mode) or {}
+        supported, reason = mode_compatibility(ctx.candidate, node_id, params, ctx.config.fps)
+        if supported is False:
+            raise ValueError(f"{node_id}: {reason}")
+        if supported is None:
+            ctx.notes.append(f"{node_id} {mode}: {reason}")
+        basis = evidence(sim, params)
+        ctx.notes.append(f"{node_id} {mode} 모델 근거: {basis['status']} · {basis['source']}")
 
 
 # ---------------------------------------------------------------- history (previous-frame) DMA rate
@@ -498,6 +576,9 @@ def lever_targets(graph, fps: float | None) -> dict[str, Any]:
 register(ChangeKind("sensor_mode", "센서 변경", "choice", "node_id", group="sensor", order=10, iq="required",
                     description="다른 sensor / DT mode로 교체 — readout timing은 mode 값, 크기가 다르면 RT chain · pyramid가 함께 바뀜",
                     discover=lambda t: t.get("sensors") or [], apply=_apply_sensor))
+register(ChangeKind("sensor_binding", "검토된 센서 DT 모드", "choice", "node_id", group="sensor", order=10, iq="required",
+                    description="설치된 source board의 DT/CIS 모드와 입력 hash를 고정한 센서 실험 (target 배선 호환성은 별도 검증)",
+                    discover=lambda t: t.get("sensor_bindings") or [], apply=_apply_sensor_binding))
 register(ChangeKind("chain_size", "IP crop · downscale", "size", "node_id", group="size", order=30, iq="required",
                     description="선택 IP에서 crop/downscale — 이후 같은 크기를 처리하던 IP가 모두 새 크기로 동작 (bayer crop · YUV downscale)",
                     discover=lambda t: t.get("chains") or [], apply=_apply_chain))

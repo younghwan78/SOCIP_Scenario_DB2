@@ -1,5 +1,6 @@
 // Prediction ↔ measurement calibration (backend: /calibration/*, src/scenario_db/api/services/calibration.py)
 import { getJson, postJson } from './api'
+import { currentReadSignal } from './readRequestScope'
 import type { CategoryFit } from './provenance'
 import type { ClockView } from './clockResidency'
 
@@ -8,6 +9,7 @@ export interface Total { mean: number | null; std: number | null; p95: number | 
 export interface MeasRow {
   id: string; scenario_id: string; variant_id: string; project_ref: string | null; measured_at: string | null
   silicon_rev: string | null; sw_baseline_ref: string | null; thermal: string | null; total: Total; fps: number | null; rails: number; synthetic?: boolean
+  origin?: 'physical_capture' | 'synthetic' | 'unknown'
   /** category: worst CPU/IP/BW Δ and whether the total matches only by compensation (absent before the API update) */
   current_prediction: { id: string; total_mw: number; delta_pct: number | null; category?: CategoryFit | null } | null
   simulation: { id: string; total_mw: number | null; delta_pct: number | null; count: number; category?: CategoryFit | null } | null
@@ -161,6 +163,7 @@ type CoverageCount = Pick<Coverage, 'measurement'>
 /** Small batched projection; preserve per-scenario failure handling on older/erroring servers.
  * Matrix/Predictions call it without `projectRef`: per-scenario coverage was never project-scoped. */
 async function coverageBatch(scenarioIds: string[], projectRef?: string): Promise<(readonly [string, Record<string, CoverageCount>] | null)[]> {
+  const signal = currentReadSignal()
   const out: (readonly [string, Record<string, CoverageCount>] | null)[] = []
   const ids = [...new Set(scenarioIds)]
   for (let i = 0; i < ids.length; i += 25) {
@@ -168,10 +171,11 @@ async function coverageBatch(scenarioIds: string[], projectRef?: string): Promis
     const query = new URLSearchParams(chunk.map((id) => ['scenario_ids', id]))
     if (projectRef) query.set('project_ref', projectRef)
     try {
-      const batch = await getJson<Record<string, Record<string, CoverageCount>>>(`/calibration/coverage-counts?${query}`, {}, false)
+      const batch = await getJson<Record<string, Record<string, CoverageCount>>>(`/calibration/coverage-counts?${query}`, {}, false, signal)
       for (const id of chunk) out.push([id, batch[id] ?? {}])
-    } catch {
-      out.push(...await Promise.all(chunk.map((id) => calibrationApi.coverage(id).then((rows) => [id, rows] as const).catch(() => null))))
+    } catch (error) {
+      if (signal?.aborted) throw error
+      out.push(...await Promise.all(chunk.map((id) => getJson<Record<string, Coverage>>('/calibration/coverage', { scenario_id: id }, false, signal).then((rows) => [id, rows] as const).catch((cause) => { if (signal?.aborted) throw cause; return null }))))
     }
   }
   return out

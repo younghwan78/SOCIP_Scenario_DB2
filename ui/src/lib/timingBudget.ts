@@ -1,3 +1,4 @@
+import { currentReadSignal } from './readRequestScope'
 // Stage timing budget: API types + pure helpers used by the Timing Budget pages.
 // Backend: POST /timing-budget/variant, /timing-budget/fleet (src/scenario_db/sim/timing_budget.py).
 import { API_BASE, ApiError, getJson } from './api'
@@ -175,7 +176,7 @@ export const marginOpts = (m: number) => (Math.abs(m - DEFAULT_SW_MARGIN) < 1e-9
 
 export { fetchAdmitted } from './admission'
 
-async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+async function postJson<T>(path: string, body: unknown, signal = currentReadSignal()): Promise<T> {
   const res = await fetchAdmitted(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
   if (!res.ok) {
     let detail = ''

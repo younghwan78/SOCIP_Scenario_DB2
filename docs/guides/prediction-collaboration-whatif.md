@@ -1,6 +1,6 @@
 # 예측 설명·댓글과 자연어 What-if
 
-Status: Current. Last verified: 2026-10-16.
+Status: Current. Last verified: 2026-10-27.
 Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/MeasurePopover.tsx`, `ui/src/components/PredictionCollaboration.tsx`,
 `src/scenario_db/api/services/scenario_whatif.py`, `whatif_conditions.py`, `whatif_levers.py`,
 `whatif_query.py`, `prediction_discussion.py`.
@@ -51,6 +51,33 @@ CPU·IP·메모리 BW power와 timing 결과도 기준 대비 변화로 표시�
 
 실험 저장은 공식 예측을 대체하지 않습니다. **조건 불러오기 · 재실행**으로 조건과
 설명을 불러와 현재 입력으로 다시 비교할 수 있습니다.
+
+## IP mode, 크기, 센서의 여러 후보 비교
+
+1. 위쪽 기준 카드에서 과제·scenario·variant, FPS, 최종 출력, 센서 mode와 모델 범위를 확인합니다.
+2. IP mode는 해당 IP의 선언된 mode를 고릅니다. 크기는 crop과 scaling을 구분하고,
+   필요한 출력 port와 crop ROI를 지정합니다. 정렬·크기·ratio 한계가 없는 항목은
+   가정으로 표시되며 하드웨어 지원이 검증됐다는 의미가 아닙니다.
+3. 다른 센서를 비교하려면 **검토된 센서 DT 모드**에서 source board의 설치 정보와
+   전체 mode 이름을 선택합니다. source catalog 식별값을 고정하므로 동명 mode를 혼동하지
+   않습니다. 목표 FPS보다 느린 mode는 FPS 조건도 함께 낮춰야 합니다. target board의
+   실제 배선과 화질은 별도 검증 대상입니다.
+4. **변경 후 OPP 재선택**은 부하 변화에 따른 DVFS 효과를 포함합니다. **기준 OPP 고정**은
+   기준 domain level을 유지하여 조건 변경 자체의 효과를 비교합니다.
+5. **값 범위 탐색**에 비교할 값을 입력합니다. 최대 4개 축, 256개 조합이며 전력·BW·지연
+   상한과 최소 여유를 지정할 수 있습니다. IQ 미검증 후보는 기본적으로 추천에서 제외됩니다.
+6. 결과에서 제약 충족 여부와 전력·BW·지연 절충 후보를 확인합니다. **상세 조건 불러오기**는
+   계산 당시 기준 설정과 OPP 정책을 유지합니다. 필요하면 탐색을 중단한 뒤 남은 계산을 재개합니다.
+   모델이 변경된 경우 새 기준으로 다시 시작해야 합니다.
+7. 단일 계산 결과를 **후보로 담기**로 최대 5개 보관하고 Compare·검토 보고서 화면에서
+   같은 기준 대비 차이를 검토합니다. 이 임시 후보는 현재 브라우저 탭의 사용자·과제별로
+   구분됩니다. 장기 보관은 **실험 저장**을 사용합니다.
+
+조건을 수정하면 이전 결과임을 표시하며 재계산 전 저장을 막습니다. 전력 비교는
+CPU·IP·메모리 모델 소계입니다. 센서 전력은 출처와 FPS가 일치하는 측정 입력이 있을 때만
+별도로 표시하고, 없으면 미확정으로 남깁니다. 지연 값은 모델의 preview/video 경로 중
+최대 지연입니다. `예측 ↔ 실측`은 실제 측정을 기본으로 보여주며 합성·출처 미상 자료는
+별도로 선택합니다.
 
 ## 예측에 설명과 검토 의견 남기기
 

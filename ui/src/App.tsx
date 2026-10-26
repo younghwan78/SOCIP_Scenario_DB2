@@ -1,28 +1,30 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { api, type CatalogItem } from './lib/api'
 import { useAsync, useRoute, type Page } from './lib/route'
 import { Icon } from './components/Icons'
 import { Resizer, usePref, useResizable } from './components/Layout'
 import { Picker } from './components/Picker'
 import { ModelStatusBar } from './components/Provenance'
-import { ExplorerPage } from './pages/Explorer'
-import { MatrixPage } from './pages/Matrix'
-import { PipelinePage } from './pages/Pipeline'
-import { ComparePage } from './pages/Compare'
-import { TimingBudgetPage } from './pages/TimingBudget'
-import { TimingFleetPage } from './pages/TimingFleet'
-import { ExplorePage } from './pages/Explore'
-import { PredictionsPage } from './pages/Predictions'
-import { ReportsPage } from './pages/Reports'
-import { HomePage } from './pages/Home'
-import { CalibrationPage } from './pages/Calibration'
-import { CpuWhatIfPage } from './pages/CpuWhatIf'
-import { LibraryPage } from './pages/Library'
-import { SettingsPage } from './pages/Settings'
-import { ScenarioWhatIfPage } from './pages/ScenarioWhatIf'
+import { ExperimentContextBar } from './components/ExperimentContext'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, loadCompareSet, parseItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
 import { AdmissionWaitPill } from './components/AdmissionWait'
+
+const ExplorerPage = lazy(() => import('./pages/Explorer').then((m) => ({ default: m.ExplorerPage })))
+const MatrixPage = lazy(() => import('./pages/Matrix').then((m) => ({ default: m.MatrixPage })))
+const PipelinePage = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.PipelinePage })))
+const ComparePage = lazy(() => import('./pages/Compare').then((m) => ({ default: m.ComparePage })))
+const TimingBudgetPage = lazy(() => import('./pages/TimingBudget').then((m) => ({ default: m.TimingBudgetPage })))
+const TimingFleetPage = lazy(() => import('./pages/TimingFleet').then((m) => ({ default: m.TimingFleetPage })))
+const ExplorePage = lazy(() => import('./pages/Explore').then((m) => ({ default: m.ExplorePage })))
+const PredictionsPage = lazy(() => import('./pages/Predictions').then((m) => ({ default: m.PredictionsPage })))
+const ReportsPage = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsPage })))
+const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })))
+const CalibrationPage = lazy(() => import('./pages/Calibration').then((m) => ({ default: m.CalibrationPage })))
+const CpuWhatIfPage = lazy(() => import('./pages/CpuWhatIf').then((m) => ({ default: m.CpuWhatIfPage })))
+const LibraryPage = lazy(() => import('./pages/Library').then((m) => ({ default: m.LibraryPage })))
+const SettingsPage = lazy(() => import('./pages/Settings').then((m) => ({ default: m.SettingsPage })))
+const ScenarioWhatIfPage = lazy(() => import('./pages/ScenarioWhatIf').then((m) => ({ default: m.ScenarioWhatIfPage })))
 
 type NavItem = { page: Page; label: string; icon: string; also?: Page[] }
 // Review workflow (U9): 선택 → 예측 → 검증 → 최적화 → 결정·보고, then Library. Home = brand link; legacy Streamlit lives in 설정.
@@ -48,7 +50,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
 /** U9: the natural next page of the review workflow (shown as a button in the top bar). */
 const NEXT: Partial<Record<Page, { page: Page; label: string }>> = {
   explorer: { page: 'pipeline', label: 'Pipeline 보기' }, matrix: { page: 'pipeline', label: 'Pipeline 보기' },
-  pipeline: { page: 'timing', label: 'Timing Budget' }, compare: { page: 'timing', label: 'Timing Budget' },
+  pipeline: { page: 'whatif', label: '조건 변경 실험' }, whatif: { page: 'compare', label: '후보 비교' }, compare: { page: 'timing', label: 'Timing Budget' },
   timing: { page: 'predictions', label: '예측 현황' }, 'timing-fleet': { page: 'predictions', label: '예측 현황' },
   predictions: { page: 'calibration', label: '실측과 비교' }, calibration: { page: 'explore', label: '조합 탐색' },
   explore: { page: 'reports', label: '검토 보고서' }, cpu: { page: 'explore', label: '조합 탐색' },
@@ -108,6 +110,10 @@ export default function App() {
       next.project = catalog.find((c) => c.scenario_id === next.scenario)?.project_id
       if (!('variant' in next)) next.variant = undefined
       if (!('variants' in next)) next.variants = undefined
+      if (!('experiment' in next)) next.experiment = undefined
+    }
+    if ((next.variant && next.variant !== variant) || (next.scenario && next.scenario !== scenario) || (next.project && next.project !== project)) {
+      for (const key of ['experiment', 'whatif_target', 'whatif_node', 'whatif_ip', 'whatif_catalog']) if (!(key in next)) next[key] = undefined
     }
     nav({ page, params: next }, replace)
   }
@@ -121,7 +127,7 @@ export default function App() {
     // Use the target catalog's known default; a source-only variant would 404.
     nav({ page: route.page === 'home' ? 'explorer' : route.page, params: { project: pid, scenario: target?.scenario_id,
       variant: target?.default_variant_id ?? undefined, variants: undefined, type: undefined,
-      run: undefined, report: undefined, m: undefined, v: undefined } })
+      run: undefined, report: undefined, m: undefined, v: undefined, experiment: undefined } })
   }
   const ctx: Ctx = { catalog: scopedCatalog, allCatalog: catalog, projects, setProject, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
   const currentItems = route.page === 'compare' ? compareItems(route.params, scenario, variant) : variant ? [{ scenario, variant }] : []
@@ -133,7 +139,7 @@ export default function App() {
   }
   const toCompare = (s: string, v: string) => navigate('compare', { items: formatItems(addItem(compareBase(), { scenario: s, variant: v })), variants: undefined })
   const link = (page: Page) => {
-    const p = new URLSearchParams(Object.entries({ project, scenario, variant }).filter(([, v]) => v))
+    const p = new URLSearchParams(Object.entries({ project, scenario, variant, experiment: route.params.experiment ?? '' }).filter(([, v]) => v))
     return `#/${page}?${p.toString()}`
   }
 
@@ -211,7 +217,9 @@ export default function App() {
           </button>
         </header>}
         {!catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <ModelStatusBar ctx={ctx} />}
+        {!catalogQ.error && route.page !== 'home' && route.page !== 'settings' && route.page !== 'whatif' && <ExperimentContextBar scope={{ project_ref: project, scenario_id: scenario, variant_id: variant }} page={route.page} />}
         {catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
+        <Suspense fallback={<div className="page" role="status">화면을 불러오는 중…</div>}>
         {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage key={project} ctx={ctx} />}
         {!catalogQ.error && route.page === 'pipeline' && <PipelinePage key={`${scenario}:${variant}`} ctx={ctx} />}
@@ -223,10 +231,11 @@ export default function App() {
         {!catalogQ.error && route.page === 'reports' && <ReportsPage ctx={ctx} />}
         {route.page === 'home' && <HomePage key={scenario} ctx={ctx} />}
         {!catalogQ.error && route.page === 'calibration' && <CalibrationPage key={scenario} ctx={ctx} />}
-        {!catalogQ.error && route.page === 'cpu' && <CpuWhatIfPage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'cpu' && <CpuWhatIfPage key={`${project}:${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'whatif' && <ScenarioWhatIfPage ctx={ctx} />}
         {!catalogQ.error && route.page === 'library' && <LibraryPage ctx={ctx} />}
-        {route.page === 'settings' && <SettingsPage />}
+        {route.page === 'settings' && <SettingsPage ctx={ctx} />}
+        </Suspense>
       </div>
       <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} projects={projects} scenarioId={scenario}
         onPick={(s, v) => (picker === 'compare' || route.page === 'compare' ? toCompare(s, v)

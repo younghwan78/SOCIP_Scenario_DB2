@@ -1,7 +1,6 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
-import { API_BASE, ApiError } from './api'
-import { authVersion } from './auth'
+import { API_BASE, ApiError, getJson } from './api'
 import { fetchAdmitted, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
 
@@ -367,18 +366,8 @@ export function caseCount(o: RunOptions, domains = 3): number {
   return slices * comp * (o.dvfs_headroom_levels + 1) ** domains
 }
 
-const inflightGet = new Map<string, Promise<unknown>>()
 function send<T>(method: string, path: string, body?: unknown): Promise<T> {
-  // concurrent identical GETs (StrictMode double effects, two panels) share one request
-  if (method !== 'GET' || body) return sendNow<T>(method, path, body)
-  const key = `${path}|auth:${authVersion()}`
-  const hit = inflightGet.get(key)
-  if (hit) return hit as Promise<T>
-  const p = sendNow<T>(method, path)
-  inflightGet.set(key, p)
-  const done = () => { if (inflightGet.get(key) === p) inflightGet.delete(key) }
-  p.then(done, done)
-  return p
+  return method === 'GET' && !body ? getJson<T>(path, {}, false) : sendNow<T>(method, path, body)
 }
 async function sendNow<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetchAdmitted(`${API_BASE}${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
@@ -412,6 +401,7 @@ export const archApi = {
   recompute: (predictionId: string, powerParamsRef?: string | null, reason?: string) =>
     send<RecomputeResult>('POST', `/arch/predictions/${encodeURIComponent(predictionId)}/recompute${q({ power_params_ref: powerParamsRef || undefined, reason: reason || undefined })}`),
   freshness: (scenarioId?: string, projectRef?: string) => send<Freshness>('GET', `/arch/predictions/freshness${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
+  historyPage: (scenarioId: string, variantId: string, cursor?: string) => send<{ items: HistoryRow[]; next_cursor: string | null }>('GET', `/arch/predictions/history-page${q({ scenario_id: scenarioId, variant_id: variantId, limit: '30', cursor })}`),
   history: (scenarioId: string, variantId: string) => send<HistoryRow[]>('GET', `/arch/predictions/history${q({ scenario_id: scenarioId, variant_id: variantId })}`),
   compare: (p: { old_id?: string; new_id?: string; scenario_id?: string; variant_id?: string }) =>
     send<{ old: HistoryRow; new: HistoryRow; attribution: Attribution }>('GET', `/arch/predictions/compare${q(p)}`),

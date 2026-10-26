@@ -39,6 +39,12 @@ from scenario_db.view.memory_levers import memory_levers
 router = APIRouter(prefix="/explorer", tags=["explorer"])
 
 
+@router.get("/overview")
+def home_overview(project_ref: str | None = Query(None), db: Session = Depends(get_db)):
+    from scenario_db.api.services.overview import overview
+    return overview(db, project_ref)
+
+
 def _variant_memory_levers(pipeline, variant):
     nodes, edges = _effective_pipeline(pipeline or {}, variant)
     return memory_levers({**(pipeline or {}), "nodes": nodes, "edges": edges}, variant.buffer_overrides,

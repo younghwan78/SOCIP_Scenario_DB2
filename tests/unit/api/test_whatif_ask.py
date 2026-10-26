@@ -33,6 +33,8 @@ def scope(monkeypatch, tables):
     monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load", lambda *a: analysis_inputs.AnalysisInputs(graph, tables, "dvfs-sample"))
     monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
     monkeypatch.setattr(service, "scenario_policy", lambda *a: None)
+    from scenario_db.api.services import whatif_sensors
+    monkeypatch.setattr(whatif_sensors, "catalog_binding_targets", lambda *a: [])
     return dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
 
 
@@ -86,6 +88,14 @@ def test_configured_targets_follow_reopened_model_settings(scope):
     settings = service.WhatIfModelSettings(**scope, config=FASTER)
     t = service.targets(None, service.WhatIfScope(**scope), settings)
     assert next(d for d in t["domains"] if d["id"] == "INTCAM")["level"] == 2
+
+
+def test_fixed_opp_rejects_conflicting_builder_and_llm_plans(scope, monkeypatch):
+    with pytest.raises(ValidationError, match="cannot override"):
+        WhatIfAskRequest(**scope, comparison="fixed_opp", changes=[{"target": "dvfs_level", "domain": "CAM", "level": 3}])
+    _llm(monkeypatch, {"ask": "search_limit", "search_domains": ["CAM"]})
+    with pytest.raises(UnprocessableError, match="fixed_opp requires"):
+        service.ask(None, WhatIfAskRequest(**scope, comparison="fixed_opp", query="lower CAM"))
 
 
 @pytest.mark.parametrize("reply", [

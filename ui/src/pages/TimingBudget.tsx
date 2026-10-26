@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
+import { updateExperimentContext } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
 import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
@@ -60,12 +61,13 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
   useEffect(() => { if (q.data && sp.ready) setMainReadyKey(mainKey) }, [q.data, sp.ready, mainKey])
   const mainReady = mainReadyKey === mainKey && sp.ready
-  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, config) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tpParam, warmup, condKey])
+  const [extrasOn, setExtrasOn] = useState(false)
+  const wq = useAsync(() => (variant && extrasOn && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, config) : Promise.resolve(null)), [scenario, variant, extrasOn, mainReady, cfg, margin, cpuModel, tpParam, warmup, condKey])
   // ⑦ DVFS level ±1/±2 per domain — runs after ④ so at most one simulation slot is held
-  const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, baseOpts, cfg, undefined, DEFAULT_COMBOS, config) : Promise.resolve(null)),
-    [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
+  const dq = useAsync(() => (variant && extrasOn && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, baseOpts, cfg, undefined, DEFAULT_COMBOS, config) : Promise.resolve(null)),
+    [scenario, variant, extrasOn, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   // ③ SW-variance box plot: last, after ⑦ (one simulation slot at a time)
-  const [distOn, setDistOn] = usePref<boolean>('tb.dist', true)
+  const [distOn, setDistOn] = usePref<boolean>('tb.dist', false)
   const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
     [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   const r = q.data?.report
@@ -76,10 +78,22 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
     basis: q.data?.basis_code ? { code: q.data.basis_code, overrides: q.data.basis_overrides ?? [] } : null }
   // B2 vs B2*: the server's resolution once calculated; before that, what the URL already says
   const basisOv = q.data ? (q.data.basis_overrides ?? []) : sp.basis ? [...(sp.followsBasis ? [] : ['config_profile']), ...(pp && pp !== sp.basis.power_params_ref ? ['power_params'] : [])] : undefined
+  const experimentBlocked = cpuModel === 'profile' || !!measured ? '측정 replay는 변경 조건으로 외삽할 수 없습니다. 가정 CPU·정의 SW 조건을 선택하세요.'
+    : !sp.followsBasis ? '기준 외 profile은 What-if의 모델 설정에서 명시적으로 지정하세요.' : null
+  const startExperiment = () => {
+    updateExperimentContext({ project_ref: ctx.project, scenario_id: scenario, variant_id: variant }, {
+      changes: [], baseline_hash: undefined, analysis_hash: undefined, active_candidate_id: undefined,
+      basis_ref: q.data?.basis_ref ?? sp.basis?.id, basis_label: q.data?.basis_code ?? sp.basis?.code,
+      config: { ...(Object.keys(overrides).length ? { dvfs_overrides: overrides } : {}), ...(pp ? { power_params_ref: pp } : {}) },
+      options: { ...baseOpts, throughput_model: effTp, timeline_frames: frames }, comparison: 'retune',
+    })
+    ctx.navigate('whatif', { experiment: undefined })
+  }
 
   return (
     <div className="page tb-page">
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: 14 }}>
+        <button className="btn" disabled={!r || !!experimentBlocked} title={experimentBlocked ?? '현재 SW·DVFS·power 설정을 조건 실험의 기준으로 전달'} onClick={startExperiment}>이 계산 조건으로 실험 →</button>
         <Seg label="SW 통계" value={statistic} options={[['max', 'max'], ['mean', 'mean']]} onPick={(v) => set('stat', v === 'max' ? undefined : v)} />
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
@@ -127,7 +141,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         onOpenPredictions={() => ctx.navigate('predictions', { sf: scenario })} />}
       {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}
       {q.loading && !r && !sp.error && <div className="empty">계산 중…</div>}
-      {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} whatif={whatif} battery={battery} dvfs={dq.data ?? null} dvfsLoading={dq.loading || wq.loading} dvfsError={dq.error ?? null} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} margin={r.sw_margin?.rt ?? margin}
+      <div className="workflow-note"><label><input type="checkbox" checked={extrasOn} onChange={(e) => setExtrasOn(e.target.checked)} /> 보조 탐색 계산 (SW 증가 · DVFS 조합)</label><span>기준 결과를 먼저 표시합니다. 보조 탐색을 켜면 조건 변경 시 순서대로 다시 계산합니다.</span></div>
+      {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} extrasOn={extrasOn} whatif={whatif} battery={battery} dvfs={dq.data ?? null} dvfsLoading={dq.loading || wq.loading} dvfsError={dq.error ?? null} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} margin={r.sw_margin?.rt ?? margin}
         frames={frames} setFrames={(n) => set('frames', n === 20 ? undefined : String(n))} warmup={warmup} setWarmup={(n) => set('warmup', n ? String(n) : undefined)}
         overrides={overrides} setOverrides={(o) => set('dvo', formatOverrides(o))}
         dist={distQ.data ?? null} distLoading={distQ.loading} distError={distQ.error ?? null} distOn={distOn} setDistOn={setDistOn} />}
@@ -135,7 +150,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   )
 }
 
-function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames, warmup, setWarmup, battery, dvfs, dvfsLoading, dvfsError, overrides, setOverrides, dist, distLoading, distError, distOn, setDistOn }: { r: TimingReport; cfg: string | null; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
+function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, setFrames, warmup, setWarmup, battery, dvfs, dvfsLoading, dvfsError, overrides, setOverrides, dist, distLoading, distError, distOn, setDistOn }: { r: TimingReport; cfg: string | null; ctx: Ctx; extrasOn: boolean; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
   margin: number; frames: number; setFrames: (n: number) => void; warmup: number; setWarmup: (n: number) => void; battery: Battery; dvfs: DvfsWhatIf | null; dvfsLoading: boolean; dvfsError: string | null
   overrides: Record<string, number>; setOverrides: (o: Record<string, number>) => void
   dist: IntervalDistribution | null; distLoading: boolean; distError: string | null; distOn: boolean; setDistOn: (v: boolean) => void }) {
@@ -201,10 +216,10 @@ function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames,
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
         {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>
       <Card id="whatif" title="④ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
-        {whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
+        {!extrasOn ? <div className="empty">위의 보조 탐색 계산을 켜면 SW 증가 조건을 비교합니다.</div> : whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
       </Card>
       <Card id="dvfs" title="⑦ IP clock level ±1 / ±2 → SW 여유 · Power · BW" note={`DVFS domain (RT / NRT / M2M) 하나를 L±1·L±2로 고정, 나머지는 현재 그대로 · ${batteryNote(battery)}`} defaultWide>
-        {dvfsError ? <div className="err">{dvfsError}</div> : !dvfs ? <div className="empty">{dvfsLoading ? 'level what-if 계산 중…' : '—'}</div> : <DvfsWhatIfTable data={dvfs} battery={battery} />}
+        {!extrasOn ? <div className="empty">위의 보조 탐색 계산을 켜면 DVFS 조합을 비교합니다.</div> : dvfsError ? <div className="err">{dvfsError}</div> : !dvfs ? <div className="empty">{dvfsLoading ? 'level what-if 계산 중…' : '—'}</div> : <DvfsWhatIfTable data={dvfs} battery={battery} />}
       </Card>
     </div>
     {r.warnings.length > 0 && <details id="tb-warnings" className="panel" style={{ padding: '8px 12px', fontSize: 12 }}><summary>경고 {r.warnings.length}</summary>{r.warnings.map((w) => <div key={w} className="faint">{w}</div>)}</details>}

@@ -25,6 +25,20 @@ capabilities:
         ppc: 8.0
         vdd: VDD_CAM
         dvfs_group: CAM
+    geometry:
+      default_operation: crop
+      limits_complete: false
+      status: assumed
+      source: existing_camera_pipeline_geometry
+      note: 'Explicit crop point used by the authored pipeline. Bounds below are model safety bounds; silicon limits and IQ require in-house verification.'
+      operations:
+        crop:
+          supported: true
+          ports: [COUTFIFO]
+          min_size: [16, 16]
+          max_size: [16384, 16384]
+          alignment: [2, 2]
+          offset_alignment: [2, 2]
     source: borrowed_legacy_model
     source_note: 'Topology/DMA: kernel IS v15. PPC 8: RT path runs at 8 pixels/clock (Joo,
       2026-10-04). Power: legacy estimate; not calibrated to IS v15.'

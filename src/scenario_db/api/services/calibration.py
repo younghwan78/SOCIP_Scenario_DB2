@@ -699,7 +699,7 @@ def _bw_comparability(sim: Evidence | None, meas: Evidence | None) -> dict[str, 
 
 # ------------------------------------------------------------------- summary (CAL-01..06)
 def calibration_summary(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None,
-                        include_synthetic: bool = True) -> dict[str, Any]:
+                        include_synthetic: bool = True, physical_only: bool = False) -> dict[str, Any]:
     """Model-level view of prediction ↔ measurement: one representative capture per variant,
     category bias over all compared variants, offsetting count and the shared confidence grade."""
     from scenario_db.comparison.calibration import BIAS_VERDICT_LABEL, bias_stats, correction_preview, flat_term
@@ -724,6 +724,8 @@ def calibration_summary(db: Session, *, scenario_id: str | None = None, project_
           .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all()) if ids else []
     groups: dict[tuple[str, str], list[Evidence]] = {}
     for m in ms:
+        if physical_only and not is_physical(m.provenance):
+            continue
         if not include_synthetic and is_synthetic(m.provenance):
             continue
         groups.setdefault((m.scenario_ref, m.variant_ref), []).append(m)
@@ -803,7 +805,8 @@ def calibration_summary(db: Session, *, scenario_id: str | None = None, project_
     cal_rows = [{"origin": r["origin"], "synthetic": r["synthetic"], "fit": r["fit"]} for r in compared]
     origin_counts = {o: sum(1 for r in compared if r["origin"] == o) for o in DATA_ORIGINS}
     return {
-        "scope": {"scenario_id": scenario_id, "project_ref": project_ref, "include_synthetic": include_synthetic},
+        "scope": {"scenario_id": scenario_id, "project_ref": project_ref, "include_synthetic": include_synthetic,
+                  "physical_only": physical_only},
         "coverage": {"variants": int(variants or 0), "with_prediction": int(with_pred or 0),
                      "with_measurement": len(rows), "compared": len(compared), "origin": origin_counts,
                      "captures": sum(len(v) for v in groups.values())},

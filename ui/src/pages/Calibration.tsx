@@ -38,28 +38,30 @@ const pctText = (v: number | null | undefined) => (v === null || v === undefined
 
 export function CalibrationPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
-  const realOnly = ctx.params.real === '1'
+  const realOnly = ctx.params.real !== '0'
   const allCaptures = ctx.params.caps === '1'
   const list = useAsync(() => calibrationApi.measurements(all ? undefined : ctx.scenario, ctx.project || undefined), [ctx.scenario, ctx.project, all])
   // CAL-01..06: model-level summary over one representative capture per variant
   const summary = useAsync(() => summaryApi.get({ ...(all ? { projectRef: ctx.project || undefined } : { scenarioId: ctx.scenario }),
-    includeSynthetic: !realOnly }), [ctx.scenario, ctx.project, all, realOnly])
+    includeSynthetic: !realOnly, physicalOnly: realOnly }), [ctx.scenario, ctx.project, all, realOnly])
   const [mxSort, setMxSort] = usePref<MatrixSort>('cal.mx.sort', 'group')
-  const sumRows = (summary.data?.rows ?? []).filter((r) => !realOnly || !r.synthetic)
+  const sumRows = (summary.data?.rows ?? []).filter((r) => !realOnly || r.origin === 'physical_capture')
   const repIds = new Set((summary.data?.rows ?? []).map((r) => r.measurement_id))
   const synthCount = (list.data ?? []).filter((r) => r.synthetic).length
-  const rows = (list.data ?? []).filter((r) => !realOnly || !r.synthetic).filter((r) => allCaptures || !summary.data || repIds.has(r.id))
-  const hiddenCaptures = (list.data ?? []).filter((r) => !realOnly || !r.synthetic).length - rows.length
+  const physicalCount = (list.data ?? []).filter((r) => r.origin === 'physical_capture').length
+  const unknownCount = (list.data?.length ?? 0) - synthCount - physicalCount
+  const rows = (list.data ?? []).filter((r) => !realOnly || r.origin === 'physical_capture').filter((r) => allCaptures || !summary.data || repIds.has(r.id))
+  const hiddenCaptures = (list.data ?? []).filter((r) => !realOnly || r.origin === 'physical_capture').length - rows.length
   // default: the current variant's representative capture (key scenario), then the first compared variant
   const selId = rows.find((r) => r.id === ctx.params.m)?.id
     ?? sumRows.find((r) => r.variant_id === ctx.variant)?.measurement_id ?? sumRows.find((r) => r.pred)?.measurement_id ?? rows[0]?.id
   const pick = (id: string) => ctx.navigate(undefined, { m: id }, true)
   const detail = useAsync(() => (selId ? calibrationApi.detail(selId) : Promise.resolve(null)), [selId])
   const cols: Column<MeasRow>[] = [
-    { key: 'v', label: 'Variant', width: 280, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}{r.synthetic && <span className="badge v-warn" style={{ marginLeft: 6 }} title="생성된 fixture — silicon 측정 아님">합성</span>}</span> },
+    { key: 'v', label: 'Variant', width: 280, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}{r.synthetic ? <span className="badge v-warn" style={{ marginLeft: 6 }} title="생성된 fixture — silicon 측정 아님">합성</span> : r.origin !== 'physical_capture' && <span className="badge v-warn" style={{ marginLeft: 6 }}>출처 미상</span>}</span> },
     { key: 'at', label: '측정', width: 130, firstDir: -1, sort: (r) => r.measured_at ?? '', render: (r) => <span className="mono faint">{r.measured_at?.slice(0, 10) ?? '—'}</span> },
     { key: 'ctx', label: 'Silicon · SW', width: 190, sort: (r) => `${r.silicon_rev}${r.sw_baseline_ref}`, render: (r) => <span className="faint">{r.silicon_rev ?? '—'} · {r.sw_baseline_ref ?? '—'}</span> },
-    { key: 'meas', label: '실측 mW', width: 110, align: 'right', firstDir: -1, sort: (r) => r.total.mean ?? -1, render: (r) => <span className="mono">{fmt(r.total.mean, 1)}{r.total.std ? <span className="faint"> ±{fmt(r.total.std, 1)}</span> : null}</span> },
+    { key: 'meas', label: realOnly ? '실측 mW' : '측정/fixture mW', width: 110, align: 'right', firstDir: -1, sort: (r) => r.total.mean ?? -1, render: (r) => <span className="mono">{fmt(r.total.mean, 1)}{r.total.std ? <span className="faint"> ±{fmt(r.total.std, 1)}</span> : null}</span> },
     { key: 'cur', label: '등록 예측 Δ (total · 구성 최대)', width: 230, align: 'right', firstDir: -1, sort: (r) => fitSort(r.current_prediction), title: (r) => fitTitle(r.current_prediction?.category), render: (r) => r.current_prediction ? <FitCell total={r.current_prediction.total_mw} delta={r.current_prediction.delta_pct} fit={r.current_prediction.category} /> : <span className="faint">등록 없음</span> },
     { key: 'sim', label: 'Simulation Δ (total · 구성 최대)', width: 230, align: 'right', firstDir: -1, sort: (r) => fitSort(r.simulation), title: (r) => fitTitle(r.simulation?.category), render: (r) => r.simulation ? <FitCell total={r.simulation.total_mw} delta={r.simulation.delta_pct} fit={r.simulation.category} /> : <span className="faint">—</span> },
     { key: 'rails', label: 'rail', width: 60, align: 'right', sort: (r) => r.rails, render: (r) => r.rails },
@@ -71,14 +73,16 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
           <button className={!all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: undefined, m: undefined }, true)}>현재 scenario</button>
           <button className={all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: '1', m: undefined }, true)}>전체</button>
         </div>
-        {synthCount > 0 && <div className="seg sm" role="group" aria-label="합성 fixture">
-          <button className={!realOnly ? 'on' : ''} onClick={() => ctx.navigate(undefined, { real: undefined, m: undefined }, true)}>합성 포함 ({synthCount})</button>
+        {(synthCount > 0 || unknownCount > 0) && <div className="seg sm" role="group" aria-label="합성 fixture">
+          <button className={!realOnly ? 'on' : ''} onClick={() => ctx.navigate(undefined, { real: '0', m: undefined }, true)}>전체 근거 (합성 {synthCount} · 출처 미상 {unknownCount})</button>
           <button className={realOnly ? 'on' : ''} onClick={() => ctx.navigate(undefined, { real: '1', m: undefined }, true)}>실제 측정만</button>
         </div>}
         <span className="faint" style={{ fontSize: 12 }}>실측 rail을 CPU · IP · BW(MIF·DRAM) · 기타로 묶어 예측과 비교합니다. 색 = total이 아닌 <b>구성(CPU·IP·BW) 최대 |Δ|</b> 기준 · ≤10% 녹색 · ≤25% 주황 · 그 이상 빨강 · “상쇄” = total은 맞지만 구성 오차가 서로 상쇄</span>
       </div>
       {list.error && <div className="err">{list.error}</div>}
-      {list.data && !rows.length && <div className="empty">{realOnly && synthCount ? '실제 측정 evidence가 없습니다 (합성 fixture만 있음).' : '실측 evidence가 없습니다. 측정 결과를 import하면 여기에 나타납니다.'}</div>}
+      {list.data && <div className="workflow-note" role="status"><b>실제 측정 {physicalCount}건 · 합성 fixture {synthCount}건 · 출처 미상 {unknownCount}건</b>
+        <span>{realOnly ? '아래 오차·신뢰도는 실제 측정만 사용합니다.' : '전체 근거 보기: 아래 오차·신뢰도에는 합성 또는 출처 미상 근거가 포함될 수 있습니다. Silicon 검증 결과로 사용할 수 없습니다.'}</span></div>}
+      {list.data && !rows.length && <div className="empty">{realOnly && (synthCount || unknownCount) ? '실제 측정 evidence가 없습니다 (합성·출처 미상 근거는 전체 보기에서 확인).' : '실측 evidence가 없습니다. 측정 결과를 import하면 여기에 나타납니다.'}</div>}
       {summary.error && <div className="err">{summary.error}</div>}
       {summary.data && summary.data.coverage.compared > 0 && <SummaryTiles s={summary.data} />}
       {rows.length > 0 && <div className="tb-grid">

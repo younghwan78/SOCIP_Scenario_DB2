@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { usePref } from '../components/Layout'
 import type { Ctx } from '../App'
+import { ExperimentEntry } from '../components/CandidateReview'
 import { api, type VariantRow } from '../lib/api'
 import { leverColumn } from '../components/LeverTag'
 import { useAsync } from '../lib/route'
@@ -80,6 +81,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       return <input type="checkbox" aria-label={`${r.variant_id} 선택`} checked={picked.has(key)} onChange={() => setPicked((p) => { const s = new Set(p); if (s.has(key)) s.delete(key); else s.add(key); return s })} /> } },
     { key: 'variant', label: 'Variant', width: 280, sticky: true, sort: (r) => r.variant_id, title: (r) => r.variant_id,
       render: (r) => <span className="mono">{r.variant_id}{r.derived_from_variant && <span className="faint" style={{ fontSize: 11, marginLeft: 6 }}>← {r.derived_from_variant}</span>}</span> },
+    { key: 'experiment', label: '실험 · 저장 후보 Δ', width: 190, headTitle: '각 variant의 마지막 저장 후보와 당시 고정 기준의 차이. 현재 표의 등록 예측과 별도입니다.', render: (r) => <ExperimentEntry scope={{ project_ref: ctx.project, scenario_id: r.scenario_id, variant_id: r.variant_id }} /> },
     ...COLS.map((c): Column<VariantRow> => ({ key: c, label: c, width: c === 'Mode · Format' || c === 'Codec · Rate' ? 170 : 130,
       sort: c === 'Res · fps' ? (r) => resFpsKey(r.design_conditions) : (r) => { const v = matrixColumns(r.design_conditions)[c]; return v === MISSING ? null : v },
       title: (r) => matrixColumns(r.design_conditions)[c],

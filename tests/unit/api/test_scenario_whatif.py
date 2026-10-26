@@ -46,8 +46,19 @@ def test_preview_uses_timing_budget_and_explains_model_subtotal(monkeypatch):
     assert out["candidate"]["metrics"]["total_power_mw"] is None
     assert not out["candidate"]["coverage"]["complete"]
     assert out["model_lineage"]["engine"] == "timing-budget"
+    assert out["candidate"]["metrics"]["latency_ms"] == max(v for k, v in out["candidate"]["report"]["latency"].items() if k.endswith("_ms"))
     db.add.assert_not_called()
     db.commit.assert_not_called()
+
+
+def test_analysis_identity_tracks_power_option_definitions(monkeypatch):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    req = _request(graph)
+    baseline = service._baseline(MagicMock(), req, req)
+    graph.scenario.power_options = {"knobs": [{"id": "changed"}]}
+    with pytest.raises(ConflictError, match="model settings changed"):
+        service._baseline(MagicMock(), req, req.model_copy(update={"expected_analysis_hash": baseline["analysis_hash"]}))
 
 
 def test_project_ownership_and_coefficient_drift_rejected(monkeypatch):
@@ -204,7 +215,7 @@ def test_relative_clock_uses_requested_model_options_and_checks_profile_frames(m
     _service(monkeypatch, graph)
     scope = service.WhatIfScope(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
     settings = service.WhatIfPlanRequest(**scope.model_dump(), query="clock 절반", config={"fps": 60}, options={"statistic": "mean"})
-    fake = MagicMock(return_value={"report": {"ips": [{"node": "mfc_enc", "set_clock_mhz": 600}]}})
+    fake = MagicMock(return_value={"metrics": {}, "coverage": {}, "report": {"ips": [{"node": "mfc_enc", "set_clock_mhz": 600}]}})
     monkeypatch.setattr(service, "_case", fake)
     assert next(n["clock_mhz"] for n in service.targets(MagicMock(), scope, settings)["nodes"] if n["id"] == "mfc_enc") == 600
     assert fake.call_args.args[1].fps == 60

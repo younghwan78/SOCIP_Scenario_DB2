@@ -60,7 +60,8 @@ def test_lever_targets_are_discovered_from_variant_data(env):
     assert kinds["sensor_mode"]["group"] == "sensor" and kinds["sensor_mode"]["iq"] == "required"
     sensor = t["sensors"][0]
     assert sensor["node_id"] == "sensor_rear" and sensor["options"][0]["current"]
-    assert all(o["fps"] is None or o["fps"] >= 30 for o in sensor["options"])
+    assert all(o["fps_compatible"] == (o["fps"] is None or o["fps"] >= 30) for o in sensor["options"])
+    assert sensor["truncated"] is False
     assert t["chains"][0]["id"] == "byrp" and "mtnr" in t["chains"][0]["downstream"]
     assert {k["param"] for k in t["knobs"]} == {"crop_strategy", "pyramid_l0"}
     assert {h["id"] for h in t["history"]} >= {"TNR_PREV_L0", "TNR_PREV_L1"}

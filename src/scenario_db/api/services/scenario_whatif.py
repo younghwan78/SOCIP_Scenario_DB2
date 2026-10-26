@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+from time import perf_counter
 from contextlib import nullcontext
 from typing import Any
 from uuid import uuid4
@@ -28,7 +30,19 @@ from scenario_db.sim.measured_timing import baseline_fingerprint
 from scenario_db.sim.service import _enforce_input_limits
 from scenario_db.sim.timing_budget import _stage_slack, analyze_timing_budget
 
-ENGINE_REV = "scenario-whatif/1"
+ENGINE_REV = "scenario-whatif/2"
+_log = logging.getLogger("scenario_db.api.analysis")
+
+
+def _digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def _analysis_identity(graph, config, options, tables, ref):
+    return _digest({"graph": baseline_fingerprint(graph), "power_options": graph.scenario.power_options,
+                    "config": config.model_dump(mode="json"),
+                    "options": options.model_dump(mode="json"), "engine": ENGINE_REV, "ref": ref,
+                    "tables": {k: t.model_dump(mode="json") for k, t in tables.items()}})
 
 
 def _guard(graph, scope: WhatIfScope) -> None:
@@ -52,7 +66,8 @@ def _baseline(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | N
     targets are discovered), and the expected baseline hash must still match.
     """
     settings = preview or settings or WhatIfModelSettings(**scope.model_dump())
-    req = TimingBudgetRequest(scenario_id=scope.scenario_id, variant_id=scope.variant_id,
+    started = perf_counter()
+    req = TimingBudgetRequest(scenario_id=scope.scenario_id, variant_id=scope.variant_id, basis_ref=settings.basis_ref,
                               config=settings.config.model_copy(deep=True), options=settings.options.model_copy(deep=True))
     selection = resolve_analysis_selection(db, req)
     config = selection.request.config
@@ -67,12 +82,29 @@ def _baseline(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | N
     inputs = selection.load(db)
     graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
     _guard(graph, scope)
-    if preview is not None and baseline_fingerprint(graph) != preview.expected_baseline_hash:
+    expected = getattr(settings, "expected_baseline_hash", None)
+    if expected is not None and baseline_fingerprint(graph) != expected:
         raise ConflictError("What-if baseline changed; interpret and preview the condition again")
     options = apply_throughput(req.options, scenario_policy(db, scope.scenario_id))
+    from scenario_db.api.services.timing_budget import _basis_fields
+    # Keep basis identity visible; the calculation already follows this selection.
+    basis = _basis_fields(db, selection.request)
+    identity = _analysis_identity(graph, config, options, tables, ref)
+    expected_analysis = getattr(settings, "expected_analysis_hash", None)
+    if expected_analysis is not None and identity != expected_analysis:
+        raise ConflictError("What-if model settings changed; refresh the baseline before calculating")
     release_read_connection(db)
+    def prepare_candidate(candidate, candidate_config):
+        from scenario_db.api.services.whatif_sensors import prepare_sensor_graph
+        try:
+            return prepare_sensor_graph(db, candidate, candidate_config)
+        finally:
+            release_read_connection(db)
+    if get_settings().performance_log_enabled:
+        _log.info("analysis phase=prepare wall_ms=%.3f", (perf_counter() - started) * 1000)
     return {"graph": graph, "config": config, "tables": tables, "ref": ref, "options": options,
-            "case": _case(graph, config, options, tables, ref)}
+            "analysis_hash": identity, "lineage": {**basis, "config_profile_ref": selection.config_profile_ref},
+            "prepare_candidate": prepare_candidate, "case": _case(graph, config, options, tables, ref)}
 
 
 def _domains(report: dict, tables: dict) -> list[dict[str, Any]]:
@@ -112,11 +144,22 @@ def targets(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | Non
     try:
         base = _baseline(db, scope, settings)
         graph, out = base["graph"], _targets_from(base)
+        from scenario_db.api.services.whatif_sensors import catalog_binding_targets
+        out["sensor_bindings"] = catalog_binding_targets(db, graph, out.get("fps"))
+        kinds = [kind.meta(out) for kind in CHANGE_KINDS.values()]
+        out["change_kinds"] = [kind for kind in kinds if kind["choices"] or kind["target"] == "fps" and out.get("fps")]
+        out["supported_changes"] = [kind["target"] for kind in out["change_kinds"]]
+        release_read_connection(db)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
     return {**scope.model_dump(), "baseline_hash": baseline_fingerprint(graph), **out,
+            "analysis_hash": base.get("analysis_hash"),
+            "baseline": {k: base["case"][k] for k in ("metrics", "coverage")},
+            "model_lineage": {**base.get("lineage", {}), "engine_rev": ENGINE_REV,
+                              "power_params_ref": base["config"].power_params_ref, "dvfs_table_ref": base["ref"]},
+            "jobs": {"supported": True, "max_cases": 256},
             "soc_ref": out["capability"]["soc_ref"], "asks": ASK_KINDS, "llm": llm_status()}
 
 
@@ -182,6 +225,19 @@ def plan(db: Session, request: WhatIfPlanRequest) -> dict:
 
 
 def _case(graph, config, options, tables, ref):
+    from scenario_db.api.services.analysis_cache import whatif_cases
+    settings = get_settings()
+    started = perf_counter()
+    key = _analysis_identity(graph, config, options, tables, ref)
+    result, cache = whatif_cases.get_or_compute(key, lambda: _calculate_case(graph, config, options, tables, ref),
+        capacity=settings.whatif_case_cache_entries, ttl=settings.whatif_case_cache_ttl_seconds)
+    if settings.performance_log_enabled:
+        _log.info("analysis phase=case cache=%s wall_ms=%.3f", cache, (perf_counter() - started) * 1000)
+    return result
+
+
+def _calculate_case(graph, config, options, tables, ref):
+    from scenario_db.api.services.whatif_sensors import sensor_power_coverage
     inputs = build_simulation_inputs(graph, config)
     _enforce_input_limits(inputs)
     report = analyze_timing_budget(graph, options, config=config, dvfs_tables=tables)
@@ -193,17 +249,23 @@ def _case(graph, config, options, tables, ref):
     excluded = sorted({str(d.get("device_type") or "external_device") for d in inputs.external_devices})
     excluded.append("unmodeled SoC/display/device baseline and MIF DVFS")
     p = report["power"]
+    sensor = sensor_power_coverage(graph, config.fps)
     coverage = {"complete": not missing and not excluded, "scope": "modeled CPU + IP + memory",
-                "missing_components": missing, "excluded_components": excluded, "cpu_model": "flat",
+                "missing_components": missing, "excluded_components": excluded, "cpu_model": "flat", "sensor": sensor,
                 "assumptions": ["Per-frame SW runtime remains the baseline assumption; no measured extrapolation",
                                 "Existing stream bitrate stays fixed", "Sensor mode and input dimensions change only through explicit conditions",
                                 "FPS-only changes are hypothetical cadence; explicit sensor selections must support the final FPS",
                                 "Model calculation does not validate IQ or wiring compatibility"]}
     metrics = {"modeled_power_mw": p["total_mw"], "total_power_mw": p["total_mw"] if coverage["complete"] else None,
+               "sensor_power_mw": sensor["power_mw"],
+               "modeled_plus_sensor_mw": p["total_mw"] + sensor["power_mw"] if sensor["power_mw"] is not None else None,
                "cpu_power_mw": p["cpu_mw"], "ip_power_mw": p["hw_mw"], "memory_power_mw": p["bw_mw"],
                "bw_mbs": report["bw"]["total_mbs"], "fps": report["fps"], "period_ms": report["period_ms"],
+               "latency_ms": max((v for k, v in (report.get("latency") or {}).items()
+                   if k.endswith("_ms") and isinstance(v, (int, float))), default=None),
                "feasible": report["verdict"]["status"] != "fail"}
-    return {"report": report, "metrics": metrics, "coverage": coverage}
+    return {"report": report, "metrics": metrics, "coverage": coverage,
+            "input_fingerprint": _digest(inputs.model_dump(mode="json"))}
 
 
 def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
@@ -224,22 +286,27 @@ def _preview_from(base: dict, request: WhatIfPreviewRequest) -> dict:
     tables, ref, options, before = base["tables"], base["ref"], base["options"], base["case"]
     baseline_hash = baseline_fingerprint(graph)
     lever_notes: list[str] = []
+    candidate_config = baseline_config.model_copy(deep=True)
+    if request.comparison == "fixed_opp":
+        candidate_config.dvfs_overrides.update({d["id"]: d["level"] for d in _domains(before["report"], tables)})
+        lever_notes.append("기준 OPP 고정: 후보의 부하 변화에 따른 DVFS 재선택을 제외합니다.")
     try:
-        candidate, config, changes = apply_whatif_changes(graph, request.changes, baseline_config,
-                                                          _domains(before["report"], tables), lever_notes)
+        candidate, config, changes = apply_whatif_changes(graph, request.changes, candidate_config,
+                                                          _domains(before["report"], tables), lever_notes,
+                                                          prepare_sensor=base.get("prepare_candidate"))
         after = _case(candidate, config, options, tables, ref)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
     scope = request.model_dump(include={"project_ref", "scenario_id", "variant_id"})
-    normalized = {"scope": scope, "changes": changes, "config": config.model_dump(mode="json"),
+    normalized = {"scope": scope, "changes": changes, "comparison": request.comparison, "config": config.model_dump(mode="json"),
                   "options": options.model_dump(mode="json")}
     hash_payload = {"baseline": baseline_hash, "condition": normalized, "engine": ENGINE_REV,
                     "tables": {k: t.model_dump(mode="json") for k, t in tables.items()},
                     "baseline_config": baseline_config.model_dump(mode="json"),
-                    "baseline_inputs": build_simulation_inputs(graph, baseline_config).model_dump(mode="json"),
-                    "candidate_inputs": build_simulation_inputs(candidate, config).model_dump(mode="json"),
+                    "baseline_inputs": before.get("input_fingerprint"),
+                    "candidate_inputs": after.get("input_fingerprint"),
                     "resolved_candidate": baseline_fingerprint(candidate)}
     condition_hash = hashlib.sha256(json.dumps(hash_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     metrics_delta = {key: round(value - before["metrics"][key], 4)
@@ -265,9 +332,10 @@ def _preview_from(base: dict, request: WhatIfPreviewRequest) -> dict:
     if iq:
         warnings.append(f"IQ evaluation required before adoption: {', '.join(iq)}")
     return {"persisted": False, "baseline_hash": baseline_hash, "condition_hash": condition_hash,
+            "analysis_hash": base.get("analysis_hash"),
             "normalized_condition": normalized, "baseline": before, "candidate": after,
             "delta": {"metrics": metrics_delta, "ips": ips}, "warnings": warnings, "lever_notes": lever_notes, "iq_required": iq,
-            "model_lineage": {"engine": "timing-budget", "engine_rev": ENGINE_REV,
+            "model_lineage": {**base.get("lineage", {}), "engine": "timing-budget", "engine_rev": ENGINE_REV,
                 "power_model": config.power_model, "power_params_ref": config.power_params_ref,
                 "dvfs_table_ref": ref, "cpu_model": "flat", "baseline_fingerprint": baseline_hash}}
 
@@ -370,7 +438,8 @@ def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[
     for sub in subsets:
         notes: list[str] = []
         try:
-            cand, cfg, _ = apply_whatif_changes(graph, [changes[i] for i in sub], config, targets.get("domains"), notes)
+            cand, cfg, _ = apply_whatif_changes(graph, [changes[i] for i in sub], config, targets.get("domains"), notes,
+                                               prepare_sensor=base.get("prepare_candidate"))
             case = _case(cand, cfg, options, tables, ref)
         except ValueError as exc:
             rows.append({"key": "+".join(map(str, sub)), "levers": list(sub), "metrics": None, "delta": None,
@@ -580,6 +649,9 @@ def ask(db: Session, request: WhatIfAskRequest, *, compute_slot=nullcontext, llm
                     "result": None, "search": None, "diagnose": None, "combine": None}
     with compute_slot():
         result = search = diag = combo = None
+        if request.comparison == "fixed_opp" and (plan_["ask"] != "what_if" or any(
+                c.get("target") == "dvfs_level" for c in plan_["changes"])):
+            raise UnprocessableError("fixed_opp requires a candidate comparison without DVFS-level changes")
         if plan_["ask"] == "combine" and len(plan_["changes"]) < 2:
             plan_["ask"] = "what_if"   # a single lever (e.g. an LLM reading) is just a what-if
         if plan_["ask"] == "combine":
@@ -594,7 +666,7 @@ def ask(db: Session, request: WhatIfAskRequest, *, compute_slot=nullcontext, llm
                 raise UnprocessableError("바꿀 조건을 하나 이상 지정하세요")
             diag = _diagnose(base, targets_["domains"])
         else:
-            result = _preview_from(base, WhatIfPreviewRequest(**scope.model_dump(), config=request.config, options=request.options,
+            result = _preview_from(base, WhatIfPreviewRequest(**scope.model_dump(), basis_ref=request.basis_ref, comparison=request.comparison, config=request.config, options=request.options,
                                                       changes=plan_["changes"], expected_baseline_hash=baseline_hash))
         return {**common, "interpretation": interpretation, "plan": plan_,
                 "answer": _answer(plan_, targets_, result, search, diag, boundaries, combo),
@@ -610,7 +682,7 @@ def _record(row, *, detail=False):
     if detail:
         out.update(preview_request=row.preview_request, normalized_condition=row.normalized_condition, result=row.result)
     else:
-        out["metrics"] = (row.result or {}).get("candidate", {}).get("metrics", {})
+        out["metrics"] = row.metrics if hasattr(row, "metrics") else (row.result or {}).get("candidate", {}).get("metrics", {})
     return out
 
 
@@ -625,7 +697,7 @@ def save_experiment(db: Session, request: WhatIfExperimentRequest, subject: str)
                           assumptions=request.assumptions, conclusion=request.conclusion, query=request.query,
                           visibility=request.visibility, created_by=subject,
                           baseline_hash=result["baseline_hash"], condition_hash=result["condition_hash"],
-                          preview_request=scope.model_dump(mode="json"),
+                          preview_request=scope.model_dump(mode="json", exclude_unset=True),
                           normalized_condition=result["normalized_condition"], result=result)
     if not row.title:
         raise UnprocessableError("experiment title cannot be blank")
@@ -655,7 +727,10 @@ def list_experiments(db: Session, subject: str, project_ref: str, *, scenario_id
     if variant_id:
         query = query.filter(WhatIfExperiment.variant_ref == variant_id)
     total = query.count()
-    rows = query.order_by(WhatIfExperiment.created_at.desc(), WhatIfExperiment.id).offset(offset).limit(limit).all()
+    columns = [c for c in WhatIfExperiment.__table__.columns
+               if c.name not in {"preview_request", "normalized_condition", "result"}]
+    rows = query.with_entities(*columns, WhatIfExperiment.result["candidate"]["metrics"].label("metrics")).order_by(
+        WhatIfExperiment.created_at.desc(), WhatIfExperiment.id).offset(offset).limit(limit).all()
     return {"items": [_record(row) for row in rows], "total": total, "limit": limit,
             "offset": offset, "has_next": offset + limit < total}
 

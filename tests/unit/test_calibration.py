@@ -92,6 +92,7 @@ def test_routes(monkeypatch):
                    "cal.measurement_detail_view": lambda db, mid: {"id": mid},
                    "cal.coverage": lambda db, scenario_id, freshness=False: {"v1": {"simulation": 1, "s": scenario_id, "f": freshness}},
                    "cal.coverage_summary": lambda db: {"sc": {"simulation": 3}},
+                   "cal.calibration_summary": lambda db, **kwargs: kwargs,
                    "lib.sw_timing": lambda db, scenario_id=None: {"tasks": [], "measured": [], "s": scenario_id}})
     assert c.get("/api/v1/calibration/coverage", params={"scenario_id": "sc"}).json()["v1"]["s"] == "sc"
     # freshness is opt-in (slow); the Scenario table loads it from /arch/predictions/freshness
@@ -104,6 +105,10 @@ def test_routes(monkeypatch):
     assert scoped.status_code == 200
     assert scoped.json() == [{"id": "m", "scenario_id": "s", "project_ref": "p"}]
     assert c.get("/api/v1/calibration/measurements/abc").json() == {"id": "abc"}
+    assert c.get("/api/v1/calibration/summary").json()["physical_only"] is False
+    filtered = c.get("/api/v1/calibration/summary", params={"project_ref": "p", "physical_only": "true", "include_synthetic": "false"})
+    assert filtered.status_code == 200 and filtered.json() == {
+        "project_ref": "p", "scenario_id": None, "physical_only": True, "include_synthetic": False}
     assert c.get("/api/v1/library/sw-timing", params={"scenario_id": "x"}).json()["s"] == "x"
 
 

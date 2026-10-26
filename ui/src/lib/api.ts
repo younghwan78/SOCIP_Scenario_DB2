@@ -1,6 +1,7 @@
 // Thin client for the ScenarioDB FastAPI read endpoints (served under /api/v1).
 import { fetchAdmitted } from './admission'
 import { authVersion } from './auth'
+import { currentReadSignal } from './readRequestScope'
 export const API_BASE: string = (import.meta.env.VITE_SCENARIODB_API_BASE as string | undefined) ?? '/api/v1'
 
 export type Dict = Record<string, unknown>
@@ -181,38 +182,67 @@ function qs(params: Record<string, string | number | undefined | null>): string 
 }
 
 
-const cache = new Map<string, { promise: Promise<unknown>; expires: number }>()
+interface ReadRequest {
+  promise: Promise<unknown>; expires: number; controller: AbortController; subscribers: number; pending: boolean
+}
+const cache = new Map<string, ReadRequest>()
+const inflight = new Map<string, ReadRequest>()
 
-/** Drop cached GET responses whose path starts with ``prefix`` (after a write, e.g. a saved simulation). */
+/** New readers must start after the write; existing subscribers may finish their original read. */
 export function invalidateCache(prefix: string): void {
   for (const k of [...cache.keys()]) if (k.startsWith(`${API_BASE}${prefix}`)) cache.delete(k)
+  for (const k of [...inflight.keys()]) if (k.startsWith(`${API_BASE}${prefix}`)) inflight.delete(k)
 }
 
-const inflight = new Map<string, Promise<unknown>>()
+function subscribeRead<T>(entry: ReadRequest, key: string, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+  entry.subscribers++
+  return new Promise<T>((resolve, reject) => {
+    let done = false
+    const release = () => {
+      if (done) return false
+      done = true; signal?.removeEventListener('abort', abort); entry.subscribers--
+      if (entry.pending && entry.subscribers === 0) {
+        if (cache.get(key) === entry) cache.delete(key)
+        if (inflight.get(key) === entry) inflight.delete(key)
+        entry.controller.abort()
+      }
+      return true
+    }
+    const abort = () => { if (release()) reject(signal?.reason ?? new DOMException('Aborted', 'AbortError')) }
+    signal?.addEventListener('abort', abort, { once: true })
+    entry.promise.then((value) => { if (release()) resolve(value as T) }, (error: unknown) => { if (release()) reject(error) })
+  })
+}
 
-export async function getJson<T>(path: string, params: Record<string, string | number | undefined | null> = {}, useCache = true): Promise<T> {
+export async function getJson<T>(path: string, params: Record<string, string | number | undefined | null> = {}, useCache = true, signal = currentReadSignal()): Promise<T> {
+  if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
   const url = `${API_BASE}${path}${qs(params)}`
   const cacheKey = `${url}|auth:${authVersion()}`
   const cached = cache.get(cacheKey)
-  if (useCache && cached && cached.expires > Date.now()) return cached.promise as Promise<T>
+  if (useCache && cached && cached.expires > Date.now()) return subscribeRead<T>(cached, cacheKey, signal)
   // uncached reads still share one request while it is in flight (StrictMode double effects, two panels at once)
   const flying = inflight.get(cacheKey)
-  if (!useCache && flying) return flying as Promise<T>
-  const promise = fetchAdmitted(url, {}).then(async (res) => {
-    if (!res.ok) throw new ApiError(`${res.status} ${res.statusText} — ${path}`, res.status)
+  if (flying) return subscribeRead<T>(flying, cacheKey, signal)
+  const controller = new AbortController()
+  const promise = fetchAdmitted(url, { signal: controller.signal }).then(async (res) => {
+    if (!res.ok) {
+      let detail = ''
+      try { const body = await res.json() as Dict; detail = (typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail ?? body)).slice(0, 300) } catch { /* non-JSON response */ }
+      throw new ApiError(`${res.status} ${res.statusText} — ${path}${detail ? ` · ${detail}` : ''}`, res.status)
+    }
     return res.json() as Promise<T>
   })
-  if (!useCache) {
-    inflight.set(cacheKey, promise)
-    const done = () => { if (inflight.get(cacheKey) === promise) inflight.delete(cacheKey) }
-    promise.then(done, done)
-  }
+  const entry: ReadRequest = { promise, expires: Date.now() + 60000, controller, subscribers: 0, pending: true }
+  inflight.set(cacheKey, entry)
+  const done = () => { entry.pending = false; if (inflight.get(cacheKey) === entry) inflight.delete(cacheKey) }
+  promise.then(done, done)
   if (useCache) {
     if (cache.size >= 100) cache.delete(cache.keys().next().value!)
-    cache.set(cacheKey, { promise, expires: Date.now() + 60000 })
-    promise.catch(() => { if (cache.get(cacheKey)?.promise === promise) cache.delete(cacheKey) })
+    cache.set(cacheKey, entry)
+    promise.catch(() => { if (cache.get(cacheKey) === entry) cache.delete(cacheKey) })
   }
-  return promise
+  return subscribeRead<T>(entry, cacheKey, signal)
 }
 
 export async function requestJson<T>(method: 'POST' | 'PUT' | 'PATCH', path: string, body: unknown): Promise<T> {
@@ -238,11 +268,11 @@ export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: str
 
 const enc = encodeURIComponent
 
-async function allPages<T, P extends Paged<T> = Paged<T>>(path: string, params: Record<string, string | number | undefined> = {}, limit = 500): Promise<P> {
-  const first = await getJson<P>(path, { ...params, limit, offset: 0 })
+async function allPages<T, P extends Paged<T> = Paged<T>>(path: string, params: Record<string, string | number | undefined> = {}, limit = 500, signal = currentReadSignal()): Promise<P> {
+  const first = await getJson<P>(path, { ...params, limit, offset: 0 }, true, signal)
   const items = [...first.items]
   while (items.length < first.total) {
-    const page = await getJson<P>(path, { ...params, limit, offset: items.length })
+    const page = await getJson<P>(path, { ...params, limit, offset: items.length }, true, signal)
     if (!page.items.length) throw new ApiError(`목록이 변경되었습니다. 새로고침하세요 — ${path}`)
     items.push(...page.items)
   }

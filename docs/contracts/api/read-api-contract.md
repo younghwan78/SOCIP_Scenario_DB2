@@ -19,6 +19,15 @@ variant, running resolver/review gate, or building viewer projections.
 
 Write/admin endpoints remain out of scope for the current phase.
 
+## Home overview
+
+`GET /api/v1/explorer/overview?project_ref=...` returns project-scoped counts for IP,
+DVFS, current predictions, exploration runs, reports and physical/synthetic/unknown
+measurements; distinct scenario/variant evidence coverage; and latest run/report
+identifiers. A missing project returns 404. Without a project it summarizes all
+projects. SQL aggregates and list-field projections avoid fetching evidence or
+report bodies. Coverage categories can overlap when a variant has multiple origins.
+
 ## Runtime And Viewer Endpoints
 
 | Endpoint | Purpose |

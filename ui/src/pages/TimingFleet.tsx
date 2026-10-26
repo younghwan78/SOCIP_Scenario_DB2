@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
+import { ExperimentEntry } from '../components/CandidateReview'
 import { useAsync } from '../lib/route'
 import { fmt, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, type CpuModel, type FleetRow, type Statistic, type ThroughputModel } from '../lib/timingBudget'
 import { Card, FleetRank } from '../components/TimingCharts'
@@ -37,6 +38,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
   const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic, cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp })
 
   const cols: Column<FleetRow>[] = [
+    { key: 'experiment', label: '실험 · 저장 후보 Δ', width: 190, headTitle: '저장 당시 기준 대비. 이 표의 즉석 계산과 조건이 다를 수 있습니다.', render: (r) => <ExperimentEntry scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: r.variant_id }} /> },
     { key: 'v', label: 'Variant', width: 220, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{r.variant_id.replace(/^cam-rec-/, '')}</span> },
     { key: 'fps', label: 'fps', width: 56, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
     { key: 'eis', label: 'EIS', width: 56, sort: (r) => (r.eis_on ? 1 : 0), render: (r) => (r.eis_on ? <span className="badge v-ok">ON</span> : <span className="faint">—</span>) },

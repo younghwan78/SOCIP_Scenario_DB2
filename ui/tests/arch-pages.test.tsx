@@ -22,13 +22,16 @@ const host = document.createElement('div')
 let root = createRoot(host)
 afterEach(() => { act(() => root.unmount()); root = createRoot(host); vi.restoreAllMocks() })
 
-it('runs the expensive what-if once, without repeating it on each statistic change', async () => {
+it('defers expensive what-if until requested, without repeating it on each statistic change', async () => {
   // Only request scheduling matters: omit report content to avoid unrelated charts.
   const send = vi.spyOn(timingApi, 'variant').mockImplementation(async (_s, _v, options) => ({
     report: options.include_whatif ? { whatif: [] } : undefined, dvfs_table_ref: null,
   }) as never)
   const ctx = { scenario: 's', variant: 'v', params: {}, navigate: vi.fn() } as unknown as Ctx
   await act(async () => root.render(<TimingBudgetPage ctx={ctx} />))
+  expect(send.mock.calls.filter((c) => c[2].include_whatif)).toHaveLength(0)
+  const extra = [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.parentElement?.textContent?.includes('보조 탐색 계산'))!
+  await act(async () => extra.click())
   expect(send.mock.calls.filter((c) => c[2].include_whatif)).toHaveLength(1)
   await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { stat: 'mean' } }} />))
   expect(send.mock.calls.filter((c) => c[2].include_whatif)).toHaveLength(1)
@@ -42,6 +45,9 @@ it('keeps the SW what-if on the selected CPU and throughput models', async () =>
   vi.spyOn(timingApi, 'dvfsWhatif').mockResolvedValue(null as never)
   const ctx = { scenario: 's', variant: 'v', params: {}, navigate: vi.fn() } as unknown as Ctx
   await act(async () => root.render(<TimingBudgetPage ctx={ctx} />))
+  expect(send.mock.calls.filter((c) => c[2].include_whatif)).toHaveLength(0)
+  const extra = [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.parentElement?.textContent?.includes('보조 탐색 계산'))!
+  await act(async () => extra.click())
   // no URL override: the server applies the project review policy's throughput model
   const first = send.mock.calls.find((c) => c[2].include_whatif)?.[2]
   expect(first).toMatchObject({ cpu_model: 'flat' })
@@ -62,10 +68,27 @@ it('selects the correct prediction history when scenarios share a variant name',
   vi.spyOn(archApi, 'board').mockResolvedValue({ rows: [
     { ...row, id: 'p1', scenario_id: 's1' }, { ...row, id: 'p2', scenario_id: 's2' },
   ] } as never)
-  const history = vi.spyOn(archApi, 'history').mockResolvedValue([])
+  const history = vi.spyOn(archApi, 'historyPage').mockResolvedValue({ items: [], next_cursor: null })
   const ctx = { scenario: 's1', params: { all: '1', v: 'p2' }, navigate: vi.fn() } as unknown as Ctx
   await act(async () => root.render(<PredictionsPage ctx={ctx} />))
-  expect(history).toHaveBeenCalledWith('s2', 'shared')
+  expect(history).toHaveBeenCalledWith('s2', 'shared', undefined)
+})
+
+it('loads prediction history using the returned cursor and retains earlier rows', async () => {
+  const row = { id: 'current', scenario_id: 's', variant_id: 'v', power: { total_mw: 1, cpu_mw: 1, hw_mw: 0, bw_mw: 0 }, compression: [], dvfs: {}, fps: 30, previous: null }
+  vi.spyOn(archApi, 'board').mockResolvedValue({ rows: [row] } as never)
+  const history = vi.spyOn(archApi, 'historyPage').mockResolvedValueOnce({ items: [{ id: 'h1', status: 'superseded', total_mw: 111 }], next_cursor: 'opaque-cursor' } as never)
+    .mockResolvedValueOnce({ items: [{ id: 'h2', status: 'superseded', total_mw: 222 }], next_cursor: null } as never)
+  const ctx = { project: 'p', scenario: 's', variant: 'v', params: { v: 'current' }, navigate: vi.fn() } as unknown as Ctx
+  await act(async () => root.render(<PredictionsPage ctx={ctx} />))
+  expect(host.textContent).toContain('111.0')
+  const more = [...host.querySelectorAll('button')].find((button) => button.textContent === '이전 이력 더 보기')!
+  await act(async () => more.click())
+  expect(history).toHaveBeenLastCalledWith('s', 'v', 'opaque-cursor')
+  expect(host.textContent).toContain('111.0')
+  expect(host.textContent).toContain('222.0')
+  expect(host.textContent).toContain('2건 조회')
+  expect([...host.querySelectorAll('button')].some((button) => button.textContent === '이전 이력 더 보기')).toBe(false)
 })
 
 
@@ -82,7 +105,7 @@ it('shows power options of the selected prediction and saves an IQ review decisi
         review: { status: 'candidate', scope: null, note: null } }],
       results: [result], best: { key: bcrop, labels: result.labels, delta_mw: -33.8, delta_pct: -5.0, review_status: 'candidate' } } }
   const board = vi.spyOn(archApi, 'board').mockResolvedValue({ rows: [row] } as never)
-  vi.spyOn(archApi, 'history').mockResolvedValue([])
+  vi.spyOn(archApi, 'historyPage').mockResolvedValue({ items: [], next_cursor: null })
   const save = vi.spyOn(archApi, 'setOptionReview').mockResolvedValue({} as never)
   const ctx = { scenario: 'uc-rec', params: { v: 'p1' }, navigate: vi.fn() } as unknown as Ctx
   await act(async () => root.render(<PredictionsPage ctx={ctx} />))

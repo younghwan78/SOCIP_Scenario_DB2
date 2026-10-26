@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
+import { ExperimentEntry } from '../components/CandidateReview'
 import { useAsync } from '../lib/route'
 import { api } from '../lib/api'
 import { fmt } from '../lib/timingBudget'
@@ -72,6 +73,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const notExplored = rows.filter((r) => !r.power_options || r.power_options.status === 'not_explored').length
   const firstReg = rows.length - changed.length
   const cols: Column<BoardRow>[] = [
+    { key: 'experiment', label: '실험 · 저장 후보 Δ', width: 190, render: (r) => <ExperimentEntry scope={{ project_ref: ctx.project, scenario_id: r.scenario_id, variant_id: r.variant_id }} /> },
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     ...(all ? [{ key: 's', label: 'Scenario', width: 170, sort: (r: BoardRow) => r.scenario_id, render: (r: BoardRow) => <span className="mono faint">{r.scenario_id}</span> }] : []),
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
@@ -175,7 +177,11 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
 }
 
 function ChangeCard({ row }: { row: BoardRow }) {
-  const h = useAsync(() => archApi.history(row.scenario_id, row.variant_id), [row.id])
+  const [cursor, setCursor] = useState<string>()
+  const [historyRetry, setHistoryRetry] = useState(0)
+  const [history, setHistory] = useState<HistoryRow[]>([])
+  const h = useAsync(() => archApi.historyPage(row.scenario_id, row.variant_id, cursor), [row.id, cursor, historyRetry])
+  useEffect(() => { if (h.data) setHistory((previous) => [...new Map([...previous, ...h.data!.items].map((item) => [item.id, item])).values()]) }, [h.data])
   const [oldId, setOldId] = useState<string | undefined>(row.previous?.id)
   const c = useAsync(() => (oldId ? archApi.compare({ old_id: oldId, new_id: row.id }) : Promise.resolve(null)), [oldId, row.id])
   const a = c.data?.attribution
@@ -195,10 +201,12 @@ function ChangeCard({ row }: { row: BoardRow }) {
         </div>
       </div>}
     </Card>
-    <Card id="pr-history" title="등록 이력" note="행 선택 = 비교 기준(이전)">
+    <Card id="pr-history" title="등록 이력" note="행 선택 = 비교 기준(이전) · 최신 30건씩 조회">
+      {h.error && <div className="err">{h.error} <button className="btn" onClick={() => setHistoryRetry((n) => n + 1)}>이력 다시 불러오기</button></div>}
+      <div className="workflow-actions"><span className="faint">{history.length}건 조회</span>{h.loading ? <span role="status">이력 불러오는 중…</span> : h.data?.next_cursor && <button className="btn" onClick={() => setCursor(h.data!.next_cursor!)}>이전 이력 더 보기</button>}</div>
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th /><th>등록</th><th>작성자</th><th>상태</th><th>Power mW</th><th>규칙</th><th>run</th></tr></thead>
-        <tbody>{(h.data ?? []).map((x: HistoryRow) => (
+        <tbody>{history.map((x: HistoryRow) => (
           <tr key={x.id} className={x.id === oldId ? 'selected' : ''} onClick={() => x.id !== row.id && setOldId(x.id)} style={{ cursor: x.id === row.id ? 'default' : 'pointer' }}>
             <td>{x.id !== row.id && <input type="radio" checked={x.id === oldId} onChange={() => setOldId(x.id)} aria-label="비교 기준" />}</td>
             <td className="mono faint">{x.created_at?.slice(0, 16).replace('T', ' ')}</td>

@@ -109,8 +109,8 @@ def list_power_params(soc_ref: str | None = None, db: Session = Depends(get_db))
 
 @router.get("/calibration/summary")
 def summary(scenario_id: str | None = None, project_ref: str | None = None, include_synthetic: bool = True,
-            db: Session = Depends(get_db)):
+            physical_only: bool = False, db: Session = Depends(get_db)):
     """Model-level prediction ↔ measurement view: representative capture per variant, category bias
     (median · same-sign share · verdict), offsetting count, correction preview and confidence grade."""
     return cal.calibration_summary(db, scenario_id=scenario_id, project_ref=project_ref,
-                                   include_synthetic=include_synthetic)
+                                   include_synthetic=include_synthetic, physical_only=physical_only)
