@@ -49,6 +49,10 @@ def test_real_sensor_swap_targets_and_preview_preserve_pinned_source(camera_cata
     assert preview["delta"]["metrics"]["modeled_power_mw"] != 0
     assert preview["normalized_condition"]["config"]["sensor_modes"]["sensor_rear"] == binding
     assert preview["iq_required"] == ["sensor_binding"]
+    answer = api_client.post("/api/v1/scenario-whatif/ask", json={**payload, "ask": "what_if"})
+    assert answer.status_code == 200, answer.text
+    assert "sensor-hp2-m2s / mode2" in answer.json()["answer"]["headline"]
+    assert "None" not in answer.json()["answer"]["headline"]
     # Confirm the actual modeled input changed sensors and has the pinned CIS
     # timing, while the persisted baseline topology and its fingerprint did not.
     with Session(camera_catalogs) as db:

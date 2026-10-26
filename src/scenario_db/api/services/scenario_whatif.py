@@ -362,6 +362,9 @@ def _change_text(change: dict, targets: dict) -> str:
         row: dict[str, Any] = next((r for r in targets.get("sensors") or [] if r["node_id"] == change["node_id"]), {})
         opt = next((o for o in row.get("options") or [] if o["id"] == change["option"]), None)
         return f"센서 → {opt['label'] if opt else change['option']}"
+    if t == "sensor_binding":
+        binding = change["sensor_binding"]
+        return f"{change['node_id']} 센서 → {binding['catalog_ref']} / {binding['mode_label']}"
     if t == "chain_size":
         return f"{change['node_id']} crop/downscale → {change['width']}x{change['height']}"
     if t == "power_knob":
