@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from threading import Condition, RLock
 from typing import Any, Literal
 
@@ -137,6 +137,19 @@ def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dic
     return out
 
 
+def latency_trade(coupling: dict[str, Any], enforced: dict[str, Any], free_best: dict[str, Any] | None) -> dict[str, Any] | None:
+    """What dropping the stage-SW budgets buys: the period-only best vs the latency-keeping best, and its latency cost."""
+    if not free_best:
+        return None
+    keep = enforced.get("best") or enforced["reference"]
+    rows = timing_impact(coupling, enforced["reference"], free_best)
+    return {"best_total_mw": free_best["total_mw"], "moved": free_best.get("moved") or [],
+            "delta_mw": round(free_best["total_mw"] - keep["total_mw"], 2),
+            "delta_vs_reference_mw": round(free_best["total_mw"] - enforced["reference"]["total_mw"], 2),
+            "extra_latency_frames": max((r["extra_latency_frames"] for r in rows), default=0),
+            "min_slack_ms": min((r["slack_ms"] for r in rows), default=None), "impact": rows}
+
+
 def scale_coupling(coupling: dict[str, Any], runtime_scale: float) -> dict[str, Any]:
     """A ``timing_stretch`` result at another uniform SW growth: stage room is fixed, SW scales linearly."""
     k = runtime_scale / float(coupling["runtime_scale"])
@@ -268,6 +281,10 @@ def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest, *, coupling_bas
     profile, target, base, spec, coupling, enforce = _rebalance_inputs(db, request, coupling_base=coupling_base)
     release_read_connection(db)
     result = _rebalance_finish(_rebalance_compute(profile, target, base, request.fps, spec), coupling, enforce)
+    result["timing_mode"] = request.timing_coupling
+    if request.latency_trade and enforce and coupling:
+        free = _rebalance_compute(profile, target, base, request.fps, replace(spec, stretch_budgets={}))
+        result["latency_trade"] = latency_trade(coupling, result, free.get("best"))
     with_bw_power(result, bw_coefficient(db, request.cpu_profile_ref if request.cpu_profile is None else None))
     return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
 

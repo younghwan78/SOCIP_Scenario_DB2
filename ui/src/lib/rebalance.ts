@@ -50,7 +50,12 @@ export interface CpuRebalance {
   ratio_curves?: RatioCurve[]
   /** CPU-09: CPU-caused DRAM BW power with the exploration's BW coefficient */
   bw_power?: BwPower
+  /** API ≥ 2026-10-28: the timing mode the result was computed with */
+  timing_mode?: 'off' | 'stage_slack'
+  /** stage_slack + latency_trade: what a longer pipeline latency (period-only search) would buy */
+  latency_trade?: LatencyTrade | null
 }
+export interface LatencyTrade { best_total_mw: number; moved: string[]; delta_mw: number; delta_vs_reference_mw: number; extra_latency_frames: number; min_slack_ms: number | null; impact: TimingImpact[] }
 export interface RatioPoint { util_pct: number; moved_unit: string | null; total_mw: number; feasible: boolean; mhz: Record<string, number> }
 export interface RatioCurve { target: string; start_util_pct: number; points: RatioPoint[]; best_index: number | null }
 export interface BwCoefficient { mw_per_mbs: number; source: 'prediction' | 'builtin'; prediction_ref: string | null; bw_power_model: string | null }
@@ -74,7 +79,7 @@ export interface RbWhy {
 export interface CpuRebalanceRequest extends CpuSweepRequest {
   pool: string[]; movable?: string[]; locks: Record<string, string>; co_move: string[][]; verify_k?: number; max_exhaustive?: number
   /** stage_slack = Timing Budget stage SW slack bounds each SW task (no extra pipeline latency); off = frame only */
-  timing_coupling?: 'off' | 'stage_slack'; timing_statistic?: 'min' | 'mean' | 'max'
+  timing_coupling?: 'off' | 'stage_slack'; timing_statistic?: 'min' | 'mean' | 'max'; latency_trade?: boolean
 }
 export const rebalanceApi = {
   run: (req: CpuRebalanceRequest, signal?: AbortSignal) => postCalculation<{ result: CpuRebalance }>('/cpu/rebalance', req, signal).then((r) => r.result),

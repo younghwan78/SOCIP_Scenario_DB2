@@ -149,3 +149,29 @@ def test_sweep_reuses_inputs_with_identical_points(coupling_mode, growth, monkey
     reference.pop("elapsed_ms")
     assert current == reference
     assert profile.model_dump() == before
+
+
+def test_latency_trade_reports_what_dropping_stage_budgets_buys(monkeypatch):
+    from scenario_db.api.schemas.cpu import CpuRebalanceRequest
+    coupling = {"period_ms": 1000 / 30, "stretch": {"a": 1.2}, "statistic": "max", "runtime_scale": 1.0,
+                "stages": [{"stage": "nrt", "sw_ms": 10.0, "hw_ms": 15.0, "overhead_ms": 1.0, "room_ms": 12.0,
+                            "slack_ms": 2.0, "stretch": 1.2, "tasks": [{"task": "a", "ms": 10.0}]}]}
+    ref = {"total_mw": 237.4, "task_ms": {"a": 10.0}}
+
+    def compute(_profile, _target, _base, _fps, spec):
+        if spec.stretch_budgets:   # latency kept: small move only
+            return {"reference": ref, "best": {"total_mw": 232.6, "task_ms": {"a": 11.0}, "moved": ["a"]}, "cases": []}
+        return {"reference": ref, "best": {"total_mw": 177.5, "task_ms": {"a": 20.0}, "moved": ["a"]}, "cases": []}
+
+    monkeypatch.setattr(cpu, "_rebalance_inputs",
+                        lambda *a, **k: (SimpleNamespace(evidence_ref="p"), None, None,
+                                         cpu.RebalanceSpec(stretch_budgets={"a": 1.2}), deepcopy(coupling), True))
+    monkeypatch.setattr(cpu, "_rebalance_compute", compute)
+    monkeypatch.setattr(cpu, "bw_coefficient", lambda *_: {"mw_per_mbs": 0.08, "source": "builtin"})
+    req = dict(cpu_profile_ref="measured", power_params_ref="target", timing_coupling="stage_slack")
+    out = cpu.run_cpu_rebalance(MagicMock(), CpuRebalanceRequest(**req, latency_trade=True)).result
+    trade = out["latency_trade"]
+    assert out["timing_mode"] == "stage_slack" and out["best"]["total_mw"] == 232.6
+    assert trade["delta_mw"] == -55.1 and trade["delta_vs_reference_mw"] == -59.9
+    assert trade["extra_latency_frames"] == 1 and trade["min_slack_ms"] < 0
+    assert "latency_trade" not in cpu.run_cpu_rebalance(MagicMock(), CpuRebalanceRequest(**req)).result
