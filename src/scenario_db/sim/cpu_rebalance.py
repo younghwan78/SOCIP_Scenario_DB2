@@ -441,6 +441,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         }
         if case is not None:
             out |= {"task_ms": case["task_ms"], "slack_ms": case["slack_ms"], "min_slack_ms": case["min_slack_ms"],
+                    "response_ms": case["response_ms"], "min_slack_shared_ms": case["min_slack_shared_ms"],
                     "flags": case["flags"], "clusters": {n: {"mhz": r["mhz"], "busy_ms": r["busy_ms"], "total_mw": r["total_mw"], "util": r["util"]}
                                                          for n, r in case["clusters"].items()},
                     "dsu": case["dsu"], "verified": True}

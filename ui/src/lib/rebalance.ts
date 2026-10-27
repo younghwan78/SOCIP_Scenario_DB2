@@ -10,6 +10,8 @@ export interface RbSplit {
   knobs: { tasks: string[]; kind: string; clusters: string[] }[]
   rank?: number; step?: number; moved_unit?: string | null; moved_util_pct?: number
   task_ms?: Record<string, number>; slack_ms?: Record<string, number>; min_slack_ms?: number | null
+  /** API ≥ 2026-10-28, shared CPU only: own + same-CPU co-runner time (upper bound) and the budget slack against it */
+  response_ms?: Record<string, number>; min_slack_shared_ms?: number | null
   flags?: Record<string, string[] | boolean>; verified?: boolean; model_err_mw?: number
   clusters?: Record<string, { mhz: number; busy_ms: number; total_mw: number; util: number }>
   dsu?: { mhz: number; active_ratio: number; total_mw: number } | null
