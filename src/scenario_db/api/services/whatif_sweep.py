@@ -16,6 +16,9 @@ def _latency(report):
     return max(values) if values else None
 
 
+_IQ_EXCLUDED = "IQ 평가 필요 후보 제외"
+
+
 def _eligibility(result, constraints):
     metrics = result["candidate"]["metrics"]
     report = result["candidate"]["report"]
@@ -31,20 +34,25 @@ def _eligibility(result, constraints):
     if constraints.min_slack_ms is not None and slack < constraints.min_slack_ms:
         reasons.append(f"최소 여유 {slack:g} < {constraints.min_slack_ms:g} ms")
     if result.get("iq_required") and not constraints.allow_iq_required:
-        reasons.append("IQ 평가 필요 후보 제외")
+        reasons.append(_IQ_EXCLUDED)
     if result["candidate"]["coverage"].get("missing_components"):
         reasons.append("IP 성능/전력 모델 누락")
     return not reasons, reasons, slack, latency
 
 
 def pareto(rows):
-    """Exact small-grid frontier: minimize modeled power, traffic and latency."""
-    eligible = [r for r in rows if r.get("eligible") and r.get("latency_ms") is not None]
+    """Exact small-grid frontier: minimize modeled power, traffic and latency.
+
+    A row without a modeled latency stays a candidate: dominance is judged on the axes both rows have,
+    so it is compared on power and traffic only."""
+    eligible = [r for r in rows if r.get("eligible")]
     def values(row):
-        return (row["metrics"]["modeled_power_mw"], row["metrics"]["bw_mbs"], row["latency_ms"])
-    return [r["id"] for r in eligible if not any(
-        all(a <= b for a, b in zip(values(other), values(r)))
-        and any(a < b for a, b in zip(values(other), values(r))) for other in eligible if other is not r)]
+        return (row["metrics"]["modeled_power_mw"], row["metrics"]["bw_mbs"], row.get("latency_ms"))
+
+    def dominates(a_row, b_row):
+        pairs = [(a, b) for a, b in zip(values(a_row), values(b_row)) if a is not None and b is not None]
+        return all(a <= b for a, b in pairs) and any(a < b for a, b in pairs)
+    return [r["id"] for r in eligible if not any(dominates(other, r) for other in eligible if other is not r)]
 
 
 def run_sweep(db, request: WhatIfSweepRequest, *, checkpoint=None, previous=None, base=None):
@@ -95,6 +103,12 @@ def run_sweep(db, request: WhatIfSweepRequest, *, checkpoint=None, previous=None
     out["pareto_ids"] = pareto(rows)
     eligible = [r for r in rows if r.get("eligible")]
     out["best_id"] = min(eligible, key=lambda r: r["metrics"]["modeled_power_mw"])["id"] if eligible else None
+    # IQ-trade alternative: rows that fail only because IQ-required candidates are excluded
+    trade = [r for r in rows if r.get("metrics") and r.get("reasons") == [_IQ_EXCLUDED]]
+    cheaper = [r for r in trade if not eligible or r["metrics"]["modeled_power_mw"]
+               < min(e["metrics"]["modeled_power_mw"] for e in eligible)]
+    best_trade = min(cheaper, key=lambda r: r["metrics"]["modeled_power_mw"]) if cheaper else None
+    out["best_trade_id"] = best_trade["id"] if best_trade else None
     if checkpoint:
         checkpoint(out)
     return out

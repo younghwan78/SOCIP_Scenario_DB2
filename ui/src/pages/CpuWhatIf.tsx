@@ -134,7 +134,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const byGroup = new Map<string, string[]>()
     const present = new Set(rbRows.map((r) => r.task))
     for (const [t, g] of Object.entries(groups)) if (g && present.has(t) && (taskStates[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
-    return { ...base, top: rbTop, pool, locks, co_move: [...byGroup.values()].filter((g) => g.length > 1), timing_coupling: timingMode }
+    return { ...base, top: rbTop, pool, locks, co_move: [...byGroup.values()].filter((g) => g.length > 1), timing_coupling: timingMode, latency_trade: timingMode === 'stage_slack' }
   }
   const runRb = (payload: CpuRebalanceRequest) => analysis.execute({
     mode: 'rebalance', request: payload, growths: growthGrid(range.start, range.end, range.step), comparison: cmpTarget,
@@ -153,7 +153,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     analysis.reset({ keepRebalance: !changed })
     if (profile && target) {
       const req = request(changed ? {} : edits, changed ? null : dsuReq)
-      if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [], timing_coupling: timingMode } : rbRequest(req))
+      if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [], timing_coupling: timingMode, latency_trade: timingMode === 'stage_slack' } : rbRequest(req))
       else void run(req)
     }
     return () => analysis.cancel()

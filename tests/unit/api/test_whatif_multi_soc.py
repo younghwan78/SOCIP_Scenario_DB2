@@ -84,7 +84,8 @@ def test_unmodeled_parameter_is_reported_not_offered(playback):
 def test_variant_without_modelable_conditions_says_so():
     g = _g("db_Exynos2600_SM-S947B", "uc-aud-mp3-playback-e2600", "audio-mp3-screen-on", "soc-exynos2600")
     targets = whatif_targets(g)
-    assert targets["supported_changes"] == []
+    # only the LLC placement of its DMA buffers is modelable (no size / clock / sensor condition)
+    assert set(targets["supported_changes"]) <= {"llc_alloc"}
     out = plan_query("FHD로", targets)
     assert out["status"] == "unsupported" and out["ignored"]
 

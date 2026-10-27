@@ -34,6 +34,9 @@ export function RebalanceWhy({ r, mode, onMode }: { r: CpuRebalance; mode: 'off'
                 그 cluster에 남는 SW stage task({r.units.filter((u) => u.home === w.driver!.cluster && u.budget_source === 'stretch').map((u) => u.unit).join(', ') || '—'})도 함께 느려져 stage 여유를 넘으므로 OPP는 유지하고 작은 이동만 남습니다</>}
               {broken.length > 0 && <>. <b>단, {broken.map((x) => `${x.stage.toUpperCase()} SW ${s1(x.delta_sw_ms, 1)} ms (여유 ${fmt(x.slack_ms, 1)} ms)`).join(', ')}{frames ? ` → latency +${frames} frame` : ''}</b> — stage 시간 여유를 넘었습니다. 전체 fps와 지연을 다시 확인하세요{mode === 'off' && onMode ? ' (SW 여유 제약으로 다시 실행해 비교)' : ''}.</>}</>}
         </div>
+        {r.latency_trade && r.latency_trade.delta_mw < -0.05 && <div className="cpu-why-head warn">
+          trade: latency {r.latency_trade.extra_latency_frames ? `+${r.latency_trade.extra_latency_frames} frame` : '증가'} 허용 시 <b className="mono">{s1(r.latency_trade.delta_mw)} mW</b> 추가
+          ({fmt(r.latency_trade.best_total_mw, 1)} mW, 측정 배치 대비 {s1(r.latency_trade.delta_vs_reference_mw)} mW · 최소 stage 여유 {fmt(r.latency_trade.min_slack_ms, 2)} ms) — fps는 유지, pipeline 지연이 늘어남{onMode ? ' (CPU 주기만 모드로 배치 확인)' : ''}.</div>}
         {w && !same && <div className="cpu-why-grid">
           <table className="tb-mini-table"><thead><tr><th>cluster</th><th>OPP MHz</th><th>mV</th><th style={{ textAlign: 'right' }}>mW</th><th style={{ textAlign: 'right' }}>Δ</th></tr></thead>
             <tbody>{w.clusters.map((c) => <tr key={c.cluster}><td>{c.cluster}</td>

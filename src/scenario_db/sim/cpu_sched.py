@@ -480,6 +480,9 @@ def evaluate(
     where: dict[str, set[str]] = {}
     signature: list[tuple[str, str, int]] = []
     shared: set[str] = set()
+    # upper bound with every co-runner of the same CPU ahead of the thread (no priority model): task_ms stays the
+    # own-time value used for feasibility; this bound shows how optimistic it is on a shared CPU
+    response_ms: dict[str, float] = {}
     overloaded = False
     for c in ctx.model.clusters:
         row = _cluster_eval(ctx, c.name, slots[c.name], policies)
@@ -488,13 +491,18 @@ def evaluate(
         for index, ths in enumerate(slots[c.name]):
             if len({t.task for t in ths}) > 1:
                 shared.update(t.task for t in ths)
-            for th in ths:
-                task_ms[th.task] = max(task_ms.get(th.task, 0.0), th.ms(c, row["mhz"]))
+            own = [th.ms(c, row["mhz"]) for th in ths]
+            for th, ms in zip(ths, own):
+                task_ms[th.task] = max(task_ms.get(th.task, 0.0), ms)
+                response_ms[th.task] = max(response_ms.get(th.task, 0.0), sum(own))
                 where.setdefault(th.task, set()).add(c.name)
                 signature.append((th.label, c.name, index))
         overloaded = overloaded or any(r["overloaded"] for r in row["cpus"])
+    # every CPU of a task counts (an unshared long thread can dominate); reported for shared tasks only
+    response_ms = {t: v for t, v in response_ms.items() if t in shared}
     period = ctx.period
     slack = {t: round(budgets_ms[t] - task_ms.get(t, 0.0), 4) for t in budgets_ms if t in task_ms}
+    slack_shared = {t: round(budgets_ms[t] - response_ms[t], 4) for t in budgets_ms if t in response_ms}
     misses = sorted(t for t, s in slack.items() if s < -1e-9)
     late = sorted(t for t, ms in task_ms.items() if ms > period + 1e-9)
     feasible = not overloaded and not misses and not late
@@ -527,6 +535,10 @@ def evaluate(
         "task_ms": {t: round(v, 4) for t, v in sorted(task_ms.items())},
         "slack_ms": slack,
         "min_slack_ms": min(slack.values()) if slack else None,
+        # shared CPU only: response upper bound (own + same-CPU co-runners) and the budget slack against it
+        "response_ms": {t: round(v, 4) for t, v in sorted(response_ms.items())},
+        "slack_shared_ms": slack_shared,
+        "min_slack_shared_ms": min(slack_shared.values()) if slack_shared else None,
         "flags": {k: v for k, v in {"overutilized": sorted(set(overutilized)), "budget_miss": misses,
                                     "over_period": late, "shared_cpu": sorted(shared),
                                     "overloaded_cpu": overloaded}.items() if v},

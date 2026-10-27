@@ -142,7 +142,7 @@ function reasonText(b: BufferRow): string {
   if (/DMA port without/.test(r)) { const ps = r.replace(/.*: /, '').split(', '); return `${r.match(/without (\S+):/)?.[1] ?? ''} 미지원 port: ${ps.length > 2 ? `${ps.slice(0, 2).join(', ')} 외 ${ps.length - 2}` : ps.join(', ')}` }
   if (/lists no compression/.test(r)) return 'endpoint IP가 압축 미지원'
   if (/max_buffers/.test(r)) return '절감 상위 N개 밖 (buffer 상한)'
-  if (/already compressed/.test(r)) return '이미 압축 사용 중'
+  if (/already compressed/.test(r)) return b.base_compression ? `이미 압축 사용 중 (${b.base_compression})` : '이미 압축 사용 중'
   return r
 }
 
@@ -156,6 +156,7 @@ export function BufferSavings({ buffers, selected }: { buffers: BufferRow[]; sel
   const hi = niceMax(Math.max(1, ...rows.map((b) => -(b.delta_mbs ?? 0))))
   if (!rows.length) return <div className="empty">압축으로 줄일 DMA traffic 없음</div>
   const nUnsup = rows.filter((b) => bufferState(b, selected).key === 'unsupported').length
+  const current = buffers.filter((b) => b.current_saving)
   return (
     <div ref={ref}>
       <div className="faint" style={{ fontSize: 11.5, marginBottom: 4 }}>압축 지원이 IP catalog에 선언된 DMA만 탐색합니다 (port별 supported_compressions 포함){nUnsup ? ` · 미지원 ${nUnsup}개는 회색 — 단독 적용 시 잠재 절감만 표시` : ''}</div>
@@ -169,6 +170,7 @@ export function BufferSavings({ buffers, selected }: { buffers: BufferRow[]; sel
               {...tip({ title: b.buffer, color: st.color, head: { label: st.label, value: `${fmt(b.delta_mbs, 0)} MB/s`, tone: off ? 'muted' : 'good' },
                 rows: [{ k: 'Δ power', v: `${fmt(b.delta_mw, 1)} mW` }, { k: 'mode · ratio', v: `${b.mode ?? '—'} ×${b.comp_ratio ?? '—'} (${b.ratio_source ?? '—'})` },
                   { k: 'endpoint IP', v: b.nodes.join(', ') }, ...(b.ports?.length ? [{ k: 'DMA port', v: b.ports.length > 3 ? `${b.ports.slice(0, 3).join(', ')} 외 ${b.ports.length - 3}` : b.ports.join(', ') }] : []),
+                  ...(b.current_saving ? [{ k: '현재 SBWC', v: `${b.current_saving.mode} ×${b.current_saving.comp_ratio} · ${fmt(b.current_saving.saving_mbs, 0)} MB/s · ${fmt(b.current_saving.saving_mw, 1)} mW 절감 중` }] : []),
                   ...(b.skip_reason ? [{ k: '제외 사유', v: reasonText(b), tone: 'bad' as const }] : [])] })}>
               <rect x={0} y={0} width={labelW + plotW + valW} height={20} fill="transparent" />
               <text x={labelW - 6} y={13} fontSize={11} textAnchor="end" fill={off ? '#A39C90' : '#3B3F4A'} className="mono">{b.buffer}</text>
@@ -178,6 +180,8 @@ export function BufferSavings({ buffers, selected }: { buffers: BufferRow[]; sel
           )
         })}
       </svg>
+      {current.length > 0 && <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>현재 SBWC가 절약 중: {current.map((b) => `${b.buffer} ${fmt(b.current_saving!.saving_mbs, 0)} MB/s · ${fmt(b.current_saving!.saving_mw, 1)} mW`).join(' · ')}
+        {' '}(OFF 반사실, baseline에 이미 반영 — 위 막대는 추가 절감)</div>}
       <div className="legend-row">
         {[['#EA8A4E', '추천 조합에 적용'], ['#F2C9AD', '탐색 (미적용)'], ['#E7DFD2', '상한 제외 (max_buffers)'], ['#D9D4CC', 'DMA 미지원 (탐색 안 함)']].map(([c, l]) =>
           <span key={l} className="legend-item"><span style={{ width: 10, height: 10, background: c }} />{l}</span>)}

@@ -73,12 +73,13 @@ Change forms (pick the ones the question asks for; leave everything else unchang
   {"target":"history_interval","value":N} | {..., "buffer_id":B} // previous-frame DMA once every N frames (30fps -> 15fps = 2)
   {"target":"ip_mode","node_id":IP,"option":MODE}
   {"target":"compression","buffer_id":B,"option":MODE}           // COMP_OFF or a listed SBWC mode (lossless / lossy …)
+  {"target":"llc_alloc","buffer_id":B,"option":"on"|"off"}       // LLC allocation of a DMA buffer (optional "value" = llc_weight 0-1)
 Rules:
 - "level/단계/OPP 낮추면" on a domain = dvfs_level shift. "어디까지/몇 단계까지/한계" = search_limit. "병목/어디가 빡빡/여유가 제일 적은" = diagnose.
 - Sizes: FHD 1920x1080, UHD/4K 3840x2160, QHD 2560x1440, HD 1280x720, 8K 7680x4320. A bare size in a recording scenario means the record output.
 - If a needed value or target is genuinely ambiguous, return a clarification whose every choice carries a complete change.
 - "N개 조합 비교 / 같이 적용하면 vs 각각" = ask "combine" with the levers as changes.
-- Codec/bitrate, LLC, feature on/off (EIS, HDR), voltage and CPU placement are NOT changes: list them in "unsupported".
+- Codec/bitrate, feature on/off (EIS, HDR), voltage and CPU placement are NOT changes: list them in "unsupported".
 """
 
 
@@ -103,6 +104,8 @@ def catalog(targets: dict[str, Any]) -> dict[str, Any]:
             "ip_modes": [{"node": r["id"], "current": r["mode"], "options": [o["id"] for o in r["options"]]} for r in targets.get("ip_modes") or []],
             "compression": [{"buffer": r["id"], "current": r["current"], "options": [o["id"] for o in r["options"] if o["supported"] is not False]}
                             for r in targets.get("buffers") or [] if r["declared"]],
+            "llc": [{"buffer": r["id"], "current": r["current"], "default_weight": r["options"][1].get("weight")}
+                    for r in targets.get("llc") or []][:40],
         },
     }
 

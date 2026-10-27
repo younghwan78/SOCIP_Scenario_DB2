@@ -358,6 +358,7 @@ function ChangeEditor({ change, kinds, targets, disabled, onChange, onRemove, in
     if (kind?.target === 'chain_size') return `${row.id} · ${row.size?.join('×')} · ${row.hint} → ${row.downstream?.join(', ')}`
     if (kind?.target === 'history_interval') return `${row.id} · ${row.node} · ${row.format ?? ''} · DMA ${row.ports}${row.value && row.value > 1 ? ` · 현재 ${row.value} frame` : ''}`
     if (kind?.target === 'compression') return `${row.id} · ${row.format} · 현재 ${row.current === 'COMP_OFF' ? '압축 없음' : row.current}${row.llc ? ' · LLC' : ''}${row.history ? ' · f-1' : ''} · ${row.nodes?.join('→')}`
+    if (kind?.target === 'llc_alloc') return `${row.id} · ${row.format} · 현재 LLC ${row.current === 'on' ? `할당${row.weight != null ? ` (weight ${row.weight})` : ''}` : '없음'} · ${row.nodes?.join('→')}`
     if (kind?.target === 'ip_mode') return `${row.id} · 현재 ${row.mode}`
     if (kind?.target === 'power_knob') return `${row.label ?? row.id} · 현재 ${row.current}`
     const clock = kind?.target === 'node_clock_mhz' ? targets.nodes.find((n) => n.id === row.id)?.clock_mhz : null
@@ -394,6 +395,8 @@ function ChangeEditor({ change, kinds, targets, disabled, onChange, onRemove, in
     {isSensor && <div className="wi-sensor-filter"><label>센서<select aria-label={`${label} 센서`} value={selectedSensor} onChange={(e) => { setSensorSearch(''); selectOption(options.find((option) => sensorKey(option) === e.target.value && option.supported !== false)) }}>{sensors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>모드 검색<input className="input" aria-label={`${label} 모드 검색`} value={sensorSearch} onChange={(e) => setSensorSearch(e.target.value)} placeholder="크기·FPS·모드 이름" /></label></div>}
     {kind?.shape === 'choice' && <label>{isSensor ? '센서 모드' : change.target === 'compression' ? 'mode' : '값'}<select aria-label={`${label} 값`} value={change.option ?? ''} onChange={(e) => selectOption(options.find((option) => option.id === e.target.value))}>
       <option value="">선택</option>{visibleOptions.map((o) => <option key={o.id} value={o.id} disabled={o.supported === false}>{optText(change.target, o)}</option>)}</select></label>}
+    {kind?.target === 'llc_alloc' && change.option === 'on' && <label>weight<input className="input" aria-label="LLC weight" type="number" min={0.05} max={1} step={0.05} placeholder={opt?.weight != null ? String(opt.weight) : '필수'} value={change.value ?? ''}
+      disabled={disabled} onChange={(e) => onChange({ ...change, value: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>}
     {kind?.target === 'compression' && change.option && change.option !== 'COMP_OFF' && <label>ratio<input className="input" aria-label="압축 ratio" type="number" min={0.05} max={1} step={0.05} placeholder={opt?.ratio != null ? String(opt.ratio) : ''} value={change.value ?? ''}
       onChange={(e) => onChange({ ...change, value: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 70 }} /></label>}
     {isSensor && opt && <span className="faint">{opt.size?.join('×')} · {opt.fps ?? '?'} fps · RAW{opt.bitwidth ?? '?'}{inst?.size && opt.size && opt.size.join() !== inst.size.join() ? ' · 크기 다름 → RT chain · pyramid 재계산' : ''} · {visibleOptions.length}개 모드{opt.sensor_binding ? ` · ${opt.sensor_binding.board_config}/${opt.sensor_binding.slot}` : ''}</span>}
@@ -433,14 +436,18 @@ function CombineView({ combo, dirty, condition }: { combo: CombineResult; dirty:
   const lo = Math.min(0, ...combo.rows.map((r) => r.delta?.modeled_power_mw ?? 0)), hi = Math.max(0, ...combo.rows.map((r) => r.delta?.modeled_power_mw ?? 0))
   const span = hi - lo || 1
   const base = combo.baseline_mw || 0
-  return <Card id="wi-combine" title="레버 조합 비교" note={`${combo.mode === 'factorial' ? '모든 조합' : '각각 + 모두'} · ${combo.rows.length - 1} case · Δ = 기준 대비 (모델 CPU + IP + 메모리) · ★ = fps 충족 최저 전력`} defaultWide>
+  // older responses have only ``best``; from scenario-whatif/3 the star is the IQ-keeping optimum and ◆ the IQ trade
+  const star = combo.best_keep !== undefined ? combo.best_keep : combo.best
+  const tradeKey = combo.best_keep !== undefined ? combo.best_trade : null
+  return <Card id="wi-combine" title="레버 조합 비교" note={`${combo.mode === 'factorial' ? '모든 조합' : '각각 + 모두'} · ${combo.rows.length - 1} case · Δ = 기준 대비 (모델 CPU + IP + 메모리) · ★ = fps 충족 · 화질 유지 최저 전력${tradeKey ? ' · ◆ = IQ trade 포함 최저' : ''}`} defaultWide>
     <ResultState dirty={dirty} condition={condition} />
-    <ul className="wi-levers">{combo.levers.map((lv) => <li key={lv.index}><b>#{lv.index + 1}</b> {lv.label}{lv.iq_required ? <span className="badge v-warn" style={{ marginLeft: 6 }}>IQ 평가</span> : null}</li>)}</ul>
+    <ul className="wi-levers">{combo.levers.map((lv) => <li key={lv.index}><b>#{lv.index + 1}</b> {lv.label}{lv.iq_required ? <span className="badge v-warn" style={{ marginLeft: 6 }}>{lv.iq === 'trade' ? '화질 trade' : 'IQ 평가'}</span> : null}</li>)}</ul>
+    {tradeKey && combo.trade_gain_mw != null && <p className="faint">화질 유지 최적(★) 대비 IQ trade 조합(◆)이 {fmt(combo.trade_gain_mw, 1)} mW 추가 절감 — IQ 평가 후 채택.</p>}
     <div className="table-x"><table className="tb-mini-table wi-combo" style={{ width: '100%' }}>
       <thead><tr><th>조합</th><th>Δ 전력 mW</th><th style={{ width: 160 }} /><th>IP</th><th>메모리</th><th>CPU</th><th>Δ BW MB/s</th><th>fps</th><th>최소 여유 ms</th><th>사유 · 메모</th></tr></thead>
-      <tbody>{rows.map((r) => { const d = r.delta?.modeled_power_mw ?? null, best = r.key === combo.best
+      <tbody>{rows.map((r) => { const d = r.delta?.modeled_power_mw ?? null, best = r.key === star, trade = r.key === tradeKey
         return <tr key={r.key} className={`${best ? 'wi-focus' : ''} ${r.feasible ? '' : 'wi-fail'}`}>
-          <th>{best ? '★ ' : ''}{name(r.levers)}</th>
+          <th>{best ? '★ ' : trade ? '◆ ' : ''}{name(r.levers)}</th>
           <td className="mono">{d == null ? '—' : `${d >= 0 ? '+' : ''}${fmt(d, 1)}`}{d != null && base ? <span className="faint"> ({((d / base) * 100).toFixed(1)}%)</span> : null}</td>
           <td>{d != null && <svg width={150} height={10} aria-hidden="true"><line x1={((0 - lo) / span) * 150} x2={((0 - lo) / span) * 150} y1={0} y2={10} stroke="#9A9387" />
             <rect x={(Math.min(0, d) - lo) / span * 150} width={Math.abs(d) / span * 150} y={1} height={8} fill={d <= 0 ? '#009E73' : '#D55E00'} /></svg>}</td>

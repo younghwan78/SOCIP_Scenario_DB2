@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog, compression_typical
 
-ENGINE_REV = "arch-exploration/11"  # 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
+ENGINE_REV = "arch-exploration/12"  # 12: SBWC mean ratio = typical (engine baseline), eligible-only lever path + exact optimum; 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -689,6 +689,27 @@ def _support(graph, nodes: set[str]) -> tuple[str, dict[str, list[str]]]:
     return ("unknown" if unknown else "catalog"), listed
 
 
+def _lists_mode(modes: list[str], mode: str) -> bool:
+    """An IP catalog compression list names ``mode`` (full name, or family-less COMP_<LOSSLESS|LOSSY...>)."""
+    suffix = mode.split("_", 2)[2] if mode.count("_") >= 2 else mode
+    return mode in {normalize_compression(v) for v in modes} or f"COMP_{suffix}".upper() in {str(v).upper() for v in modes}
+
+
+def compression_support(graph, nodes: set[str], mode: str) -> tuple[bool | None, str | None, list[str]]:
+    """One support rule for What-if and exploration: (supported, reason, undeclared endpoints).
+
+    False = a declaring endpoint IP does not list ``mode``; None = every declaring endpoint lists it but some
+    endpoint declares nothing (exploration skips it with ``require_declared``; What-if applies it with a note)."""
+    _, listed = _support(graph, nodes)
+    undeclared = sorted(n for n in nodes if n not in listed)
+    lacking = sorted(n for n, modes in listed.items() if not _lists_mode(modes, mode))
+    if lacking:
+        return False, f"IP catalog does not list {mode}: {', '.join(lacking)}", undeclared
+    if undeclared:
+        return None, f"compression support not declared: {', '.join(undeclared)}", undeclared
+    return True, None, []
+
+
 def _port_unsupported(graph, ports: list[tuple[str, str, str]], mode: str) -> list[str]:
     """DMA ports whose IP module declares ``supported_compressions`` without ``mode``.
 
@@ -737,10 +758,15 @@ def compression_candidates(
     image quality, so it is a different lever from the lossy one. Ratio per mode: spec override > SoC catalog
     ``typical_ratio`` (average, power) > catalog ``comp_ratio`` < 1 > assumed default. The top-level fields
     repeat the selectable mode with the largest saving (older readers keep working).
+
+    A buffer that is already compressed is not skipped: ``current_saving`` is what its SBWC saves now (OFF
+    counterfactual, attribution only — never a choice), and a lossless buffer still offers the lossy mode as
+    an IQ-trade choice whose delta is the increment over the current lossless state.
     """
     sw = sw_nodes or set()
     catalog = compression_catalog(graph.soc)
     typical = compression_typical(graph.soc)
+    mean = compression_catalog(graph.soc, purpose="mean")
     buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
     node_map = _buffer_nodes(graph)
     active = {str(n.get("id")) for n in graph.pipeline_nodes}
@@ -760,18 +786,25 @@ def compression_candidates(
             "nodes": sorted(nodes & active), "support": support, "listed_modes": listed,
             "base_compression": normalize_compression(eff.get("compression")),
         }
-        if compression_enabled(eff.get("compression")):
-            out.append(row | {"selectable": False, "skip_reason": "already compressed", "modes": []})
-            continue
+        current = row["base_compression"]
+        if current is not None:
+            row["base_comp_ratio"] = float(eff.get("comp_ratio") or mean.get(current) or 1.0)
+            off_variant = deepcopy(graph.variant)
+            off_variant.buffer_overrides = deepcopy(off_variant.buffer_overrides or {})
+            off_variant.buffer_overrides.setdefault(bid, {}).update({"compression": "COMP_OFF", "comp_ratio": None})
+            off = _dma(replace(graph, variant=off_variant), config)
+            row["current_saving"] = {
+                "mode": current, "comp_ratio": row["base_comp_ratio"],
+                "saving_mbs": round(sum(v[0] for v in off.values()) - sum(v[0] for v in base.values()), 3),
+                "saving_mw": round(sum(v[1] for v in off.values()) - sum(v[1] for v in base.values()), 4)}
         undeclared = [n for n in row["nodes"] if n not in listed]
         modes: list[dict[str, Any]] = []
         for m in axis.modes:
             mode = f"COMP_{fam}_{m.upper()}"
-            if not axis.include_unsupported and any(
-                mode not in {normalize_compression(v) for v in modes_}
-                and f"COMP_{m.upper()}" not in {str(v).upper() for v in modes_}
-                for modes_ in listed.values()
-            ):
+            # an already-compressed buffer only moves lossless -> lossy (an IQ trade); its current mode is the baseline
+            if current is not None and (m != "lossy" or mode == current or "LOSSY" in current.upper()):
+                continue
+            if not axis.include_unsupported and any(not _lists_mode(modes_, mode) for modes_ in listed.values()):
                 continue
             if mode in axis.ratio_overrides:
                 ratio, src = axis.ratio_overrides[mode], "override"
@@ -814,7 +847,8 @@ def compression_candidates(
                 "unsupported_ports": blocked, "selectable": reason is None, "skip_reason": reason,
             })
         if not modes:
-            out.append(row | {"selectable": False, "skip_reason": "no mode with ratio < 1", "modes": []})
+            reason = f"already compressed ({current})" if current is not None else "no mode with ratio < 1"
+            out.append(row | {"selectable": False, "skip_reason": reason, "modes": []})
             continue
         sel = [x for x in modes if x["selectable"]]
         top = min(sel or modes, key=lambda x: x["delta_mw"])
@@ -1349,7 +1383,7 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
         m = (_mode_of(buffers, b["buffer"], cmodes.get(b["buffer"])) or b) if on else b
         bufs.append({"buffer": b["buffer"], "raw_mbs": m.get("raw_mbs", b.get("raw_mbs", 0.0)), "compressed": on,
                      "mode": m.get("mode") if on else None,
-                     "comp_ratio": m.get("comp_ratio") if on else 1.0,
+                     "comp_ratio": m.get("comp_ratio") if on else b.get("base_comp_ratio", 1.0),
                      "delta_mbs": m.get("delta_mbs", 0.0) if on else 0.0,
                      "delta_mw": m.get("delta_mw", 0.0) if on else 0.0})
     return {
@@ -1433,6 +1467,7 @@ def _jsonable(value: Any) -> Any:
 # ------------------------------------------------------------------- lever analysis
 IQ_ORDER = {"neutral": 0, "eval": 1, "trade": 2}
 _MIN_GAIN_MW = 0.05
+_GREEDY_GAP_MW = 0.5  # milestone above the exact class optimum by more than this -> greedy path flagged
 
 
 def _point(c: dict[str, Any]) -> dict[str, Any]:
@@ -1460,6 +1495,11 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     options), ``trade`` = gives up image quality (lossy compression). The path adds the best lever of each
     class in turn (neutral -> eval -> trade); each step's total is a looked-up design point, so steps include
     interactions (e.g. L0 skip removes the L0 buffer, so L0 compression no longer saves anything).
+
+    Only timing-eligible points may enter the path, the per-class best lever or the exact ``optimum``. The greedy
+    path is an explanation; ``optimum`` is the exact cheapest eligible point per IQ class and ``gap_mw`` on a
+    milestone shows how far the greedy path stopped above it. A baseline that already misses the constraints
+    makes the analysis reference-only (``baseline_eligible`` False, no eligibility filter).
     """
     po = summary.get("power_options") or {}
     item_iq: dict[str, str] = {}
@@ -1484,6 +1524,10 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     if base is None:
         return {"status": "none"}
     bufs = {b["buffer"]: b for b in summary.get("buffers") or []}
+    base_ok = bool(base.get("eligible", True))
+
+    def feasible(p: dict[str, Any] | None) -> bool:
+        return p is not None and (not base_ok or bool(p.get("eligible", True)))
 
     def mode_info(bid: str, mode: str) -> dict[str, Any]:
         return next((m for m in (bufs.get(bid) or {}).get("modes") or [] if m["mode"] == mode), {})
@@ -1551,7 +1595,7 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
                 if nxt is None or (lv["kind"] == "compression" and state[1].get(lv["buffer"]) == lv["mode"]):
                     continue
                 cand, kept = total_of(nxt)
-                if cand is None or IQ_ORDER[point_iq(nxt[0], kept)] > IQ_ORDER[phase]:
+                if cand is None or not feasible(cand) or IQ_ORDER[point_iq(nxt[0], kept)] > IQ_ORDER[phase]:
                     continue
                 if best is None or cand["total_mw"] < best[0]["total_mw"]:
                     best = (cand, (nxt[0], kept), lv)
@@ -1578,6 +1622,7 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
         alone_state = apply((frozenset(), {}), lv)
         ap = total_of(alone_state)[0] if alone_state else None
         lv["alone"] = delta(base, ap) if ap else None
+        lv["alone_eligible"] = bool(ap.get("eligible", True)) if ap else None
         ctx = None
         lv["moot"] = False
         if fin_p is not None and lv["kind"] == "compression":
@@ -1622,15 +1667,28 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     points.sort(key=lambda x: x["total_mw"])
     best_by: dict[str, str | None] = {}
     for cls in ("neutral", "eval", "trade"):
-        gains = [lv for lv in levers if lv["iq"] == cls and lv["alone"] and lv["alone"]["total_mw"] < -_MIN_GAIN_MW]
+        gains = [lv for lv in levers if lv["iq"] == cls and lv["alone"] and lv["alone"]["total_mw"] < -_MIN_GAIN_MW
+                 and (not base_ok or lv["alone_eligible"])]
         best_by[cls] = min(gains, key=lambda x: x["alone"]["total_mw"])["key"] if gains else None
+    # exact cheapest eligible point per IQ class (the greedy path above is only the explanation)
+    optimum: dict[str, dict[str, Any] | None] = {}
+    for cls in ("neutral", "eval", "trade"):
+        ok = [p for p in points if IQ_ORDER[p["iq"]] <= IQ_ORDER[cls] and (not base_ok or p["eligible"])]
+        exact = ({k: ok[0][k] for k in ("options", "option_keys", "comp", "iq", "total_mw", "bw_mbs", "key")}
+                 | {"delta_mw": round(ok[0]["total_mw"] - base["total_mw"], 2)}) if ok else None
+        optimum[cls] = exact
+        m = milestones.get(cls)
+        if m is not None and exact is not None:
+            m["gap_mw"] = round(m["total_mw"] - exact["total_mw"], 2)
+            m["greedy_suboptimal"] = m["gap_mw"] > _GREEDY_GAP_MW
     return {
-        "status": "ok",
+        "status": "ok" if base_ok else "reference",
+        "baseline_eligible": base_ok,
         "basis": {"statistic": (summary.get("objective") or {}).get("statistic"),
                   "runtime_scale": (summary.get("objective") or {}).get("runtime_scale"),
                   "dvfs": "resolved levels (no headroom)",
                   "sw_band_mw": summary.get("sw_band_mw")},
         "baseline": {k: base[k] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_mbs")},
         "levers": levers, "costs": costs, "steps": steps, "milestones": milestones,
-        "best_lever": best_by, "points": points, "point_count": len(points),
+        "best_lever": best_by, "optimum": optimum, "points": points, "point_count": len(points),
     }

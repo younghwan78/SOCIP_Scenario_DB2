@@ -56,12 +56,14 @@ Commercialization levers (`whatif_levers.py`, same registry; `group` = palette g
 | `power_knob` | `param` (knob) · `option` (value) | Scenario `power_options.knobs` with `explore` (e.g. `crop_strategy=byrp_bcrop`, `pyramid_l0=skip`), applied with the authoring knob engine |
 | `history_interval` | optional `buffer_id` (none = all history buffers) · `value` N (1–8) | Previous-frame DMA read/write once every N frames: `history.update_interval` → `r_w_rate = 1/N`. IP core work stays per frame |
 | `ip_mode` | `node_id` · `option` (mode) | IP catalog `capabilities.sim.modes.<mode>` (own unit power / PPC) |
-| `compression` | `buffer_id` · `option` (`COMP_OFF` or a SoC catalog mode of the buffer family) · optional `value` ratio (0, 1] | Ratio default: `typical_ratio` → catalog `comp_ratio` < 1 → assumed. Only buffers whose endpoint IPs declare compression are listed; a mode the IP catalog does not list is rejected |
+| `compression` | `buffer_id` · `option` (`COMP_OFF` or a SoC catalog mode of the buffer family) · optional `value` ratio (0, 1] | Ratio default: `typical_ratio` → catalog `comp_ratio` < 1 → assumed — the same mean ratio the engine baseline uses, so re-selecting the current mode is a no-op. Support follows `compression_support` (shared with exploration): a declaring endpoint without the mode → `supported: false` (rejected); an endpoint that declares nothing → `supported: null` (applied with a note; exploration skips it) |
+| `llc_alloc` | `buffer_id` · `option` `on`/`off` · optional `value` = `llc_weight` (0, 1] | Sets `placement.llc_allocated` / `llc_weight` of a buffer that reaches DRAM; weight default = the buffer's own, else the scenario median. DRAM BW power × weight; LLC capacity and contention are not modeled. IQ-neutral |
 
 Structural levers apply first (sensor → power option → chain size), then the rest in request order.
 An explicitly selected sensor mode must also support the final FPS after all conditions are applied. Plain FPS-only conditions remain hypothetical cadence changes.
-Preview adds `lever_notes` (what was reshaped) and `iq_required` (targets needing IQ evaluation;
-lossy compression included).
+Preview adds `lever_notes` (what was reshaped) and `iq_required` (targets needing IQ evaluation).
+The IQ class is per option (`change_iq`: `neutral` / `eval` / `trade`): lossy compression trades IQ,
+lossless does not, and a power-knob or IP-mode option declared `iq_eval: not_required` is neutral.
 
 `dvfs_level` pins a DVFS domain to an OPP level of that domain's ladder (`domain` + integer `level`);
 every IP of the shared domain runs at that level, so a level below the required clock fails timing.
@@ -73,7 +75,7 @@ domain down.
 | `ask` | Input | Execution | Answer |
 | --- | --- | --- | --- |
 | `what_if` | `changes` (1–8) | Preview (baseline vs candidate) | `ok` / `fail` + minimum stage slack, power/BW deltas, applied clock moves; notes a clock floor below the applied clock |
-| `combine` | `changes` (2–8; `combine: "factorial"` ≤ 5) | Baseline + each lever alone + all together (`each`) or every subset (`factorial`), each case through `apply_whatif_changes` + Timing Budget | `combine.rows` (Δ CPU/IP/memory/BW, verdict, min slack, notes), `best` = fps-feasible lowest power, `interaction_mw` = all − Σ singles |
+| `combine` | `changes` (2–8; `combine: "factorial"` ≤ 5) | Baseline + each lever alone + all together (`each`) or every subset (`factorial`), each case through `apply_whatif_changes` + Timing Budget | `combine.rows` (Δ CPU/IP/memory/BW, verdict, min slack, notes, `iq`), `best_keep` = fps-feasible lowest power keeping IQ (the recommendation), `best_trade` = a cheaper IQ-eval/trade row with `trade_gain_mw`, `best` = lowest regardless of IQ (compatibility), `interaction_mw` = all − Σ singles |
 | `search_limit` | `search_domains` (empty = all) | Lower each domain one OPP level at a time until the Timing Budget verdict fails | Lowest feasible level, power delta, first failing level and reason; `at_min` when already at the lowest OPP |
 | `diagnose` | — | Baseline report | Tightest stage and slack, its longest IPs, per-domain room to lower/raise |
 
@@ -115,8 +117,9 @@ Saved result values are calculated on the server rather than supplied by clients
 
 Baseline/candidate contain reports, metrics, model coverage, assumptions, and
 required/applied clock comparison. `modeled_power_mw` is the modeled subtotal.
-`total_power_mw` is null when excluded or missing components prevent whole-system
-prediction. SW runtime per frame and bitstream bitrate retain their stated baseline
+`coverage.complete` is true when every IP of the modeled scope (CPU + IP + memory) has
+a model; `excluded_components` name the scope boundary, so `total_power_mw` (a
+whole-system prediction) stays null. SW runtime per frame and bitstream bitrate retain their stated baseline
 assumptions. Output resizing preserves sensor mode/input dimensions and upstream
 processing. A model calculation does not establish measured accuracy or IQ.
 
@@ -143,8 +146,10 @@ in total. The product is at most 256 and also respects the deployment case limit
 Constraints are `max_power_mw`, `max_bw_mbs`, `max_latency_ms`, `min_slack_ms` and
 `allow_iq_required` (default false). Failed cases remain visible with reasons.
 Eligibility requires timing feasibility, complete IP models and the selected
-constraints. The Pareto set minimizes modeled power, BW and latency; the recommended
-row is the lowest modeled-power eligible row. Neither selection certifies IQ.
+constraints. The Pareto set minimizes modeled power, BW and latency (a row without a
+modeled latency is compared on power and BW); the recommended row (`best_id`) is the
+lowest modeled-power eligible row. `best_trade_id` names a cheaper row excluded only
+because it needs IQ evaluation. Neither selection certifies IQ.
 
 Sensor power is reported separately. A measured sensor sample requires explicit
 power, source and matching FPS; otherwise it stays unknown. Rankings and power
@@ -152,10 +157,14 @@ constraints use CPU + IP + memory subtotal, excluding unmodeled device power.
 Assumed SW runtime and bitstream bitrate remain fixed and visible in warnings.
 
 Migration `0032` adds job requests/checkpoints. A two-worker thread pool
-uses the existing simulation admission budget; the database queue is bounded to 16
-active jobs. A 120-second heartbeat lease and worker tokens fence obsolete workers.
-Restarted or cancelled work can resume only with the same input identity. Progress
-is checkpointed between cases; cancellation does not interrupt a case mid-calculation.
+runs jobs in their own admission pool (`SCENARIO_DB_WHATIF_JOB_MAX_CONCURRENT`,
+default 1), so a sweep never holds the interactive simulation slots; the database
+queue is bounded to 16 active jobs. A 120-second heartbeat lease and worker tokens fence obsolete workers.
+Restarted or cancelled work can resume only with the same input identity. Cancellation
+is checked between cases (it does not interrupt a case mid-calculation); the result
+checkpoint is rewritten at most every `SCENARIO_DB_WHATIF_JOB_CHECKPOINT_SECONDS`
+(default 2) and once at the end. Combine and sweep cases reuse one lever-target set
+per baseline instead of rediscovering targets per case.
 Serialized requests preserve omitted configuration fields so active-profile defaults
 remain distinguishable from explicitly supplied code defaults after reopening.
 Worker calculation sessions release read connections before computing/checkpointing.

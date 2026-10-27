@@ -56,6 +56,29 @@ def register(kind: ChangeKind) -> ChangeKind:
     return kind
 
 
+def change_iq(change: dict, targets: dict | None = None) -> str:
+    """IQ class of one condition — the lever-analysis enum: neutral (keeps IQ) / eval (IQ evaluation) / trade (lossy).
+
+    Per option, not per kind: lossy compression trades IQ, lossless does not; a power knob or IP mode option
+    declared ``iq_eval: not_required`` is neutral even though its kind defaults to "required".
+    """
+    target = change.get("target")
+    if target == "compression":
+        return "trade" if "LOSSY" in str(change.get("option") or "").upper() else "neutral"
+    kind = CHANGE_KINDS.get(str(target))
+    if kind is None or kind.iq != "required":
+        return "neutral"
+    t = targets or {}
+    if target == "power_knob":
+        row = next((r for r in t.get("knobs") or [] if r.get("param") == change.get("param")), {})
+    elif target == "ip_mode":
+        row = next((r for r in t.get("ip_modes") or [] if r.get("id") == change.get("node_id")), {})
+    else:
+        return "eval"
+    opt = next((o for o in row.get("options") or [] if o.get("id") == change.get("option")), {})
+    return "neutral" if opt.get("iq_eval") == "not_required" else "eval"
+
+
 # Node-config parameters a condition may set directly (flat or sim block).
 # key -> (label, unit, max, modeled). Only keys present in the variant are listed; only ``modeled`` keys
 # (read by the Timing Budget power/clock model) are offered as conditions — the rest are reported as
@@ -260,6 +283,9 @@ def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dic
            "capability": _capability(graph)}
     from scenario_db.api.services.whatif_levers import lever_targets
     out.update(lever_targets(graph, out["fps"]))
+    from scenario_db.sim.transfers import dma_buffer_ids
+    dma = dma_buffer_ids(graph, workloads)   # LLC only moves buffers that actually reach DRAM
+    out["llc"] = [r for r in out.get("llc") or [] if r["id"] in dma]
     kinds = [k.meta(out) for k in CHANGE_KINDS.values()]
     out["change_kinds"] = [k for k in kinds if k["choices"] or k["target"] == "fps" and out["fps"]]
     out["supported_changes"] = [k["target"] for k in out["change_kinds"]]
@@ -500,18 +526,21 @@ def param_max(param: str | None) -> float | None:
 
 
 def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = None, notes: list | None = None,
-                         prepare_sensor: Callable | None = None):
+                         prepare_sensor: Callable | None = None, targets: dict | None = None):
     """Return a detached graph/config. The loaded graph and all ORM JSON remain untouched.
 
     Structural levers run first (sensor -> power option -> chain size), the rest in request order, so a later
-    size / compression condition applies to the reshaped pipeline. ``notes`` collects what a lever rewrote."""
+    size / compression condition applies to the reshaped pipeline. ``notes`` collects what a lever rewrote.
+    ``targets`` = ``whatif_targets(graph, config, domains)`` already computed for this baseline (read only);
+    combine / sweep pass it so every case does not repeat shape propagation and lever discovery."""
     candidate = replace(graph, scenario=deepcopy(graph.scenario), variant=deepcopy(graph.variant))
     variant = candidate.variant
     variant.node_configs = deepcopy(variant.node_configs or {})
     variant.size_overrides = deepcopy(variant.size_overrides or {})
     variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
     variant.design_conditions = deepcopy(variant.design_conditions or {})
-    ctx = _Apply(candidate, variant, config.model_copy(deep=True), whatif_targets(graph, config, domains))
+    ctx = _Apply(candidate, variant, config.model_copy(deep=True),
+                 targets if targets is not None else whatif_targets(graph, config, domains))
     ctx.prepare_sensor = prepare_sensor
     stream_changes = [c.model_dump(exclude_none=True) if hasattr(c, "model_dump") else dict(c)
                       for c in changes if (c.target if hasattr(c, "target") else c["target"]) == "stream_size"]

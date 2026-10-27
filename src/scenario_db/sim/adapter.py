@@ -11,7 +11,7 @@ from scenario_db.sim.external_devices import (
 from scenario_db.sim.models import IPWorkload, PortTransferSpec, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
 from scenario_db.sim.timeline_adapter import timeline_edges, timeline_tasks
-from scenario_db.sim.transfers import compression_catalog, edge_port_transfers, history_port_transfers, port_transfers_for_node, standalone_port_transfers
+from scenario_db.sim.transfers import apply_peak_ratio, compression_catalog, edge_port_transfers, history_port_transfers, port_transfers_for_node, standalone_port_transfers
 from scenario_db.sim.stream_io import supplemental_transfers
 from scenario_db.sim.timing_profiles import timing_case, timing_profiles
 from scenario_db.sim.workloads import build_workload_for_node, node_sim_block
@@ -108,7 +108,8 @@ def build_simulation_inputs(
     for device in external_devices(graph):
         if device.get("device_type") == "sensor" and device.get("v_valid_ms") is None:
             warnings.append(f"{device['node_id']}: sensor VVALID/CSIS frame window is unknown; provide CIS pixel clock and line timing. FPS is not a readout measurement.")
-    comp_catalog = compression_catalog(graph.soc)
+    # power / mean BW use the typical ratio; the worst-case catalog ratio only feeds bw_mbs_worst
+    comp_catalog = compression_catalog(graph.soc, purpose="mean")
 
     for node in graph.pipeline_nodes:
         node_id = str(node.get("id") or "")
@@ -145,6 +146,7 @@ def build_simulation_inputs(
     transfers.extend(history_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
     transfers.extend(standalone_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
     transfers.extend(supplemental_transfers(graph))
+    transfers = apply_peak_ratio(transfers, compression_catalog(graph.soc, purpose="peak"))
     for node_id, profile in timing_profiles(graph).items():
         if profile.get("start_latency_ref"):
             warnings.append(f"{node_id}: named event {profile['start_latency_ref']} is metadata only; select an explicitly mapped measured timing profile to apply its latency.")

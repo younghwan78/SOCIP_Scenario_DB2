@@ -100,6 +100,9 @@ class CpuRebalanceRequest(CpuSweepRequest):
     # "off" = only the frame period (and budgets_ms) bound the task time.
     timing_coupling: Literal["off", "stage_slack"] = "off"
     timing_statistic: Literal["min", "mean", "max"] = "max"
+    # with stage_slack: also search without the stage budgets and report what a longer pipeline latency would
+    # buy (result.latency_trade) — an explicit trade instead of a mode toggle; one extra search (single run only)
+    latency_trade: bool = False
 
 
 class CpuRebalanceSweepRequest(CpuRebalanceRequest):

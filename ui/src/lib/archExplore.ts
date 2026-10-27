@@ -34,6 +34,9 @@ export interface BufferRow {
   raw_mbs?: number; delta_mbs?: number; delta_mw?: number; ports?: string[]; listed_modes?: Record<string, string[]>; unsupported_ports?: string[]
   /** engine rev ≥ 11: every evaluated mode of the buffer (lossless / lossy) */
   modes?: { mode: string; comp_ratio: number; ratio_source: string; lossy: boolean; delta_mw: number; delta_mbs: number; selectable: boolean; skip_reason?: string | null }[]
+  /** engine rev ≥ 12: an already-compressed buffer — its current mode / mean ratio and what that SBWC saves now (OFF counterfactual) */
+  base_compression?: string | null; base_comp_ratio?: number
+  current_saving?: { mode: string; comp_ratio: number; saving_mbs: number; saving_mw: number }
 }
 export interface DomainOpt { level: number; speed_mhz: number; voltage_mv: number; delta_mw: number; raise: boolean }
 export interface DomainRow { domain: string; base_level: number; nodes: string[]; max_required_mhz: number; options: DomainOpt[] }
@@ -98,7 +101,12 @@ export interface LeverStep {
   phase: 'baseline' | IqClass; lever?: string; label: string; iq: IqClass; delta_mw: number; total_mw: number
   bw_mbs: number; delta_bw_mbs?: number; dropped?: string[] | null
 }
-export interface LeverMilestone { total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string> }
+export interface LeverMilestone {
+  total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string>
+  /** engine rev ≥ 12: milestone − exact class optimum; flagged above 0.5 mW */
+  gap_mw?: number; greedy_suboptimal?: boolean
+}
+export interface LeverOptimum { options: string[]; option_keys?: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; key?: string; delta_mw: number }
 export interface LeverPoint {
   eligible?: boolean
   options: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; cpu_mw: number; hw_mw: number; bw_mw: number
@@ -116,7 +124,11 @@ export interface LeverRegisterResult {
   promoted: { id: string; total_mw: number }[]; skipped?: { variant_id: string; reason: string }[]
 }
 export interface LeverAnalysis {
-  status: 'ok' | 'none'
+  /** reference (engine rev ≥ 12) = the baseline misses the constraints: no eligibility filter, for reference only */
+  status: 'ok' | 'reference' | 'none'
+  baseline_eligible?: boolean
+  /** engine rev ≥ 12: exact cheapest eligible design point per IQ class (the greedy path is the explanation) */
+  optimum?: Partial<Record<IqClass, LeverOptimum | null>>
   basis?: { statistic: string; runtime_scale: number; dvfs: string; sw_band_mw?: [number, number] | null }
   baseline?: LeverDelta
   levers?: LeverRow[]
@@ -335,7 +347,8 @@ export interface RunOptions {
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
-  modes: ['lossy'], max_buffers: 8, allow_lossy: true, objective_statistic: 'max', objective_scale: 1.0, require_declared: true,
+  // lossless SBWC keeps IQ (tier A / iq_keep baseline), lossy trades it: both explored like the backend default
+  modes: ['lossless', 'lossy'], max_buffers: 6, allow_lossy: true, objective_statistic: 'max', objective_scale: 1.0, require_declared: true,
   options: { knobs: true, modes: true, max_sets: 64 },
 }
 
@@ -359,10 +372,12 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
   }
 }
 
-/** Case count per variant before running (guards the 200k server limit). */
+/** Upper-bound case count per variant before running (guards the 200k server limit).
+ *  Each explored buffer is off or one of its modes (``1 + modes``); lossy is dropped when not allowed (backend rule). */
 export function caseCount(o: RunOptions, domains = 3): number {
   const slices = new Set([...o.statistics, o.objective_statistic]).size * new Set([...o.runtime_scales, o.objective_scale]).size
-  const comp = o.modes.length ? 2 ** o.max_buffers : 1
+  const modes = o.modes.filter((m) => o.allow_lossy || m !== 'lossy').length
+  const comp = modes ? (1 + modes) ** o.max_buffers : 1
   return slices * comp * (o.dvfs_headroom_levels + 1) ** domains
 }
 

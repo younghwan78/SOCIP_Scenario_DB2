@@ -287,3 +287,30 @@ def test_sweep_memo_preserves_complete_results(monkeypatch, util_model, max_case
     monkeypatch.setattr(_Ctx, "energy", lambda ctx, name, cpus, policies, clamped:
                         _cluster_eval(ctx, name, cpus, policies)["energy_mw"])
     assert cpu_sweep(prof, target=model, fps=30, spec=spec) == cached
+
+
+def test_shared_cpu_reports_response_bound_next_to_own_time_slack():
+    one = CpuPowerModel.from_params(_params(clusters=[
+        {"name": "MID", "core_type": "M", "cores": 1, "ipc_rel": 1.0, "opps": [
+            {"mhz": 1000, "mv": 700, "mw_per_core": 100}, {"mhz": 2000, "mv": 850, "mw_per_core": 300}]}], default_cluster=0))
+    profile = CpuProfile(tasks=[CpuTaskProfile(task=n, cluster="MID", cycles=8e6) for n in ("a", "b")],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    ref = cpu_sweep(profile, target=one, fps=30, spec=SweepSpec(budgets_ms={"a": 12, "b": 12}))["reference"]
+    assert set(ref["flags"]["shared_cpu"]) == {"a", "b"}
+    assert ref["response_ms"]["a"] == pytest.approx(ref["task_ms"]["a"] + ref["task_ms"]["b"], abs=1e-3)
+    assert ref["slack_shared_ms"]["a"] == pytest.approx(12 - ref["response_ms"]["a"], abs=1e-3)
+    assert ref["min_slack_shared_ms"] < ref["min_slack_ms"]
+
+
+def test_shared_response_bound_keeps_an_unshared_longer_thread():
+    """Task a: a long thread alone on cpu0, a short one sharing cpu1 with b -> the bound is never below own time."""
+    two = CpuPowerModel.from_params(_params(clusters=[
+        {"name": "MID", "core_type": "M", "cores": 2, "ipc_rel": 1.0, "opps": [
+            {"mhz": 1000, "mv": 700, "mw_per_core": 100}, {"mhz": 2000, "mv": 850, "mw_per_core": 300}]}], default_cluster=0))
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="MID", cycles=21e6, threads={"long": 20e6, "short": 1e6}),
+                                CpuTaskProfile(task="b", cluster="MID", cycles=1e6)],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    ref = cpu_sweep(profile, target=two, fps=30, spec=SweepSpec(budgets_ms={"a": 8, "b": 8}))["reference"]
+    assert set(ref["flags"]["shared_cpu"]) == {"a", "b"}
+    assert all(ref["response_ms"][t] >= ref["task_ms"][t] for t in ref["response_ms"])
+    assert ref["slack_shared_ms"]["a"] <= ref["slack_ms"]["a"] < 0

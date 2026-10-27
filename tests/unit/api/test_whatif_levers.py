@@ -94,6 +94,18 @@ def test_power_knob_l0_skip_and_sbwc_modes(env):
     assert lossy["bw_mbs"] < 0 <= off["bw_mbs"]
 
 
+def test_sbwc_baseline_uses_the_same_mean_ratio_as_the_lever(env):
+    """Engine baseline and the compression lever price SBWC with typical_ratio: re-selecting is a no-op, OFF costs BW."""
+    _, same = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L0", "option": "COMP_YUV_LOSSLESS"})
+    assert all(v == pytest.approx(0, abs=1e-6) for v in same.values()), same
+    _, off = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L0", "option": "COMP_OFF"})
+    assert off["bw_mbs"] > 100 and off["memory_power_mw"] > 0
+    _, off_l1 = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L1", "option": "COMP_OFF"})
+    assert off_l1["bw_mbs"] > 0
+    _, lossy = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L0", "option": "COMP_YUV_LOSSY"})
+    assert -off["bw_mbs"] < lossy["bw_mbs"] < 0   # lossy saves only its increment over the current lossless SBWC
+
+
 def test_sensor_swap_reshapes_chain_when_active_size_differs(env):
     _, _, t = env
     sensor = t["sensors"][0]
@@ -173,3 +185,68 @@ def test_runtime_combine_limits_also_cover_inferred_plans(n, mode):
     # An LLM plan can select combine after request-schema validation has run.
     with pytest.raises(Exception, match="combine requires"):
         service._combine({}, {}, [{}] * n, mode)
+
+
+def test_change_iq_is_per_option():
+    from scenario_db.api.services.whatif_conditions import change_iq
+    t = {"knobs": [{"param": "crop", "options": [{"id": "on", "iq_eval": "not_required"}, {"id": "off"}]}],
+         "ip_modes": [{"id": "mtnr", "options": [{"id": "Low", "iq_eval": "required"}, {"id": "Eco", "iq_eval": "not_required"}]}]}
+    assert change_iq({"target": "compression", "buffer_id": "B", "option": "COMP_YUV_LOSSY"}, t) == "trade"
+    assert change_iq({"target": "compression", "buffer_id": "B", "option": "COMP_YUV_LOSSLESS"}, t) == "neutral"
+    assert change_iq({"target": "power_knob", "param": "crop", "option": "on"}, t) == "neutral"
+    assert change_iq({"target": "power_knob", "param": "crop", "option": "off"}, t) == "eval"
+    assert change_iq({"target": "ip_mode", "node_id": "mtnr", "option": "Eco"}, t) == "neutral"
+    assert change_iq({"target": "ip_mode", "node_id": "mtnr", "option": "Low"}, t) == "eval"
+    assert change_iq({"target": "history_interval", "value": 2}, t) == "eval"
+    assert change_iq({"target": "fps", "value": 24}, t) == "neutral"
+
+
+def test_combine_recommends_iq_keeping_case_and_lists_the_trade(env, monkeypatch):
+    from scenario_db.api.services import whatif_conditions
+    _, scope, _ = env
+    calls = []
+    real = whatif_conditions.whatif_targets
+    monkeypatch.setattr(service, "whatif_targets", lambda *a, **k: calls.append(1) or real(*a, **k))
+    monkeypatch.setattr(whatif_conditions, "whatif_targets", lambda *a, **k: calls.append(1) or real(*a, **k))
+    levers = [{"target": "history_interval", "value": 2},
+              {"target": "compression", "buffer_id": "TNR_PREV_L0", "option": "COMP_YUV_LOSSLESS"}]
+    out = service.ask(MagicMock(), WhatIfAskRequest(**scope, ask="combine", combine="factorial", changes=levers))
+    combo = out["combine"]
+    rows = {r["key"]: r for r in combo["rows"]}
+    assert [lv["iq"] for lv in combo["levers"]] == ["eval", "neutral"]
+    assert rows[combo["best_keep"]]["iq"] == "neutral" and combo["best_keep"] == "1"
+    assert combo["best"] == combo["best_trade"] != combo["best_keep"] and rows[combo["best_trade"]]["iq"] == "eval"
+    assert combo["trade_gain_mw"] < 0
+    assert "화질 유지" in out["answer"]["headline"] and any("IQ trade 포함" in f for f in out["answer"]["facts"])
+    assert len(calls) <= 2   # baseline targets + one shared lever-target set, not one per case
+
+
+def test_compression_support_matches_exploration_rule(env):
+    """What-if and exploration share compression_support: an undeclared endpoint makes the mode unknown (None)."""
+    from scenario_db.sim.arch_exploration import compression_support
+    graph, _, t = env
+    for row in t["buffers"]:
+        live = set(row["nodes"])
+        for opt in row["options"]:
+            if opt["id"] == "COMP_OFF":
+                continue
+            assert opt["supported"] == compression_support(graph, live, opt["id"])[0]
+            if row["undeclared"] and opt["supported"] is not False:
+                assert opt["supported"] is None and "not declared" in opt["support_reason"]
+
+
+def test_llc_lever_moves_dram_bw_by_the_weight(env):
+    _, _, t = env
+    rows = {r["id"]: r for r in t["llc"]}
+    l0 = rows["PYRAMID_L0"]
+    assert l0["current"] == "on" and l0["weight"] == pytest.approx(0.6)
+    out, off = _preview(env, {"target": "llc_alloc", "buffer_id": "PYRAMID_L0", "option": "off"})
+    assert off["memory_power_mw"] > 0 and off["bw_mbs"] == pytest.approx(0, abs=1e-6)   # LLC scales power, not traffic
+    assert not out["iq_required"]
+    plain = next(r for r in t["llc"] if r["current"] == "off")
+    assert plain["options"][1]["weight"] == pytest.approx(0.6) and plain["options"][1]["weight_source"] == "scenario median"
+    for row in (r for r in t["llc"] if r["current"] == "off"):   # every listed buffer reaches DRAM
+        _, on = _preview(env, {"target": "llc_alloc", "buffer_id": row["id"], "option": "on", "value": 0.5})
+        assert on["memory_power_mw"] < 0, row["id"]
+    _, same = _preview(env, {"target": "llc_alloc", "buffer_id": "PYRAMID_L0", "option": "on"})
+    assert all(v == pytest.approx(0, abs=1e-6) for v in same.values())

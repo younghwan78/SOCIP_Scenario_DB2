@@ -204,3 +204,26 @@ def test_compression_catalog_from_dict_and_object():
 
     assert compression_catalog(_Soc()) == {"COMP_YUV_LOSSY": 0.5}
     assert compression_catalog(None) == {}
+
+
+def test_compression_catalog_mean_prefers_typical_and_peak_feeds_worst_bw():
+    from types import SimpleNamespace
+
+    from scenario_db.sim.transfers import apply_peak_ratio
+
+    soc = SimpleNamespace(compression_modes={
+        "COMP_YUV_LOSSLESS": {"comp_ratio": 1.0, "typical_ratio": 0.7},
+        "COMP_YUV_LOSSY": SimpleNamespace(comp_ratio=0.5, typical_ratio=None),
+    })
+    assert compression_catalog(soc) == {"COMP_YUV_LOSSLESS": 1.0, "COMP_YUV_LOSSY": 0.5}
+    mean = compression_catalog(soc, purpose="mean")
+    assert mean == {"COMP_YUV_LOSSLESS": 0.7, "COMP_YUV_LOSSY": 0.5}
+    spec = PortTransferSpec(node_id="n", hw_name="h", port="out", port_type=PortType.DMA_WRITE, width=100, height=100,
+                            format="NV12", compression="COMP_YUV_LOSSLESS",
+                            comp_ratio=resolve_comp_ratio("COMP_YUV_LOSSLESS", mean))
+    (peaked,) = apply_peak_ratio([spec], compression_catalog(soc, purpose="peak"))
+    bw = calc_port_bw(peaked, fps=30)
+    assert peaked.comp_ratio == 0.7 and peaked.comp_ratio_max == 1.0
+    assert bw.bw_mbs_worst == pytest.approx(bw.bw_mbs / 0.7)
+    off = spec.model_copy(update={"compression": "COMP_OFF"})
+    assert apply_peak_ratio([off], compression_catalog(soc))[0].comp_ratio_max is None

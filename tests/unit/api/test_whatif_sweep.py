@@ -82,3 +82,28 @@ def test_axis_validation_and_duplicate_targets():
         request(axes=[{**axis, "values": [axis["values"][0]] * 2}])
     with pytest.raises(ValueError, match="one target"):
         request(axes=[{**axis, "values": [axis["values"][0], {"target": "node_param", "node_id": "n", "param": "ppc", "value": 2}]}])
+
+
+def _row(rid, mw, bw, latency, eligible=True, reasons=None):
+    return {"id": rid, "metrics": {"modeled_power_mw": mw, "bw_mbs": bw}, "latency_ms": latency,
+            "eligible": eligible, "reasons": reasons or []}
+
+
+def test_pareto_keeps_eligible_rows_without_modeled_latency():
+    rows = [_row("a", 10, 10, None), _row("b", 12, 12, 5.0), _row("c", 9, 20, 7.0), _row("d", 11, 11, None)]
+    # a has no latency: compared on power/BW only -> dominates b and d; c is cheaper in power
+    assert sweep.pareto(rows) == ["a", "c"]
+
+
+def test_best_trade_lists_the_cheaper_iq_required_case(monkeypatch):
+    model(monkeypatch)
+    real = sweep.engine._preview_from
+    def preview(base, req):
+        out = real(base, req)
+        if req.changes[0].value == 30:
+            out["iq_required"] = ["power_knob"]
+        return out
+    monkeypatch.setattr(sweep.engine, "_preview_from", preview)
+    out = sweep.run_sweep(None, request())
+    assert out["best_id"] == "case-2" and out["best_trade_id"] == "case-1"
+    assert sweep.run_sweep(None, request(constraints={"allow_iq_required": True}))["best_trade_id"] is None

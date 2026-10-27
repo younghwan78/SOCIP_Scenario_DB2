@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     simulation_global_max_concurrent_runs: int = Field(default=0, ge=0)
     exploration_global_max_concurrent_requests: int = Field(default=0, ge=0)
     simulation_max_concurrent_runs: int = Field(default=2, ge=1)
+    # What-if sweep jobs run in their own per-process pool so a long sweep never holds the interactive
+    # simulation slots (What-if ask / CPU / Timing Budget keep answering while a job runs)
+    whatif_job_max_concurrent: int = Field(default=1, ge=1)
+    whatif_job_checkpoint_seconds: float = Field(default=2.0, ge=0, le=60)
     # CPU growth sweep: worker processes for the per-point rebalance (0 = min(cpu_count, 8); 1 = in-process)
     cpu_sweep_workers: int = Field(default=0, ge=0)
     simulation_max_timeline_frames: int = Field(default=120, ge=1)

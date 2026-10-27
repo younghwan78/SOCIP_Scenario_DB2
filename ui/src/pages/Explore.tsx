@@ -78,12 +78,15 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
   const sp = useSimProfiles(ctx.project, cfgSel)
   const set = <K extends keyof RunOptions>(k: K, v: RunOptions[K]) => setO((p) => ({ ...p, [k]: v }))
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
-  const cases = caseCount(o)
+  // project policy iq_keep registers the IQ-keeping optimum: lossless SBWC must stay in the explored space
+  const iqKeep = useReferences(ctx.project)?.policy.register_baseline === 'iq_keep'
+  const eff: RunOptions = iqKeep && !o.modes.includes('lossless') ? { ...o, modes: [...o.modes, 'lossless'] } : o
+  const cases = caseCount(eff)
   const variants = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).reduce((s, c) => s + c.variant_count, 0)
   const typeLabel = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).map((c) => c.scenario_name).join(' + ')
   const run = async () => {
     setBusy(true); setErr(undefined)
-    try { onDone(await archApi.createRun(runBody(scenarios, title, typeLabel, o, sp.ref))) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    try { onDone(await archApi.createRun(runBody(scenarios, title, typeLabel, eff, sp.ref))) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
   const byCat = useMemo(() => {
     const g: Record<string, typeof ctx.catalog> = {}
@@ -111,7 +114,11 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
           <div className="ax-row"><span className="ax-label">DVFS headroom</span>
             <div className="seg sm">{[0, 1, 2].map((k) => <button key={k} className={o.dvfs_headroom_levels === k ? 'on' : ''} onClick={() => set('dvfs_headroom_levels', k)}>+{k} level</button>)}</div></div>
           <div className="ax-row"><span className="ax-label">Compression</span>
-            {(['lossy', 'lossless'] as const).map((m) => <label key={m} className="ax-check"><input type="checkbox" checked={o.modes.includes(m)} onChange={() => set('modes', toggle(o.modes, m))} />{m}</label>)}
+            {(['lossless', 'lossy'] as const).map((m) => {
+              const locked = m === 'lossless' && iqKeep
+              return <label key={m} className="ax-check" title={locked ? '프로젝트 정책 iq_keep: 화질 유지(lossless SBWC) 조합이 등록 기준이라 항상 탐색' : undefined}>
+                <input type="checkbox" checked={eff.modes.includes(m)} disabled={locked} onChange={() => set('modes', toggle(o.modes, m))} />{m}</label>
+            })}
             <span className="faint" style={{ fontSize: 12 }}>buffer ≤</span>
             <input className="input" type="number" min={0} max={12} value={o.max_buffers} style={{ width: 64 }} onChange={(e) => set('max_buffers', Math.max(0, Math.min(12, Number(e.target.value) || 0)))} />
             <label className="ax-check"><input type="checkbox" checked={o.allow_lossy} onChange={() => set('allow_lossy', !o.allow_lossy)} />lossy 추천 허용</label>

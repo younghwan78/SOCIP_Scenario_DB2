@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from math import prod
 from threading import Event, Lock, Thread
+from time import monotonic
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -173,18 +174,23 @@ def _run(factory, job_id, token):
             db.commit()
         thread = Thread(target=heartbeat, daemon=True)
         thread.start()
+        settings = get_settings()
+        last_write = [float("-inf")]
         def checkpoint(result):
+            # Called before every case: always checks cancellation, but rewrites the (growing) result JSON only
+            # every whatif_job_checkpoint_seconds; the final result is written after run_sweep returns.
             with factory() as db:
                 current = db.query(WhatIfJob).filter_by(id=job_id, worker_token=token).with_for_update().one_or_none()
                 if current is None:
                     return False
-                current.result = dict(result)
-                current.completed_cases = result["completed_cases"]
+                if monotonic() - last_write[0] >= settings.whatif_job_checkpoint_seconds:
+                    current.result = dict(result)
+                    current.completed_cases = result["completed_cases"]
+                    last_write[0] = monotonic()
                 current.heartbeat_at = current.updated_at = _now()
                 keep_going = not current.cancel_requested and not _shutdown.is_set()
                 db.commit()
                 return keep_going
-        settings = get_settings()
         slot = None
         while slot is None:
             with factory() as db:
@@ -196,7 +202,7 @@ def _run(factory, job_id, token):
                     current.updated_at = _now()
                     db.commit()
                     return
-            candidate_slot = admission_slot("simulation", settings.simulation_max_concurrent_runs)
+            candidate_slot = admission_slot("whatif_job", settings.whatif_job_max_concurrent)
             try:
                 candidate_slot.__enter__()
                 slot = candidate_slot
