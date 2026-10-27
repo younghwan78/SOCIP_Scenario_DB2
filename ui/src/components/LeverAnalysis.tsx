@@ -20,7 +20,7 @@ export interface Measured { total_mw: number; label: string }
 export interface RegisterCtx { runId: string; scenarioId: string; variantId: string; projectRef?: string | null; readOnly: boolean }
 
 export function LeverAnalysisView({ la, battery, measured, reg }: { la: LeverAnalysis | undefined; battery: Battery; measured?: Measured | null; reg?: RegisterCtx }) {
-  if (!la || la.status !== 'ok' || !la.baseline) {
+  if (!la || (la.status !== 'ok' && la.status !== 'reference') || !la.baseline) {
     return <div className="empty">이 run에는 lever 분석이 없습니다 (engine rev 11 이후 다시 탐색하면 표시).</div>
   }
   return <LeverBody key={JSON.stringify([reg?.runId, reg?.scenarioId, reg?.variantId, reg?.projectRef, reg?.readOnly])} la={la} battery={battery} measured={measured} reg={reg} />
@@ -35,6 +35,7 @@ function LeverBody({ la, battery, measured, reg }: { la: LeverAnalysis; battery:
   const best = (c: IqClass) => levers.find((l) => l.key === la.best_lever?.[c])
   return (
     <div className="lever">
+      {la.status === 'reference' && <div className="err-text" style={{ fontSize: 12, marginBottom: 6 }}>⚠ baseline이 제약(timing · budget)을 만족하지 않아 lever 분석은 참고용입니다 — 아래 경로 · 최적은 적격성 필터 없이 계산됨. 등록 전 조합별 판정을 확인하세요.</div>}
       <div className="lever-tiles">
         <Tile title="baseline" sub="변경 없음 · 현재 DVFS" mw={base.total_mw} bw={base.bw_mbs} battery={battery} />
         {PHASES.map((c) => ms[c] && <Tile key={c} title={c === 'neutral' ? IQ_LABEL.neutral + ' 최적' : `+ ${IQ_LABEL[c]}`} color={IQ_COLOR[c]}
@@ -48,6 +49,7 @@ function LeverBody({ la, battery, measured, reg }: { la: LeverAnalysis; battery:
           : <>줄일 수 있는 무손실 lever가 없습니다 (lossless 지원 DMA 없음).</>}</li>
         {best('eval') && <li><b>IQ 평가가 필요한 lever</b> 중 단독 효과 최대: <b>{best('eval')!.label}</b> ({signed(best('eval')!.alone?.total_mw)} mW) — 채택 전 화질 평가 필요</li>}
         {ms.trade && ms.eval && ms.trade.total_mw < ms.eval.total_mw - 0.05 && <li><b>lossy까지 허용</b>하면 추가 {signed(ms.trade.total_mw - ms.eval.total_mw)} mW</li>}
+        {PHASES.filter((c) => ms[c]?.greedy_suboptimal && la.optimum?.[c]).map((c) => <li key={`gap-${c}`}><b>{IQ_LABEL[c]}</b> 정확 최적은 {fmt(la.optimum![c]!.total_mw, 1)} mW ({describe(la.optimum![c]!.options, la.optimum![c]!.comp)}) — 단계별 경로보다 {fmt(ms[c]!.gap_mw, 1)} mW 낮음 (lever 조합 상호작용)</li>)}
         {levers.some((l) => l.moot || l.overlap) && <li className="faint">중첩: {levers.filter((l) => l.moot || l.overlap).map((l) => l.label).join(', ')} — 같은 traffic을 줄이는 lever라 함께 쓰면 단독 효과의 합보다 작습니다.</li>}
       </ul>
       {reg && (la.points ?? []).some((p) => p.option_keys) && <LeverSelect la={la} battery={battery} sel={sel} setSel={setSel} {...reg} />}

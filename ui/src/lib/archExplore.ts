@@ -101,7 +101,12 @@ export interface LeverStep {
   phase: 'baseline' | IqClass; lever?: string; label: string; iq: IqClass; delta_mw: number; total_mw: number
   bw_mbs: number; delta_bw_mbs?: number; dropped?: string[] | null
 }
-export interface LeverMilestone { total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string> }
+export interface LeverMilestone {
+  total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string>
+  /** engine rev ≥ 12: milestone − exact class optimum; flagged above 0.5 mW */
+  gap_mw?: number; greedy_suboptimal?: boolean
+}
+export interface LeverOptimum { options: string[]; option_keys?: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; key?: string; delta_mw: number }
 export interface LeverPoint {
   eligible?: boolean
   options: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; cpu_mw: number; hw_mw: number; bw_mw: number
@@ -119,7 +124,11 @@ export interface LeverRegisterResult {
   promoted: { id: string; total_mw: number }[]; skipped?: { variant_id: string; reason: string }[]
 }
 export interface LeverAnalysis {
-  status: 'ok' | 'none'
+  /** reference (engine rev ≥ 12) = the baseline misses the constraints: no eligibility filter, for reference only */
+  status: 'ok' | 'reference' | 'none'
+  baseline_eligible?: boolean
+  /** engine rev ≥ 12: exact cheapest eligible design point per IQ class (the greedy path is the explanation) */
+  optimum?: Partial<Record<IqClass, LeverOptimum | null>>
   basis?: { statistic: string; runtime_scale: number; dvfs: string; sw_band_mw?: [number, number] | null }
   baseline?: LeverDelta
   levers?: LeverRow[]

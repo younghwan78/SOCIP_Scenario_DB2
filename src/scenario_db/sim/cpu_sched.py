@@ -494,11 +494,12 @@ def evaluate(
             own = [th.ms(c, row["mhz"]) for th in ths]
             for th, ms in zip(ths, own):
                 task_ms[th.task] = max(task_ms.get(th.task, 0.0), ms)
-                if th.task in shared:
-                    response_ms[th.task] = max(response_ms.get(th.task, 0.0), sum(own))
+                response_ms[th.task] = max(response_ms.get(th.task, 0.0), sum(own))
                 where.setdefault(th.task, set()).add(c.name)
                 signature.append((th.label, c.name, index))
         overloaded = overloaded or any(r["overloaded"] for r in row["cpus"])
+    # every CPU of a task counts (an unshared long thread can dominate); reported for shared tasks only
+    response_ms = {t: v for t, v in response_ms.items() if t in shared}
     period = ctx.period
     slack = {t: round(budgets_ms[t] - task_ms.get(t, 0.0), 4) for t in budgets_ms if t in task_ms}
     slack_shared = {t: round(budgets_ms[t] - response_ms[t], 4) for t in budgets_ms if t in response_ms}
