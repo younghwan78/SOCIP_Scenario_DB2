@@ -411,6 +411,7 @@ def mode_targets(graph) -> list[dict[str, Any]]:
             options.append({"id": a["mode"], "label": a.get("label") or a["mode"], "explorable": a["explorable"],
                             "unit_power_mw_mp": a["unit_power_mw_mp"], "ppc": a["ppc"], "note": a.get("note"),
                             "supported": supported, "reason": reason, "requires": params.get("requires"),
+                            "iq_eval": params.get("iq_eval", "required"),
                             "evidence": evidence(sim, params), "effects": ["IP unit power", "PPC / required clock"]})
         rows.append({"id": r["node"], "mode": r["mode"], "hw_name": r["hw_name"], "unit_power_mw_mp": r["unit_power_mw_mp"],
                      "ppc": r["ppc"], "options": options})

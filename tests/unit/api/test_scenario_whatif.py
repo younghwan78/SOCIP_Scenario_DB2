@@ -43,8 +43,10 @@ def test_preview_uses_timing_budget_and_explains_model_subtotal(monkeypatch):
     out = service.preview(db, _request(graph))
     assert out["candidate"]["metrics"]["modeled_power_mw"] < out["baseline"]["metrics"]["modeled_power_mw"]
     assert out["candidate"]["metrics"]["cpu_power_mw"] > 0
+    # complete = every IP of the modeled scope has a model; the whole-device total stays out of scope
     assert out["candidate"]["metrics"]["total_power_mw"] is None
-    assert not out["candidate"]["coverage"]["complete"]
+    coverage = out["candidate"]["coverage"]
+    assert coverage["complete"] is (not coverage["missing_components"]) and coverage["excluded_components"]
     assert out["model_lineage"]["engine"] == "timing-budget"
     assert out["candidate"]["metrics"]["latency_ms"] == max(v for k, v in out["candidate"]["report"]["latency"].items() if k.endswith("_ms"))
     db.add.assert_not_called()

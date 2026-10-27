@@ -18,7 +18,7 @@ from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
 from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
 from scenario_db.api.services.compute_session import release_read_connection
-from scenario_db.api.services.whatif_conditions import CHANGE_KINDS, apply_whatif_changes, whatif_targets
+from scenario_db.api.services.whatif_conditions import CHANGE_KINDS, apply_whatif_changes, change_iq, whatif_targets
 from scenario_db.api.services.whatif_llm import LlmUnavailable, interpret as llm_interpret, llm_status
 from scenario_db.api.services.whatif_query import plan_query
 from scenario_db.db.models.definition import Project, Scenario
@@ -127,6 +127,15 @@ def _domains(report: dict, tables: dict) -> list[dict[str, Any]]:
             continue
         out.append({**d, "stages": sorted(d["stages"]), "ladder": ladder, "index": index})
     return out
+
+
+def _apply_targets(base: dict[str, Any], config, domains: list[dict] | None) -> dict[str, Any]:
+    """Lever targets of the baseline graph for this config, computed once per baseline (combine / sweep cases)."""
+    cache = base.setdefault("apply_targets", {})
+    key = _digest([config.model_dump(mode="json"), domains])
+    if key not in cache:
+        cache[key] = whatif_targets(base["graph"], config, domains)
+    return cache[key]
 
 
 def _targets_from(base: dict[str, Any]) -> dict[str, Any]:
@@ -250,13 +259,15 @@ def _calculate_case(graph, config, options, tables, ref):
     excluded.append("unmodeled SoC/display/device baseline and MIF DVFS")
     p = report["power"]
     sensor = sensor_power_coverage(graph, config.fps)
-    coverage = {"complete": not missing and not excluded, "scope": "modeled CPU + IP + memory",
+    # complete = every IP of the modeled scope (CPU + IP + memory) has a power/performance model; the excluded
+    # components are the scope boundary, so a whole-device total (total_power_mw) is never reported here.
+    coverage = {"complete": not missing, "scope": "modeled CPU + IP + memory",
                 "missing_components": missing, "excluded_components": excluded, "cpu_model": "flat", "sensor": sensor,
                 "assumptions": ["Per-frame SW runtime remains the baseline assumption; no measured extrapolation",
                                 "Existing stream bitrate stays fixed", "Sensor mode and input dimensions change only through explicit conditions",
                                 "FPS-only changes are hypothetical cadence; explicit sensor selections must support the final FPS",
                                 "Model calculation does not validate IQ or wiring compatibility"]}
-    metrics = {"modeled_power_mw": p["total_mw"], "total_power_mw": p["total_mw"] if coverage["complete"] else None,
+    metrics = {"modeled_power_mw": p["total_mw"], "total_power_mw": None,
                "sensor_power_mw": sensor["power_mw"],
                "modeled_plus_sensor_mw": p["total_mw"] + sensor["power_mw"] if sensor["power_mw"] is not None else None,
                "cpu_power_mw": p["cpu_mw"], "ip_power_mw": p["hw_mw"], "memory_power_mw": p["bw_mw"],
@@ -291,9 +302,10 @@ def _preview_from(base: dict, request: WhatIfPreviewRequest) -> dict:
         candidate_config.dvfs_overrides.update({d["id"]: d["level"] for d in _domains(before["report"], tables)})
         lever_notes.append("기준 OPP 고정: 후보의 부하 변화에 따른 DVFS 재선택을 제외합니다.")
     try:
-        candidate, config, changes = apply_whatif_changes(graph, request.changes, candidate_config,
-                                                          _domains(before["report"], tables), lever_notes,
-                                                          prepare_sensor=base.get("prepare_candidate"))
+        domains = _domains(before["report"], tables)
+        candidate, config, changes = apply_whatif_changes(graph, request.changes, candidate_config, domains, lever_notes,
+                                                          prepare_sensor=base.get("prepare_candidate"),
+                                                          targets=_apply_targets(base, candidate_config, domains))
         after = _case(candidate, config, options, tables, ref)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
@@ -327,8 +339,8 @@ def _preview_from(base: dict, request: WhatIfPreviewRequest) -> dict:
     warnings = sorted(set(before["report"]["warnings"] + after["report"]["warnings"] + [
         "Calculated model subtotal excludes missing/unmodeled device power; it is not measured whole-device power.",
         "Condition changes keep assumed SW runtime and stream bitrate fixed; review those assumptions before adoption."]))
-    iq = sorted({c["target"] for c in changes if (CHANGE_KINDS.get(c["target"]) and CHANGE_KINDS[c["target"]].iq == "required")
-                 or (c["target"] == "compression" and "LOSSY" in str(c.get("option", "")).upper())})
+    lever_targets = _apply_targets(base, candidate_config, domains)
+    iq = sorted({c["target"] for c in changes if change_iq(c, lever_targets) != "neutral"})
     if iq:
         warnings.append(f"IQ evaluation required before adoption: {', '.join(iq)}")
     return {"persisted": False, "baseline_hash": baseline_hash, "condition_hash": condition_hash,
@@ -418,6 +430,7 @@ def _search_limit(base: dict, domains: list[dict], ids: list[str]) -> list[dict[
 
 
 _DELTA = ("modeled_power_mw", "cpu_power_mw", "ip_power_mw", "memory_power_mw", "bw_mbs")
+_IQ_ORDER = {"neutral": 0, "eval": 1, "trade": 2}
 
 
 def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[str, Any]:
@@ -442,7 +455,8 @@ def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[
         notes: list[str] = []
         try:
             cand, cfg, _ = apply_whatif_changes(graph, [changes[i] for i in sub], config, targets.get("domains"), notes,
-                                               prepare_sensor=base.get("prepare_candidate"))
+                                               prepare_sensor=base.get("prepare_candidate"),
+                                               targets=_apply_targets(base, config, targets.get("domains")))
             case = _case(cand, cfg, options, tables, ref)
         except ValueError as exc:
             rows.append({"key": "+".join(map(str, sub)), "levers": list(sub), "metrics": None, "delta": None,
@@ -456,19 +470,25 @@ def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[
                      "reason": None if m["feasible"] else (case["report"]["verdict"]["reasons"] or ["timing 미달"])[0]})
     singles = {r["levers"][0]: r for r in rows if len(r["levers"]) == 1}
     together = next((r for r in rows if len(r["levers"]) == n), None)
-    ok = [r for r in rows[1:] if r["feasible"] and r["delta"] is not None]
-    best = min(ok, key=lambda r: r["delta"]["modeled_power_mw"], default=None)
     interaction = None
     if together and together["delta"] and all(singles.get(i, {}).get("delta") for i in range(n)):
         interaction = round(together["delta"]["modeled_power_mw"] - sum(singles[i]["delta"]["modeled_power_mw"] for i in range(n)), 3)
     levers = []
     for i, ch in enumerate(changes):
         kind = CHANGE_KINDS.get(ch["target"])
-        iq = (kind.iq == "required") if kind else False
-        iq = iq or (ch["target"] == "compression" and "LOSSY" in str(ch.get("option", "")).upper())
-        levers.append({"index": i, "change": ch, "label": _change_text(ch, targets), "group": kind.group if kind else "other", "iq_required": iq})
+        iq_class = change_iq(ch, targets)
+        levers.append({"index": i, "change": ch, "label": _change_text(ch, targets), "group": kind.group if kind else "other",
+                       "iq": iq_class, "iq_required": iq_class != "neutral"})
+    for r in rows:
+        r["iq"] = max((levers[i]["iq"] for i in r["levers"]), key=_IQ_ORDER.__getitem__, default="neutral")
+    ok = [r for r in rows[1:] if r["feasible"] and r["delta"] is not None]
+    lowest = lambda pool: min(pool, key=lambda r: r["delta"]["modeled_power_mw"], default=None)  # noqa: E731
+    best = lowest(ok)                                           # any IQ class (kept for older readers)
+    keep = lowest([r for r in ok if r["iq"] == "neutral"])      # image quality kept: the recommendation
+    gap = round(best["delta"]["modeled_power_mw"] - keep["delta"]["modeled_power_mw"], 3) if best and keep else None
     return {"mode": mode, "levers": levers, "rows": rows, "best": best["key"] if best else None,
-            "interaction_mw": interaction, "baseline_mw": bm["modeled_power_mw"]}
+            "best_keep": keep["key"] if keep else None, "best_trade": best["key"] if best and best is not keep else None,
+            "trade_gain_mw": gap, "interaction_mw": interaction, "baseline_mw": bm["modeled_power_mw"]}
 
 
 def _combine_answer(combo: dict) -> dict[str, Any]:
@@ -494,10 +514,18 @@ def _combine_answer(combo: dict) -> dict[str, Any]:
                         if combo.get("interaction_mw") is not None and abs(combo["interaction_mw"]) >= 0.5 else ""))
     if best is None:
         return {"verdict": "fail", "headline": "fps(처리량)를 충족하는 조합이 없습니다", "facts": facts, "actions": []}
-    iq = any(levers[i]["iq_required"] for i in best["levers"])
+    keep = next((r for r in rows if r["key"] == combo.get("best_keep")), None)
+    trade = next((r for r in rows if r["key"] == combo.get("best_trade")), None)
+    if trade is not None:
+        facts.append(f"IQ trade 포함 최저: {name(trade)} — {trade['delta']['modeled_power_mw']:+.1f} mW"
+                     + (f" (화질 유지 대비 추가 {combo['trade_gain_mw']:+.1f} mW)" if combo.get("trade_gain_mw") is not None else "")
+                     + f" · {'lossy 화질 trade' if trade.get('iq') == 'trade' else 'IQ 평가 필요'}")
+    pick = keep or best
+    iq = pick.get("iq", "neutral") != "neutral"
+    label = "fps 충족 · 화질 유지 최저 전력" if keep else "fps 충족 최저 전력 (화질 유지 조합 없음)"
     return {"verdict": "ok", "facts": facts, "actions": [],
-            "headline": f"fps 충족 최저 전력: {name(best)} — {best['delta']['modeled_power_mw']:+.1f} mW ({pct(best['delta']['modeled_power_mw'])})"
-                        f" · 최소 여유 {best['tight_stage']} {best['min_slack_ms']:.2f} ms" + (" · IQ 평가 필요" if iq else "")}
+            "headline": f"{label}: {name(pick)} — {pick['delta']['modeled_power_mw']:+.1f} mW ({pct(pick['delta']['modeled_power_mw'])})"
+                        f" · 최소 여유 {pick['tight_stage']} {pick['min_slack_ms']:.2f} ms" + (" · IQ 평가 필요" if iq else "")}
 
 
 def _diagnose(base: dict, domains: list[dict]) -> dict[str, Any]:

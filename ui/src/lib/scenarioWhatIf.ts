@@ -82,8 +82,20 @@ export interface CombineRow {
   key: string; levers: number[]; metrics: WhatIfMetrics | null
   delta: Record<'modeled_power_mw' | 'cpu_power_mw' | 'ip_power_mw' | 'memory_power_mw' | 'bw_mbs', number> | null
   feasible: boolean; min_slack_ms: number | null; tight_stage: string | null; reason: string | null; error?: boolean; notes: string[]
+  /** API ≥ scenario-whatif/3: worst IQ class of the row's levers */
+  iq?: IqClass
 }
-export interface CombineResult { mode: CombineMode; levers: { index: number; change: WhatIfChange; label: string; group: string; iq_required: boolean }[]; rows: CombineRow[]; best: string | null; interaction_mw: number | null; baseline_mw: number }
+/** neutral = keeps image quality · eval = needs IQ evaluation · trade = lossy (same enum as the exploration lever analysis) */
+export type IqClass = 'neutral' | 'eval' | 'trade'
+export interface CombineResult {
+  mode: CombineMode; levers: { index: number; change: WhatIfChange; label: string; group: string; iq_required: boolean; iq?: IqClass }[]
+  rows: CombineRow[]
+  /** lowest power with fps met, any IQ class */
+  best: string | null
+  /** API ≥ scenario-whatif/3: lowest power keeping IQ (the recommendation) · cheaper IQ-trade alternative · its extra Δ */
+  best_keep?: string | null; best_trade?: string | null; trade_gain_mw?: number | null
+  interaction_mw: number | null; baseline_mw: number
+}
 export interface AskResponse {
   scope: WhatIfScope; baseline_hash: string
   /** null = builder conditions (no interpretation) */
@@ -126,7 +138,7 @@ export interface ExperimentDraft { title: string; purpose: string; description: 
 export interface SweepConstraints { max_power_mw?: number; max_bw_mbs?: number; max_latency_ms?: number; min_slack_ms?: number; allow_iq_required: boolean }
 export interface SweepRequest extends WhatIfScope { basis_ref?: string; config?: Record<string, unknown>; options?: Record<string, unknown>; expected_baseline_hash: string; expected_analysis_hash?: string; changes: WhatIfChange[]; axes: { label: string; values: WhatIfChange[] }[]; constraints: SweepConstraints; comparison: 'retune' | 'fixed_opp' }
 export interface SweepRow { id: string; label: string; changes: WhatIfChange[]; preview_request?: PreviewRequest; metrics: WhatIfMetrics | null; delta: Record<string, number | null> | null; feasible: boolean; eligible: boolean; reasons: string[]; iq_required: string[]; condition_hash?: string; min_slack_ms: number | null; latency_ms: number | null }
-export interface SweepResult { scope: WhatIfScope; baseline_hash: string; analysis_hash: string; comparison?: 'retune' | 'fixed_opp'; constraints?: SweepConstraints; baseline: { metrics: WhatIfMetrics; coverage: WhatIfCoverage }; rows: SweepRow[]; pareto_ids: string[]; best_id: string | null; total_cases: number; completed_cases: number; cancelled: boolean; assumptions: string[] }
+export interface SweepResult { scope: WhatIfScope; baseline_hash: string; analysis_hash: string; comparison?: 'retune' | 'fixed_opp'; constraints?: SweepConstraints; baseline: { metrics: WhatIfMetrics; coverage: WhatIfCoverage }; rows: SweepRow[]; pareto_ids: string[]; best_id: string | null; best_trade_id?: string | null; total_cases: number; completed_cases: number; cancelled: boolean; assumptions: string[] }
 export interface SweepJob { id: string; status: 'pending' | 'queued' | 'running' | 'completed' | 'cancelled' | 'interrupted' | 'failed'; completed_cases: number; total_cases: number; result?: SweepResult | null; error?: string | null; resumable: boolean; cancel_requested?: boolean }
 const path = '/scenario-whatif'
 export const whatIfApi = {

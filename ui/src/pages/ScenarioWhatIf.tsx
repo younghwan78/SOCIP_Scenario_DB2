@@ -433,14 +433,18 @@ function CombineView({ combo, dirty, condition }: { combo: CombineResult; dirty:
   const lo = Math.min(0, ...combo.rows.map((r) => r.delta?.modeled_power_mw ?? 0)), hi = Math.max(0, ...combo.rows.map((r) => r.delta?.modeled_power_mw ?? 0))
   const span = hi - lo || 1
   const base = combo.baseline_mw || 0
-  return <Card id="wi-combine" title="레버 조합 비교" note={`${combo.mode === 'factorial' ? '모든 조합' : '각각 + 모두'} · ${combo.rows.length - 1} case · Δ = 기준 대비 (모델 CPU + IP + 메모리) · ★ = fps 충족 최저 전력`} defaultWide>
+  // older responses have only ``best``; from scenario-whatif/3 the star is the IQ-keeping optimum and ◆ the IQ trade
+  const star = combo.best_keep !== undefined ? combo.best_keep : combo.best
+  const tradeKey = combo.best_keep !== undefined ? combo.best_trade : null
+  return <Card id="wi-combine" title="레버 조합 비교" note={`${combo.mode === 'factorial' ? '모든 조합' : '각각 + 모두'} · ${combo.rows.length - 1} case · Δ = 기준 대비 (모델 CPU + IP + 메모리) · ★ = fps 충족 · 화질 유지 최저 전력${tradeKey ? ' · ◆ = IQ trade 포함 최저' : ''}`} defaultWide>
     <ResultState dirty={dirty} condition={condition} />
-    <ul className="wi-levers">{combo.levers.map((lv) => <li key={lv.index}><b>#{lv.index + 1}</b> {lv.label}{lv.iq_required ? <span className="badge v-warn" style={{ marginLeft: 6 }}>IQ 평가</span> : null}</li>)}</ul>
+    <ul className="wi-levers">{combo.levers.map((lv) => <li key={lv.index}><b>#{lv.index + 1}</b> {lv.label}{lv.iq_required ? <span className="badge v-warn" style={{ marginLeft: 6 }}>{lv.iq === 'trade' ? '화질 trade' : 'IQ 평가'}</span> : null}</li>)}</ul>
+    {tradeKey && combo.trade_gain_mw != null && <p className="faint">화질 유지 최적(★) 대비 IQ trade 조합(◆)이 {fmt(combo.trade_gain_mw, 1)} mW 추가 절감 — IQ 평가 후 채택.</p>}
     <div className="table-x"><table className="tb-mini-table wi-combo" style={{ width: '100%' }}>
       <thead><tr><th>조합</th><th>Δ 전력 mW</th><th style={{ width: 160 }} /><th>IP</th><th>메모리</th><th>CPU</th><th>Δ BW MB/s</th><th>fps</th><th>최소 여유 ms</th><th>사유 · 메모</th></tr></thead>
-      <tbody>{rows.map((r) => { const d = r.delta?.modeled_power_mw ?? null, best = r.key === combo.best
+      <tbody>{rows.map((r) => { const d = r.delta?.modeled_power_mw ?? null, best = r.key === star, trade = r.key === tradeKey
         return <tr key={r.key} className={`${best ? 'wi-focus' : ''} ${r.feasible ? '' : 'wi-fail'}`}>
-          <th>{best ? '★ ' : ''}{name(r.levers)}</th>
+          <th>{best ? '★ ' : trade ? '◆ ' : ''}{name(r.levers)}</th>
           <td className="mono">{d == null ? '—' : `${d >= 0 ? '+' : ''}${fmt(d, 1)}`}{d != null && base ? <span className="faint"> ({((d / base) * 100).toFixed(1)}%)</span> : null}</td>
           <td>{d != null && <svg width={150} height={10} aria-hidden="true"><line x1={((0 - lo) / span) * 150} x2={((0 - lo) / span) * 150} y1={0} y2={10} stroke="#9A9387" />
             <rect x={(Math.min(0, d) - lo) / span * 150} width={Math.abs(d) / span * 150} y={1} height={8} fill={d <= 0 ? '#009E73' : '#D55E00'} /></svg>}</td>

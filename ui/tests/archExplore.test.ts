@@ -12,8 +12,8 @@ it('builds the run request with objective folded into the axes', () => {
   expect(b.title).toBeUndefined()
 })
 
-it('estimates the case count like the server (SW slices x 2^buffers x DVFS)', () => {
-  expect(caseCount(DEFAULT_RUN)).toBe(2 * 3 * 256 * 8)
+it('estimates the case count like the server (SW slices x (1 + modes)^buffers x DVFS)', () => {
+  expect(caseCount(DEFAULT_RUN)).toBe(2 * 3 * 3 ** 6 * 8)
   expect(caseCount({ ...DEFAULT_RUN, modes: [] })).toBe(2 * 3 * 8)
 })
 
