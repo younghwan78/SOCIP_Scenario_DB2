@@ -34,6 +34,9 @@ export interface BufferRow {
   raw_mbs?: number; delta_mbs?: number; delta_mw?: number; ports?: string[]; listed_modes?: Record<string, string[]>; unsupported_ports?: string[]
   /** engine rev ≥ 11: every evaluated mode of the buffer (lossless / lossy) */
   modes?: { mode: string; comp_ratio: number; ratio_source: string; lossy: boolean; delta_mw: number; delta_mbs: number; selectable: boolean; skip_reason?: string | null }[]
+  /** engine rev ≥ 12: an already-compressed buffer — its current mode / mean ratio and what that SBWC saves now (OFF counterfactual) */
+  base_compression?: string | null; base_comp_ratio?: number
+  current_saving?: { mode: string; comp_ratio: number; saving_mbs: number; saving_mw: number }
 }
 export interface DomainOpt { level: number; speed_mhz: number; voltage_mv: number; delta_mw: number; raise: boolean }
 export interface DomainRow { domain: string; base_level: number; nodes: string[]; max_required_mhz: number; options: DomainOpt[] }

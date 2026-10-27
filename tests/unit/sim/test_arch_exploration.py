@@ -609,3 +609,26 @@ def test_lever_analysis_on_a_failing_baseline_is_reference_only():
     lv = ax.lever_analysis(_summary([_pt({}, 100, eligible=False), _pt({"A": LL}, 90, eligible=False)]))
     assert lv["status"] == "reference" and not lv["baseline_eligible"]
     assert lv["milestones"]["neutral"]["total_mw"] == 90 and lv["optimum"]["neutral"]["total_mw"] == 90
+
+
+def test_already_compressed_buffer_reports_current_saving_and_lossy_increment():
+    """Shipped fixture (MTNR L0/L1 lossless SBWC): the current saving is shown and lossy is an incremental trade."""
+    from scenario_db.sim.models import SimulationRunConfig
+
+    catalog = {}
+    for path in (FIXTURE / "00_hw").glob("ip-*.yaml"):
+        d = read(path)
+        catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"],
+                                     hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
+    raw = read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml")
+    g = _with_soc(graph_from_fixture(raw, UHD30, catalog))
+    rows = {r["buffer"]: r for r in ax.compression_candidates(g, ax.CompressionAxis(), SimulationRunConfig())}
+    l0 = rows["PYRAMID_L0"]
+    assert l0["base_compression"] == "COMP_YUV_LOSSLESS" and l0["base_comp_ratio"] == pytest.approx(0.7)
+    assert l0["current_saving"]["saving_mbs"] > 0 and l0["current_saving"]["saving_mw"] > 0
+    assert [m["mode"] for m in l0["modes"]] == ["COMP_YUV_LOSSY"] and l0["selectable"]
+    # lossy saves only its increment over lossless: (0.5 - 0.7) vs the OFF saving (1.0 - 0.7) of the same ports
+    assert -l0["modes"][0]["delta_mbs"] == pytest.approx(l0["current_saving"]["saving_mbs"] * 0.2 / 0.3, rel=1e-3)
+    no_lossy = {r["buffer"]: r for r in ax.compression_candidates(
+        g, ax.CompressionAxis(modes=["lossless"]), SimulationRunConfig())}
+    assert no_lossy["PYRAMID_L0"]["skip_reason"].startswith("already compressed")

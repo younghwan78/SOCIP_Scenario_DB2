@@ -737,10 +737,15 @@ def compression_candidates(
     image quality, so it is a different lever from the lossy one. Ratio per mode: spec override > SoC catalog
     ``typical_ratio`` (average, power) > catalog ``comp_ratio`` < 1 > assumed default. The top-level fields
     repeat the selectable mode with the largest saving (older readers keep working).
+
+    A buffer that is already compressed is not skipped: ``current_saving`` is what its SBWC saves now (OFF
+    counterfactual, attribution only — never a choice), and a lossless buffer still offers the lossy mode as
+    an IQ-trade choice whose delta is the increment over the current lossless state.
     """
     sw = sw_nodes or set()
     catalog = compression_catalog(graph.soc)
     typical = compression_typical(graph.soc)
+    mean = compression_catalog(graph.soc, purpose="mean")
     buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
     node_map = _buffer_nodes(graph)
     active = {str(n.get("id")) for n in graph.pipeline_nodes}
@@ -760,13 +765,24 @@ def compression_candidates(
             "nodes": sorted(nodes & active), "support": support, "listed_modes": listed,
             "base_compression": normalize_compression(eff.get("compression")),
         }
-        if compression_enabled(eff.get("compression")):
-            out.append(row | {"selectable": False, "skip_reason": "already compressed", "modes": []})
-            continue
+        current = row["base_compression"]
+        if current is not None:
+            row["base_comp_ratio"] = float(eff.get("comp_ratio") or mean.get(current) or 1.0)
+            off_variant = deepcopy(graph.variant)
+            off_variant.buffer_overrides = deepcopy(off_variant.buffer_overrides or {})
+            off_variant.buffer_overrides.setdefault(bid, {}).update({"compression": "COMP_OFF", "comp_ratio": None})
+            off = _dma(replace(graph, variant=off_variant), config)
+            row["current_saving"] = {
+                "mode": current, "comp_ratio": row["base_comp_ratio"],
+                "saving_mbs": round(sum(v[0] for v in off.values()) - sum(v[0] for v in base.values()), 3),
+                "saving_mw": round(sum(v[1] for v in off.values()) - sum(v[1] for v in base.values()), 4)}
         undeclared = [n for n in row["nodes"] if n not in listed]
         modes: list[dict[str, Any]] = []
         for m in axis.modes:
             mode = f"COMP_{fam}_{m.upper()}"
+            # an already-compressed buffer only moves lossless -> lossy (an IQ trade); its current mode is the baseline
+            if current is not None and (m != "lossy" or mode == current or "LOSSY" in current.upper()):
+                continue
             if not axis.include_unsupported and any(
                 mode not in {normalize_compression(v) for v in modes_}
                 and f"COMP_{m.upper()}" not in {str(v).upper() for v in modes_}
@@ -814,7 +830,8 @@ def compression_candidates(
                 "unsupported_ports": blocked, "selectable": reason is None, "skip_reason": reason,
             })
         if not modes:
-            out.append(row | {"selectable": False, "skip_reason": "no mode with ratio < 1", "modes": []})
+            reason = f"already compressed ({current})" if current is not None else "no mode with ratio < 1"
+            out.append(row | {"selectable": False, "skip_reason": reason, "modes": []})
             continue
         sel = [x for x in modes if x["selectable"]]
         top = min(sel or modes, key=lambda x: x["delta_mw"])
@@ -1349,7 +1366,7 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
         m = (_mode_of(buffers, b["buffer"], cmodes.get(b["buffer"])) or b) if on else b
         bufs.append({"buffer": b["buffer"], "raw_mbs": m.get("raw_mbs", b.get("raw_mbs", 0.0)), "compressed": on,
                      "mode": m.get("mode") if on else None,
-                     "comp_ratio": m.get("comp_ratio") if on else 1.0,
+                     "comp_ratio": m.get("comp_ratio") if on else b.get("base_comp_ratio", 1.0),
                      "delta_mbs": m.get("delta_mbs", 0.0) if on else 0.0,
                      "delta_mw": m.get("delta_mw", 0.0) if on else 0.0})
     return {
