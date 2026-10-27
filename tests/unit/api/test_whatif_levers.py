@@ -94,6 +94,18 @@ def test_power_knob_l0_skip_and_sbwc_modes(env):
     assert lossy["bw_mbs"] < 0 <= off["bw_mbs"]
 
 
+def test_sbwc_baseline_uses_the_same_mean_ratio_as_the_lever(env):
+    """Engine baseline and the compression lever price SBWC with typical_ratio: re-selecting is a no-op, OFF costs BW."""
+    _, same = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L0", "option": "COMP_YUV_LOSSLESS"})
+    assert all(v == pytest.approx(0, abs=1e-6) for v in same.values()), same
+    _, off = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L0", "option": "COMP_OFF"})
+    assert off["bw_mbs"] > 100 and off["memory_power_mw"] > 0
+    _, off_l1 = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L1", "option": "COMP_OFF"})
+    assert off_l1["bw_mbs"] > 0
+    _, lossy = _preview(env, {"target": "compression", "buffer_id": "PYRAMID_L0", "option": "COMP_YUV_LOSSY"})
+    assert -off["bw_mbs"] < lossy["bw_mbs"] < 0   # lossy saves only its increment over the current lossless SBWC
+
+
 def test_sensor_swap_reshapes_chain_when_active_size_differs(env):
     _, _, t = env
     sensor = t["sensors"][0]

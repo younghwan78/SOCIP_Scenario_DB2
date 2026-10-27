@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog, compression_typical
 
-ENGINE_REV = "arch-exploration/11"  # 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
+ENGINE_REV = "arch-exploration/12"  # 12: SBWC mean ratio = typical (engine baseline), eligible-only lever path + exact optimum; 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -1433,6 +1433,7 @@ def _jsonable(value: Any) -> Any:
 # ------------------------------------------------------------------- lever analysis
 IQ_ORDER = {"neutral": 0, "eval": 1, "trade": 2}
 _MIN_GAIN_MW = 0.05
+_GREEDY_GAP_MW = 0.5  # milestone above the exact class optimum by more than this -> greedy path flagged
 
 
 def _point(c: dict[str, Any]) -> dict[str, Any]:
@@ -1460,6 +1461,11 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     options), ``trade`` = gives up image quality (lossy compression). The path adds the best lever of each
     class in turn (neutral -> eval -> trade); each step's total is a looked-up design point, so steps include
     interactions (e.g. L0 skip removes the L0 buffer, so L0 compression no longer saves anything).
+
+    Only timing-eligible points may enter the path, the per-class best lever or the exact ``optimum``. The greedy
+    path is an explanation; ``optimum`` is the exact cheapest eligible point per IQ class and ``gap_mw`` on a
+    milestone shows how far the greedy path stopped above it. A baseline that already misses the constraints
+    makes the analysis reference-only (``baseline_eligible`` False, no eligibility filter).
     """
     po = summary.get("power_options") or {}
     item_iq: dict[str, str] = {}
@@ -1484,6 +1490,10 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     if base is None:
         return {"status": "none"}
     bufs = {b["buffer"]: b for b in summary.get("buffers") or []}
+    base_ok = bool(base.get("eligible", True))
+
+    def feasible(p: dict[str, Any] | None) -> bool:
+        return p is not None and (not base_ok or bool(p.get("eligible", True)))
 
     def mode_info(bid: str, mode: str) -> dict[str, Any]:
         return next((m for m in (bufs.get(bid) or {}).get("modes") or [] if m["mode"] == mode), {})
@@ -1551,7 +1561,7 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
                 if nxt is None or (lv["kind"] == "compression" and state[1].get(lv["buffer"]) == lv["mode"]):
                     continue
                 cand, kept = total_of(nxt)
-                if cand is None or IQ_ORDER[point_iq(nxt[0], kept)] > IQ_ORDER[phase]:
+                if not feasible(cand) or IQ_ORDER[point_iq(nxt[0], kept)] > IQ_ORDER[phase]:
                     continue
                 if best is None or cand["total_mw"] < best[0]["total_mw"]:
                     best = (cand, (nxt[0], kept), lv)
@@ -1578,6 +1588,7 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
         alone_state = apply((frozenset(), {}), lv)
         ap = total_of(alone_state)[0] if alone_state else None
         lv["alone"] = delta(base, ap) if ap else None
+        lv["alone_eligible"] = bool(ap.get("eligible", True)) if ap else None
         ctx = None
         lv["moot"] = False
         if fin_p is not None and lv["kind"] == "compression":
@@ -1622,15 +1633,27 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     points.sort(key=lambda x: x["total_mw"])
     best_by: dict[str, str | None] = {}
     for cls in ("neutral", "eval", "trade"):
-        gains = [lv for lv in levers if lv["iq"] == cls and lv["alone"] and lv["alone"]["total_mw"] < -_MIN_GAIN_MW]
+        gains = [lv for lv in levers if lv["iq"] == cls and lv["alone"] and lv["alone"]["total_mw"] < -_MIN_GAIN_MW
+                 and (not base_ok or lv["alone_eligible"])]
         best_by[cls] = min(gains, key=lambda x: x["alone"]["total_mw"])["key"] if gains else None
+    # exact cheapest eligible point per IQ class (the greedy path above is only the explanation)
+    optimum: dict[str, dict[str, Any] | None] = {}
+    for cls in ("neutral", "eval", "trade"):
+        ok = [p for p in points if IQ_ORDER[p["iq"]] <= IQ_ORDER[cls] and (not base_ok or p["eligible"])]
+        optimum[cls] = ({k: ok[0][k] for k in ("options", "option_keys", "comp", "iq", "total_mw", "bw_mbs", "key")}
+                        | {"delta_mw": round(ok[0]["total_mw"] - base["total_mw"], 2)}) if ok else None
+        m = milestones.get(cls)
+        if m is not None and optimum[cls] is not None:
+            m["gap_mw"] = round(m["total_mw"] - optimum[cls]["total_mw"], 2)
+            m["greedy_suboptimal"] = m["gap_mw"] > _GREEDY_GAP_MW
     return {
-        "status": "ok",
+        "status": "ok" if base_ok else "reference",
+        "baseline_eligible": base_ok,
         "basis": {"statistic": (summary.get("objective") or {}).get("statistic"),
                   "runtime_scale": (summary.get("objective") or {}).get("runtime_scale"),
                   "dvfs": "resolved levels (no headroom)",
                   "sw_band_mw": summary.get("sw_band_mw")},
         "baseline": {k: base[k] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_mbs")},
         "levers": levers, "costs": costs, "steps": steps, "milestones": milestones,
-        "best_lever": best_by, "points": points, "point_count": len(points),
+        "best_lever": best_by, "optimum": optimum, "points": points, "point_count": len(points),
     }

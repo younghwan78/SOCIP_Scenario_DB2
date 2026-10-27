@@ -572,3 +572,40 @@ def test_any_design_point_is_rebuilt_from_its_key(graph_factory, dvfs):
     assert sel is not None and sel["key"] == keep["key"] and sel["total_mw"] == pytest.approx(keep["total_mw"], abs=0.01)
     assert ax.case_from_key(r, keep["key"].replace("s=max", "s=mean")) is None       # other SW slice: not rebuilt
     assert ax.case_from_key(r, "s=max|x=1|c=NOPE:LL|d=-") is None
+
+
+def _pt(comp, total, eligible=True):
+    return {"comp": comp, "total_mw": total, "cpu_mw": 0.0, "hw_mw": total, "bw_mw": 0.0, "bw_mbs": total,
+            "eligible": eligible, "key": "|".join(f"{b}:{m}" for b, m in sorted(comp.items())) or "base"}
+
+
+def _summary(points):
+    return {"design_points": points, "buffers": [], "power_options": {}, "domains": []}
+
+
+LL = "COMP_YUV_LOSSLESS"
+
+
+def test_lever_path_and_best_lever_skip_timing_fail_points():
+    lv = ax.lever_analysis(_summary([_pt({}, 100), _pt({"A": LL}, 90, eligible=False), _pt({"B": LL}, 95),
+                                     _pt({"A": LL, "B": LL}, 85, eligible=False)]))
+    assert lv["status"] == "ok" and lv["baseline_eligible"]
+    assert [s.get("lever") for s in lv["steps"][1:]] == [f"comp:B={LL}"]
+    assert lv["milestones"]["neutral"]["total_mw"] == 95 and lv["best_lever"]["neutral"] == f"comp:B={LL}"
+    assert lv["optimum"]["neutral"]["total_mw"] == 95 and lv["optimum"]["neutral"]["comp"] == {"B": LL}
+    assert not lv["milestones"]["neutral"]["greedy_suboptimal"]
+
+
+def test_lever_analysis_reports_exact_optimum_when_greedy_stops_short():
+    lv = ax.lever_analysis(_summary([_pt({}, 100), _pt({"A": LL}, 90), _pt({"B": LL}, 92), _pt({"C": LL}, 93),
+                                     _pt({"A": LL, "B": LL}, 89), _pt({"A": LL, "C": LL}, 89.5),
+                                     _pt({"B": LL, "C": LL}, 80)]))
+    ms = lv["milestones"]["neutral"]
+    assert ms["total_mw"] == 89 and lv["optimum"]["neutral"]["total_mw"] == 80
+    assert ms["gap_mw"] == 9 and ms["greedy_suboptimal"]
+
+
+def test_lever_analysis_on_a_failing_baseline_is_reference_only():
+    lv = ax.lever_analysis(_summary([_pt({}, 100, eligible=False), _pt({"A": LL}, 90, eligible=False)]))
+    assert lv["status"] == "reference" and not lv["baseline_eligible"]
+    assert lv["milestones"]["neutral"]["total_mw"] == 90 and lv["optimum"]["neutral"]["total_mw"] == 90

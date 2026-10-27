@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.sim.bw_calc import compression_enabled, normalize_compression, resolve_comp_ratio
@@ -11,8 +11,13 @@ from scenario_db.sim.shape_propagation import NodeShape, SurfaceShape
 from scenario_db.sim.workloads import buffer_size, design_size_for_graph, port_size
 
 
-def compression_catalog(soc: object | None) -> dict[str, float]:
-    """Extract {mode_name: comp_ratio} from a SoC's compression_modes catalog.
+def compression_catalog(soc: object | None, purpose: Literal["mean", "peak"] = "peak") -> dict[str, float]:
+    """Extract {mode_name: ratio} from a SoC's compression_modes catalog.
+
+    ``purpose="peak"`` returns the catalog ``comp_ratio`` (worst case, BW allocation);
+    ``purpose="mean"`` prefers ``typical_ratio`` (average, power / mean BW) and falls back to
+    ``comp_ratio``. The engine baseline, What-if and exploration all price power with "mean", so
+    re-selecting the current mode is a no-op and switching an SBWC buffer off costs BW.
 
     Tolerates both the ORM row (dict-of-dict JSONB) and a pydantic SocPlatform
     (dict-of-CompressionMode), so sim works with or without a DB-backed graph.
@@ -20,10 +25,25 @@ def compression_catalog(soc: object | None) -> dict[str, float]:
     modes = getattr(soc, "compression_modes", None) or {}
     catalog: dict[str, float] = {}
     for name, entry in modes.items():
-        ratio = entry.get("comp_ratio") if isinstance(entry, dict) else getattr(entry, "comp_ratio", None)
+        get = entry.get if isinstance(entry, dict) else (lambda k, e=entry: getattr(e, k, None))
+        ratio = get("comp_ratio")
+        if purpose == "mean" and get("typical_ratio") is not None:
+            ratio = get("typical_ratio")
         if ratio is not None:
             catalog[str(name)] = float(ratio)
     return catalog
+
+
+def apply_peak_ratio(specs: list[PortTransferSpec], peak: dict[str, float]) -> list[PortTransferSpec]:
+    """Attach the catalog worst-case ratio as ``comp_ratio_max`` (-> ``bw_mbs_worst``) where it exceeds the mean."""
+    out = []
+    for spec in specs:
+        mode = normalize_compression(spec.compression)
+        worst = peak.get(mode) if mode else None
+        if worst is not None and spec.comp_ratio_max is None and worst > spec.comp_ratio:
+            spec = spec.model_copy(update={"comp_ratio_max": worst})
+        out.append(spec)
+    return out
 
 
 def compression_typical(soc: object | None) -> dict[str, float]:
