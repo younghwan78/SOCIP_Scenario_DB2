@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_RUN, coverageOf, promoteTargets, runBody, type VariantResult } from './archExplore'
+import { DEFAULT_RUN, caseCount, coverageOf, promoteTargets, runBody, type VariantResult } from './archExplore'
 
 const v = (o: Partial<VariantResult>) => o as VariantResult
 
@@ -25,5 +25,17 @@ describe('customer budget (EXP-05)', () => {
     const b = runBody(['s'], '', '', { ...DEFAULT_RUN, power_budget_mw: 1800, bw_budget_mbs: 9000, budget_from_reference: true }) as typeof plain
     expect(b.spec.constraints).toEqual({ allow_lossy: true, power_budget_mw: 1800, bw_budget_mbs: 9000 })
     expect(b.power_budget_from_reference).toBe(true)
+  })
+})
+
+describe('compression defaults', () => {
+  it('explores lossless and lossy like the backend and counts off + each mode per buffer', () => {
+    const body = runBody(['s'], '', '', DEFAULT_RUN) as { spec: { axes: { compression: { modes: string[] } } } }
+    expect(body.spec.axes.compression.modes).toEqual(['lossless', 'lossy'])
+    const one = { ...DEFAULT_RUN, statistics: ['max' as const], runtime_scales: [1.0], objective_statistic: 'max' as const, objective_scale: 1.0, dvfs_headroom_levels: 0, max_buffers: 2 }
+    expect(caseCount(one)).toBe(9)                                       // (1 + 2 modes) ** 2 buffers
+    expect(caseCount({ ...one, allow_lossy: false })).toBe(4)            // lossy dropped server-side
+    expect(caseCount({ ...one, modes: [] })).toBe(1)
+    expect(caseCount(DEFAULT_RUN)).toBeLessThanOrEqual(200000)
   })
 })

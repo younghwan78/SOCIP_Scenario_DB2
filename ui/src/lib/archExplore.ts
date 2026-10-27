@@ -335,7 +335,8 @@ export interface RunOptions {
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
-  modes: ['lossy'], max_buffers: 8, allow_lossy: true, objective_statistic: 'max', objective_scale: 1.0, require_declared: true,
+  // lossless SBWC keeps IQ (tier A / iq_keep baseline), lossy trades it: both explored like the backend default
+  modes: ['lossless', 'lossy'], max_buffers: 6, allow_lossy: true, objective_statistic: 'max', objective_scale: 1.0, require_declared: true,
   options: { knobs: true, modes: true, max_sets: 64 },
 }
 
@@ -359,10 +360,12 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
   }
 }
 
-/** Case count per variant before running (guards the 200k server limit). */
+/** Upper-bound case count per variant before running (guards the 200k server limit).
+ *  Each explored buffer is off or one of its modes (``1 + modes``); lossy is dropped when not allowed (backend rule). */
 export function caseCount(o: RunOptions, domains = 3): number {
   const slices = new Set([...o.statistics, o.objective_statistic]).size * new Set([...o.runtime_scales, o.objective_scale]).size
-  const comp = o.modes.length ? 2 ** o.max_buffers : 1
+  const modes = o.modes.filter((m) => o.allow_lossy || m !== 'lossy').length
+  const comp = modes ? (1 + modes) ** o.max_buffers : 1
   return slices * comp * (o.dvfs_headroom_levels + 1) ** domains
 }
 
