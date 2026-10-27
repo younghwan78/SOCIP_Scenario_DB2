@@ -15,6 +15,8 @@ export interface LeverOption {
   ip_ref?: string; mode?: string; sensor?: string; place?: string | null; size?: [number, number]; fps?: number | null; bitwidth?: number | null; readout_ms?: number | null
   /** power_knob / ip_mode */
   iq_eval?: string | null; note?: string | null; explorable?: boolean; unit_power_mw_mp?: number | null; ppc?: number | null
+  /** llc_alloc: weight of the "on" option (buffer value or scenario median) */
+  weight?: number | null; weight_source?: string | null
   /** compression */
   ratio?: number; ratio_source?: string; lossy?: boolean; supported?: boolean | null; compressor?: string | null
   fps_compatible?: boolean; reason?: string | null; evidence?: ModelEvidence
@@ -27,7 +29,7 @@ export interface ChangeKindMeta {
   /** lever palette group · "required" = image-quality evaluation before adoption · compression accepts a ratio value (API ≥ 2026-10-16) */
   group?: LeverGroup; iq?: string | null; value_optional?: boolean
   /** instances available in this variant: id + size / value / ip / param */
-  choices: { id: string; size?: [number, number]; value?: number | null; ip?: string | null; param?: string; label?: string; unit?: string; role?: string | null; primary?: boolean; where?: string[]
+  choices: { id: string; size?: [number, number]; value?: number | null; weight?: number | null; ip?: string | null; param?: string; label?: string; unit?: string; role?: string | null; primary?: boolean; where?: string[]
     /** dvfs_level: current level / clock, member IPs and the OPP ladder (slow -> fast) */
     level?: number | null; mhz?: number | null; ips?: string[]; ladder?: { level: number; mhz: number }[]
     /** choice levers: current value + options; chain_size: IPs that follow the size; history: node · ports */
@@ -159,7 +161,7 @@ export const whatIfApi = {
   resumeJob: (id: string) => postJson<SweepJob>(`${path}/jobs/${encodeURIComponent(id)}/resume`, {}),
 }
 export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값', dvfs_level: 'DVFS level',
-  sensor_mode: '센서 변경', sensor_binding: '등록 센서 교체', chain_size: 'IP crop · downscale', power_knob: 'Power option', history_interval: 'Previous DMA 빈도', ip_mode: 'IP mode', compression: 'SBWC 압축' }
+  sensor_mode: '센서 변경', sensor_binding: '등록 센서 교체', chain_size: 'IP crop · downscale', power_knob: 'Power option', history_interval: 'Previous DMA 빈도', ip_mode: 'IP mode', compression: 'SBWC 압축', llc_alloc: 'LLC 할당' }
 /** Lever palette: the commercialization tasks in the order a project usually tries them. */
 export const LEVER_GROUPS: { id: LeverGroup; label: string; hint: string }[] = [
   { id: 'sensor', label: '센서', hint: '기존 예측 기준 sensor를 다른 sensor · mode로' },
@@ -167,11 +169,11 @@ export const LEVER_GROUPS: { id: LeverGroup; label: string; hint: string }[] = [
   { id: 'temporal', label: 'Temporal · previous DMA', hint: 'MTNR L0 skip 등 power option · previous DMA 빈도' },
   { id: 'clock', label: 'DVFS · clock · FPS', hint: 'domain level ±1~2 · IP clock 하한 · FPS' },
   { id: 'mode', label: 'IP mode', hint: 'IP 동작 mode (unit power · PPC)' },
-  { id: 'compression', label: 'SBWC 압축', hint: 'on/off · lossless ↔ lossy · footprint mode' },
+  { id: 'compression', label: 'SBWC · LLC', hint: 'SBWC on/off · lossless ↔ lossy · LLC 할당/해제' },
   { id: 'other', label: '기타', hint: '' },
 ]
 const LEGACY_GROUP: Record<string, LeverGroup> = { output_size: 'size', anchor_size: 'size', node_size: 'size', stream_size: 'size', chain_size: 'size', fps: 'clock', node_clock_mhz: 'clock', dvfs_level: 'clock',
-  sensor_mode: 'sensor', sensor_binding: 'sensor', power_knob: 'temporal', history_interval: 'temporal', ip_mode: 'mode', compression: 'compression' }
+  sensor_mode: 'sensor', sensor_binding: 'sensor', power_knob: 'temporal', history_interval: 'temporal', ip_mode: 'mode', compression: 'compression', llc_alloc: 'compression' }
 export const groupOf = (k: Pick<ChangeKindMeta, 'target' | 'group'>): LeverGroup => (k.group && k.group !== 'other' ? k.group : LEGACY_GROUP[k.target] ?? 'other')
 /** Fallback metadata for API responses that predate ``change_kinds``. */
 const LEGACY_KINDS: ChangeKindMeta[] = [
@@ -287,6 +289,7 @@ export function describeChange(change: WhatIfChange): string {
   if (change.target === 'history_interval') return `previous DMA ${change.buffer_id ?? '전체'} → ${change.value} frame마다`
   if (change.target === 'ip_mode') return `${change.node_id} mode → ${change.option}`
   if (change.target === 'compression') return `${change.buffer_id} → ${change.option}${change.value ? ` (×${change.value})` : ''}`
+  if (change.target === 'llc_alloc') return `${change.buffer_id} LLC ${change.option === 'on' ? '할당' : '해제'}${change.value ? ` (weight ${change.value})` : ''}`
   if (change.target === 'dvfs_level') return `${change.domain} → L${change.level}`
   if (change.target === 'node_clock_mhz') return `${change.node_id} clock 하한 → ${change.value} MHz`
   if (change.value != null && change.width == null) return `${change.node_id ?? ''}${change.node_id ? ' ' : ''}${change.param ?? CHANGE_LABELS[change.target] ?? change.target} → ${change.value}`

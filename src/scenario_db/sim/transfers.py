@@ -197,6 +197,30 @@ def _buffer_transfers(
     ) for name in names]
 
 
+def dma_buffer_ids(graph: CanonicalScenarioGraph, workloads: dict[str, IPWorkload]) -> set[str]:
+    """Buffers whose placement / compression reaches DRAM traffic: the buffer-derived DMA of
+    ``edge_port_transfers`` (endpoints without explicit sim ports), history and standalone DMA."""
+    from scenario_db.sim.workloads import node_sim_block
+    explicit = {n for n in workloads if any((node_sim_block(graph, n) or {}).get(k) for k in ("inputs", "outputs"))}
+    out = set()
+    for edge in graph.pipeline_edges:
+        bid = str(edge.get("buffer") or "")
+        if bid and edge_type(edge) == "M2M" and any(
+                str(n or "") in workloads and str(n or "") not in explicit for n in (edge_source(edge), edge_target(edge))):
+            out.add(bid)
+    for bid in (cast(dict[str, Any], graph.scenario.pipeline or {}).get("buffers") or {}):
+        b = _effective_buffer(graph, bid)
+        if str((b.get("history") or {}).get("node_id") or "") in workloads:
+            out.add(bid)
+        dma = b.get("dma") or {}
+        node_id = str(dma.get("node_id") or "")
+        flag = dma.get("activation_flag")
+        if node_id in workloads and enabled(dma.get("enabled", True)) and (
+                not flag or enabled(((graph.variant.node_configs or {}).get(node_id) or {}).get(flag, False))):
+            out.add(bid)
+    return out
+
+
 def edge_port_transfers(
     graph: CanonicalScenarioGraph,
     workloads: dict[str, IPWorkload],

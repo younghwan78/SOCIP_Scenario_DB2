@@ -563,11 +563,67 @@ def _apply_compression(ctx: _Apply, data: dict) -> tuple:
     return ("compression", bid)
 
 
+# ---------------------------------------------------------------- LLC allocation
+
+def llc_targets(graph) -> list[dict[str, Any]]:
+    """DMA buffers of active nodes with their LLC placement. The default weight for a new allocation is the
+    buffer's own ``llc_weight``, else the median of the scenario's allocated buffers (else the request value)."""
+    from statistics import median
+
+    from scenario_db.sim.arch_exploration import _buffer_nodes
+    from scenario_db.sim.transfers import _effective_buffer
+    active = {str(n.get("id")) for n in graph.pipeline_nodes}
+    rows, weights = [], []
+    for bid, nodes in sorted(_buffer_nodes(graph).items()):
+        b = _effective_buffer(graph, bid)
+        if not nodes & active or not b or b.get("size_status") == "unknown" or not b.get("format"):
+            continue
+        place = b.get("placement") or {}
+        on = bool(place.get("llc_allocated"))
+        weight = float(place["llc_weight"]) if place.get("llc_weight") is not None else None
+        if on and weight is not None:
+            weights.append(weight)
+        rows.append({"id": bid, "format": b.get("format"), "nodes": sorted(nodes & active), "current": "on" if on else "off",
+                     "weight": weight, "allocation_mb": place.get("llc_allocation_mb"),
+                     "compression": normalize_compression(b.get("compression")) or "COMP_OFF"})
+    default = round(median(weights), 3) if weights else None
+    for r in rows:
+        w = r["weight"] if r["weight"] is not None else default
+        r["options"] = [{"id": "off", "label": "LLC 끔 (DRAM)", "current": r["current"] == "off"},
+                        {"id": "on", "label": "LLC 할당" + (f" · weight {w:g}" if w is not None else " · weight 입력 필요"),
+                         "weight": w, "weight_source": "buffer" if r["weight"] is not None else "scenario median" if w is not None else None,
+                         "current": r["current"] == "on"}]
+    rows.sort(key=lambda r: (r["current"] != "on", r["id"]))
+    return rows
+
+
+def _apply_llc(ctx: _Apply, data: dict) -> tuple:
+    bid, option = data["buffer_id"], data["option"]
+    row = next((r for r in ctx.targets.get("llc") or [] if r["id"] == bid), None)
+    if row is None:
+        raise ValueError(f"unknown or inactive DMA buffer: {bid}")
+    if option not in ("on", "off"):
+        raise ValueError("LLC option must be on or off")
+    override = ctx.variant.buffer_overrides.setdefault(bid, {})
+    place = dict(override.get("placement") or {})
+    if option == "off":
+        place.update(llc_allocated=False)
+    else:
+        weight = data.get("value") if data.get("value") is not None else row["options"][1]["weight"]
+        if weight is None or not 0 < float(weight) <= 1:
+            raise ValueError(f"{bid}: LLC weight (DRAM byte fraction, 0-1] is required")
+        place.update(llc_allocated=True, llc_weight=float(weight))
+        ctx.notes.append(f"{bid} LLC weight {float(weight):g}: LLC 용량 · 다른 할당과의 경합은 모델하지 않음 (DRAM BW × weight)")
+    override["placement"] = place
+    return ("llc_alloc", bid)
+
+
 # ---------------------------------------------------------------- registry
 
 def lever_targets(graph, fps: float | None) -> dict[str, Any]:
     return {"sensors": sensor_targets(graph, fps), "chains": chain_targets(graph), "knobs": knob_targets(graph),
-            "ip_modes": mode_targets(graph), "history": history_targets(graph), "buffers": compression_targets(graph)}
+            "ip_modes": mode_targets(graph), "history": history_targets(graph), "buffers": compression_targets(graph),
+            "llc": llc_targets(graph)}
 
 
 register(ChangeKind("sensor_mode", "센서 변경", "choice", "node_id", group="sensor", order=10, iq="required",
@@ -592,3 +648,6 @@ register(ChangeKind("ip_mode", "IP mode", "choice", "node_id", group="mode", iq=
 register(ChangeKind("compression", "SBWC 압축", "choice", "buffer_id", value_optional=True, group="compression",
                     description="buffer 압축 on/off · mode 변경 (lossless ↔ lossy · footprint 등 SoC catalog mode). ratio = typical(평균) → catalog",
                     discover=lambda t: t.get("buffers") or [], apply=_apply_compression))
+register(ChangeKind("llc_alloc", "LLC 할당", "choice", "buffer_id", value_optional=True, group="compression",
+                    description="buffer를 LLC에 할당 / 해제 — DRAM BW × llc_weight (value = weight, 기본 = buffer 값 → scenario 중앙값). 용량 경합 미모델",
+                    discover=lambda t: t.get("llc") or [], apply=_apply_llc))

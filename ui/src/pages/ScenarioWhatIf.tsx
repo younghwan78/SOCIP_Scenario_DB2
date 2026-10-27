@@ -358,6 +358,7 @@ function ChangeEditor({ change, kinds, targets, disabled, onChange, onRemove, in
     if (kind?.target === 'chain_size') return `${row.id} · ${row.size?.join('×')} · ${row.hint} → ${row.downstream?.join(', ')}`
     if (kind?.target === 'history_interval') return `${row.id} · ${row.node} · ${row.format ?? ''} · DMA ${row.ports}${row.value && row.value > 1 ? ` · 현재 ${row.value} frame` : ''}`
     if (kind?.target === 'compression') return `${row.id} · ${row.format} · 현재 ${row.current === 'COMP_OFF' ? '압축 없음' : row.current}${row.llc ? ' · LLC' : ''}${row.history ? ' · f-1' : ''} · ${row.nodes?.join('→')}`
+    if (kind?.target === 'llc_alloc') return `${row.id} · ${row.format} · 현재 LLC ${row.current === 'on' ? `할당${row.weight != null ? ` (weight ${row.weight})` : ''}` : '없음'} · ${row.nodes?.join('→')}`
     if (kind?.target === 'ip_mode') return `${row.id} · 현재 ${row.mode}`
     if (kind?.target === 'power_knob') return `${row.label ?? row.id} · 현재 ${row.current}`
     const clock = kind?.target === 'node_clock_mhz' ? targets.nodes.find((n) => n.id === row.id)?.clock_mhz : null
@@ -394,6 +395,8 @@ function ChangeEditor({ change, kinds, targets, disabled, onChange, onRemove, in
     {isSensor && <div className="wi-sensor-filter"><label>센서<select aria-label={`${label} 센서`} value={selectedSensor} onChange={(e) => { setSensorSearch(''); selectOption(options.find((option) => sensorKey(option) === e.target.value && option.supported !== false)) }}>{sensors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>모드 검색<input className="input" aria-label={`${label} 모드 검색`} value={sensorSearch} onChange={(e) => setSensorSearch(e.target.value)} placeholder="크기·FPS·모드 이름" /></label></div>}
     {kind?.shape === 'choice' && <label>{isSensor ? '센서 모드' : change.target === 'compression' ? 'mode' : '값'}<select aria-label={`${label} 값`} value={change.option ?? ''} onChange={(e) => selectOption(options.find((option) => option.id === e.target.value))}>
       <option value="">선택</option>{visibleOptions.map((o) => <option key={o.id} value={o.id} disabled={o.supported === false}>{optText(change.target, o)}</option>)}</select></label>}
+    {kind?.target === 'llc_alloc' && change.option === 'on' && <label>weight<input className="input" aria-label="LLC weight" type="number" min={0.05} max={1} step={0.05} placeholder={opt?.weight != null ? String(opt.weight) : '필수'} value={change.value ?? ''}
+      disabled={disabled} onChange={(e) => onChange({ ...change, value: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>}
     {kind?.target === 'compression' && change.option && change.option !== 'COMP_OFF' && <label>ratio<input className="input" aria-label="압축 ratio" type="number" min={0.05} max={1} step={0.05} placeholder={opt?.ratio != null ? String(opt.ratio) : ''} value={change.value ?? ''}
       onChange={(e) => onChange({ ...change, value: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 70 }} /></label>}
     {isSensor && opt && <span className="faint">{opt.size?.join('×')} · {opt.fps ?? '?'} fps · RAW{opt.bitwidth ?? '?'}{inst?.size && opt.size && opt.size.join() !== inst.size.join() ? ' · 크기 다름 → RT chain · pyramid 재계산' : ''} · {visibleOptions.length}개 모드{opt.sensor_binding ? ` · ${opt.sensor_binding.board_config}/${opt.sensor_binding.slot}` : ''}</span>}

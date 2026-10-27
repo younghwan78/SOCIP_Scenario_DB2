@@ -278,7 +278,7 @@ it('groups levers by commercialization task, edits choice levers and compares th
     answer: { verdict: 'ok', headline: 'fps 충족 최저 전력: #1 + #2 — -81.5 mW (-10.2%)', facts: [], actions: [] } }))
   const { host, root } = await mount()
   try {
-    expect([...host.querySelectorAll('.wi-pal-label')].map((x) => x.textContent)).toEqual(['크기 · crop · downscale', 'Temporal · previous DMA', 'DVFS · clock · FPS', 'SBWC 압축'])
+    expect([...host.querySelectorAll('.wi-pal-label')].map((x) => x.textContent)).toEqual(['크기 · crop · downscale', 'Temporal · previous DMA', 'DVFS · clock · FPS', 'SBWC · LLC'])
     await act(async () => button(host, '+ SBWC 압축').click())
     const mode = host.querySelector<HTMLSelectElement>('[aria-label="SBWC 압축 값"]')!
     expect(mode.value).toBe('COMP_OFF')                                                       // first option that differs from the current mode

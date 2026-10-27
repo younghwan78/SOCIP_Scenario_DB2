@@ -283,6 +283,9 @@ def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dic
            "capability": _capability(graph)}
     from scenario_db.api.services.whatif_levers import lever_targets
     out.update(lever_targets(graph, out["fps"]))
+    from scenario_db.sim.transfers import dma_buffer_ids
+    dma = dma_buffer_ids(graph, workloads)   # LLC only moves buffers that actually reach DRAM
+    out["llc"] = [r for r in out.get("llc") or [] if r["id"] in dma]
     kinds = [k.meta(out) for k in CHANGE_KINDS.values()]
     out["change_kinds"] = [k for k in kinds if k["choices"] or k["target"] == "fps" and out["fps"]]
     out["supported_changes"] = [k["target"] for k in out["change_kinds"]]

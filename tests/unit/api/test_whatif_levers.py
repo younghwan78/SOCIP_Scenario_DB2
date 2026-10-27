@@ -233,3 +233,20 @@ def test_compression_support_matches_exploration_rule(env):
             assert opt["supported"] == compression_support(graph, live, opt["id"])[0]
             if row["undeclared"] and opt["supported"] is not False:
                 assert opt["supported"] is None and "not declared" in opt["support_reason"]
+
+
+def test_llc_lever_moves_dram_bw_by_the_weight(env):
+    _, _, t = env
+    rows = {r["id"]: r for r in t["llc"]}
+    l0 = rows["PYRAMID_L0"]
+    assert l0["current"] == "on" and l0["weight"] == pytest.approx(0.6)
+    out, off = _preview(env, {"target": "llc_alloc", "buffer_id": "PYRAMID_L0", "option": "off"})
+    assert off["memory_power_mw"] > 0 and off["bw_mbs"] == pytest.approx(0, abs=1e-6)   # LLC scales power, not traffic
+    assert not out["iq_required"]
+    plain = next(r for r in t["llc"] if r["current"] == "off")
+    assert plain["options"][1]["weight"] == pytest.approx(0.6) and plain["options"][1]["weight_source"] == "scenario median"
+    for row in (r for r in t["llc"] if r["current"] == "off"):   # every listed buffer reaches DRAM
+        _, on = _preview(env, {"target": "llc_alloc", "buffer_id": row["id"], "option": "on", "value": 0.5})
+        assert on["memory_power_mw"] < 0, row["id"]
+    _, same = _preview(env, {"target": "llc_alloc", "buffer_id": "PYRAMID_L0", "option": "on"})
+    assert all(v == pytest.approx(0, abs=1e-6) for v in same.values())
