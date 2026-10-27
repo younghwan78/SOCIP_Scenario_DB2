@@ -1595,7 +1595,7 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
                 if nxt is None or (lv["kind"] == "compression" and state[1].get(lv["buffer"]) == lv["mode"]):
                     continue
                 cand, kept = total_of(nxt)
-                if not feasible(cand) or IQ_ORDER[point_iq(nxt[0], kept)] > IQ_ORDER[phase]:
+                if cand is None or not feasible(cand) or IQ_ORDER[point_iq(nxt[0], kept)] > IQ_ORDER[phase]:
                     continue
                 if best is None or cand["total_mw"] < best[0]["total_mw"]:
                     best = (cand, (nxt[0], kept), lv)
@@ -1674,11 +1674,12 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     optimum: dict[str, dict[str, Any] | None] = {}
     for cls in ("neutral", "eval", "trade"):
         ok = [p for p in points if IQ_ORDER[p["iq"]] <= IQ_ORDER[cls] and (not base_ok or p["eligible"])]
-        optimum[cls] = ({k: ok[0][k] for k in ("options", "option_keys", "comp", "iq", "total_mw", "bw_mbs", "key")}
-                        | {"delta_mw": round(ok[0]["total_mw"] - base["total_mw"], 2)}) if ok else None
+        exact = ({k: ok[0][k] for k in ("options", "option_keys", "comp", "iq", "total_mw", "bw_mbs", "key")}
+                 | {"delta_mw": round(ok[0]["total_mw"] - base["total_mw"], 2)}) if ok else None
+        optimum[cls] = exact
         m = milestones.get(cls)
-        if m is not None and optimum[cls] is not None:
-            m["gap_mw"] = round(m["total_mw"] - optimum[cls]["total_mw"], 2)
+        if m is not None and exact is not None:
+            m["gap_mw"] = round(m["total_mw"] - exact["total_mw"], 2)
             m["greedy_suboptimal"] = m["gap_mw"] > _GREEDY_GAP_MW
     return {
         "status": "ok" if base_ok else "reference",
