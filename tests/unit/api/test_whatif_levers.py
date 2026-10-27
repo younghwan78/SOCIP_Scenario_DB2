@@ -219,3 +219,17 @@ def test_combine_recommends_iq_keeping_case_and_lists_the_trade(env, monkeypatch
     assert combo["trade_gain_mw"] < 0
     assert "화질 유지" in out["answer"]["headline"] and any("IQ trade 포함" in f for f in out["answer"]["facts"])
     assert len(calls) <= 2   # baseline targets + one shared lever-target set, not one per case
+
+
+def test_compression_support_matches_exploration_rule(env):
+    """What-if and exploration share compression_support: an undeclared endpoint makes the mode unknown (None)."""
+    from scenario_db.sim.arch_exploration import compression_support
+    graph, _, t = env
+    for row in t["buffers"]:
+        live = set(row["nodes"])
+        for opt in row["options"]:
+            if opt["id"] == "COMP_OFF":
+                continue
+            assert opt["supported"] == compression_support(graph, live, opt["id"])[0]
+            if row["undeclared"] and opt["supported"] is not False:
+                assert opt["supported"] is None and "not declared" in opt["support_reason"]

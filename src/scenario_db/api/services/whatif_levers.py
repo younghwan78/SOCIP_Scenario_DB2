@@ -495,17 +495,8 @@ def _catalog(graph) -> dict[str, dict]:
     return out
 
 
-def _supported(listed: dict[str, list[str]], mode: str, fam: str) -> bool | None:
-    """True/False from the IP catalog of every endpoint; None when no endpoint declares compression."""
-    if not listed:
-        return None
-    suffix = mode[len(f"COMP_{fam}_"):] if mode.startswith(f"COMP_{fam}_") else mode
-    want = {normalize_compression(mode), f"COMP_{suffix}".upper()}
-    return all(any(str(v).upper() in {str(w).upper() for w in want if w} for v in modes) for modes in listed.values())
-
-
 def compression_targets(graph) -> list[dict[str, Any]]:
-    from scenario_db.sim.arch_exploration import _buffer_nodes, _support
+    from scenario_db.sim.arch_exploration import _buffer_nodes, _support, compression_support
     catalog = _catalog(graph)
     active = {str(n.get("id")) for n in graph.pipeline_nodes}
     buffers = _buffers(graph)
@@ -535,12 +526,14 @@ def compression_targets(graph) -> list[dict[str, Any]]:
                 ratio, src = DEFAULT_RATIO[suffix.split("_")[0]], "assumed"
             else:
                 ratio, src = float(worst if worst is not None else 1.0), "catalog"
+            supported, reason, _ = compression_support(graph, live, m)
             options.append({"id": m, "label": suffix.replace("_", " ").lower(), "ratio": ratio, "ratio_source": src,
-                            "lossy": "LOSSY" in suffix, "supported": _supported(listed, m, fam), "compressor": c.get("compressor"),
-                            "note": c.get("note")})
+                            "lossy": "LOSSY" in suffix, "supported": supported, "support_reason": reason,
+                            "compressor": c.get("compressor"), "note": c.get("note")})
         rows.append({"id": bid, "format": fmt, "family": fam, "nodes": sorted(live), "current": current or "COMP_OFF",
                      "current_ratio": b.get("comp_ratio"), "llc": bool((b.get("placement") or {}).get("llc_allocated")),
-                     "history": bool(b.get("history")), "declared": sorted(listed), "options": options})
+                     "history": bool(b.get("history")), "declared": sorted(listed),
+                     "undeclared": sorted(live - set(listed)), "options": options})
     # buffers already compressed first (mode change), then by id
     rows.sort(key=lambda r: (r["current"] == "COMP_OFF", r["id"]))
     return rows
@@ -556,6 +549,9 @@ def _apply_compression(ctx: _Apply, data: dict) -> tuple:
         raise ValueError(f"{bid}: compression {mode} is not in the SoC catalog for {row['family']}")
     if opt["supported"] is False:
         raise ValueError(f"{bid}: {', '.join(row['declared'])} IP catalog does not list {mode}")
+    if opt["supported"] is None and mode != "COMP_OFF":
+        ctx.notes.append(f"{bid} {mode}: {opt.get('support_reason') or 'compression support not declared'}"
+                         " — 조합 탐색(지원 DMA만)에서는 제외되는 조건")
     override = ctx.variant.buffer_overrides.setdefault(bid, {})
     if mode == "COMP_OFF":
         override.update({"compression": "COMP_OFF", "comp_ratio": None})

@@ -689,6 +689,27 @@ def _support(graph, nodes: set[str]) -> tuple[str, dict[str, list[str]]]:
     return ("unknown" if unknown else "catalog"), listed
 
 
+def _lists_mode(modes: list[str], mode: str) -> bool:
+    """An IP catalog compression list names ``mode`` (full name, or family-less COMP_<LOSSLESS|LOSSY...>)."""
+    suffix = mode.split("_", 2)[2] if mode.count("_") >= 2 else mode
+    return mode in {normalize_compression(v) for v in modes} or f"COMP_{suffix}".upper() in {str(v).upper() for v in modes}
+
+
+def compression_support(graph, nodes: set[str], mode: str) -> tuple[bool | None, str | None, list[str]]:
+    """One support rule for What-if and exploration: (supported, reason, undeclared endpoints).
+
+    False = a declaring endpoint IP does not list ``mode``; None = every declaring endpoint lists it but some
+    endpoint declares nothing (exploration skips it with ``require_declared``; What-if applies it with a note)."""
+    _, listed = _support(graph, nodes)
+    undeclared = sorted(n for n in nodes if n not in listed)
+    lacking = sorted(n for n, modes in listed.items() if not _lists_mode(modes, mode))
+    if lacking:
+        return False, f"IP catalog does not list {mode}: {', '.join(lacking)}", undeclared
+    if undeclared:
+        return None, f"compression support not declared: {', '.join(undeclared)}", undeclared
+    return True, None, []
+
+
 def _port_unsupported(graph, ports: list[tuple[str, str, str]], mode: str) -> list[str]:
     """DMA ports whose IP module declares ``supported_compressions`` without ``mode``.
 
@@ -783,11 +804,7 @@ def compression_candidates(
             # an already-compressed buffer only moves lossless -> lossy (an IQ trade); its current mode is the baseline
             if current is not None and (m != "lossy" or mode == current or "LOSSY" in current.upper()):
                 continue
-            if not axis.include_unsupported and any(
-                mode not in {normalize_compression(v) for v in modes_}
-                and f"COMP_{m.upper()}" not in {str(v).upper() for v in modes_}
-                for modes_ in listed.values()
-            ):
+            if not axis.include_unsupported and any(not _lists_mode(modes_, mode) for modes_ in listed.values()):
                 continue
             if mode in axis.ratio_overrides:
                 ratio, src = axis.ratio_overrides[mode], "override"
