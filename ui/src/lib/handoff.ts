@@ -2,7 +2,7 @@
 // Design: docs/design/handoff-flow-ko.md. A full-stack trace without a hand-off document is turned into
 // the same model (deriveHandoff) so one renderer serves both.
 import type { HandoffCadence, HandoffDoc, HandoffFlow, HandoffStep } from './api'
-import { chainOf, frameStarts, LAYER_COLORS, type Slice, type Timeline } from './timeline'
+import { chainOf, displayName, frameStarts, LAYER_COLORS, type Slice, type Timeline } from './timeline'
 
 export const LAYERS = ['app', 'framework', 'hal', 'kernel', 'fw', 'hw'] as const
 export const LAYER_LABEL: Record<string, string> = { app: 'App', framework: 'Framework', hal: 'HAL', kernel: 'Kernel', fw: 'FW', hw: 'HW' }
@@ -22,6 +22,8 @@ export const fmtHz = (period: number | null) => {
   const hz = 1000 / period
   return `${hz >= 10 ? hz.toFixed(0) : hz >= 1 ? hz.toFixed(1).replace(/\.0$/, '') : hz.toFixed(2)} Hz`
 }
+/** A step's name in the same form as the timelines: its Pipeline node, else its common task name, else the call. */
+export const stepName = (s: HandoffStep) => (s.node ? displayName(s.node) : s.task ? displayName(s.task) : s.call ?? '')
 export const cadenceLabel = (doc: HandoffDoc, id: string | undefined) => {
   const c = doc.cadences.find((x) => x.id === id)
   return c ? `${c.name} · ${fmtHz(cadencePeriod(doc, c.id))}` : id ?? ''
@@ -172,7 +174,7 @@ export function cadenceLinks(doc: HandoffDoc): { from: string; to: string; n: nu
         const k = `${cadOf(prev)}>${cadOf(s)}`
         const e = m.get(k) ?? { n: 0, via: new Set<string>() }
         e.n++
-        if (s.call) e.via.add(s.call)
+        if (stepName(s)) e.via.add(stepName(s))
         m.set(k, e)
       }
     })
@@ -184,9 +186,9 @@ export function cadenceLinks(doc: HandoffDoc): { from: string; to: string; n: nu
 export function deriveHandoff(tl: Timeline, seed: Slice): HandoffDoc {
   const set = chainOf(tl, seed.id)
   const list = tl.slices.filter((s) => set.has(s.id)).sort((a, b) => a.start - b.start || a.end - b.end)
-  const trackName = new Map(tl.groups.flatMap((g) => g.tracks).map((t) => [t.id, t.name]))
+  const context = new Map(tl.groups.flatMap((g) => g.tracks).map((t) => [t.id, t.context ?? t.name]))
   const partOf = (s: Slice) => {
-    const [proc, ...thread] = (trackName.get(s.track) ?? s.track).split(' · ')
+    const [proc, ...thread] = (context.get(s.track) ?? s.track).split(' · ')
     const layer = (s.layer ?? s.group).toLowerCase()
     return { id: `${layer}.${proc}`, layer, name: proc, thread: thread.join(' · ') }
   }
@@ -212,7 +214,7 @@ export function deriveHandoff(tl: Timeline, seed: Slice): HandoffDoc {
   const t0 = list[0]?.start ?? 0
   const steps: HandoffStep[] = list.map((s) => {
     const ins = tl.flows.filter((f) => f.to === s.id && byId.has(f.from)).sort((a, b) => byId.get(b.from)!.end - byId.get(a.from)!.end)
-    const step: HandoffStep = { to: partOf(s).id, call: s.label, task: s.label, slice: s.id, t_ms: s.start - t0, dur_ms: s.end - s.start }
+    const step: HandoffStep = { to: partOf(s).id, task: s.task, slice: s.id, t_ms: s.start - t0, dur_ms: s.end - s.start }
     if (ins[0]) { step.from = partOf(byId.get(ins[0].from)!).id; if (ins[0].type && ins[0].type !== 'data') step.handoff = ins[0].type }
     if (s.nodeId) step.node = s.nodeId
     const c = cadOf(s)

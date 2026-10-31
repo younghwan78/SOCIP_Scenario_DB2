@@ -447,7 +447,7 @@ handoff_flows:
   cadences:
   - {id: frame, name: Sensor frame, kind: frame, period_ms: 33.3333}
   - {id: vsync, name: Display vsync, kind: vsync, period_ms: 16.6667}
-  - {id: od, name: VPS OD, kind: divided, of: frame, every: 5, note: object detection every 5th frame}
+  - {id: od, name: VPS_OD, kind: divided, of: frame, every: 5, note: object detection every 5th frame}
   - {id: abox, name: ABOX period, kind: period, period_ms: 20.0, note: 48 kHz · 960 samples}
   - {id: aac, name: AAC frame, kind: period, period_ms: 21.3333, note: 1024 samples @ 48 kHz}
   - {id: mux, name: MPEG4 chunk, kind: chunk, period_ms: 1000.0, note: interleave chunk write}
@@ -472,7 +472,7 @@ handoff_flows:
     - {from: hw.isp-rt, to: kernel.pablo-is, call: MLSC done IRQ, task: is.irq, slice: is.irq#f4, handoff: irq, t_ms: 142.072, dur_ms: 0.032}
     - {from: kernel.pablo-is, to: fw.rta, call: stats → CRTA, task: rta.post_crta, slice: rta.post_crta#f4, node: post_crta, handoff: kick, t_ms: 142.153, dur_ms: 0.307}
     - {from: fw.rta, to: fw.rta, call: preME, task: rta.pre_me, slice: rta.pre_me#f4, node: pre_me_rta, handoff: kick, t_ms: 142.561, dur_ms: 2.887}
-    - {note: VPS OD는 5 frame에 한 번 (6 Hz), over: [hw.vps]}
+    - {note: VPS_OD는 5 frame에 한 번 (6 Hz), over: [hw.vps]}
     - {from: hw.isp-rt, to: hw.vps, call: OD kick, task: vps.od, slice: vps.od#f4, node: vps_od, handoff: kick, cadence: od, every: 5, t_ms: 142.622, dur_ms: 1.902}
     - {from: fw.rta, to: hw.lme, call: LME kick, task: lme, slice: lme#f4, node: lme, handoff: kick, t_ms: 142.961, dur_ms: 1.949}
     - {from: fw.rta, to: fw.rta, call: IRTA, task: rta.post_irta, slice: rta.post_irta#f4, node: post_irta, t_ms: 145.497, dur_ms: 3.8}

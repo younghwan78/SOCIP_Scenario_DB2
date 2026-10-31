@@ -44,7 +44,7 @@ describe('full-stack timeline', () => {
   })
 
   it('cadence rows: declared own period, frame gap for frame-locked work, load per layer', () => {
-    const rows = new Map(cadenceRows(tl).map((r) => [r.name, r]))
+    const rows = new Map(cadenceRows(tl).map((r) => [r.task, r]))
     const abox = rows.get('abox')!
     expect(abox.frameLocked).toBe(false)
     expect(abox.period).toBe(20)
@@ -58,15 +58,36 @@ describe('full-stack timeline', () => {
   })
 })
 
+describe('names shared with Pipeline timing', () => {
+  const tl = buildTimeline(events, { maxFrames: 64, groupOrder: FULLSTACK_GROUPS })
+  const slice = (id: string) => tl.slices.find((s) => s.id === id)!
+  const track = (id: string) => tl.groups.flatMap((g) => g.tracks).find((t) => t.id === slice(id).track)!
+  it('a slice shows its Pipeline node, else its common name, in capitals; the common name stays the key', () => {
+    expect(slice('sensor#f0')).toMatchObject({ label: 'SENSOR_REAR', task: 'sensor' })
+    expect(slice('hal.request#f0')).toMatchObject({ label: 'HAL_REQUEST', task: 'hal.request' })
+    expect(cadenceRows(tl).find((r) => r.task === 'sensor')).toMatchObject({ name: 'SENSOR_REAR', track: 'SENSOR_REAR', trackSub: 'p · sensor' })
+  })
+  it('a HW track running one node takes its Pipeline name; other tracks show process, then thread', () => {
+    expect(track('sensor#f0')).toMatchObject({ name: 'SENSOR_REAR', sub: 'p · sensor', context: 'p · sensor' })
+    expect(track('abox#c0')).toMatchObject({ name: 'ABOX', sub: 'p' })
+    expect(track('eis#f0')).toMatchObject({ name: 'p', sub: 'vdis' })
+  })
+  it('Pipeline timing slices carry the same name as their track', () => {
+    const pl = buildTimeline([{ task_id: 'sensor_rear#f0', node_id: 'sensor_rear', task_type: 'hw', frame_index: 0, start_ms: 0, end_ms: 10 }])
+    expect(pl.groups[0].tracks[0].name).toBe('SENSOR_REAR')
+    expect(pl.slices[0].label).toBe('SENSOR_REAR')
+  })
+})
+
 describe('cadence basis and full-stack colours', () => {
   const tl = buildTimeline(events, { maxFrames: 64, groupOrder: FULLSTACK_GROUPS })
   it('a hand-off document declares the loop; otherwise trace capture, frame gap or borrowed frame period', () => {
     const doc: HandoffDoc = { format: 'sdb.handoff/1', participants: [{ id: 'hal', layer: 'hal', name: 'hal' }],
       cadences: [{ id: 'frame', name: 'frame', kind: 'frame', period_ms: 33.3 }, { id: 'vdis', name: 'VDIS', kind: 'period', period_ms: 16.6 }],
       flows: [{ id: 'f', name: 'f', cadence: 'frame', steps: [{ to: 'hal', task: 'eis', cadence: 'vdis' }] }] }
-    const plain = new Map(cadenceRows(tl).map((r) => [r.name, r]))
+    const plain = new Map(cadenceRows(tl).map((r) => [r.task, r]))
     expect([plain.get('abox')!.basis, plain.get('sensor')!.basis, plain.get('eis')!.basis]).toEqual(['trace', 'frame', 'borrowed'])
-    const withDoc = new Map(cadenceRows(tl, doc).map((r) => [r.name, r]))
+    const withDoc = new Map(cadenceRows(tl, doc).map((r) => [r.task, r]))
     expect(withDoc.get('eis')).toMatchObject({ basis: 'doc', period: 16.6, cadence: 'vdis', frameLocked: false })
   })
   it('layers get distinct colours; frame mode keeps HW deep and own-cadence work neutral', () => {

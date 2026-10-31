@@ -31,13 +31,13 @@ describe('Cadence tab', () => {
     document.body.appendChild(host)
     root = createRoot(host)
     act(() => root!.render(<CadenceTab timeline={tl} doc={doc} onOpenSlice={onOpenSlice} onOpenFlow={onOpenFlow} />))
-    const row = [...host.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('aud.read'))!
+    const row = [...host.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('AUD_READ'))!
     expect(row.textContent).toContain('문서')
     act(() => { row.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 })) })
     const pop = host.querySelector('[role="dialog"]')!
     expect(pop.textContent).toContain('hand-off 문서에 선언된 loop 주기')
     expect(pop.textContent).toContain('ABOX period · 50 Hz · independent loop')
-    expect(pop.textContent).toContain('abox.dsp (50 Hz)')
+    expect(pop.textContent).toContain('ABOX (50 Hz)')
     const btn = (re: RegExp) => [...pop.querySelectorAll('button')].find((b) => re.test(b.textContent ?? ''))!
     act(() => { btn(/Full-stack/).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(onOpenSlice).toHaveBeenCalledWith('aud.read#c0')
@@ -48,10 +48,10 @@ describe('Cadence tab', () => {
   it('an aperiodic (kind: event) declaration wins over the capture / window period', () => {
     const evDoc: HandoffDoc = { ...doc, cadences: [{ id: 'touch', name: 'Touch', kind: 'event' }],
       flows: [{ id: 'touch', name: 'Touch', cadence: 'touch', steps: [{ to: 'hal', task: 'aud.read' }] }] }
-    const row = cadenceRows(tl, evDoc).find((r) => r.name === 'aud.read')!
+    const row = cadenceRows(tl, evDoc).find((r) => r.task === 'aud.read')!
     expect(row.basis).toBe('doc')
     expect(row.period).toBeNull()
     expect(row.load).toBeNull()
-    expect(cadenceRows(tl, doc).find((r) => r.name === 'aud.read')!.period).toBe(20)
+    expect(cadenceRows(tl, doc).find((r) => r.task === 'aud.read')!.period).toBe(20)
   })
 })
