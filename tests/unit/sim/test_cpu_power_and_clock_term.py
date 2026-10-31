@@ -198,6 +198,20 @@ def test_power_hash_covers_cpu_statistic_and_physical_constraints(graph):
     assert params_hash(inputs) != before
 
 
+def test_power_hash_follows_the_v2_formula_revision(graph, monkeypatch):
+    """A cached v2-vf result (request / Timing Budget condition / saved evidence id) is not reused after a formula change."""
+    from dataclasses import replace
+
+    from scenario_db.sim import power_model as pm
+
+    v2 = build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"), SimulationRunConfig(power_model="v2-vf"))
+    v1 = build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"))
+    before_v2, before_v1 = params_hash(v2), params_hash(v1)
+    monkeypatch.setitem(pm.POWER_MODELS, "v2-vf", replace(pm.POWER_MODELS["v2-vf"], version="9.9"))
+    assert params_hash(v2) != before_v2
+    assert params_hash(v1) == before_v1  # v1 caches are untouched
+
+
 def test_prediction_attribution_explains_clock_only_power_change():
     from copy import deepcopy
     from scenario_db.sim.power_attribution import attribute

@@ -28,7 +28,7 @@ from scenario_db.sim.models import (
     SimulationInputs,
 )
 from scenario_db.sim.perf_calc import calc_processing_time_ms
-from scenario_db.sim.power_model import resolve_power_model
+from scenario_db.sim.power_model import POWER_MODELS, resolve_power_model
 from scenario_db.sim.power_params import effective_power_params, power_params_lineage
 from scenario_db.sim.timeline import build_timeline_events
 
@@ -363,6 +363,9 @@ def params_hash(inputs: SimulationInputs) -> str:
     if inputs.config.power_model == "v2-vf":
         for raw, workload in zip(payload["workloads"], inputs.workloads):
             raw["clock_constraints"] = [c.model_dump(mode="json") for c in workload.clock_constraints]
+        # a v2-vf formula change must not reuse results cached under the old one (request / condition /
+        # saved-evidence ids all derive from this hash); v1 hashes stay as they were
+        payload["power_model_version"] = POWER_MODELS["v2-vf"].version
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 

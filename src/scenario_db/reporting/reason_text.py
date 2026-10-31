@@ -11,7 +11,8 @@ import re
 from typing import Any
 
 _SW = re.compile(r"^(?P<stage>.+?): SW (?P<sw>[\d.]+) ms leaves no HW budget$")
-_RT = re.compile(r"^RT HW (?P<hw>[\d.]+) ms > (?P<pct>\d+)% budget (?P<budget>[\d.]+) ms(?: — sensor readout (?P<readout>[\d.]+) ms.*)?$")
+_RT = re.compile(r"^RT HW (?P<hw>[\d.]+) ms > (?P<pct>\d+)% budget (?P<budget>[\d.]+) ms"
+                 r"(?: — sensor readout (?P<readout>[\d.]+) ms(?: \(frame period (?P<period>[\d.]+) ms)?.*)?$")
 _IV = re.compile(r"^(?P<which>preview|video) interval (?P<got>[\d.]+) ms != (?P<target>[\d.]+) ms$")
 _CLK_GROUP = re.compile(r"^(?P<nodes>[\w, ]+): 필요 clock (?P<req>[\d.]+) MHz > DVFS max (?P<max>[\d.]+) MHz$")
 _IP_MAX = re.compile(r"^(?P<node>\w+): required_clock (?P<req>[\d.]+)MHz exceeds ip max_clock (?P<max>[\d.]+)MHz$")
@@ -37,11 +38,15 @@ def explain(reason: str, period_ms: float | None = None) -> dict[str, str]:
         hw, budget = float(m["hw"]), float(m["budget"])
         text = f"RT HW {hw:.2f} ms > {m['pct']}% 예산 {budget:.2f} ms ({100 - int(m['pct'])}% SW margin rule)"
         if m["readout"]:
-            period = budget * 100 / int(m["pct"])  # budget = (1 - margin) x period
-            max_margin = math.floor(100 * (1 - hw / period))
+            action = f"clock으로는 줄지 않음 — sensor mode (readout ≤ {budget:.2f} ms) · blanking 확대"
+            # largest margin that fits: from the exact period (the budget % is rounded); hw is rounded to 0.01 ms,
+            # so take its upper end to never suggest a margin that still fails
+            period = float(m["period"]) if m["period"] else period_ms
+            if period:
+                limit = math.floor(100 * (1 - (hw + 0.005) / period))
+                action += f", 또는 SW margin {max(0, limit)}% 이하"
             return {"code": "rt_budget", "raw": reason, "text": f"{text} — sensor readout {float(m['readout']):.2f} ms가 정함",
-                    "action": f"clock으로는 줄지 않음 — sensor mode (readout ≤ {budget:.2f} ms) · blanking 확대, "
-                              f"또는 SW margin {max(0, max_margin)}% 이하"}
+                    "action": action}
         return {"code": "rt_budget", "raw": reason, "text": text,
                 "action": f"RT 경로 {hw - budget:.2f} ms 단축 — RT clock ×{hw / budget:.2f} 이상 또는 처리량(ppc) 증가"}
     m = _IV.match(reason)

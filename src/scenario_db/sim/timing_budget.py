@@ -1144,7 +1144,8 @@ def _verdict(stages, intervals, ips, domains=None, period: float | None = None) 
         # read-out-clocked RT streams at the sensor rate: a faster clock cannot shorten it
         readout = max((float(i.get("sensor_readout_ms") or 0.0) for i in ips if i.get("stage") == "rt"), default=0.0)
         if readout > 0 and rt["hw_ms"] <= readout * 1.0001:
-            share = f" (frame period의 {100 * readout / period:.0f}%)" if period else ""
+            # the exact period lets readers derive the largest margin that fits (the budget % above is rounded)
+            share = f" (frame period {period:.3f} ms의 {100 * readout / period:.0f}%)" if period else ""
             msg += f" — sensor readout {readout:.2f} ms{share}가 정하는 시간이라 clock으로 줄일 수 없음 (sensor mode · blanking 또는 margin 조정)"
         reasons.append(msg)
     for key in ("preview", "video"):
