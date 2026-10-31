@@ -11,6 +11,8 @@ export interface TimingInputs {
   measured: MeasuredInputs | null; measuredOption?: MeasuredInputOption | null
   /** power params chosen on this screen; '' = the profile's (or basis') own */
   powerParams: string; defaultPowerParams: string | null
+  /** DVFS domains whose level is pinned on this screen (their clock does not follow SW) */
+  pinnedDomains?: string[]
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -41,15 +43,20 @@ function Current({ x }: { x: TimingInputs }) {
 }
 
 function Effects({ x }: { x: TimingInputs }) {
+  // SW time reaches the HW clock only when NRT / Post HW gets "period − SW" (stage 1 frame); a pinned level stays put
+  const stage = x.throughput === 'stage'
+  const pinned = x.pinnedDomains?.length ? <span className="faint"> (DVFS level 고정: {x.pinnedDomains.join(', ')}은 clock 그대로)</span> : null
+  const swToHw: ReactNode = stage ? <> · NRT · Post 필요 clock · DVFS level · HW ms · 판정{pinned}</>
+    : <>. <span className="faint">처리량 기준이 stage 1 frame이면 NRT · Post clock · HW ms · 판정도</span></>
+  const swKeeps = stage ? 'RT · Output HW, BW GB/s' : 'HW ms · clock · BW GB/s'
   const rows: [ReactNode, ReactNode, ReactNode][] = [
     [<><b>SW 통계</b><div className="faint">mean (기본) = task별 평균 runtime: 평균 전력 · 실측 비교와 같은 조건.<br />max = 정의 SW timing의 최대값: 최악 frame으로 deadline을 보수 판정.</div></>,
-      <>SW ms · SW 여유 · CPU mW{x.throughput === 'stage' ? ' · NRT 필요 clock · DVFS level · 판정' : <>. <span className="faint">처리량 기준이 stage 1 frame이면 NRT 필요 clock · 판정도</span></>}</>,
-      'HW ms · BW GB/s'],
+      <>SW ms · SW 여유 · CPU mW{swToHw}</>, swKeeps],
     [<b>설정 profile</b>,
       <>Power 카드: power model · 계수 · CPU 전력 방식 · ASV(전압) · mA 환산 (Vbat · PMIC).<div className="faint">profile에 h-blank · DVFS 고정 · configured clock이 있으면 RT 예산과 clock도</div></>,
       <>SW · HW ms, fps 판정 (E2600 v1 ↔ v2는 power 항목만 다름). SW margin은 툴바 값</>],
     [<><b>실측</b> 고르기만</>, '실측 대비 카드 (예측 vs 실측 mW, rail 분류별 Δ)', '계산 전부'],
-    [<><b>실측</b> SW ✓</>, '측정 task runtime으로 교체 (SW 통계 선택 그대로) → SW ms · 여유 · CPU mW', 'HW · clock'],
+    [<><b>실측</b> SW ✓</>, <>측정 task runtime으로 교체 (SW 통계 선택 그대로) → SW ms · 여유 · CPU mW{swToHw}</>, swKeeps],
     [<><b>실측</b> clock ✓</>, '측정 IP clock (clock ledger) → HW ms · clock · HW mW', 'SW'],
     [<><b>실측</b> CPU ✓</>, '측정 CPU profile을 EAS + schedutil로 재현 → CPU mW · CPU BW. 조건 실험으로는 넘길 수 없음', 'SW · HW timing'],
     [<b>power params</b>, '계수만 교체 → IP · CPU · BW mW. profile의 power model과 짝이 맞는 version만 선택 가능', 'timing 결과 전부'],
@@ -65,11 +72,16 @@ function Effects({ x }: { x: TimingInputs }) {
 export function TimingInputsHelp({ inputs }: { inputs: TimingInputs }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const btn = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!at) return
     const close = () => setAt(null)
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    const click = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) close() }
+    // the trigger toggles on its own click; closing it here too would reopen it right after
+    const click = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (ref.current && !ref.current.contains(t) && !btn.current?.contains(t)) close()
+    }
     window.addEventListener('keydown', key)
     const t = setTimeout(() => window.addEventListener('mousedown', click), 0)
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('mousedown', click); clearTimeout(t) }
@@ -78,7 +90,7 @@ export function TimingInputsHelp({ inputs }: { inputs: TimingInputs }) {
   const left = at ? Math.max(8, Math.min(at.x - w / 2, window.innerWidth - w - 8)) : 0
   const top = at ? Math.max(8, Math.min(at.y + 6, window.innerHeight - 240)) : 0
   return <>
-    <button type="button" className={`help-q ${at ? 'on' : ''}`} aria-label="입력 영향" aria-expanded={!!at} title="SW 통계 · 설정 profile · 실측 · power params가 결과의 무엇을 바꾸는지"
+    <button ref={btn} type="button" className={`help-q ${at ? 'on' : ''}`} aria-label="입력 영향" aria-expanded={!!at} title="SW 통계 · 설정 profile · 실측 · power params가 결과의 무엇을 바꾸는지"
       onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom }) }}>?</button>
     {at && <div ref={ref} className="verdict-pop basis-pop" role="dialog" aria-label="입력 영향" style={{ left, top, width: w, maxHeight: `calc(100vh - ${top + 12}px)` }}>
       <div className="vp-head"><b>계산 입력이 바꾸는 것</b><span className="grow" /><button className="btn tb-mini" aria-label="닫기" onClick={() => setAt(null)}>✕</button></div>

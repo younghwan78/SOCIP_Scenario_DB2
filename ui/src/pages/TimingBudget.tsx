@@ -7,7 +7,7 @@ import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from 
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
 import { ProfileSelect } from '../components/ProfileSelect'
-import { DEFAULT_POWER_MODEL, useSimProfiles } from '../lib/simProfile'
+import { DEFAULT_POWER_MODEL, defaultPowerParams, useSimProfiles } from '../lib/simProfile'
 import { TimingInputsHelp } from '../components/TimingInputsHelp'
 import { maText, useBattery, batteryNote, type Battery } from '../lib/battery'
 import { DvfsWhatIfTable } from '../components/DvfsWhatIf'
@@ -43,7 +43,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const prof = sp.profiles.find((p) => p.id === cfg)
   // power params must target the profile's power model (the server rejects a mismatch)
   const runModel = String(prof?.run_config?.power_model ?? DEFAULT_POWER_MODEL)
-  const defaultPp = sp.basis ? sp.basis.power_params_ref : prof?.run_config?.power_params_ref ?? null
+  const defaultPp = defaultPowerParams(sp.basis, prof)
   const battery = useBattery(ctx.project, ctx.params.cfg)
   // DVFS level override per domain (URL dvo = "CAM:3,INTCAM:2"); part of the condition
   const dvo = ctx.params.dvo ?? ''
@@ -130,7 +130,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
                 {p.ref}{p.calibrated ? ' · 보정' : ''}{p.status === 'draft' ? ' · draft' : ''}{off ? ` · ${p.ip_model} (power model 불일치)` : ''}</option> })}
           </select></label>
         <TimingInputsHelp inputs={{ statistic, throughput: effTp, margin, profile: prof, basisCode: sp.basis?.code ?? null, measured,
-          measuredOption: (measQ.data ?? []).find((o) => o.id === measured?.measurement_ref) ?? null, powerParams: pp, defaultPowerParams: defaultPp }} />
+          measuredOption: (measQ.data ?? []).find((o) => o.id === measured?.measurement_ref) ?? null, powerParams: pp, defaultPowerParams: defaultPp,
+          pinnedDomains: Object.keys(overrides).sort() }} />
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}

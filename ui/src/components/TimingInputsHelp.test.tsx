@@ -4,7 +4,7 @@ import { expect, it } from 'vitest'
 import { ProfileSelect } from './ProfileSelect'
 import { TimingInputsBody, type TimingInputs } from './TimingInputsHelp'
 import { statisticOf, statParam } from '../lib/timingBudget'
-import type { SimProfile } from '../lib/simProfile'
+import { defaultPowerParams, type SimProfile } from '../lib/simProfile'
 
 const v2: SimProfile = { id: 'simcfg-v2', version: 2, status: 'draft', description: '사외 2600 profile. 계수는 SYNTHETIC (pmp-v2)',
   run_config: { power_model: 'v2-vf', power_params_ref: 'pmp-v2', include_cpu_power: true, asv_group: 4, sw_margin: 0.15, vbat: 4 } }
@@ -25,10 +25,20 @@ it('lists the current inputs and what each one changes', () => {
   expect(html).toContain('profile의 SW margin 15%는 이 화면에서 쓰지 않습니다 — 툴바 SW margin 25% 사용')
   expect(html).toContain('입력으로 사용: SW runtime')
   expect(html).toContain('pmp-v2</span> (profile 기본)')
-  expect(html).toContain('처리량 기준이 stage 1 frame이면 NRT 필요 clock · 판정도')
-  const stage = renderToStaticMarkup(createElement(TimingInputsBody, { inputs: { ...inputs, throughput: 'stage', statistic: 'max', measured: null } }))
-  expect(stage).toContain('SW ms · SW 여유 · CPU mW · NRT 필요 clock · DVFS level · 판정')
+  expect(html).toContain('처리량 기준이 stage 1 frame이면 NRT · Post clock · HW ms · 판정도')
+  expect(html).toContain('HW ms · clock · BW GB/s')            // pipelined: SW never moves the HW side
+  const stage = renderToStaticMarkup(createElement(TimingInputsBody, { inputs: { ...inputs, throughput: 'stage', statistic: 'max', measured: null, pinnedDomains: ['CAM'] } }))
+  expect(stage).toContain('SW ms · SW 여유 · CPU mW · NRT · Post 필요 clock · DVFS level · HW ms · 판정')
+  expect(stage).toContain('DVFS level 고정: CAM은 clock 그대로')
+  expect(stage).not.toContain('HW ms · clock · BW GB/s')
   expect(stage).toContain('<b>max</b><')
+})
+
+it('names the power params the server will use when the screen picks none', () => {
+  expect(defaultPowerParams({ power_params_ref: 'pmp-b@1' }, v2)).toBe('pmp-b@1')
+  expect(defaultPowerParams({ power_params_ref: null }, v2)).toBe('pmp-v2')   // basis without one: the chosen profile's
+  expect(defaultPowerParams(null, v2)).toBe('pmp-v2')
+  expect(defaultPowerParams(null, undefined)).toBeNull()
 })
 
 it('defaults the SW statistic to mean and keeps max explicit in the URL', () => {
