@@ -1,5 +1,5 @@
 // Timing Budget = prediction workbench: the condition (summary + actions), DVFS level override per domain and the
-// ③ interval / latency spread under per-frame SW variance.
+// ⑤ interval / latency spread under per-frame SW variance.
 import { OVERRIDE_LABEL } from '../lib/basis'
 import { useRef, useState } from 'react'
 import { BoxPlot } from './Charts'
@@ -72,7 +72,7 @@ export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpen
   </div>
 }
 
-/** ⑤ DVFS level per domain: calculated (lowest level meeting the IPs' required clock) or a pinned override. */
+/** ② DVFS level per domain: calculated (lowest level meeting the IPs' required clock) or a pinned override. */
 export function DvfsOverrideTable({ report, overrides, onChange }: { report: TimingReport; overrides: Record<string, number>; onChange: (o: Record<string, number>) => void }) {
   const rows = dvfsDomains(report)
   if (!rows.length) return <div className="faint" style={{ fontSize: 12 }}>DVFS table이 연결되지 않아 level override를 쓸 수 없습니다.</div>
@@ -105,7 +105,7 @@ export function DvfsOverrideTable({ report, overrides, onChange }: { report: Tim
   </div>
 }
 
-/** ③ interval / latency box plot from the per-frame SW variance trials. */
+/** ⑤ interval / latency box plot from the per-frame SW variance trials. */
 export function IntervalBoxes({ data }: { data: IntervalDistribution }) {
   const P = data.period_ms
   const COLOR: Record<string, string> = { preview: '#2F6F68', video: '#4C5E8C' }

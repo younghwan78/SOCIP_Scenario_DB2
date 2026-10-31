@@ -3,7 +3,7 @@ import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
-  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, cpuTileNote, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, whatIfDomains,
+  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, cpuTileNote, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, voltText, whatIfDomains,
   type FleetRow, type IpRow, type StageId, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
@@ -118,13 +118,13 @@ function Legend({ color, label, border }: { color: string; label: string; border
   return <span className="legend-item"><span style={{ width: 14, height: 10, background: color, border: border ? `1px solid ${border}` : undefined, borderRadius: 2 }} />{label}</span>
 }
 
-// ---------------------------------------------------------------- ⑤ clocks
+// ---------------------------------------------------------------- ② clocks
 const DOMAIN_TINT = ['#EEF4FB', '#F2F7EE', '#FBF3EA', '#F4EFFA', '#EEF7F6', '#FAF0F2']
 const DOMAIN_EDGE = ['#7FA7D6', '#8FBF7A', '#E0A867', '#A88BD0', '#6FB8AE', '#D98A9C']
 const STAGE_RANK: Record<string, number> = { rt: 0, nrt: 1, post: 2, output: 3 }
 
 /** IPs grouped by DVFS domain (one voltage per domain → the most demanding IP sets the domain level). */
-export function domainGroups(ips: IpRow[]): { domain: string; rows: IpRow[]; level: number | null; voltage: number; driver: IpRow }[] {
+export function domainGroups(ips: IpRow[]): { domain: string; rows: IpRow[]; level: number | null; voltage: number; levelVoltage: number; driver: IpRow }[] {
   const by = new Map<string, IpRow[]>()
   for (const ip of ips.filter((i) => i.set_clock_mhz > 0)) {
     const d = ip.dvfs_group ?? '(domain 없음)'
@@ -135,7 +135,8 @@ export function domainGroups(ips: IpRow[]): { domain: string; rows: IpRow[]; lev
     const lv = rows.map((r) => r.dvfs_level).filter((l): l is number => l !== null)
     const need = (r: IpRow) => r.own_required_mhz ?? r.required_clock_mhz
     const driver = [...rows].sort((a, b) => need(b) - need(a) || (b.hw_ms ?? 0) - (a.hw_ms ?? 0))[0]
-    return { domain, rows: sorted, level: lv.length ? Math.max(...lv) : null, voltage: Math.max(...rows.map((r) => r.voltage_mv)), driver }
+    return { domain, rows: sorted, level: lv.length ? Math.max(...lv) : null, voltage: Math.max(...rows.map((r) => r.voltage_mv)),
+      levelVoltage: Math.max(...rows.map((r) => r.level_voltage_mv ?? r.voltage_mv)), driver }
   }).sort((a, b) => Math.min(...a.rows.map((r) => STAGE_RANK[r.stage] ?? 9)) - Math.min(...b.rows.map((r) => STAGE_RANK[r.stage] ?? 9)) || a.domain.localeCompare(b.domain))
 }
 
@@ -155,7 +156,10 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
         <div key={g.domain} className="dom-group" style={{ background: DOMAIN_TINT[gi % DOMAIN_TINT.length], borderLeftColor: DOMAIN_EDGE[gi % DOMAIN_EDGE.length] }}>
           <div className="dom-head">
             <b>{g.domain}</b>
-            {dvfsApplied && g.level !== null && <span className="badge">domain Lv{g.level} · {fmt(g.voltage, 0)} mV</span>}
+            {dvfsApplied && g.level !== null && <span className="badge">domain Lv{g.level} · {fmt(g.levelVoltage, 0)} mV</span>}
+            {dvfsApplied && g.voltage > g.levelVoltage + 0.5 && (() => { const r = g.rows.find((x) => x.voltage_mv === g.voltage)
+              return <span className="badge v-warn" title={`같은 VDD rail(${r?.vdd ?? '?'})의 다른 IP가 더 높은 전압을 요구해 rail이 ${fmt(g.voltage, 0)} mV로 설정됨 — IP 전력은 rail 전압 기준.\nlevel 전압 ${fmt(g.levelVoltage, 0)} mV는 DVFS table 값 (override 표와 동일)`}>
+                rail {r?.vdd ?? ''} {fmt(g.voltage, 0)} mV{r?.vdd_leader ? ` ← ${r.vdd_leader.toUpperCase()}` : ''}</span> })()}
             <span className="faint">IP {g.rows.length}개 · level 결정 = <b>{g.driver.node.toUpperCase()}</b> (최고 요구 {fmt(g.driver.own_required_mhz ?? g.driver.required_clock_mhz, 0)} MHz{g.driver.basis ? ` · ${basisLabel(g.driver.basis)}` : ''})</span>
           </div>
           {g.rows.map((ip) => {
@@ -171,7 +175,7 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
                     ...(ip.set_reason ? [{ k: 'set이 더 높은 이유', v: `${SET_REASON_LABEL[ip.set_reason] ?? ip.set_reason}${ip.domain_leader ? ` (${ip.domain_leader.toUpperCase()})` : ''}` }] : []),
                     ...(ip.sensor_readout_ms ? [{ k: 'sensor readout', v: `${fmt(ip.sensor_readout_ms, 2)} ms (HW 시간 하한)` }] : []),
                     ...(ip.rule_clock_mhz ? [{ k: 'rule 대비', v: `×${fmt(ip.set_clock_mhz / ip.rule_clock_mhz, 2)}`, tone: (up ? 'bad' : 'good') as 'bad' | 'good' }] : []),
-                    { k: 'DVFS level · 전압', v: dvfsApplied && ip.dvfs_table !== false ? `Lv${ip.dvfs_level ?? '—'} · ${fmt(ip.voltage_mv, 0)} mV` : '표 없음' },
+                    { k: 'DVFS level · 전압', v: dvfsApplied && ip.dvfs_table !== false ? `Lv${ip.dvfs_level ?? '—'} · ${voltText(ip)}` : '표 없음' },
                     { k: 'HW 시간', v: ip.hw_ms === null ? '—' : `${fmt(ip.hw_ms, 2)} ms${ip.standalone_hw_ms ? ` (단독 ${fmt(ip.standalone_hw_ms, 2)})` : ''}` },
                     ...(ip.otf_group ? [{ k: `OTF 연동 ${ip.otf_group}`, v: ip.standalone_hw_ms
                       ? `${(pacers.get(ip.otf_group) ?? []).join(', ').toUpperCase()} 속도에 맞춰 대기`
@@ -190,7 +194,7 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
                   {(ip.own_required_mhz ?? ip.required_clock_mhz) < ip.set_clock_mhz - 0.5 && <line x1={((ip.own_required_mhz ?? ip.required_clock_mhz) / max) * barW} x2={((ip.own_required_mhz ?? ip.required_clock_mhz) / max) * barW} y1={9} y2={20} stroke="#1F2430" strokeWidth={1.5} />}
                 </svg>
                 <span className="mono" style={{ width: valW, flexShrink: 0, fontSize: 12, color: up ? '#C2410C' : 'var(--text-2)' }}>
-                  {dvfsApplied ? clockText(ip) : `${fmt(ip.rule_clock_mhz, 0)} → ${fmt(ip.set_clock_mhz, 0)} MHz`}{dvfsApplied && ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}{ip.basis ? <span className="faint" title={ip.set_reason ? SET_REASON_LABEL[ip.set_reason] : undefined}> · {basisLabel(ip.basis)}</span> : null}
+                  {dvfsApplied ? clockText(ip) : `${fmt(ip.rule_clock_mhz, 0)} → ${fmt(ip.set_clock_mhz, 0)} MHz`}{dvfsApplied && ip.dvfs_table !== false ? <span className="faint" title={voltText(ip)}> · {fmt(ip.level_voltage_mv ?? ip.voltage_mv, 0)}{ip.level_voltage_mv !== undefined && ip.voltage_mv > ip.level_voltage_mv + 0.5 ? `→${fmt(ip.voltage_mv, 0)}` : ''} mV</span> : null}{ip.basis ? <span className="faint" title={ip.set_reason ? SET_REASON_LABEL[ip.set_reason] : undefined}> · {basisLabel(ip.basis)}</span> : null}
                 </span>
               </div>
             )
@@ -207,7 +211,7 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
   )
 }
 
-// ---------------------------------------------------------------- ⑥ power / BW
+// ---------------------------------------------------------------- ③ power / BW
 export function PowerBw({ report }: { report: TimingReport }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
   const p = report.power, bw = report.bw
@@ -293,7 +297,7 @@ function HBarList({ title, rows, max, unit }: { title: string; rows: { k: string
   )
 }
 
-// ---------------------------------------------------------------- ② timeline
+// ---------------------------------------------------------------- ④ timeline
 const LANES: { id: string; name: string; match: (r: TimelineRow) => boolean }[] = [
   { id: 'rt', name: 'RT HW', match: (r) => r.stage === 'rt' && r.type === 'hw' },
   { id: 'nrtsw', name: 'NRT SW', match: (r) => r.stage === 'nrt' && r.type === 'sw' },
@@ -461,7 +465,7 @@ function OutputPairTable({ pairs, period }: { pairs: ReturnType<typeof outputPai
   </div>
 }
 
-// ---------------------------------------------------------------- ③ intervals
+// ---------------------------------------------------------------- ⑤ intervals
 export function Intervals({ report }: { report: TimingReport }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
   const t = report.intervals.target_ms, tol = report.intervals.tolerance
@@ -506,7 +510,7 @@ export function Intervals({ report }: { report: TimingReport }) {
   )
 }
 
-// ---------------------------------------------------------------- ④ what-if
+// ---------------------------------------------------------------- ⑥ what-if
 export function WhatIf({ rows, current, margin = 0.25 }: { rows: WhatIfRow[]; current: { statistic: string; eis: boolean; scale: number }; margin?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
   // one DVFS domain at a time: NRT spans several (CAM / INTCAM) and their clocks must not share one line

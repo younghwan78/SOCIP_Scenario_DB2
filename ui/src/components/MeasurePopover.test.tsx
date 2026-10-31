@@ -65,6 +65,19 @@ it('pipeline chip shows registered vs measured power and opens both in one popov
   } finally { act(() => root.unmount()) }
 })
 
+it('pipeline chip names the stored simulation when nothing is registered (not "예측 —")', async () => {
+  vi.spyOn(archApi, 'board').mockResolvedValue({ rows: [] })
+  vi.spyOn(calibrationApi, 'coverage').mockResolvedValue({ v: { simulation: 1, measurement: 1, synthetic: 0, current_prediction: null,
+    simulations: [{ id: 'sim-1', at: '2026-10-04T10:00:00', source: 'estimated', total_mw: 559.4, shown: true }],
+    measurements: [{ id: detail.id, at: '2026-06-14', origin: 'physical_capture', synthetic: false, total_mw: 675.2, shown: true }] } })
+  const { host, root } = await render(<PowerChip scenarioId="s" variantId="v" project="p" />)
+  try {
+    const chip = host.querySelector<HTMLButtonElement>('.power-chip')!
+    expect(chip.textContent).toContain('Sim 10-04 559 · 실측 675 mW')
+    expect(chip.title).toContain('등록 예측 없음 — 대표 Sim evidence sim-1')
+  } finally { act(() => root.unmount()) }
+})
+
 it('shows condition differences for the latest simulation even when the registered prediction matches', async () => {
   const current = { ...detail.predictions[0], conditions: { overall: 'equivalent' as const, items: [] } }
   const simulation = { ...detail.predictions[0], id: 'SIM-1', kind: 'simulation' as const }

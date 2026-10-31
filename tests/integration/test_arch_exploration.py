@@ -353,6 +353,9 @@ def test_model_status_counts_predictions_from_older_engine(engine, stored_run):
         assert set(status["measurements"]) == {"real", "synthetic", "empty", "unknown"}
         assert status["dvfs_unrecorded"] >= 0
         assert all(set(d) == {"ref", "sample", "predictions"} for d in status["dvfs"])
+        # the table an analysis uses when none is chosen, independent of what predictions recorded
+        assert status["dvfs_default"] is None or set(status["dvfs_default"]) == {"ref", "sample"}
+        assert svc.model_status(db, project_ref="no-such-project")["dvfs_default"] is None
 
 
 def test_report_package_and_run_manifest(engine, stored_run):

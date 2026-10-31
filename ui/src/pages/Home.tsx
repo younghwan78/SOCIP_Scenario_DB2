@@ -8,6 +8,8 @@ import { DOMAIN_LABEL, domainFor, type Domain } from '../lib/tunnel'
 import { PipelineTunnel } from '../components/PipelineTunnel'
 
 import { projLabel, socLabel } from '../lib/projects'
+import { basisApi } from '../lib/basis'
+import { setupSteps } from '../lib/setup'
 
 interface Overview {
   counts: { ip: number; dvfs: number; dvfs_sample: number; predictions: number; runs: number; reports: number; published_reports: number; measurements: number; synthetic_measurements: number }
@@ -45,7 +47,13 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
   const run = overview.data?.latest_run
   const report = overview.data?.latest_report
   const sampleDvfs = overview.data?.counts.dvfs_sample ?? 0
-  const pct = (n: number) => (variants ? Math.round((100 * n) / variants) : 0)
+  const pct = (n: number) => (variants ? Math.round((1000 * n) / variants) / 10 : 0)
+  const basesQ = useAsync(() => (ctx.project ? basisApi.list(ctx.project).catch(() => null) : Promise.resolve(null)), [ctx.project])
+  const steps = setupSteps({
+    bases: basesQ.loading ? null : basesQ.data?.items.filter((b) => b.status !== 'retired').length ?? 0, activeBasis: basesQ.data?.active?.code ?? null,
+    runs: overview.data?.counts.runs ?? 0, predictions: overview.data?.counts.predictions ?? 0, variants,
+    measurements: overview.data?.counts.measurements ?? 0, synthetic: overview.data?.counts.synthetic_measurements ?? 0, reports: overview.data?.counts.reports ?? 0,
+  }, (page, extra) => `${experimentHref(page, scope)}${extra ? `&${extra}` : ''}`)
 
   return (
     <div className="home">
@@ -66,6 +74,14 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
       </div>
 
       <section className="home-dock" aria-label="현황">
+        {overview.data && <div className="hd-block hd-wide hd-steps-block">
+          <h3>과제 진행 <span>{socLabel(ctx.catalog[0]?.soc_ref)} · {projLabel(ctx.project)} · 다음 단계 강조 · 눌러서 이동</span></h3>
+          <ol className="hd-steps">{steps.map((s) => (
+            <li key={s.key} className={`hd-step ${s.state}`}><a href={s.href} title={s.hint}>
+              <span className="hd-step-no">{s.state === 'done' ? '✓' : s.no}</span><span className="hd-step-l">{s.label}</span><b>{s.value}</b>
+              {s.state === 'next' && <em>시작 →</em>}</a></li>))}
+          </ol>
+        </div>}
         <div className="hd-block hd-wide">
           <h3>과제 × Scenario type <span>scenario · variant · 과제명을 눌러 선택</span></h3>
           <table className="hd-matrix">
@@ -87,7 +103,7 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
             <Meter label="Simulation 예측" n={sum('simulation')} pct={pct(sum('simulation'))} color="#56B4E9" />
             <Meter label="등록 예측 (current)" n={sum('current_prediction')} pct={pct(sum('current_prediction'))} color="#2BB3A3" />
             {(overview.data.coverage.unknown ?? 0) > 0 && <p className="hd-em">출처 미상 {overview.data.coverage.unknown} variant — 실측 coverage에서 제외</p>}
-            <Meter label="실측" n={sum('measurement')} pct={pct(sum('measurement'))} color="#7FD6C8" note={sum('synthetic') ? `+ 합성 ${sum('synthetic')}` : undefined} />
+            <Meter label="실측" n={sum('measurement')} pct={pct(sum('measurement'))} color="#7FD6C8" note={sum('synthetic') ? `+ 합성 ${sum('synthetic')} variant` : undefined} />
           </> : <p className="hd-dim">{overview.error ? '현황을 불러오지 못했습니다' : '현황 불러오는 중…'}</p>}
           <p className="hd-dim">구성별 오차와 실제 측정 근거 확인 →</p>
         </a>
@@ -111,10 +127,15 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
   )
 }
 
+/** Coverage percent label: a non-zero share never rounds down to "0%". */
+export function pctText(n: number, pct: number): string {
+  return n > 0 && pct < 1 ? '<1%' : `${pct}%`
+}
+
 function Meter({ label, n, pct, color, note }: { label: string; n: number; pct: number; color: string; note?: string }) {
   return (
     <div className="hd-meter">
-      <div className="hd-row"><span>{label}</span><b>{n} <small>({pct}%)</small>{note && <em> {note}</em>}</b></div>
+      <div className="hd-row"><span>{label}</span><b>{n} <small>({pctText(n, pct)})</small>{note && <em> {note}</em>}</b></div>
       <div className="hd-bar"><i style={{ width: `${Math.min(100, pct)}%`, background: color }} /></div>
     </div>
   )

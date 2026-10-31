@@ -20,6 +20,7 @@ import { MeasurePopover } from '../components/MeasurePopover'
 import { calibrationApi, freshnessOf, measTooltip, predictionTooltip, simTooltip, uniqueShortIds, type Coverage } from '../lib/calibration'
 import { batteryNote, maText, useBattery } from '../lib/battery'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
+import { idleColumns } from '../lib/columnPolicy'
 
 type FacetKey = 'resolution' | 'fps' | 'stab' | 'hdr' | 'camera'
 const FACET_LABEL: Record<FacetKey, string> = { resolution: 'Res', fps: 'fps', stab: 'Stab', hdr: 'HDR', camera: 'Camera' }
@@ -99,7 +100,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const reference = (selected && refChoice[selected.scenario_id]) || preferredReference(selected ? canonicalOf(selected) : undefined, rows.map((r) => r.variant_id), medoid)
   const refRow = byId.get(reference)
   const isRef = useCallback((r: VariantRow) => r.variant_id === reference, [reference])
-  const [descOpen, setDescOpen] = usePref('explorer.desc.open', true)
+  // closed by default: the one-line summary keeps the table high on the page (G-07)
+  const [descOpen, setDescOpen] = usePref('explorer.desc.open', false)
   const [verdictAt, setVerdictAt] = useState<{ id: string; x: number; y: number } | null>(null)
   const [measAt, setMeasAt] = useState<{ id: string; scenario: string; x: number; y: number } | null>(null)
 
@@ -207,6 +209,13 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a>
       {behavior.get(r.scenario_id)?.has(r.variant_id) && <a href="#" title="full-stack timing · cadence · processing flow" onClick={(e) => { e.preventDefault(); ctx.navigate('behavior', { scenario: r.scenario_id, variant: r.variant_id }) }}>Behavior</a>}</span> },
   ]
+  // G-07: all-empty / single-value data columns are hidden by default (over the base list, not the facet filter)
+  const [showIdle, setShowIdle] = usePref('explorer.idleCols', false)
+  const dataReady = !!covQ.data && !boardQ.loading && !variantsQ.loading && !leverQ.loading
+  const idle = dataReady ? idleColumns(columns, rows.filter((r) => showDerived || !r.derived_from_variant),
+    ['pred', 'meas', 'pw', 'vd', 'llc', 'sbwc', 'votf', 'load', ...COLS.map((c) => c.key)], (c) => (typeof c.label === 'string' ? c.label : c.key)) : []
+  const shownColumns = showIdle ? columns : columns.filter((c) => !idle.some((i) => i.key === c.key))
+  const idleTitle = idle.map((i) => `${i.label}: ${i.kind === 'empty' ? '전부 비어 있음' : `모두 ${i.value}`}`).join('\n')
 
   return (
     <PageLayout id="explorer" top={
@@ -295,11 +304,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                 )
               })}
               <span className="input" style={{ width: 200 }}><Icon name="search" size={14} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="variant·조건 검색" aria-label="variant 검색" /></span>
+              {idle.length > 0 && <button className="btn sm" onClick={() => setShowIdle((s) => !s)} aria-pressed={showIdle}
+                title={`${showIdle ? '비교 신호 없는 열 다시 숨기기' : '숨긴 열 보기'} — 이 scenario variant 전체에서\n${idleTitle}`}>
+                {showIdle ? `${idle.length}열 숨기기` : `숨김 ${idle.length}열: 빈 ${idle.filter((i) => i.kind === 'empty').length} · 같은 값 ${idle.filter((i) => i.kind === 'constant').length}`}</button>}
             </div>
           </div>}
           <div className="table-scroll" style={{ flexGrow: 1 }}>
             {variantsQ.error && <div className="err" style={{ margin: 12 }}>{variantsQ.error}</div>}
-            <DataTable id="explorer.variants" columns={columns} rows={visible} rowKey={(r) => r.variant_id}
+            <DataTable id="explorer.variants" columns={shownColumns} rows={visible} rowKey={(r) => r.variant_id}
               rowClass={(r) => (r.variant_id === reference ? 'sel' : '')} stickyTop={isRef} />
             {!variantsQ.loading && !visible.length && <div className="empty">조건에 맞는 variant가 없습니다.</div>}
             {variantsQ.loading && <div className="empty">불러오는 중…</div>}

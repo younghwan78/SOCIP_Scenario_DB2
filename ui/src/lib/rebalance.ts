@@ -2,6 +2,7 @@
 import { postCalculation } from './calculation'
 import type { CpuSweepRequest } from './cpu'
 import { dsuPower, residency, type DsuModelInfo, type DsuParams, type DsuPolicy } from './dsu'
+import { fmt } from './timingBudget'
 
 export interface RbSplit {
   assign: Record<string, string>; moved: string[]; total_mw: number; delta_mw: number; feasible: boolean
@@ -103,6 +104,33 @@ export function bigVerdict(b: NonNullable<RbStrategies['big_check']>): { text: s
   if (!m) return { text: `${b.clusters.join(', ')}로 옮기면 모두 budget 미충족입니다.`, tone: 'ok' }
   if (b.gain) return { text: `${m.unit} → ${m.cluster} 이동이 ${Math.abs(m.delta_mw).toFixed(1)} mW 낮습니다 — 고부하(BW·고속) 조건이면 BIG 사용을 검토하세요.`, tone: 'warn' }
   return { text: `BIG 사용 이득 없음: 가장 유리한 경우(${m.unit} → ${m.cluster})도 +${m.delta_mw.toFixed(1)} mW.`, tone: 'ok' }
+}
+
+/** Budget verdict of a split. Own slack (budget − own time) decides feasibility; the shared bound (budget − own − same-CPU
+ *  co-runner time, priority and phase ignored) only flags a risk: met on own time, missed if the task waits behind every co-runner. */
+export interface SlackVerdict { tier: 'ok' | 'shared' | 'miss'; task?: string; shared_ms?: number; wait_ms?: number }
+export function slackVerdict(s: RbSplit): SlackVerdict {
+  if (!s.feasible) return { tier: 'miss' }
+  let worst: SlackVerdict | null = null
+  for (const [t, resp] of Object.entries(s.response_ms ?? {})) {
+    const own = s.slack_ms?.[t], ms = s.task_ms?.[t]
+    if (own === undefined || ms === undefined) continue
+    const shared = own - (resp - ms)   // = budget − response
+    if (!worst || shared < worst.shared_ms!) worst = { tier: 'shared', task: t, shared_ms: shared, wait_ms: resp - ms }
+  }
+  if (worst && worst.shared_ms! < -1e-3) return worst
+  // older servers send only the minimum
+  if (!worst && s.min_slack_shared_ms != null && s.min_slack_shared_ms < -1e-3) return { tier: 'shared', shared_ms: s.min_slack_shared_ms }
+  return { tier: 'ok' }
+}
+export const SLACK_TIER_LABEL: Record<SlackVerdict['tier'], string> = { ok: '충족', shared: '조건부', miss: '미충족' }
+export function slackVerdictNote(v: SlackVerdict): string {
+  if (v.tier === 'ok') return 'budget 충족 — 같은 CPU co-runner 대기를 모두 더해도 충족'
+  if (v.tier === 'miss') return 'budget 미충족 (자체 실행시간 기준)'
+  const who = v.task ? `${v.task}: ` : ''
+  const wait = v.wait_ms !== undefined ? ` (co-runner ${fmt(v.wait_ms, 2)} ms)` : ''
+  return `조건부 충족 — 자체 실행시간으로는 충족, 같은 CPU co-runner를 모두 기다리면 ${who}slack ${fmt(v.shared_ms!, 2)} ms${wait}. `
+    + '우선순위 미모델: RT 우선순위 또는 co-runner 분리가 필요'
 }
 
 /** client default pool when no result yet: clusters whose name has no "BIG" (≥ 2), else all */

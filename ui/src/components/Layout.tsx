@@ -88,6 +88,8 @@ interface PageLayoutProps {
   main: ReactNode
   bottomTabs?: BottomTab[]
   bottomDefault?: number
+  /** bottom panel open on first visit (the user's toggle is kept afterwards) */
+  bottomOpenDefault?: boolean
   /** Controlled active tab (e.g. jump to "DMA" when a row is needed). */
   activeTab?: string
   onTabChange?: (id: string) => void
@@ -99,13 +101,13 @@ interface PageLayoutProps {
  *  ├ main (fills the rest, owns its own scrolling)
  *  └ bottom (tabbed details) — collapsible (Ctrl+J), height resizable
  */
-export function PageLayout({ id, top, main, bottomTabs, bottomDefault = 260, activeTab, onTabChange }: PageLayoutProps) {
+export function PageLayout({ id, top, main, bottomTabs, bottomDefault = 260, bottomOpenDefault = true, activeTab, onTabChange }: PageLayoutProps) {
   const [topOpen, setTopOpen] = usePref(`${id}.top.open`, true)
   const [topH, setTopH] = usePref<number | null>(`${id}.top.h`, null)
   const topRef = useRef<HTMLDivElement>(null)
   const topBase = useRef(0)
   const bottom = useResizable(`${id}.bottom.h`, bottomDefault, 120, 900, -1)
-  const [bottomOpen, setBottomOpen] = usePref(`${id}.bottom.open`, true)
+  const [bottomOpen, setBottomOpen] = usePref(`${id}.bottom.open`, bottomOpenDefault)
   const [tabState, setTabState] = usePref<string>(`${id}.bottom.tab`, bottomTabs?.[0]?.id ?? '')
   const tab = activeTab ?? tabState
   const setTab = (t: string) => { setTabState(t); onTabChange?.(t) }

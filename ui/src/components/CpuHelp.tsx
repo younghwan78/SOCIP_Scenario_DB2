@@ -29,7 +29,7 @@ export const CPU_HELP: Record<string, ReactNode> = {
       <li>같은 구성(core type · core 수 · OPP)이고 고정 부하가 없는 cluster는 바꿔도 결과가 같아 한쪽만 표시합니다.</li>
     </ul>
   </>,
-  rbTop: <><b>budget을 만족하는 분배 중 CPU + DSU 전력이 낮은 순.</b> 상위 후보는 전체 EAS 모델로 다시 계산해 검증했습니다. MHz 색: 초록 = 현재보다 낮음, 빨강 = 높음.</>,
+  rbTop: <><b>budget을 만족하는 분배 중 CPU + DSU 전력이 낮은 순.</b> 상위 후보는 전체 EAS 모델로 다시 계산해 검증했습니다. 판정은 자기 실행시간 기준이며, <b>조건부</b> = 같은 CPU co-runner를 모두 기다리면 budget을 넘는 경우입니다 (우선순위 미모델 — 해당 task에 RT 우선순위를 주거나 co-runner를 분리해야 성립). MHz 색: 초록 = 현재보다 낮음, 빨강 = 높음.</>,
   rbStates: <><b>cluster OPP 조합이 같은 분배끼리 묶은 것.</b> 같은 OPP면 전력 차이가 1 mW 안팎이라 순위보다 “어떤 OPP 조합에 도달하느냐”가 중요합니다. 분할 수가 많을수록 그 상태로 가는 방법이 많다는 뜻.</>,
   rbBound: <><b>cluster를 OPP 한 단계 낮추는 데 필요한 util 감소량과 그만큼을 덜어 줄 수 있는 task.</b> 전압이 같은 구간이면 OPP를 낮춰도 이득이 작습니다 (mV 확인).</>,
   rbCross: <><b>같은 측정 profile을 다른 과제의 CPU 구성에서 재분배해 MID 구조 변경의 영향을 봅니다</b> (예: E2600 MID_LF0/LF1/HF → 차기 MID_HF0/HF1). 측정 cluster는 이름 → core type 순으로 대응하고, 대응이 없으면 기본 cluster로 보내며 경고를 표시합니다. task 고정(cluster 지정)은 비교 SoC에 적용되지 않고 ‘제외’만 유지됩니다.</>,
