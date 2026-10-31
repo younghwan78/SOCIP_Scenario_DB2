@@ -211,3 +211,37 @@ def test_trial_restart_rejects_late_result_and_pending_promotion(engine, registr
             svc.run_trial_item(db, bid, "p1")
         db.rollback()
         assert db.get(ModelBasis, bid).trial["items"] == {}
+
+
+def test_model_status_default_dvfs_follows_the_active_basis(engine):
+    """The status line names the table an analysis uses: the active basis' DVFS, else the SoC's latest."""
+    from scenario_db.api.services.arch_exploration import model_status
+    from scenario_db.db.models.capability import SocDvfsTable
+
+    tag = uuid4().hex[:8]
+    pid, cfg = f"basis-dvfs-{tag}", f"cfg-basis-dvfs-{tag}"
+    old, new = f"dvfs-sample-{tag}-v1", f"dvfs-{tag}-v2"
+    with Session(engine) as db:
+        db.add(Project(id=pid, schema_version="1.0", metadata_={"soc_ref": "soc-exynos2500"}, yaml_sha256="test"))
+        top = db.query(SocDvfsTable.dvfs_version).filter_by(soc_ref="soc-exynos2500").order_by(SocDvfsTable.dvfs_version.desc()).first()
+        base = (top[0] if top else 0) + 1
+        for ref, ver in ((old, base), (new, base + 1)):
+            db.add(SocDvfsTable(id=ref, schema_version="1.0", soc_ref="soc-exynos2500", dvfs_version=ver, domains={},
+                                compatibility_scope="test", yaml_sha256="test"))
+        db.flush()
+        db.add(SimConfigProfile(id=cfg, schema_version="1.0", project_ref=pid, version=1,
+                                status="draft", run_config={"bw_power_mw_per_gbps": 10}, yaml_sha256="test"))
+        db.commit()
+    try:
+        with Session(engine) as db:
+            assert model_status(db, project_ref=pid)["dvfs_default"] == {"ref": new, "sample": False, "source": "latest"}
+            basis = svc.create_basis(db, project_ref=pid, config_profile_ref=cfg, dvfs_table_ref=old)
+            svc.activate_basis(db, basis["id"])
+            assert model_status(db, project_ref=pid)["dvfs_default"] == {"ref": old, "sample": True, "source": "basis"}
+    finally:
+        with Session(engine) as db:
+            db.query(ModelBasis).filter_by(project_ref=pid).delete()
+            db.query(SimConfigProfile).filter_by(project_ref=pid).delete()
+            db.query(SocDvfsTable).filter(SocDvfsTable.id.in_([old, new])).delete()
+            db.query(Project).filter_by(id=pid).delete()
+            db.commit()

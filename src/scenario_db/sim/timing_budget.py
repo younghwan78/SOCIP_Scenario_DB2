@@ -845,7 +845,11 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 # False when the IP's DVFS group has no table (level cannot be named, voltage is the default)
                 "dvfs_table": bool(res.dvfs_group) and res.dvfs_group in dvfs_tables,
                 "voltage_mv": round(res.set_voltage_mv, 2),
-                "hw_ms": round(timing[node].hw_time_ms, 3) if node in timing else None,
+                # the level's own voltage and the shared VDD rail that raised it (voltage_mv = rail max)
+                "level_voltage_mv": round(res.required_voltage_mv, 2),
+                "vdd": res.vdd,
+                "vdd_leader": res.vdd_leader if res.vdd else None,
+                "hw_ms":round(timing[node].hw_time_ms, 3) if node in timing else None,
                 # OTF-linked across DVFS domains: hw_ms is the group's time; standalone = this IP alone
                 "otf_group": timing[node].otf_group if node in timing else None,
                 "standalone_hw_ms": round(timing[node].standalone_hw_time_ms, 3)

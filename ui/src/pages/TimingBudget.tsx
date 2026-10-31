@@ -63,10 +63,10 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const mainReady = mainReadyKey === mainKey && sp.ready
   const [extrasOn, setExtrasOn] = useState(false)
   const wq = useAsync(() => (variant && extrasOn && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, config) : Promise.resolve(null)), [scenario, variant, extrasOn, mainReady, cfg, margin, cpuModel, tpParam, warmup, condKey])
-  // ⑦ DVFS level ±1/±2 per domain — runs after ④ so at most one simulation slot is held
+  // ⑦ DVFS level ±1/±2 per domain — runs after ⑥ so at most one simulation slot is held
   const dq = useAsync(() => (variant && extrasOn && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, baseOpts, cfg, undefined, DEFAULT_COMBOS, config) : Promise.resolve(null)),
     [scenario, variant, extrasOn, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
-  // ③ SW-variance box plot: last, after ⑦ (one simulation slot at a time)
+  // ⑤ SW-variance box plot: last, after ⑦ (one simulation slot at a time)
   const [distOn, setDistOn] = usePref<boolean>('tb.dist', false)
   const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
     [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
@@ -203,19 +203,19 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
     {r.measured_compare && <MeasuredCompareCard data={r.measured_compare} battery={battery} />}
     <div className="tb-grid">
       <Card id="slot" title="① 1 frame 예산 — stage별 slot" note={pipelined ? 'stage는 M2M buffer로 pipeline · 각 SW task / HW stage가 1 frame 안에 · 합이 넘으면 latency만 증가 (fps = 출력 간격)' : 'stage 1 frame 기준 · 각 stage SW+HW가 1 frame 안에 끝나야 함 (보수적)'} defaultWide><SlotBudget report={r} margin={margin} /></Card>
-      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level (계산 / override)" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}>
+      <Card id="clock" title="② IP별 필요 clock · DVFS level (계산 / override)" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}>
         <ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} margin={margin} />
         <DvfsOverrideTable report={r} overrides={overrides} onChange={setOverrides} /></Card>
-      <Card id="power" title="⑥ 예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
-      <Card id="gantt" title="② Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 점선 = ${fmt(r.fps, 0)} fps frame 경계 (${fmt(r.period_ms, 2)} ms)`} defaultWide
+      <Card id="power" title="③ 예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
+      <Card id="gantt" title="④ Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 점선 = ${fmt(r.fps, 0)} fps frame 경계 (${fmt(r.period_ms, 2)} ms)`} defaultWide
         actions={<span style={{ display: 'inline-flex', gap: 6 }}>
           <div className="seg sm" role="group" aria-label="timeline 상세도"><button className={ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(true)} title="IP · SW task별 행">상세</button><button className={!ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(false)} title="stage별 묶음">요약</button></div>
           <div className="seg sm" role="group" aria-label="timeline frame 수">{[6, 12, 20].map((n) => <button key={n} className={frames === n ? 'on' : ''} onClick={() => setFrames(n)}>{n} frame</button>)}</div></span>}><Gantt report={r} detail={ganttDetail} /></Card>
-      <Card id="interval" title="③ 출력 frame 간격 · pipeline latency" defaultWide note="합격 기준 = 간격 · latency는 참고 · jitter · drop · SW 편차 분포는 참고 지표"
+      <Card id="interval" title="⑤ 출력 frame 간격 · pipeline latency" defaultWide note="합격 기준 = 간격 · latency는 참고 · jitter · drop · SW 편차 분포는 참고 지표"
         actions={<div className="seg sm" role="group" aria-label="warm-up 제외" title="앞쪽 출력 간격 N개를 판정에서 제외 (pipeline fill · AE/AWB 안정화). 0 = 모두 판정">{[0, 1, 2, 4].map((n) => <button key={n} className={warmup === n ? 'on' : ''} onClick={() => setWarmup(n)}>{n ? `warm-up ${n}` : 'warm-up 없음'}</button>)}</div>}><Intervals report={r} />
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
         {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>
-      <Card id="whatif" title="④ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
+      <Card id="whatif" title="⑥ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
         {!extrasOn ? <div className="empty">위의 보조 탐색 계산을 켜면 SW 증가 조건을 비교합니다.</div> : whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
       </Card>
       <Card id="dvfs" title="⑦ IP clock level ±1 / ±2 → SW 여유 · Power · BW" note={`DVFS domain (RT / NRT / M2M) 하나를 L±1·L±2로 고정, 나머지는 현재 그대로 · ${batteryNote(battery)}`} defaultWide>

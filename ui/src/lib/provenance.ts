@@ -3,6 +3,7 @@
 // different power on different pages; these helpers make each number say where it came from.
 import type { ReportMeta } from './archExplore'
 import { getJson } from './api'
+import { shortDvfs } from './basis'
 
 export type ProvKind = 'registered' | 'recalc' | 'simulation' | 'measured' | 'synthetic'
 export interface Prov {
@@ -128,6 +129,8 @@ export interface ModelStatus {
   dvfs: { ref: string; sample: boolean; predictions: number }[]
   /** current predictions whose run did not record a DVFS table (older engines) */
   dvfs_unrecorded?: number
+  /** the table an analysis uses when none is chosen: the active basis' table, else the latest of the project's SoC */
+  dvfs_default?: { ref: string; sample: boolean; source?: 'basis' | 'latest' } | null
   /** real/synthetic = captures with total power; empty = imports without power data */
   measurements: { real: number; synthetic: number; empty?: number }
   lineage: Record<string, unknown> | null
@@ -144,16 +147,22 @@ export function statusItems(s: ModelStatus, project?: string): StatusItem[] {
   const items: StatusItem[] = []
   const sample = s.dvfs.filter((d) => d.sample)
   const unrec = s.dvfs_unrecorded ?? 0
+  const def = s.dvfs_default
   items.push(s.dvfs.length === 0 && unrec > 0
     ? { key: 'dvfs', text: 'DVFS 미기록 (이전 run)', title: `등록 예측 ${unrec}건의 run이 사용한 DVFS table을 기록하지 않음 (이전 engine) — 현재 engine으로 재탐색하면 기록됨`, level: 'warn', href: `#/explore${q}` }
+    : s.dvfs.length === 0 && def
+    // nothing registered yet: name the table every analysis falls back to (Timing Budget, What-if, 탐색)
+    ? { key: 'dvfs', text: `DVFS ${shortDvfs(def.ref)}${def.sample ? ' SAMPLE' : ''} · ${def.source === 'basis' ? '예측 기준' : '기본'}`,
+        title: `분석 기본 DVFS table: ${def.ref}${def.source === 'basis' ? ' (active 예측 기준이 지정)' : ' (SoC 최신 table)'}${def.sample ? ' (SAMPLE — 사내 table 교체 필요)' : ''}\n등록 예측이 없어 예측 기록 기준 DVFS는 0건`, level: def.sample ? 'warn' : 'ok', href: `#/library${q}` }
     : s.dvfs.length === 0
-    ? { key: 'dvfs', text: 'DVFS 없음', title: '등록 예측이 없어 참조 DVFS table 없음', level: 'info', href: `#/library${q}` }
+    ? { key: 'dvfs', text: 'DVFS table 없음', title: '이 과제 SoC의 DVFS table이 없음 — level·전압 산출 불가', level: 'warn', href: `#/library${q}` }
     : sample.length
       ? { key: 'dvfs', text: `DVFS SAMPLE ${sample.length}/${s.dvfs.length}`, title: `사내 table 교체 필요: ${sample.map((d) => d.ref).join(', ')}`, level: 'warn', href: `#/library${q}` }
       : { key: 'dvfs', text: `DVFS ${s.dvfs.map((d) => d.ref).join(', ')}`, title: '등록 예측이 참조하는 DVFS table', level: 'ok', href: `#/library${q}` })
   const m = s.measurements
-  items.push({ key: 'meas', text: `실측 ${m.real} · 합성 ${m.synthetic}${m.empty ? ` · 전력 없음 ${m.empty}` : ''}`,
+  items.push({ key: 'meas', text: `capture 실측 ${m.real} · 합성 ${m.synthetic}${m.empty ? ` · 전력 없음 ${m.empty}` : ''}`,
     title: (m.real === 0 ? '실제 silicon 측정이 없어 예측 정확도를 검증할 수 없음 (합성 fixture는 검증 근거 아님)' : 'total power가 있는 실제 silicon 측정 / 합성 fixture 건수')
+      + '\n단위: 측정 capture (evidence) 건수 — Home coverage는 측정이 있는 variant 수라 다를 수 있음'
       + (m.empty ? `\n전력 데이터 없이 import된 측정 ${m.empty}건은 제외` : ''),
     level: m.real === 0 ? 'warn' : 'ok', href: `#/calibration${q}` })
   const p = s.predictions

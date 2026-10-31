@@ -524,7 +524,7 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 /* Home — pipeline tunnel */
 .home { position: relative; display: flex; flex-direction: column; gap: 24px; flex-grow: 1; min-height: 0; overflow: auto; container-type: inline-size; background: #0B1116; color: #E8EEF0; }
 .tunnel-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.home-card { position: relative; flex-shrink: 0; margin: 80px clamp(20px, 5vw, 64px) 0; width: min(400px, calc(100% - 40px)); display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: 14px; background: rgba(11,17,22,.72); border: 1px solid rgba(127,214,200,.22); backdrop-filter: blur(6px); }
+.home-card { position: relative; flex-shrink: 0; margin: 56px clamp(20px, 5vw, 64px) 0; width: min(400px, calc(100% - 40px)); display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: 14px; background: rgba(11,17,22,.72); border: 1px solid rgba(127,214,200,.22); backdrop-filter: blur(6px); }
 .home-card h2 { margin: 0; font-size: clamp(24px, 3vw, 32px); line-height: 1.25; font-weight: 700; }
 .home-card p { margin: 0; font-size: 14px; line-height: 1.6; color: #B7C3C8; }
 .home-kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; color: #7FD6C8; }
@@ -551,6 +551,18 @@ a.hd-row:hover span { color: #E8EEF0; }
 .hd-row small { font-size: 11px; color: #9FB0B6; } .hd-row em { font-style: normal; font-size: 11px; color: #E6A23C; }
 .hd-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; } .hd-bar i { display: block; height: 100%; }
 .hd-meter { display: flex; flex-direction: column; gap: 3px; }
+/* 과제 진행 checklist (① 예측 기준 … ⑤ 보고서): the first unfinished step is highlighted */
+.hd-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.hd-step a { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.14); color: #B7C3C8; text-decoration: none; height: 100%; box-sizing: border-box; }
+.hd-step a:hover { border-color: #7FD6C8; color: #E8EEF0; }
+.hd-step-no { font-family: var(--mono); font-size: 12px; color: #7C8C92; }
+.hd-step-l { font-size: 12px; }
+.hd-step b { font-family: var(--mono); font-size: 14px; color: #E8EEF0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-step em { font-style: normal; font-size: 11px; color: #06201D; background: #2BB3A3; border-radius: 4px; padding: 1px 6px; width: fit-content; margin-top: 2px; }
+.hd-step.done .hd-step-no { color: #7FD6C8; }
+.hd-step.next a { border-color: #2BB3A3; background: rgba(43,179,163,.12); }
+.hd-step.todo { opacity: .7; }
+@container (max-width: 760px) { .hd-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .hd-em { margin: 0; font-size: 11px; color: #E6A23C; } .hd-dim { margin: 0; font-size: 11px; color: #7C8C92; }
 .hd-matrix { border-collapse: collapse; font-size: 12px; width: auto; min-width: 60%; }
 .hd-matrix th:not(:first-child) { text-align: right; padding-left: 18px; }
@@ -706,6 +718,10 @@ a.hd-row:hover span { color: #E8EEF0; }
 .cs-val { font-weight: 600; }
 .cs-chip { display: inline-block; margin-left: 8px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #F3EFE8; min-width: 62px; text-align: center; }
 .cs-chip.t-good { background: #E3F1E7; color: #166534; } .cs-chip.t-bad { background: #FBE4E1; color: #B42318; } .cs-chip.t-same { color: var(--faint); }
+.cs-chip.t-none { background: #FFF4DB; color: #8A5A00; }
+/* headline whose ★ and column come from different sources: no Δ, a prompt to unify instead */
+.cs-v.cs-mixed { color: #8A5A00; font-size: clamp(13px, 1.1vw, 16px); }
+.cs-unify { margin-top: 6px; }
 td.cs-best { box-shadow: inset 0 0 0 2px #8CC5A0; border-radius: 4px; }
 .dom-group { border-left: 4px solid #ccc; border-radius: 6px; padding: 6px 8px 6px 8px; display: flex; flex-direction: column; gap: 3px; }
 .dom-head { display: flex; gap: 10px; align-items: baseline; font-size: 12.5px; margin-bottom: 2px; flex-wrap: wrap; }

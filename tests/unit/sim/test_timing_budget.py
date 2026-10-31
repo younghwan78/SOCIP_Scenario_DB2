@@ -146,6 +146,12 @@ def test_dvfs_levels_are_reported(graph_factory, dvfs):
     for ip in r["ips"]:
         if not ip["dvfs_table"]:
             assert ip["dvfs_level"] is None
+        # the reported voltage is the shared rail's; the level's own voltage never exceeds it
+        assert ip["level_voltage_mv"] <= ip["voltage_mv"] + 1e-6
+        if ip["vdd"] is None:
+            assert ip["vdd_leader"] is None and ip["level_voltage_mv"] == pytest.approx(ip["voltage_mv"])
+        else:
+            assert ip["vdd_leader"]
 
 
 def test_power_and_bw_split(graph_factory):

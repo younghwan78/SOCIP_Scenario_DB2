@@ -140,6 +140,16 @@ export function predictionTooltip(p: CoveragePrediction, short?: string, checkin
     p.dvfs_table_ref ? `DVFS ${p.dvfs_table_ref}` : null,
     p.supersedes ? `이전 등록 ${shortId(p.supersedes)} 대체` : null].filter(Boolean).join('\n')
 }
+export const shownMeas = (c: Coverage | undefined) => (c?.measurements ?? []).find((x) => x.shown) ?? (c?.measurements ?? [])[0]
+// only a prediction fed by a measured trace has a SW build to compare; defined timing has none
+export const predSw = (c: Coverage) => (c.current_prediction?.sw?.source === 'measured' ? c.current_prediction.sw.ref : null)
+export const swDiffers = (c: Coverage, m: CoverageMeas) => { const p = predSw(c); return !!(p && m.sw_baseline_ref && p !== m.sw_baseline_ref) }
+/** what the 실측 cell shows (date · power · SW≠), so the idle-column check compares cells, not the date sort key */
+export function measCellKey(c: Coverage | undefined): string | null {
+  const m = shownMeas(c)
+  if (!c || !m) return c && (c.measurement || c.synthetic) ? (c.measurement ? '실측' : '합성') : null
+  return `${m.synthetic ? '합성 ' : ''}${(m.at ?? '').slice(5, 10).replace('-', '/') || '날짜?'}${m.total_mw != null ? ` · ${m.total_mw.toFixed(0)}` : ''}${swDiffers(c, m) ? ' · SW≠' : ''}`
+}
 export function measTooltip(c: Coverage): string {
   const ms = c.measurements ?? []
   if (!ms.length) return `실제 측정 ${c.measurement}건 · 합성 ${c.synthetic}건`

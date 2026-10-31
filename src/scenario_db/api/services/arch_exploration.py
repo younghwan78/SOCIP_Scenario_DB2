@@ -1246,6 +1246,24 @@ def _is_sample(ref: str | None) -> bool:
     return bool(ref) and any(k in str(ref).lower() for k in ("sample", "synthetic"))
 
 
+def _default_dvfs(db: Session, project_ref: str | None) -> dict[str, Any] | None:
+    """The DVFS table an analysis of this project uses when none is chosen: the active basis' table (as
+    ``apply_basis`` fills it), else the latest table of the project's SoC."""
+    from scenario_db.api.services.model_basis import active_basis
+    from scenario_db.db.models.capability import SocDvfsTable
+
+    project = db.get(Project, project_ref) if project_ref else None
+    if project is None:
+        return None
+    basis = active_basis(db, project.id)
+    if basis is not None and basis.dvfs_table_ref:
+        return {"ref": basis.dvfs_table_ref, "sample": _is_sample(basis.dvfs_table_ref), "source": "basis"}
+    soc = (project.metadata_ or {}).get("soc_ref") or (project.globals_ or {}).get("soc_ref")
+    table = (db.query(SocDvfsTable.id).filter_by(soc_ref=soc).order_by(SocDvfsTable.dvfs_version.desc()).first()
+             if soc else None)
+    return {"ref": table.id, "sample": _is_sample(table.id), "source": "latest"} if table is not None else None
+
+
 def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, Any]:
     """What the displayed numbers rest on: engine rev, DVFS tables, real vs synthetic measurements.
 
@@ -1322,6 +1340,7 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
                         "engines": engines},
         "dvfs": [{"ref": ref, "sample": _is_sample(ref), "predictions": n} for ref, n in sorted(dvfs.items())],
         "dvfs_unrecorded": unrecorded,
+        "dvfs_default": _default_dvfs(db, project_ref),
         "measurements": {"real": real, "synthetic": synthetic, "empty": empty, "unknown": unknown},
         "lineage": lineage,
         "latest_run": {"id": latest.id, "engine_rev": latest.engine_rev,

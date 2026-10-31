@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { fmt } from '../lib/timingBudget'
 import { partColor, sortClusters } from '../lib/powerModel'
-import { applyDsuRebalance, bigVerdict, strategyVerdict, type CpuRebalance, type RbBoundary, type RbSplit, type RbStrategyRow } from '../lib/rebalance'
+import { applyDsuRebalance, bigVerdict, SLACK_TIER_LABEL, slackVerdict, slackVerdictNote, strategyVerdict, type CpuRebalance, type RbBoundary, type RbSplit, type RbStrategyRow } from '../lib/rebalance'
 import { shiftVote, type DsuPolicy } from '../lib/dsu'
 import { useTip } from './ChartTip'
 import { useWidth } from './Charts'
@@ -162,7 +162,7 @@ export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; on
             {...tip(() => ({ title: i === 0 ? '현재 (측정 배치)' : `step ${i} · ${p.moved_unit} 이동`, head: { label: '총 CPU', value: `${fmt(p.total_mw, 1)} mW`, tone: 'strong' as const },
               rows: [{ k: '현재 대비', v: `${signed(p.delta_mw)} mW`, tone: p.delta_mw < 0 ? 'good' as const : 'bad' as const },
                 ...parts.map((q) => ({ k: q.label, v: `${fmt(p.mw[q.k] ?? 0, 1)} mW${p.mhz[q.k] ? ` @${p.mhz[q.k]}` : ''}`, color: q.color })),
-                { k: '옮긴 util', v: `${p.moved_util_pct ?? 0}%` }, { k: '판정', v: p.feasible ? 'budget 충족' : '미충족', tone: p.feasible ? 'good' as const : 'bad' as const }] }))}>
+                { k: '옮긴 util', v: `${p.moved_util_pct ?? 0}%` }, verdictRow(p)] }))}>
             {parts.map((q) => { const v = p.mw[q.k] ?? 0; const y0 = y(acc + v), h = y(acc) - y0; acc += v
               return <rect key={q.k} x={x(i) - bw / 2} y={y0} width={bw} height={Math.max(0, h)} fill={q.color} stroke={sel === id ? '#1F2430' : 'none'} /> })}
             <text x={x(i)} y={H + 14} fontSize={10} textAnchor="middle" fill="var(--muted)">{i}</text>
@@ -178,24 +178,45 @@ export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; on
   )
 }
 
+const SHARED_NOTE = 'budget − (자기 + 같은 CPU co-runner 실행시간) — 우선순위·위상을 무시한 대기 상한, 판정에는 쓰지 않음'
+const TIER_ORDER = { ok: 0, unchecked: 1, shared: 2, miss: 3 } as const
+const TIER_CLASS = { ok: 'v-ok', shared: 'v-warn', unchecked: 'v-na', miss: 'v-fail' } as const
+/** own-time verdict, with "조건부" when the shared-CPU wait bound misses */
+export function VerdictBadge({ s, long = false }: { s: RbSplit; long?: boolean }) {
+  const v = slackVerdict(s)
+  const text = long && v.tier === 'shared' ? `조건부 충족${v.task ? ` · ${v.task} 대기 시 ${fmt(v.shared_ms!, 2)} ms` : ''}` : SLACK_TIER_LABEL[v.tier]
+  return <span className={`badge ${TIER_CLASS[v.tier]} rb-verdict`} title={slackVerdictNote(v)}>{text}</span>
+}
+function verdictRow(s: RbSplit) {
+  const v = slackVerdict(s)
+  return { k: '판정', v: v.tier === 'shared' ? `조건부${v.task ? ` (${v.task} ${fmt(v.shared_ms!, 2)} ms)` : ''}` : v.tier === 'ok' ? 'budget 충족' : v.tier === 'unchecked' ? 'budget 충족 (자체 · 대기 미검사)' : '미충족',
+    tone: v.tier === 'ok' ? 'good' as const : v.tier === 'miss' ? 'bad' as const : 'muted' as const }
+}
+
 function SplitDetail({ s, r, title, knob = 'cpuset' }: { s: RbSplit; r: CpuRebalance; title: string; knob?: Knob }) {
   const units = r.units
+  const hasShared = Object.keys(s.response_ms ?? {}).length > 0
   return (
     <Card id="cpu-rb-detail" title={title} defaultWide note="task별 cluster · 시간 · budget" help={CPU_HELP.rbDetail}>
       <div className="toolbar" style={{ gap: 12, fontSize: 12, flexWrap: 'wrap', marginBottom: 6 }}>
         {r.pool.map((c) => <span key={c} className="mono">{c} <b>{s.mhz[c]}</b> MHz ({fmt(s.mw[c] ?? 0, 1)} mW · {r.reference.mhz[c]}→{s.mhz[c]})</span>)}
         <span className="mono">DSU <b>{s.mhz.dsu}</b> MHz ({fmt(s.mw.dsu ?? 0, 1)} mW)</span>
         {s.knobs.length > 0 && <span className="badge" title={KNOB_NOTE[knob]}>{KNOB_LABEL[knob]} {s.knobs.length}건</span>}
+        <VerdictBadge s={s} long />
       </div>
       <table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th>task</th><th>측정 → 배치</th><th style={{ textAlign: 'right' }}>task ms</th><th style={{ textAlign: 'right' }}>budget</th><th style={{ textAlign: 'right' }}>slack</th></tr></thead>
+        <thead><tr><th>task</th><th>측정 → 배치</th><th style={{ textAlign: 'right' }}>task ms</th><th style={{ textAlign: 'right' }}>budget</th><th style={{ textAlign: 'right' }}>slack</th>
+          {hasShared && <th style={{ textAlign: 'right' }} title={SHARED_NOTE}>대기 포함</th>}</tr></thead>
         <tbody>{units.flatMap((u) => u.tasks.map((t) => {
-          const at = s.assign[u.unit] ?? u.home, ms = s.task_ms?.[t], sl = s.slack_ms?.[t]
+          const at = s.assign[u.unit] ?? u.home, ms = s.task_ms?.[t], sl = s.slack_ms?.[t], resp = s.response_ms?.[t]
+          const sh = sl !== undefined && ms !== undefined && resp !== undefined ? sl - (resp - ms) : undefined
           return <tr key={t}><td className="mono">{t}{u.tasks.length > 1 && <span className="faint"> ({u.unit})</span>}</td>
             <td>{u.home}{at !== u.home ? <b> → {at}</b> : ''}</td>
             <td className="mono" style={{ textAlign: 'right' }}>{ms !== undefined ? fmt(ms, 2) : '—'}</td>
-            <td className="mono" style={{ textAlign: 'right' }}>{u.budget_ms ?? '—'}</td>
-            <td className={`mono ${sl !== undefined && sl < 0 ? 'pm-up' : ''}`} style={{ textAlign: 'right' }}>{sl !== undefined ? fmt(sl, 2) : '—'}</td></tr>
+            <td className="mono" style={{ textAlign: 'right' }}>{fmt(u.budget_ms, 2)}</td>
+            <td className={`mono ${sl !== undefined && sl < 0 ? 'pm-up' : ''}`} style={{ textAlign: 'right' }}>{sl !== undefined ? fmt(sl, 2) : '—'}</td>
+            {hasShared && <td className={`mono ${sh !== undefined && sh < -1e-3 ? '' : 'faint'}`} style={{ textAlign: 'right', color: sh !== undefined && sh < -1e-3 ? 'var(--warn-text)' : undefined }}
+              title={sh !== undefined ? `co-runner ${fmt(resp! - ms!, 2)} ms 포함 응답 ${fmt(resp!, 2)} ms (상한)` : '같은 CPU co-runner 없음'}>{sh !== undefined ? fmt(sh, 2) : '—'}</td>}</tr>
         }))}</tbody>
       </table>
     </Card>
@@ -232,7 +253,9 @@ export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity,
       {parts.map((q) => <span key={q.k} style={{ width: `${(100 * (c.mw[q.k] ?? 0)) / maxMw}%`, background: q.color }} />)}</span> },
     ...r.pool.map((cl): Column<RbSplit> => ({ key: `f.${cl}`, label: cl, width: 86, align: 'right', sort: (c) => c.mhz[cl], render: (c) => <span className={`mono ${c.mhz[cl] < ref.mhz[cl] ? 'pm-down' : c.mhz[cl] > ref.mhz[cl] ? 'pm-up' : ''}`}>{c.mhz[cl]}</span> })),
     { key: 'dsu', label: 'DSU', width: 64, align: 'right', sort: (c) => c.mhz.dsu, render: (c) => <span className="mono">{c.mhz.dsu}</span> },
-    { key: 'slack', label: 'slack ms', width: 76, align: 'right', sort: (c) => c.min_slack_ms ?? null, render: (c) => <span className="mono" title={c.min_slack_shared_ms != null ? `같은 CPU co-runner 대기 포함 상한: ${fmt(c.min_slack_shared_ms, 2)} ms` : undefined}>{c.min_slack_ms === null || c.min_slack_ms === undefined ? '—' : fmt(c.min_slack_ms, 2)}{c.min_slack_shared_ms != null && c.min_slack_ms != null && c.min_slack_shared_ms < c.min_slack_ms - 0.005 ? <span className="faint"> / {fmt(c.min_slack_shared_ms, 2)}</span> : null}</span> },
+    { key: 'slack', label: 'slack ms', width: 70, align: 'right', sort: (c) => c.min_slack_ms ?? null, headTitle: '최소 slack = budget − 자기 실행시간 (판정 기준)',
+      render: (c) => <span className={`mono ${c.min_slack_ms != null && c.min_slack_ms < 0 ? 'pm-up' : ''}`}>{c.min_slack_ms == null ? '—' : fmt(c.min_slack_ms, 2)}</span> },
+    { key: 'verdict', label: '판정', width: 78, headTitle: '충족 = 같은 CPU 대기를 모두 더해도 충족 · 조건부 = 자체 실행시간으로만 충족 (우선순위 미모델) · hover = 원인 task', sort: (c) => TIER_ORDER[slackVerdict(c).tier], render: (c) => <VerdictBadge s={c} /> },
     { key: 'mv', label: '옮긴 task → cluster', width: 420, title: (c) => c.moved.map((u) => `${u}→${c.assign[u]}`).join('\n'), render: (c) => <span className="mono faint" style={{ fontSize: 11.5 }}>{c.moved.map((u) => `${u}→${c.assign[u]}`).join(' · ') || <span className="badge">현재 배치 그대로</span>}</span> },
   ], [r]) // eslint-disable-line react-hooks/exhaustive-deps
   const tile = (label: string, value: string, note: string, tone = '') =>
@@ -249,7 +272,7 @@ export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity,
     <Card id="cpu-rb-curve" title="이동 곡선" defaultWide help={CPU_HELP.rbCurve} note="현재 배치에서 이득이 큰 task부터 하나씩 옮김 · 막대 클릭 = 아래 상세">
       <MoveCurve r={r} sel={sel} onPick={setSel} />
     </Card>
-    <Card id="cpu-rb-top" title={`최저 분배 상위 ${r.cases.length}`} defaultWide help={CPU_HELP.rbTop} note="budget 충족 · CPU+DSU 전력 낮은 순 · 행 클릭 = 상세" minHeight={160}>
+    <Card id="cpu-rb-top" title={`최저 분배 상위 ${r.cases.length}`} defaultWide help={CPU_HELP.rbTop} note="budget 충족 (자체 실행시간 기준) · 조건부 = 같은 CPU 대기 시 위험 · CPU+DSU 전력 낮은 순 · 행 클릭 = 상세" minHeight={160}>
       <div className="table-scroll" style={{ maxHeight: 360 }}>
         <DataTable id="cpu.rb.top" columns={cols} rows={r.cases} rowKey={(c) => `c${c.rank}`} rowClass={(c) => (sel === `c${c.rank}` ? 'sel' : '')} onRowClick={(c) => setSel(`c${c.rank}`)} />
       </div>

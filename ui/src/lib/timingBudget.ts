@@ -20,6 +20,8 @@ export interface IpRow {
   node: string; hw_name: string; stage: StageId; dvfs_group: string | null; cores: number; shared_streams: number
   rule_clock_mhz: number | null; required_clock_mhz: number; set_clock_mhz: number; dvfs_level: number | null; voltage_mv: number
   rule_dvfs_level?: number | null; dvfs_table?: boolean
+  /** the level's own voltage; voltage_mv is the shared VDD rail's (raised by vdd_leader) */
+  level_voltage_mv?: number; vdd?: string | null; vdd_leader?: string | null
   hw_ms: number | null; power_mw: number; feasible: boolean; infeasible_reason: string | null; clock_reason: string | null
   /** IP's own need before DVFS-domain sharing, the constraint that set it, and why the set clock is higher */
   own_required_mhz?: number; basis?: ClockBasisKind; set_reason?: SetReason; domain_leader?: string | null
@@ -335,6 +337,14 @@ export function intervalOk(values: number[], target: number, tol: number): boole
 
 export function fmt(v: number | null | undefined, d = 1): string {
   return v === null || v === undefined || Number.isNaN(v) ? '—' : v.toFixed(d)
+}
+
+/** "619 mV" or "619 → 710 mV (VDD_CAM: CSIS)" when a shared VDD rail runs above the level's own voltage. */
+export function voltText(ip: Pick<IpRow, 'voltage_mv' | 'level_voltage_mv' | 'vdd' | 'vdd_leader'>): string {
+  const own = ip.level_voltage_mv
+  if (own === undefined || !(ip.voltage_mv > own + 0.5)) return `${fmt(ip.voltage_mv, 0)} mV`
+  const leader = ip.vdd_leader ? `: ${ip.vdd_leader.split(',').map((s) => s.toUpperCase()).join(', ')}` : ''
+  return `${fmt(own, 0)} → ${fmt(ip.voltage_mv, 0)} mV (${ip.vdd ?? 'rail'}${leader})`
 }
 
 /** Nice axis max for bar charts. */

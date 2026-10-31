@@ -142,13 +142,16 @@ export function PowerChip({ scenarioId, variantId, project, onEvidence }: { scen
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
   useEffect(() => setAt(null), [scenarioId, variantId])
   if (!variantId || (boardQ.loading && covQ.loading)) return null
-  const pred = board?.power.total_mw, measured = meas?.total_mw
+  // G-01: without a registered prediction the stored simulation is the model number — named as such, not "예측 —"
+  const sim = board ? null : (covQ.data?.[variantId]?.simulations ?? []).find((s) => s.shown && s.total_mw != null) ?? null
+  const pred = board?.power.total_mw ?? sim?.total_mw ?? null, measured = meas?.total_mw
+  const predLabel = board ? '등록 예측' : sim ? `Sim ${(sim.at ?? '').slice(5, 10)}` : '등록 예측'
   const delta = pred != null && measured != null && measured ? ((pred - measured) / measured) * 100 : null
   const label = pred == null && measured == null ? '전력 · 예측/실측 없음'
-    : `예측 ${pred != null ? fmt(pred, 0) : '—'} · ${meas?.synthetic ? '합성' : '실측'} ${measured != null ? fmt(measured, 0) : '—'} mW`
+    : `${predLabel} ${pred != null ? fmt(pred, 0) : '—'} · ${meas?.synthetic ? '합성' : '실측'} ${measured != null ? fmt(measured, 0) : '—'} mW`
   return <>
     <button type="button" className={`chip chip-btn power-chip ${delta != null ? errClass(delta) : ''}`} aria-label="예측 · 실측 전력 상세"
-      title={`클릭: 등록 예측 · 실측 power 상세 (CPU · IP · BW · rail · SW task)${delta != null ? `\n예측 − 실측 = ${pct(delta)}` : ''}`}
+      title={`클릭: 등록 예측 · 실측 power 상세 (CPU · IP · BW · rail · SW task)${sim ? `\n등록 예측 없음 — 대표 Sim evidence ${sim.id} (${sim.source ?? '출처 ?'}) 값 표시` : ''}${delta != null ? `\n${predLabel} − 실측 = ${pct(delta)} (모델 범위가 다르면 CPU·기타 rail 차이 포함)` : ''}`}
       onClick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setAt(at ? null : { x: r.left, y: r.bottom }) }}>
       <span aria-hidden="true">⚡</span> {label}{delta != null ? <span className="mono" style={{ marginLeft: 4 }}>({pct(delta)})</span> : null}</button>
     {at && <PowerPopover scenarioId={scenarioId} variantId={variantId} project={project} at={at} onClose={() => setAt(null)}

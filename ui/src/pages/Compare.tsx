@@ -29,6 +29,7 @@ import { SimSaveLine } from '../components/SimSave'
 import { Card } from '../components/TimingCharts'
 import { CpuDiffView } from '../components/CpuDiff'
 import { pickCpuSide, storedCpuPower } from '../lib/cpuDiff'
+import { CAT_LABEL, CONDITION_LABEL, calibrationApi, type Category, type MeasDetail } from '../lib/calibration'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -42,6 +43,13 @@ export function predictionKpi(p: BoardRow): Dict {
     total_bw_mbs: p.bw_mbs, fps_effective: p.verdict === 'fail' ? null : p.fps,
     frame_latency_ms: p.verdict_detail?.latency?.video_ms ?? null,
   }
+}
+
+/** Short source label of a KPI / power value; two values are compared (Δ) only when their labels match. */
+export function srcLabel(source: string | null): string | null {
+  if (!source) return null
+  if (source.startsWith('등록 예측 (')) return '등록 예측'
+  return ({ measured: '실측', calculated: 'Sim 저장', synthetic: '합성', assumed: '가정', '재계산 (즉석)': '즉석 계산', 'Sim evidence (저장)': 'Sim 저장' } as Record<string, string>)[source] ?? source
 }
 
 export function kpiNumber(v: unknown): number | null {
@@ -149,6 +157,11 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       await simRuns.run(ids[i], () => runPreview({ scenario: it.scenario, variant: it.variant,
         project_id: cat?.project_id, default_sw_profile_ref: cat?.default_sw_profile_ref }))
     }
+  }
+  /** Same simulation model for every column: switch the KPI mode and run what is not computed yet. */
+  const unify = () => {
+    setKpiMode('sim')
+    void runSim(ids.map((_, i) => i).filter((i) => sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running'))
   }
   /** "결과 저장": the previewed run becomes simulation evidence (same request, persist: true). */
   const saveSim = async (targets: string[]) => {
@@ -274,7 +287,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const latRows = ids.map((id, i) => { const r = stream(i, 'preview') ?? stream(i, 'display'); return { id, label: <span className="mono">{labels[id]}</span>, box: r?.latBox ?? null, values: r?.latencies ?? [], color: color(i) } }).filter((r) => r.box)
 
   const pmTarget = (evQ.data ?? []).map((items, i) => ({ i, sim: items.find((e) => e.kind === 'evidence.simulation' && e.kpi), meas: items.find((e) => e.kind === 'evidence.measurement' && e.kpi && e.vdd_power) })).find((x) => x.sim && x.meas)
-  const pmQ = useAsync(() => (pmTarget ? api.predMeas(pmTarget.sim!.id, pmTarget.meas!.id) : Promise.resolve(null)), [pmTarget?.sim?.id, pmTarget?.meas?.id])
+  // the same rail-group comparison as 예측 ↔ 실측 (CPU / IP / BW(MIF·DRAM) / 기타), so one pair has one error
+  const pmQ = useAsync(() => (pmTarget ? calibrationApi.detail(pmTarget.meas!.id) : Promise.resolve(null)), [pmTarget?.meas?.id])
 
   const setItems = (next: CompareItem[]) => ctx.navigate(undefined, { items: formatItems(next), variants: undefined })
   const remove = (i: number) => setItems(cItems.filter((_, n) => n !== i))
@@ -287,27 +301,31 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   // ---- decision summary: Power / BW / Latency vs ★
   const kv = (field: string) => kpiRows.find((r) => r.field === field)?.values ?? ids.map(() => null)
   const fam = (i: number, f: 'cpu' | 'ip' | 'mem'): number | null => {
-    const r = powerRows.find((x) => x.id === ids[i])
-    return r ? r.parts.filter((p) => p.family === f).reduce((a, p) => a + p.mw, 0) : null
+    const parts = powerRows.find((x) => x.id === ids[i])?.parts.filter((p) => p.family === f)
+    // a breakdown without CPU clusters did not model SW power: no value, never 0 mW
+    return parts?.length ? parts.reduce((a, p) => a + p.mw, 0) : null
   }
+  const famBlank = (f: 'cpu' | 'ip' | 'mem') => ids.map((id) => (powerRows.some((x) => x.id === id) ? (f === 'cpu' ? '미모델' : '—') : '미계산'))
+  const kpiSources = ids.map((_, i) => srcLabel(kpiOf(i).source))
+  const powerSources = ids.map((_, i) => srcLabel(powerOf(i).source))
   const lat = (sid: 'preview' | 'video') => ids.map((_, i) => stream(i, sid)?.latBox?.mean ?? null)
   const metrics: MetricRow[] = [
-    { group: 'Power', key: 'total_power_mw', label: 'Total power', unit: 'mW', values: kv('total_power_mw'), hint: 'KPI (evidence 또는 즉석 simulation)' },
-    { group: 'Power', key: 'fam_cpu', label: '구성 · CPU (SW)', unit: 'mW', values: ids.map((_, i) => fam(i, 'cpu')), hint: 'power_breakdown: CPU cluster 합' },
-    { group: 'Power', key: 'fam_ip', label: '구성 · IP core', unit: 'mW', values: ids.map((_, i) => fam(i, 'ip')), hint: 'power_breakdown: IP 동작 + leakage + clock' },
-    { group: 'Power', key: 'fam_mem', label: '구성 · 메모리 (BW)', unit: 'mW', values: ids.map((_, i) => fam(i, 'mem')), hint: 'power_breakdown: traffic + MIF base' },
+    { group: 'Power', key: 'total_power_mw', label: 'Total power', unit: 'mW', values: kv('total_power_mw'), sources: kpiSources, hint: 'KPI (evidence 또는 즉석 simulation)' },
+    { group: 'Power', key: 'fam_cpu', label: '구성 · CPU (SW)', unit: 'mW', values: ids.map((_, i) => fam(i, 'cpu')), sources: powerSources, blank: famBlank('cpu'), hint: 'power_breakdown: CPU cluster 합 · 미모델 = SW 전력이 이 결과에 없음' },
+    { group: 'Power', key: 'fam_ip', label: '구성 · IP core', unit: 'mW', values: ids.map((_, i) => fam(i, 'ip')), sources: powerSources, blank: famBlank('ip'), hint: 'power_breakdown: IP 동작 + leakage + clock' },
+    { group: 'Power', key: 'fam_mem', label: '구성 · 메모리 (BW)', unit: 'mW', values: ids.map((_, i) => fam(i, 'mem')), sources: powerSources, blank: famBlank('mem'), hint: 'power_breakdown: traffic + MIF base' },
     // KPI core/BW power only when the power breakdown is missing (same quantity otherwise)
     ...(powerRows.length ? [] : [
-      { group: 'Power' as const, key: 'core_power_mw', label: 'Core power', unit: 'mW', values: kv('core_power_mw') },
-      { group: 'Power' as const, key: 'bw_power_mw', label: 'BW power', unit: 'mW', values: kv('bw_power_mw') }]),
-    { group: 'BW', key: 'total_bw_mbs', label: 'Total BW', unit: 'MB/s', digits: 0, values: kv('total_bw_mbs'), hint: 'KPI · DMA W+R' },
+      { group: 'Power' as const, key: 'core_power_mw', label: 'Core power', unit: 'mW', values: kv('core_power_mw'), sources: kpiSources },
+      { group: 'Power' as const, key: 'bw_power_mw', label: 'BW power', unit: 'mW', values: kv('bw_power_mw'), sources: kpiSources }]),
+    { group: 'BW', key: 'total_bw_mbs', label: 'Total BW', unit: 'MB/s', digits: 0, values: kv('total_bw_mbs'), sources: kpiSources, hint: 'KPI · DMA W+R' },
     { group: 'BW', key: 'dma', label: 'DMA 모델 합계', unit: 'MB/s', digits: 0, values: models.map((m) => (m ? m.totalMBs : null)), hint: 'pipeline view memory × fps (압축 ratio 적용 · stat/size 미정 제외)' },
     { group: 'BW', key: 'dram', label: 'DRAM 모델 합계 (LLC 반영)', unit: 'MB/s', digits: 0, values: models.map((m) => (m ? m.totalDramMBs : null)), hint: 'Σ (W+R) × llc_weight — LLC 상주 buffer의 DRAM 절감 반영' },
     { group: 'Latency · Timing', key: 'preview_lat', label: 'Sensor → Preview 지연 (평균)', unit: 'ms', values: lat('preview'), hint: 'timeline evidence (trace / simulation)' },
     { group: 'Latency · Timing', key: 'video_lat', label: 'Sensor → Video 지연 (평균)', unit: 'ms', values: lat('video') },
-    { group: 'Latency · Timing', key: 'frame_latency_ms', label: 'Frame latency (KPI)', unit: 'ms', values: kv('frame_latency_ms') },
-    { group: 'Latency · Timing', key: 'hw_time_max_ms', label: 'HW time max', unit: 'ms', values: kv('hw_time_max_ms') },
-    { group: 'Latency · Timing', key: 'fps_effective', label: 'Effective fps', unit: 'fps', digits: 2, values: kv('fps_effective'), lowerIsBetter: false, tolerancePct: 0.5 },
+    { group: 'Latency · Timing', key: 'frame_latency_ms', label: 'Frame latency (KPI)', unit: 'ms', values: kv('frame_latency_ms'), sources: kpiSources },
+    { group: 'Latency · Timing', key: 'hw_time_max_ms', label: 'HW time max', unit: 'ms', values: kv('hw_time_max_ms'), sources: kpiSources },
+    { group: 'Latency · Timing', key: 'fps_effective', label: 'Effective fps', unit: 'fps', digits: 2, values: kv('fps_effective'), sources: kpiSources, lowerIsBetter: false, tolerancePct: 0.5 },
   ]
   const summaryItems: ItemInfo[] = ids.map((id, i) => {
     const f = found.find((x) => x.index === i)
@@ -337,8 +355,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         {unsaved.length > 1 && <button className="btn" onClick={() => saveSim(unsaved)} title="즉석 계산 결과를 simulation evidence로 저장 (같은 조건은 1건으로 합쳐짐)">즉석 결과 {unsaved.length}개 저장</button>}
         {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="같은 기본 조건 simulation으로 KPI 계산 (비교용 미리보기 — 저장은 결과 옆 “결과 저장”). 예측 조건 설정 · 등록은 Timing Budget">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
       </div>
-      {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 (실측 vs 계산). 설계 대안 비교는 “Simulation 통일”을 권장합니다.</div>}
-      <CompareSummary items={summaryItems} metrics={metrics} battery={battery} batteries={batteries} />
+      {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 ({[...new Set(kpiSources.filter(Boolean))].join(' · ')}) — 출처가 다른 값은 Δ를 표시하지 않습니다. 설계 대안 비교는 “Simulation 통일”.</div>}
+      <CompareSummary items={summaryItems} metrics={metrics} battery={battery} batteries={batteries} onUnify={unify} />
     </section>
   )
 
@@ -380,7 +398,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   )
 
   return (
-    <PageLayout id="compare" top={
+    <PageLayout id="compare" bottomOpenDefault={false} top={
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>비교 대상</span>
         {ids.map((id, i) => (
@@ -417,16 +435,34 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
           <span className={`badge src-${evidenceSource(pmTarget.meas!)}`}>{evidenceSource(pmTarget.meas!)}</span>
           <span className="muted" style={{ fontSize: 12 }}>{pmTarget.sim!.id} ↔ {pmTarget.meas!.id}</span></div>
         {pmQ.error && <div className="err">{pmQ.error}</div>}
-        {pmQ.data && <div className="table-scroll">
-          <table className="grid"><thead><tr><th>metric</th><th>scope</th><th>unit</th><th style={{ textAlign: 'right' }}>예측</th><th style={{ textAlign: 'right' }}>실측</th><th style={{ textAlign: 'right' }}>Δ%</th><th>status</th></tr></thead>
-            <tbody>{(pmQ.data.rows as Dict[]).filter((r) => String(r.metric_id).startsWith('power.domain') || String(r.metric_id).includes('total') || r.status === 'MATCHED').slice(0, 40).map((r, i) => (
-              <tr key={i}><td className="mono">{String(r.metric_id)}</td><td>{String(r.scope_ref ?? '')}</td><td>{String(r.unit ?? '')}</td>
-                <td className="mono" style={{ textAlign: 'right' }}>{typeof r.prediction === 'number' ? r.prediction.toFixed(1) : '—'}</td>
-                <td className="mono" style={{ textAlign: 'right' }}>{typeof r.measurement === 'number' ? r.measurement.toFixed(1) : '—'}</td>
-                <td className="mono" style={{ textAlign: 'right' }}>{typeof r.delta_pct === 'number' ? r.delta_pct.toFixed(1) : '—'}</td>
-                <td className="faint">{String(r.status)}</td></tr>))}</tbody></table>
-        </div>}
+        {pmQ.data && <PredMeasGroups detail={pmQ.data} simId={pmTarget.sim!.id}
+          href={`#/calibration?scenario=${encodeURIComponent(cItems[pmTarget.i].scenario)}&variant=${encodeURIComponent(cItems[pmTarget.i].variant)}&m=${encodeURIComponent(pmTarget.meas!.id)}&real=0&caps=1`} />}
       </> }] : undefined} />
   )
+}
+
+const PM_CATS: Category[] = ['cpu', 'ip', 'bw', 'other']
+
+/** Prediction vs measurement by rail group (calibration API): the simulation shown in Compare, else the first one with a split. */
+export function PredMeasGroups({ detail, simId, href }: { detail: MeasDetail; simId: string; href: string }) {
+  const sims = detail.predictions.filter((p) => p.kind === 'simulation')
+  const p = sims.find((x) => x.id === simId && x.rows) ?? sims.find((x) => x.rows) ?? sims.find((x) => x.id === simId)
+  if (!p) return <div className="empty">이 측정과 비교할 simulation evidence 없음</div>
+  const rows = PM_CATS.map((c) => p.rows?.find((r) => r.category === c) ?? { category: c, prediction_mw: null, measurement_mw: detail.measured.categories[c] ?? null, delta_mw: null, delta_pct: null })
+  const pct = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`)
+  return <div className="table-scroll">
+    <div className="faint" style={{ fontSize: 12, margin: '0 0 6px' }}>
+      <span className="mono">{p.id}</span>{p.id !== simId && ' (rail 분해가 있는 simulation)'} · {p.conditions ? CONDITION_LABEL[p.conditions.overall] : '조건 미기록'} · <a href={href}>예측 ↔ 실측에서 rail 상세 →</a></div>
+    <table className="grid"><thead><tr><th>rail 그룹</th><th style={{ textAlign: 'right' }}>예측 mW</th><th style={{ textAlign: 'right' }}>실측 mW</th><th style={{ textAlign: 'right' }}>Δ mW</th><th style={{ textAlign: 'right' }}>Δ%</th></tr></thead>
+      <tbody>{rows.map((r) => <tr key={r.category}><td>{CAT_LABEL[r.category]}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{r.prediction_mw === null ? <span className="faint">미모델</span> : r.prediction_mw.toFixed(1)}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{r.measurement_mw === null ? '—' : r.measurement_mw.toFixed(1)}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{r.delta_mw === null ? '—' : `${r.delta_mw >= 0 ? '+' : ''}${r.delta_mw.toFixed(1)}`}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{pct(r.delta_pct)}</td></tr>)}
+        <tr><td><b>Total</b></td><td className="mono" style={{ textAlign: 'right' }}>{p.total_mw === null ? '—' : p.total_mw.toFixed(1)}</td>
+          <td className="mono" style={{ textAlign: 'right' }}>{detail.total.mean === null ? '—' : detail.total.mean.toFixed(1)}</td><td />
+          <td className="mono" style={{ textAlign: 'right' }}>{pct(p.delta_pct)}</td></tr></tbody></table>
+    {rows.some((r) => r.prediction_mw === null && (r.measurement_mw ?? 0) > 0) && <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>미모델 그룹 전력은 예측 total에 없음 — total Δ만 보면 구성 오차가 상쇄돼 보일 수 있음</div>}
+  </div>
 }
 

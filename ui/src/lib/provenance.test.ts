@@ -65,8 +65,19 @@ describe('statusItems (U2)', () => {
     const old = { ...s, dvfs: [], dvfs_unrecorded: 54, measurements: { real: 1, synthetic: 33, empty: 1 } }
     const items = statusItems(old, 'p')
     expect(items.find((i) => i.key === 'dvfs')?.text).toBe('DVFS 미기록 (이전 run)')
-    expect(items.find((i) => i.key === 'meas')?.text).toBe('실측 1 · 합성 33 · 전력 없음 1')
-    expect(statusItems({ ...s, dvfs: [], predictions: { current: 0, stale_engine: 0, engines: {} } }).find((i) => i.key === 'dvfs')?.level).toBe('info')
+    expect(items.find((i) => i.key === 'meas')?.text).toBe('capture 실측 1 · 합성 33 · 전력 없음 1')
+    expect(statusItems({ ...s, dvfs: [], predictions: { current: 0, stale_engine: 0, engines: {} } }).find((i) => i.key === 'dvfs')?.text).toBe('DVFS table 없음')
+  })
+  it('names the default table analyses use when nothing is registered (not "DVFS 없음")', () => {
+    const empty = { ...s, dvfs: [], predictions: { current: 0, stale_engine: 0, engines: {} }, dvfs_default: { ref: 'dvfs-exynos2600-sample-v0', sample: true } }
+    const d = statusItems(empty, 'p').find((i) => i.key === 'dvfs')!
+    expect(d.text).toBe('DVFS sample-v0 SAMPLE · 기본')
+    expect(d.level).toBe('warn')
+    expect(d.title).toContain('예측 기록 기준 DVFS는 0건')
+    // an active basis pins the table analyses use (apply_basis), so the status names it as such
+    const pinned = statusItems({ ...empty, dvfs_default: { ref: 'dvfs-exynos2600-v1', sample: false, source: 'basis' } }, 'p').find((i) => i.key === 'dvfs')!
+    expect(pinned.text).toBe('DVFS v1 · 예측 기준')
+    expect(pinned.title).toContain('active 예측 기준이 지정')
   })
 })
 
