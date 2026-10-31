@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -100,14 +102,18 @@ def list_power_params(soc_ref: str | None = None, db: Session = Depends(get_db))
     from scenario_db.models.capability.power_model import PowerModelParams
 
     default_ip_model = PowerModelParams.model_fields["ip_model"].default
+
+    def row(r: Row) -> dict[str, Any]:
+        params: dict[str, Any] = dict(r.params or {})
+        calibration: dict[str, Any] = params.get("calibration") or {}
+        return {"id": r.id, "version": r.version, "ref": f"{r.id}@{r.version}", "soc_ref": r.soc_ref, "status": r.status,
+                "description": r.description, "ip_model": params.get("ip_model") or default_ip_model,
+                "calibrated": bool(calibration.get("fit")), "ip_power_scale": calibration.get("ip_power_scale") or {}}
+
     q = db.query(Row)
     if soc_ref:
         q = q.filter(Row.soc_ref == soc_ref)
-    return [{"id": r.id, "version": r.version, "ref": f"{r.id}@{r.version}", "soc_ref": r.soc_ref, "status": r.status,
-             "description": r.description, "ip_model": (r.params or {}).get("ip_model") or default_ip_model,
-             "calibrated": bool(((r.params or {}).get("calibration") or {}).get("fit")),
-             "ip_power_scale": ((r.params or {}).get("calibration") or {}).get("ip_power_scale") or {}}
-            for r in q.order_by(Row.soc_ref, Row.version).all()]
+    return [row(r) for r in q.order_by(Row.soc_ref, Row.version).all()]
 
 
 @router.get("/calibration/summary")

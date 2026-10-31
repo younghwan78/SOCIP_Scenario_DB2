@@ -17,6 +17,13 @@ export interface SimProfile {
 /** Server default when a run names no power model (sim/power_model.py DEFAULT_POWER_MODEL_ID). */
 export const DEFAULT_POWER_MODEL = 'v1-vfps'
 
+/** Profile the server runs with: the chosen one, else (no profile sent) the active basis' profile — the server
+ * re-applies it (model_basis.apply_basis), so "코드 기본값" under a basis still runs the basis profile. */
+export function effectiveProfile(profiles: SimProfile[], ref: string | null, basis: Pick<ModelBasis, 'config_profile_ref'> | null | undefined): SimProfile | undefined {
+  const id = (ref ?? basis?.config_profile_ref ?? '').split('@', 1)[0]
+  return id ? profiles.find((p) => p.id === id) : undefined
+}
+
 /** Power params a run uses when the screen names none, as the server resolves it:
  * the basis' when it fixes one, else the chosen profile's (null = the power model's built-in coefficients). */
 export function defaultPowerParams(basis: Pick<ModelBasis, 'power_params_ref'> | null | undefined, profile: SimProfile | undefined): string | null {

@@ -7,7 +7,7 @@ import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from 
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
 import { ProfileSelect } from '../components/ProfileSelect'
-import { DEFAULT_POWER_MODEL, defaultPowerParams, useSimProfiles } from '../lib/simProfile'
+import { DEFAULT_POWER_MODEL, defaultPowerParams, effectiveProfile, useSimProfiles } from '../lib/simProfile'
 import { TimingInputsHelp } from '../components/TimingInputsHelp'
 import { maText, useBattery, batteryNote, type Battery } from '../lib/battery'
 import { DvfsWhatIfTable } from '../components/DvfsWhatIf'
@@ -40,7 +40,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const set = (k: string, v: string | undefined) => ctx.navigate(undefined, { [k]: v }, true)
   const sp = useSimProfiles(ctx.project, ctx.params.cfg)
   const cfg = sp.ref
-  const prof = sp.profiles.find((p) => p.id === cfg)
+  const prof = effectiveProfile(sp.profiles, cfg, sp.basis)
   // power params must target the profile's power model (the server rejects a mismatch)
   const runModel = String(prof?.run_config?.power_model ?? DEFAULT_POWER_MODEL)
   const defaultPp = defaultPowerParams(sp.basis, prof)
@@ -131,7 +131,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
           </select></label>
         <TimingInputsHelp inputs={{ statistic, throughput: effTp, margin, profile: prof, basisCode: sp.basis?.code ?? null, measured,
           measuredOption: (measQ.data ?? []).find((o) => o.id === measured?.measurement_ref) ?? null, powerParams: pp, defaultPowerParams: defaultPp,
-          pinnedDomains: Object.keys(overrides).sort() }} />
+          pinnedDomains: Object.keys(overrides).sort(), cpuModel: measured?.cpu ? 'profile' : cpuModel }} />
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}

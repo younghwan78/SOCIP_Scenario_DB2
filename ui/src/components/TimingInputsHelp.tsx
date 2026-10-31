@@ -13,6 +13,8 @@ export interface TimingInputs {
   powerParams: string; defaultPowerParams: string | null
   /** DVFS domains whose level is pinned on this screen (their clock does not follow SW) */
   pinnedDomains?: string[]
+  /** effective CPU model ('profile' also when the measured CPU input is on); default flat */
+  cpuModel?: 'flat' | 'profile'
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -45,18 +47,22 @@ function Current({ x }: { x: TimingInputs }) {
 function Effects({ x }: { x: TimingInputs }) {
   // SW time reaches the HW clock only when NRT / Post HW gets "period − SW" (stage 1 frame); a pinned level stays put
   const stage = x.throughput === 'stage'
+  // the measured CPU profile computes CPU power from its own per-frame cycles (and SW growth), not the SW runtime
+  const flatCpu = x.cpuModel !== 'profile'
   const pinned = x.pinnedDomains?.length ? <span className="faint"> (DVFS level 고정: {x.pinnedDomains.join(', ')}은 clock 그대로)</span> : null
-  const swToHw: ReactNode = stage ? <> · NRT · Post 필요 clock · DVFS level · HW ms · 판정{pinned}</>
-    : <>. <span className="faint">처리량 기준이 stage 1 frame이면 NRT · Post clock · HW ms · 판정도</span></>
-  const swKeeps = stage ? 'RT · Output HW, BW GB/s' : 'HW ms · clock · BW GB/s'
+  const swToHw: ReactNode = stage ? <> · NRT · Post 필요 clock · DVFS level · HW ms · 판정 · 출력 간격{pinned}</>
+    : <> · 판정 · 출력 간격 <span className="faint">(task 하나 또는 같은 CPU의 SW 합이 frame period를 넘을 때). 처리량 기준이 stage 1 frame이면 NRT · Post clock · HW ms도</span></>
+  const swEffect = <>SW ms · SW 여유{flatCpu ? ' · CPU mW' : ''}{swToHw}
+    {!flatCpu && <span className="faint"> CPU 모델이 측정 profile이라 CPU mW는 SW 통계와 무관 (측정 profile · SW 증가로 계산)</span>}</>
+  const swKeeps = [stage ? 'RT · Output HW' : 'HW ms · clock', 'BW GB/s', ...(flatCpu ? [] : ['CPU mW'])].join(' · ')
   const rows: [ReactNode, ReactNode, ReactNode][] = [
     [<><b>SW 통계</b><div className="faint">mean (기본) = task별 평균 runtime: 평균 전력 · 실측 비교와 같은 조건.<br />max = 정의 SW timing의 최대값: 최악 frame으로 deadline을 보수 판정.</div></>,
-      <>SW ms · SW 여유 · CPU mW{swToHw}</>, swKeeps],
+      swEffect, swKeeps],
     [<b>설정 profile</b>,
       <>Power 카드: power model · 계수 · CPU 전력 방식 · ASV(전압) · mA 환산 (Vbat · PMIC).<div className="faint">profile에 h-blank · DVFS 고정 · configured clock이 있으면 RT 예산과 clock도</div></>,
       <>SW · HW ms, fps 판정 (E2600 v1 ↔ v2는 power 항목만 다름). SW margin은 툴바 값</>],
     [<><b>실측</b> 고르기만</>, '실측 대비 카드 (예측 vs 실측 mW, rail 분류별 Δ)', '계산 전부'],
-    [<><b>실측</b> SW ✓</>, <>측정 task runtime으로 교체 (SW 통계 선택 그대로) → SW ms · 여유 · CPU mW{swToHw}</>, swKeeps],
+    [<><b>실측</b> SW ✓</>, <>측정 task runtime으로 교체 (SW 통계 선택 그대로) → {swEffect}</>, swKeeps],
     [<><b>실측</b> clock ✓</>, '측정 IP clock (clock ledger) → HW ms · clock · HW mW', 'SW'],
     [<><b>실측</b> CPU ✓</>, '측정 CPU profile을 EAS + schedutil로 재현 → CPU mW · CPU BW. 조건 실험으로는 넘길 수 없음', 'SW · HW timing'],
     [<b>power params</b>, '계수만 교체 → IP · CPU · BW mW. profile의 power model과 짝이 맞는 version만 선택 가능', 'timing 결과 전부'],
