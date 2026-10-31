@@ -18,8 +18,10 @@ export interface MetricRow {
   blank?: (string | null)[]
 }
 
-/** Δ vs ★ is meaningful only when both values come from the same source (model / measurement). */
-export function sameSource(m: Pick<MetricRow, 'sources'>, i: number): boolean {
+/** Δ vs ★ is meaningful only when both values come from the same source (model / measurement).
+ *  A side with no value (e.g. "등록 예측 없음") has nothing to mix: it reads 미계산, not 출처 다름. */
+export function sameSource(m: Pick<MetricRow, 'sources'> & { values?: (number | null)[] }, i: number): boolean {
+  if (m.values && (m.values[0] == null || m.values[i] == null)) return true
   const a = m.sources?.[0], b = m.sources?.[i]
   return !a || !b || a === b
 }

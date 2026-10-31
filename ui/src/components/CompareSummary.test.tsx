@@ -32,6 +32,12 @@ describe('Compare headline guard (G-02)', () => {
     expect(html).toContain('미계산')
     expect(html).toContain('500.0')
   })
+  it('a column with no value is 미계산, not 출처 다름 (e.g. 등록 예측 없음 on one side)', () => {
+    const html = render([{ group: 'Power', key: 'total_power_mw', label: 'Total power', unit: 'mW', values: [500, null], sources: ['등록 예측', '등록 예측 없음'] }], () => {})
+    expect(html).not.toContain('cs-mixed')
+    expect(html).not.toContain('Simulation 통일로 다시 계산')
+    expect(html).toContain('미계산')
+  })
   it('same-source values keep their Δ and ranking', () => {
     const html = render([{ group: 'Power', key: 'total_power_mw', label: 'Total power', unit: 'mW', values: [500, 600], sources: ['즉석 계산', '즉석 계산'] }])
     expect(html).toContain('+20.0%')

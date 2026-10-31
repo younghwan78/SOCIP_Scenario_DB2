@@ -74,6 +74,10 @@ describe('statusItems (U2)', () => {
     expect(d.text).toBe('DVFS sample-v0 SAMPLE · 기본')
     expect(d.level).toBe('warn')
     expect(d.title).toContain('예측 기록 기준 DVFS는 0건')
+    // an active basis pins the table analyses use (apply_basis), so the status names it as such
+    const pinned = statusItems({ ...empty, dvfs_default: { ref: 'dvfs-exynos2600-v1', sample: false, source: 'basis' } }, 'p').find((i) => i.key === 'dvfs')!
+    expect(pinned.text).toBe('DVFS v1 · 예측 기준')
+    expect(pinned.title).toContain('active 예측 기준이 지정')
   })
 })
 

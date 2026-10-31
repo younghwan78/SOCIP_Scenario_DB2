@@ -129,8 +129,8 @@ export interface ModelStatus {
   dvfs: { ref: string; sample: boolean; predictions: number }[]
   /** current predictions whose run did not record a DVFS table (older engines) */
   dvfs_unrecorded?: number
-  /** the table an analysis uses when none is chosen (latest of the project's SoC) */
-  dvfs_default?: { ref: string; sample: boolean } | null
+  /** the table an analysis uses when none is chosen: the active basis' table, else the latest of the project's SoC */
+  dvfs_default?: { ref: string; sample: boolean; source?: 'basis' | 'latest' } | null
   /** real/synthetic = captures with total power; empty = imports without power data */
   measurements: { real: number; synthetic: number; empty?: number }
   lineage: Record<string, unknown> | null
@@ -152,8 +152,8 @@ export function statusItems(s: ModelStatus, project?: string): StatusItem[] {
     ? { key: 'dvfs', text: 'DVFS 미기록 (이전 run)', title: `등록 예측 ${unrec}건의 run이 사용한 DVFS table을 기록하지 않음 (이전 engine) — 현재 engine으로 재탐색하면 기록됨`, level: 'warn', href: `#/explore${q}` }
     : s.dvfs.length === 0 && def
     // nothing registered yet: name the table every analysis falls back to (Timing Budget, What-if, 탐색)
-    ? { key: 'dvfs', text: `DVFS ${shortDvfs(def.ref)}${def.sample ? ' SAMPLE' : ''} · 기본`,
-        title: `분석 기본 DVFS table: ${def.ref}${def.sample ? ' (SAMPLE — 사내 table 교체 필요)' : ''}\n등록 예측이 없어 예측 기록 기준 DVFS는 0건`, level: def.sample ? 'warn' : 'ok', href: `#/library${q}` }
+    ? { key: 'dvfs', text: `DVFS ${shortDvfs(def.ref)}${def.sample ? ' SAMPLE' : ''} · ${def.source === 'basis' ? '예측 기준' : '기본'}`,
+        title: `분석 기본 DVFS table: ${def.ref}${def.source === 'basis' ? ' (active 예측 기준이 지정)' : ' (SoC 최신 table)'}${def.sample ? ' (SAMPLE — 사내 table 교체 필요)' : ''}\n등록 예측이 없어 예측 기록 기준 DVFS는 0건`, level: def.sample ? 'warn' : 'ok', href: `#/library${q}` }
     : s.dvfs.length === 0
     ? { key: 'dvfs', text: 'DVFS table 없음', title: '이 과제 SoC의 DVFS table이 없음 — level·전압 산출 불가', level: 'warn', href: `#/library${q}` }
     : sample.length
