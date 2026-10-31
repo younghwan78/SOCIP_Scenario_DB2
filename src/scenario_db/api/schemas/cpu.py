@@ -48,6 +48,9 @@ class CpuTaskPolicyIn(BaseModel):
     uclamp_max: int | None = Field(default=None, ge=0, le=1024)
     prefer_idle: bool = False
     threads: int | None = Field(default=None, ge=1, le=64)
+    sched_class: Literal["fifo", "rr", "normal"] | None = None
+    rt_priority: int | None = Field(default=None, ge=1, le=99)
+    nice: int | None = Field(default=None, ge=-20, le=19)
 
 
 class CpuSweepRequest(BaseModel):

@@ -314,3 +314,52 @@ def test_shared_response_bound_keeps_an_unshared_longer_thread():
     assert set(ref["flags"]["shared_cpu"]) == {"a", "b"}
     assert all(ref["response_ms"][t] >= ref["task_ms"][t] for t in ref["response_ms"])
     assert ref["slack_shared_ms"]["a"] <= ref["slack_ms"]["a"] < 0
+
+
+def test_priority_response_follows_class_priority_and_nice():
+    """RT sees only higher/equal RT; normal sees every RT plus a nice-weighted share of each normal co-runner."""
+    ths = [cpu_sched.Thread(t, t, 1e6, 0.0) for t in ("rt_hi", "rt_lo", "fg", "bg")]
+    pol = {"rt_hi": cpu_sched.TaskPolicy(sched_class="fifo", rt_priority=10),
+           "rt_lo": cpu_sched.TaskPolicy(sched_class="fifo", rt_priority=1),
+           "fg": cpu_sched.TaskPolicy(sched_class="normal", nice=-5),
+           "bg": cpu_sched.TaskPolicy(sched_class="normal", nice=5)}
+    r = dict(zip([t.task for t in ths], cpu_sched.priority_response(ths, [1.0, 2.0, 4.0, 8.0], pol)))
+    assert r["rt_hi"] == pytest.approx(1.0)                      # nothing above it
+    assert r["rt_lo"] == pytest.approx(3.0)                      # + rt_hi
+    w = {n: cpu_sched._NICE_WEIGHT[n + 20] for n in (-5, 5)}
+    assert r["fg"] == pytest.approx(4.0 + 3.0 + 4.0 * w[5] / w[-5])      # + RT + bg's share while fg runs
+    assert r["bg"] == pytest.approx(8.0 + 3.0 + 4.0)                     # + RT + all of fg (fg finishes first)
+    # unset = SCHED_NORMAL nice 0: two equal normal threads wait for min(own, other)
+    assert cpu_sched.priority_response(ths[2:], [4.0, 8.0], {}) == [pytest.approx(8.0), pytest.approx(12.0)]
+
+
+def _one_core(**sched) -> CpuPowerModel:
+    return CpuPowerModel.from_params(_params(clusters=[
+        {"name": "MID", "core_type": "M", "cores": 1, "ipc_rel": 1.0, "opps": [
+            {"mhz": 1000, "mv": 700, "mw_per_core": 100}, {"mhz": 2000, "mv": 850, "mw_per_core": 300}]}], default_cluster=0,
+        **({"scheduler": sched} if sched else {})))
+
+
+def test_sched_class_in_task_policy_adds_priority_response_only():
+    profile = CpuProfile(tasks=[CpuTaskProfile(task=n, cluster="MID", cycles=8e6) for n in ("a", "b")],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    spec = SweepSpec(budgets_ms={"a": 5, "b": 12})
+    ref = cpu_sweep(profile, target=_one_core(task_policy={"a": {"sched_class": "fifo", "rt_priority": 2}}),
+                    fps=30, spec=spec)["reference"]
+    assert ref["response_prio_ms"]["a"] == pytest.approx(ref["task_ms"]["a"], abs=1e-3)          # RT: no wait
+    assert ref["response_prio_ms"]["b"] == pytest.approx(ref["response_ms"]["b"], abs=1e-3)      # behind the RT task
+    assert ref["min_slack_prio_ms"] == pytest.approx(min(5 - ref["task_ms"]["a"], 12 - ref["response_ms"]["b"]), abs=1e-3)
+    assert ref["min_slack_shared_ms"] < ref["min_slack_prio_ms"]
+    assert ref["feasible"] == cpu_sweep(profile, target=_one_core(), fps=30, spec=spec)["reference"]["feasible"]
+    # no class anywhere: no priority fields (opt-in)
+    assert "response_prio_ms" not in cpu_sweep(profile, target=_one_core(), fps=30, spec=spec)["reference"]
+
+
+@pytest.mark.parametrize("policy, match", [
+    ({"rt_priority": 5}, "needs sched_class fifo or rr"),
+    ({"sched_class": "fifo"}, "needs rt_priority"),
+    ({"sched_class": "fifo", "rt_priority": 5, "nice": -2}, "nice needs sched_class normal"),
+])
+def test_task_policy_class_fields_are_consistent(policy, match):
+    with pytest.raises(ValueError, match=match):
+        CpuSchedulerParams.model_validate({"task_policy": {"t": policy}})
