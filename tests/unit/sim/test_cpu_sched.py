@@ -363,3 +363,12 @@ def test_sched_class_in_task_policy_adds_priority_response_only():
 def test_task_policy_class_fields_are_consistent(policy, match):
     with pytest.raises(ValueError, match=match):
         CpuSchedulerParams.model_validate({"task_policy": {"t": policy}})
+    # the API request takes the same rule (it bypasses the YAML model on its way to the scheduler)
+    with pytest.raises(ValueError, match=match):
+        CpuSweepRequest.model_validate({"power_params_ref": "p", "task_policy": {"t": policy}})
+
+
+def test_stray_nice_without_normal_class_does_not_change_the_share():
+    ths = [cpu_sched.Thread(t, t, 1e6, 0.0) for t in ("a", "b")]
+    pol = {"a": cpu_sched.TaskPolicy(nice=-20), "b": cpu_sched.TaskPolicy(sched_class="normal")}
+    assert cpu_sched.priority_response(ths, [4.0, 4.0], pol) == [pytest.approx(8.0), pytest.approx(8.0)]

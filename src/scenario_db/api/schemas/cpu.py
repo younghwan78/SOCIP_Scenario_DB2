@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from scenario_db.models.capability.power_model import check_sched_class
 from scenario_db.sim.models import CpuProfile
 
 Growth = Annotated[float, Field(gt=0, le=10, allow_inf_nan=False)]
@@ -51,6 +52,11 @@ class CpuTaskPolicyIn(BaseModel):
     sched_class: Literal["fifo", "rr", "normal"] | None = None
     rt_priority: int | None = Field(default=None, ge=1, le=99)
     nice: int | None = Field(default=None, ge=-20, le=19)
+
+    @model_validator(mode="after")
+    def _class_fields(self) -> CpuTaskPolicyIn:
+        check_sched_class(self.sched_class, self.rt_priority, self.nice)
+        return self
 
 
 class CpuSweepRequest(BaseModel):

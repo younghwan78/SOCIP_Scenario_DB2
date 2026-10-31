@@ -88,11 +88,16 @@ class TaskPolicy:
     @property
     def kernel_prio(self) -> int:
         """Linux ``task->prio``: lower runs first (RT 0..98 = 99 - rt_priority, normal 100..139 = 120 + nice)."""
-        return 99 - (self.rt_priority or 1) if self.is_rt else 120 + (self.nice or 0)
+        return 99 - (self.rt_priority or 1) if self.is_rt else 120 + self.nice_value
 
     @property
     def weight(self) -> int:
-        return _NICE_WEIGHT[(self.nice or 0) + 20]
+        return _NICE_WEIGHT[self.nice_value + 20]
+
+    @property
+    def nice_value(self) -> int:
+        """nice counts only for SCHED_NORMAL (a stray nice without the class is ignored, as validation rejects it)"""
+        return (self.nice or 0) if self.sched_class == "normal" else 0
 
     def describe(self) -> dict[str, Any]:
         out: dict[str, Any] = {}

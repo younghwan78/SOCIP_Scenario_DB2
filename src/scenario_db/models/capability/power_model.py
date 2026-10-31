@@ -188,14 +188,19 @@ class CpuTaskPolicy(BaseScenarioModel):
 
     @model_validator(mode="after")
     def _class_fields(self) -> CpuTaskPolicy:
-        rt = self.sched_class in ("fifo", "rr")
-        if self.rt_priority is not None and not rt:
-            raise ValueError("task_policy.rt_priority needs sched_class fifo or rr")
-        if self.nice is not None and self.sched_class != "normal":
-            raise ValueError("task_policy.nice needs sched_class normal")
-        if rt and self.rt_priority is None:
-            raise ValueError("task_policy sched_class fifo / rr needs rt_priority (1..99)")
+        check_sched_class(self.sched_class, self.rt_priority, self.nice)
         return self
+
+
+def check_sched_class(sched_class: str | None, rt_priority: int | None, nice: int | None) -> None:
+    """rt_priority only with fifo / rr (and required there), nice only with normal (YAML and API requests)."""
+    rt = sched_class in ("fifo", "rr")
+    if rt_priority is not None and not rt:
+        raise ValueError("task_policy.rt_priority needs sched_class fifo or rr")
+    if nice is not None and sched_class != "normal":
+        raise ValueError("task_policy.nice needs sched_class normal")
+    if rt and rt_priority is None:
+        raise ValueError("task_policy sched_class fifo / rr needs rt_priority (1..99)")
 
 
 class CpuSchedulerParams(BaseScenarioModel):
