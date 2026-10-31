@@ -1,7 +1,7 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
 import { API_BASE, ApiError, getJson } from './api'
-import { fetchAdmitted, type Statistic } from './timingBudget'
+import { fetchAdmitted, statParam, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
 
 export interface Quant { min: number; p25: number; median: number; p75: number; max: number }
@@ -274,7 +274,7 @@ export function conditionParams(r: Pick<BoardRow, 'scenario_id' | 'variant_id' |
   const m = c?.rt_margin
   return {
     scenario: r.scenario_id, variant: r.variant_id,
-    stat: c?.statistic && c.statistic !== 'max' ? c.statistic : undefined,
+    stat: statParam(c?.statistic),
     scale: c?.runtime_scale !== null && c?.runtime_scale !== undefined && c.runtime_scale !== 1 ? String(c.runtime_scale) : undefined,
     eis: c?.eis && c.eis !== 'auto' ? c.eis : undefined,
     cpu: c?.cpu_model === 'profile' ? 'profile' : undefined,

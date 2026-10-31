@@ -166,7 +166,9 @@ export interface FitRow { measurement_ref: string; scenario_id: string; variant_
   delta_pct_before: number | null; delta_pct_after: number | null }
 export interface PowerFit { base_params_ref: string; statistic: string; measured_sw: boolean; rows: FitRow[]; errors: { measurement_ref: string; variant_id: string; error: string }[]
   factors: Record<FitCat, FitFactor>; warnings: string[] }
-export interface PowerParamsVersion { id: string; version: number; ref: string; soc_ref: string; status: string; description: string | null; calibrated: boolean; ip_power_scale: Record<string, number> }
+export interface PowerParamsVersion { id: string; version: number; ref: string; soc_ref: string; status: string; description: string | null; calibrated: boolean; ip_power_scale: Record<string, number>
+  /** power model the coefficients are for; a run must use the same power_model */
+  ip_model?: string }
 export interface PowerParamsCreated { params_ref: string; id: string; version: number; applied: Partial<Record<FitCat, number>>; yaml: string; params_hash: string }
 
 type CoverageCount = Pick<Coverage, 'measurement'>

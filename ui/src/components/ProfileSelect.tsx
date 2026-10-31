@@ -47,23 +47,23 @@ export function ProfileSelect({ profiles, value, onChange, basis, followsBasis, 
     )
   }
   const cur = profiles.find((p) => p.id === value)
-  const synthetic = !!cur && /synthetic/i.test(`${cur.description ?? ''} ${cur.run_config?.power_params_ref ?? ''}`)
   const tip = [cur ? `${cur.id} v${cur.version ?? '?'} · ${cur.status ?? ''}${cur.approved_by ? ` · 승인 ${cur.approved_by}` : ''}` : '코드 기본값',
     cur?.description ?? '', ...profileSummary(cur)].filter(Boolean).join('\n')
+  // one row: the description lives in the tooltip (and the 입력 영향 popover), not under the select
   return (
-    <span className="profile-sel">
-      <label className="cpu-f" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }} title={tip}>
-        <span className="muted" style={{ fontSize: 13 }}>설정 profile</span>
-        <select className="input" value={value ?? NO_PROFILE} onChange={(e) => onChange(e.target.value)} aria-label="설정 profile">
-          {[...profiles].sort((a, b) => (b.version ?? 0) - (a.version ?? 0)).map((p) => <option key={p.id} value={p.id}>{p.id} (v{p.version ?? '?'}{p.status ? ` · ${p.status}` : ''}){p.run_config?.power_model ? ` · ${p.run_config.power_model}` : ''}</option>)}
-          <option value={NO_PROFILE}>코드 기본값 (profile 없음)</option>
-        </select>
-      </label>
-      <span className="faint profile-desc" title={tip}>
-        {cur?.status === 'approved' ? <span className="badge v-ok">합의</span> : cur ? <span className="badge v-warn">draft</span> : <span className="badge">기본값</span>}
-        {synthetic && <span className="badge v-warn">SYNTHETIC 계수</span>}
-        {' '}{cur?.description ?? profileSummary(undefined)[0]}
-      </span>
-    </span>
+    <label className="profile-sel" title={tip}>
+      <span className="muted" style={{ fontSize: 13 }}>설정 profile</span>
+      <select className="input" value={value ?? NO_PROFILE} onChange={(e) => onChange(e.target.value)} aria-label="설정 profile">
+        {[...profiles].sort((a, b) => (b.version ?? 0) - (a.version ?? 0)).map((p) => <option key={p.id} value={p.id}>{p.id} (v{p.version ?? '?'}{p.status ? ` · ${p.status}` : ''}){p.run_config?.power_model ? ` · ${p.run_config.power_model}` : ''}</option>)}
+        <option value={NO_PROFILE}>코드 기본값 (profile 없음)</option>
+      </select>
+      {cur?.status === 'approved' ? <span className="badge v-ok">합의</span> : cur ? <span className="badge v-warn">draft</span> : <span className="badge">기본값</span>}
+      {isSyntheticProfile(cur) && <span className="badge v-warn">SYNTHETIC</span>}
+    </label>
   )
+}
+
+/** Coefficients flagged synthetic in the profile text or its power params ref. */
+export function isSyntheticProfile(p: SimProfile | undefined): boolean {
+  return !!p && /synthetic/i.test(`${p.description ?? ''} ${p.run_config?.power_params_ref ?? ''}`)
 }

@@ -14,6 +14,9 @@ export interface SimProfile {
     sw_margin?: number | null; bw_power_coeff?: number | null; vbat?: number | null; pmic_efficiency?: number | null; [k: string]: unknown }
 }
 
+/** Server default when a run names no power model (sim/power_model.py DEFAULT_POWER_MODEL_ID). */
+export const DEFAULT_POWER_MODEL = 'v1-vfps'
+
 /** Plain-language power model name (run_config.power_model). */
 export const POWER_MODEL_LABEL: Record<string, string> = {
   'v1-vfps': 'v1-vfps · IP = unit power × MP × (V/710)² × fps/30, BW = mW per MB/s',

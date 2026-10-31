@@ -9,6 +9,14 @@ export type StageId = 'rt' | 'nrt' | 'post' | 'output'
 export type Statistic = 'min' | 'mean' | 'max'
 export type EisMode = 'auto' | 'on' | 'off'
 
+/** SW statistic when the URL has no `stat`: mean = average power and the same condition as a measurement;
+ * max stays one click away for the conservative deadline check. */
+export const DEFAULT_STATISTIC: Statistic = 'mean'
+export const statisticOf = (v: string | undefined): Statistic => (v === 'max' || v === 'min' || v === 'mean' ? v : DEFAULT_STATISTIC)
+/** URL value for a statistic: the default is left out. */
+export const statParam = (s: string | null | undefined): string | undefined => (s && s !== DEFAULT_STATISTIC ? s : undefined)
+export const STAT_TIP = 'mean (기본) = task별 평균 runtime — 평균 전력 · 실측 비교와 같은 조건\nmax = 정의 SW timing의 최대값 — 최악 frame으로 deadline을 보수 판정 (SW ms · CPU mW ↑, stage 1 frame 기준이면 필요 clock · 판정도)'
+
 export interface SwItem { task: string; kind: 'sw' | 'ip_overhead'; runtime_ms: number; latency_ms: number; source: string; critical?: boolean }
 export interface StageRow {
   id: StageId; name: string; nodes: string[]; sw_items: SwItem[]

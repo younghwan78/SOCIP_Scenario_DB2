@@ -95,14 +95,17 @@ def create_power_params(request: PowerParamsCreateRequest, db: Session = Depends
 
 @router.get("/calibration/power-params")
 def list_power_params(soc_ref: str | None = None, db: Session = Depends(get_db)):
-    """power_model_params versions (id@version, status, calibration lineage)."""
+    """power_model_params versions (id@version, status, calibration lineage, the power model they are for)."""
     from scenario_db.db.models.capability import PowerModelParams as Row
+    from scenario_db.models.capability.power_model import PowerModelParams
 
+    default_ip_model = PowerModelParams.model_fields["ip_model"].default
     q = db.query(Row)
     if soc_ref:
         q = q.filter(Row.soc_ref == soc_ref)
     return [{"id": r.id, "version": r.version, "ref": f"{r.id}@{r.version}", "soc_ref": r.soc_ref, "status": r.status,
-             "description": r.description, "calibrated": bool(((r.params or {}).get("calibration") or {}).get("fit")),
+             "description": r.description, "ip_model": (r.params or {}).get("ip_model") or default_ip_model,
+             "calibrated": bool(((r.params or {}).get("calibration") or {}).get("fit")),
              "ip_power_scale": ((r.params or {}).get("calibration") or {}).get("ip_power_scale") or {}}
             for r in q.order_by(Row.soc_ref, Row.version).all()]
 

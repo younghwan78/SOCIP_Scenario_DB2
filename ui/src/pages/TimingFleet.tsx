@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { ExperimentEntry } from '../components/CandidateReview'
 import { useAsync } from '../lib/route'
-import { fmt, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, type CpuModel, type FleetRow, type Statistic, type ThroughputModel } from '../lib/timingBudget'
+import { fmt, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, DEFAULT_STATISTIC, STAT_TIP, statParam, type CpuModel, type FleetRow, type Statistic, type ThroughputModel } from '../lib/timingBudget'
 import { Card, FleetRank } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { SW_COLOR } from '../lib/timingBudget'
@@ -15,7 +15,7 @@ import { ISSUE_LABEL, ISSUE_ORDER, issueCounts, verdictIssues, type IssueCode } 
 type Filter = 'all' | 'ok' | 'clock_up' | 'fail'
 
 export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
-  const statistic = (ctx.params.stat === 'mean' ? 'mean' : 'max') as Statistic
+  const statistic: Statistic = ctx.params.stat === 'max' ? 'max' : DEFAULT_STATISTIC
   const sp = useSimProfiles(ctx.project, ctx.params.cfg)
   const margin = marginOf(ctx.params.margin)
   // same model as the variant page (TIM-06): CPU model and throughput override travel in the URL;
@@ -35,7 +35,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     rows.forEach((r) => { c[r.verdict.status] = (c[r.verdict.status] ?? 0) + 1 })
     return c
   }, [rows])
-  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic, cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp })
+  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statParam(statistic), cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp })
 
   const cols: Column<FleetRow>[] = [
     { key: 'experiment', label: '실험 · 저장 후보 Δ', width: 190, headTitle: '저장 당시 기준 대비. 이 표의 즉석 계산과 조건이 다를 수 있습니다.', render: (r) => <ExperimentEntry scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: r.variant_id }} /> },
@@ -62,9 +62,9 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
         <span className={`chip ${Math.abs(margin - 0.25) > 1e-9 ? 'mode-warn' : ''}`} title="Timing Budget · variant 화면에서 변경">SW margin {pct0(margin)}</span>
         <span className="chip" title="Timing Budget · variant 화면과 같은 모델 (URL cpu / tp)">CPU {cpuModel === 'profile' ? '측정 profile' : '가정'} · 처리량 {tp ? (tp === 'pipelined' ? 'pipeline' : 'stage') : '과제 기준'}</span>
         <span className="faint" style={{ fontSize: 12 }}>범위: 현재 scenario의 전체 variant</span>
-        <span className="muted" style={{ fontSize: 13 }}>SW 통계</span>
-        <div className="seg" role="group" aria-label="SW 통계">
-          {(['max', 'mean'] as const).map((s) => <button key={s} className={statistic === s ? 'on' : ''} onClick={() => ctx.navigate(undefined, { stat: s === 'max' ? undefined : s }, true)}>{s}</button>)}
+        <span className="muted" style={{ fontSize: 13 }} title={STAT_TIP}>SW 통계</span>
+        <div className="seg" role="group" aria-label="SW 통계" title={STAT_TIP}>
+          {(['mean', 'max'] as const).map((s) => <button key={s} className={statistic === s ? 'on' : ''} onClick={() => ctx.navigate(undefined, { stat: statParam(s) }, true)}>{s}{s === DEFAULT_STATISTIC ? ' (기본)' : ''}</button>)}
         </div>
         <span className="muted" style={{ fontSize: 13 }}>판정</span>
         <div className="seg" role="group" aria-label="판정 필터">

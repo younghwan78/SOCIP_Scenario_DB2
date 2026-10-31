@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { updateExperimentContext } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
+import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, DEFAULT_STATISTIC, STAT_TIP, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
 import { ProfileSelect } from '../components/ProfileSelect'
-import { useSimProfiles } from '../lib/simProfile'
+import { DEFAULT_POWER_MODEL, useSimProfiles } from '../lib/simProfile'
+import { TimingInputsHelp } from '../components/TimingInputsHelp'
 import { maText, useBattery, batteryNote, type Battery } from '../lib/battery'
 import { DvfsWhatIfTable } from '../components/DvfsWhatIf'
 import { useReferences } from '../lib/review'
@@ -22,7 +23,7 @@ const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
 export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const { scenario, variant } = ctx
-  const statistic = (ctx.params.stat === 'mean' || ctx.params.stat === 'min' ? ctx.params.stat : 'max') as Statistic
+  const statistic = statisticOf(ctx.params.stat)
   const eis = (ctx.params.eis === 'on' || ctx.params.eis === 'off' ? ctx.params.eis : 'auto') as EisMode
   const scale = runtimeScaleOf(ctx.params.scale)
   const cpuModel: CpuModel = ctx.params.cpu === 'profile' ? 'profile' : 'flat'
@@ -39,6 +40,10 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const set = (k: string, v: string | undefined) => ctx.navigate(undefined, { [k]: v }, true)
   const sp = useSimProfiles(ctx.project, ctx.params.cfg)
   const cfg = sp.ref
+  const prof = sp.profiles.find((p) => p.id === cfg)
+  // power params must target the profile's power model (the server rejects a mismatch)
+  const runModel = String(prof?.run_config?.power_model ?? DEFAULT_POWER_MODEL)
+  const defaultPp = sp.basis ? sp.basis.power_params_ref : prof?.run_config?.power_params_ref ?? null
   const battery = useBattery(ctx.project, ctx.params.cfg)
   // DVFS level override per domain (URL dvo = "CAM:3,INTCAM:2"); part of the condition
   const dvo = ctx.params.dvo ?? ''
@@ -94,7 +99,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
     <div className="page tb-page">
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: 14 }}>
         <button className="btn" disabled={!r || !!experimentBlocked} title={experimentBlocked ?? '현재 SW·DVFS·power 설정을 조건 실험의 기준으로 전달'} onClick={startExperiment}>이 계산 조건으로 실험 →</button>
-        <Seg label="SW 통계" value={statistic} options={[['max', 'max'], ['mean', 'mean']]} onPick={(v) => set('stat', v === 'max' ? undefined : v)} />
+        <span title={STAT_TIP}><Seg label="SW 통계" value={statistic} options={[['mean', 'mean (기본)'], ['max', 'max']]} onPick={(v) => set('stat', v === DEFAULT_STATISTIC ? undefined : v)} /></span>
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
         <span title="가정 = 한 cluster·고정 OPP의 coeff·f·V²·util (기존) · 측정 profile = 이 variant의 측정 CPU profile을 EAS + schedutil로 재현, SW 증가에 따라 OPP·DSU·leakage가 함께 변함 (CPU BW도 측정 bus bytes)">
@@ -119,9 +124,13 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
           title={sp.basis ? `power model 계수 버전 — 기본은 예측 기준 ${sp.basis.code}가 고정한 ${sp.basis.power_params_ref ?? 'profile 계수'}. 다른 것을 고르면 ${sp.basis.code}*(기준 외)` : 'power model 계수 버전 — 기본은 설정 profile의 것. 보정(S5)으로 만든 draft를 골라 비교 · 등록'}>power params
           <select value={pp} onChange={(e) => set('pp', e.target.value || undefined)} aria-label="power params" style={{ maxWidth: 270 }}
             className={sp.basis && pp && pp !== sp.basis.power_params_ref ? 'sel-off-basis' : undefined}>
-            <option value="">{sp.basis ? `기준 ${sp.basis.code} · ${sp.basis.power_params_ref ?? 'profile 계수'}` : 'profile 기본'}</option>
-            {(ppQ.data ?? []).map((p) => <option key={p.ref} value={p.ref}>{p.ref}{p.calibrated ? ' · 보정' : ''}{p.status === 'draft' ? ' · draft' : ''}</option>)}
+            <option value="">{sp.basis ? `기준 ${sp.basis.code} · ${sp.basis.power_params_ref ?? 'profile 계수'}` : `profile 기본 · ${defaultPp ?? '내장 계수'}`}</option>
+            {(ppQ.data ?? []).map((p) => { const off = !!p.ip_model && p.ip_model !== runModel && p.ref !== pp
+              return <option key={p.ref} value={p.ref} disabled={off} title={off ? `${p.ip_model}용 계수 — 이 profile의 power model은 ${runModel}` : p.description ?? undefined}>
+                {p.ref}{p.calibrated ? ' · 보정' : ''}{p.status === 'draft' ? ' · draft' : ''}{off ? ` · ${p.ip_model} (power model 불일치)` : ''}</option> })}
           </select></label>
+        <TimingInputsHelp inputs={{ statistic, throughput: effTp, margin, profile: prof, basisCode: sp.basis?.code ?? null, measured,
+          measuredOption: (measQ.data ?? []).find((o) => o.id === measured?.measurement_ref) ?? null, powerParams: pp, defaultPowerParams: defaultPp }} />
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}
