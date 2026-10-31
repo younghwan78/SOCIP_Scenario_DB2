@@ -6,7 +6,7 @@ import { bufferPills, buildGraph, ipPills, layoutGraph, memoryText, pipelineIdOf
 import { libraryApi } from '../lib/library'
 import { compDetail, llcDetail, LEVER_COLOR } from '../lib/memLever'
 import { LeverTag, LeverTags } from '../components/LeverTag'
-import { buildTimeline, type Slice } from '../lib/timeline'
+import { buildTimeline, isFullStack, type Slice } from '../lib/timeline'
 import { evidenceSource } from '../lib/conditions'
 import { buildModel, LANE_LABEL, type BufferRow, type IpModel } from '../lib/model'
 import { sequenceLayout, sequenceOrder } from '../lib/sequence'
@@ -16,6 +16,7 @@ import { calibrationApi, dayOf, errClass } from '../lib/calibration'
 import { GraphView } from '../components/GraphView'
 import { FrameColorLegend, TimelineView } from '../components/TimelineView'
 import { IpInternalView, LeverLegend } from '../components/IpInternalView'
+import { SimInputsView } from '../components/SimInputsView'
 import { CadenceView, TimingContextStrip } from '../components/CadenceView'
 import { TimingCompare } from '../components/TimingCompare'
 import { BufferTooltip, IpTooltip } from '../components/NodeTooltip'
@@ -33,6 +34,7 @@ const LENS: { id: Lens; label: string; hint: string }[] = [
   { id: 'sequence', label: 'Sequence · HW/SW 순서', hint: 'Sensor → Panel/Storage 실행 순서. 같은 열 = OTF streaming(같은 시점), 다음 열 = M2M 또는 SW hand-off. RT 이후 어떤 SW가 NRT를 열고, NRT 이후 어떤 SW가 출력단을 여는지 확인. 노드: +frame 기준 시작 · 소요(ms) / 처리 크기' },
   { id: 'dma', label: 'DMA · Memory', hint: 'Buffer 중심: IP WDMA → Buffer → RDMA. W×H · format · bit · 압축 · MB/frame · MB/s, IP 입력→출력 크기, history(f-1) · stat · optional DMA 포함. 상세 값은 하단 DMA 표' },
   { id: 'ip', label: 'IP 내부', hint: '위: 전체 IP 연결 구조 (Sensor → RT → Pre-NRT(CPU SW · M2M) → NRT → Post-NRT(CPU SW · M2M) → Codec → Display, 색 = Voltage domain 또는 BLK). IP 클릭 → 아래: OTF in / RDMA / history read → Core(처리 크기, crop·scale·mode) → OTF out / WDMA / stat 출력과 port 전체 표' },
+  { id: 'sim', label: 'Sim 입력', hint: 'simulation이 node마다 쓰는 값: 주기(frame 경로 · 독립 cadence) · frame당 횟수 · 실행 시간 · 부하 항(SW CPU ms/s, HW duty %) · power · BW, 그리고 정의 ↔ 실측 점검. 행 클릭 → Timing의 같은 IP' },
 ]
 const OUT_NODES = /^(panel|dpu|mfc|apv)/
 
@@ -55,11 +57,14 @@ function TraceCondition({ ev }: { ev: Evidence }) {
   return <span className="chip" style={{ fontSize: 11, whiteSpace: 'nowrap', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${c.text}\n${c.tip}`}>{c.text}</span>
 }
 
-function rankTrace(e: Evidence): number {
+// default trace: reaches an output, then covers the most pipeline nodes (own-cadence IPs such as
+// ABOX included, so no used HW IP is missing), then has the most frames
+export function rankTrace(e: Evidence): number {
   const t = e.timeline_events ?? []
-  const frames = new Set(t.map((x) => x.frame_index)).size
+  const frames = new Set(t.filter((x) => x.frame_index != null).map((x) => x.frame_index)).size
+  const nodes = new Set(t.map((x) => x.node_id).filter(Boolean)).size
   const outputs = t.some((x) => OUT_NODES.test(String(x.node_id ?? '')))
-  return (outputs ? 1000 : 0) + frames * 10 + (evidenceSource(e) === 'measured' ? 1 : 0)
+  return (outputs ? 100000 : 0) + nodes * 1000 + Math.min(frames, 99) * 10 + (evidenceSource(e) === 'measured' ? 1 : 0)
 }
 
 export function PipelinePage({ ctx }: { ctx: Ctx }) {
@@ -84,6 +89,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const [traceId, setTraceId] = useState<string>('')
   const [mode, setMode] = usePref<Mode>('pipeline.mode', 'split')
   const { lens, setLens, openIpInternal, origin: drillFrom } = usePipelineNavigation(ctx, mode, setMode)
+  const simQ = useAsync(() => (lens === 'sim' && variant ? api.simInputs(scenario, variant) : Promise.resolve(null)), [scenario, variant, lens])
   const [tview, setTview] = usePref<TimingView>('pipeline.timing.view', 'trace')
   const [colorBy, setColorBy] = usePref<'group' | 'frame'>('pipeline.timing.color', 'frame')
   const [split, setSplit] = usePref<number>('pipeline.split', 50)
@@ -108,7 +114,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const model = useMemo(() => (view ? buildModel(view, scnQ.data, varQ.data, catQ.data, { compCatalog }) : null), [view, scnQ.data, varQ.data, catQ.data, compCatalog])
 
   // ---- timing evidence
-  const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => rankTrace(b) - rankTrace(a)),
+  // full-stack traces (App … HW layers) belong to the Behavior page, not the Pipeline timing
+  const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3 && !isFullStack(e.timeline_events)).sort((a, b) => rankTrace(b) - rankTrace(a)),
     [evidenceQ.data])
   const trace: Evidence | undefined = traces.find((t) => t.id === traceId) ?? traces[0]
   const canCompare = traces.some((t) => evidenceSource(t) === 'calculated') && traces.some((t) => evidenceSource(t) !== 'calculated')
@@ -185,7 +192,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const flowsOf = (dir: 'in' | 'out') => (slice && timeline ? timeline.flows.filter((f) => (dir === 'in' ? f.to === slice.id : f.from === slice.id))
     .map((f) => timeline.slices.find((s) => s.id === (dir === 'in' ? f.from : f.to))).filter((s): s is Slice => !!s) : [])
 
-  const legend = lens === 'ip' ? null : (
+  const legend = lens === 'ip' || lens === 'sim' ? null : (
     <div className="legend-mini">
       <span className="legend-item"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#2563EB" strokeWidth="2" /></svg>OTF</span>
       <span className="legend-item" title="virtual OTF — DRAM 왕복 없음"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke={LEVER_COLOR.votf.line} strokeWidth="3" /></svg>vOTF</span>
@@ -277,7 +284,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         <div className="seg" role="group" aria-label="보기 관점">
           {LENS.map((l) => <button key={l.id} className={lens === l.id ? 'on' : ''} onClick={() => setLens(l.id)} title={l.hint}>{l.label}</button>)}
         </div>
-        {lens !== 'ip' && <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={showSw} onChange={(e) => setShowSw(e.target.checked)} />SW task</label>}
+        {lens !== 'ip' && lens !== 'sim' && <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={showSw} onChange={(e) => setShowSw(e.target.checked)} />SW task</label>}
         {notes.map((n) => <span key={n.id} className={`chip mode-${n.tone}`} title={n.detail}>{n.label}</span>)}
         <span className="grow" />
         {variant && <PowerChip scenarioId={scenario} variantId={variant} project={ctx.project}
@@ -302,14 +309,17 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         : <div className="empty">{viewQ.error ?? '불러오는 중…'}</div>) :
       <div className="workspace" ref={workRef}>
         {mode !== 'timing' && <section className="panel pane" style={{ flex: mode === 'split' ? `0 0 ${split}%` : '1 1 auto' }}>
-          <div className="pane-head"><h2>{lens === 'dma' ? 'DMA · Memory' : 'Sequence'}</h2>
+          <div className="pane-head"><h2>{lens === 'dma' ? 'DMA · Memory' : lens === 'sim' ? 'Sim 입력' : 'Sequence'}</h2>
             {lens === 'sequence' && trace && <span className="faint" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>timing: {evidenceSource(trace)}</span>}{legend}</div>
           <div className="pane-body" ref={paneRef}>
+            {lens === 'sim' ? <SimInputsView data={simQ.data ?? null} error={simQ.error} loading={simQ.loading} selected={selectedPid}
+              onSelect={(nodeId) => { const ip = model?.byPid.get(nodeId); selectNode(ip ? ip.viewId : null) }} /> : <>
             {viewQ.error && <div className="err" style={{ margin: 12 }}>{viewQ.error}</div>}
             {lens === 'dma' && layoutErr && <div className="err" style={{ margin: 12 }}>Layout 실패: {layoutErr}</div>}
             {(viewQ.loading || (!layout && !layoutErr && !viewQ.error)) && <div className="empty">Layout 계산 중…</div>}
             {layout && !viewQ.error && <GraphView layout={layout} selected={selected} related={related} onSelect={selectNode} showOps={false} tooltip={nodeTip}
               onToggleGroup={(g) => setCollapsed((c) => { const s = new Set(c); if (s.has(g)) s.delete(g); else s.add(g); return s })} />}
+            </>}
           </div>
         </section>}
         {mode === 'split' && <Resizer axis="x" label="Pipeline | Timing 폭" onStart={() => { splitBase.current = split }} onResize={onSplit} onReset={() => setSplit(50)} />}

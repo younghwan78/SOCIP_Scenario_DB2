@@ -42,6 +42,41 @@
     },
     {
       "data": {
+        "id": "ip-abox",
+        "label": "ABOX",
+        "type": "ip",
+        "layer": "hw",
+        "ip_ref": "ip-abox-s5e9965",
+        "summary_badges": [
+          "audio"
+        ],
+        "capability_badges": [
+          "AUDIO"
+        ],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Role: audio_capture"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 1,
+          "width": 150,
+          "height": 58,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 560.0,
+        "y": 197.0
+      }
+    },
+    {
+      "data": {
         "id": "ip-csis",
         "label": "CSIS",
         "type": "ip",
@@ -64,7 +99,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "capture",
-          "order": 1,
+          "order": 2,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -73,7 +108,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 197.0
+        "y": 309.0
       }
     },
     {
@@ -101,7 +136,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "capture",
-          "order": 2,
+          "order": 3,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -110,7 +145,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 309.0
+        "y": 421.0
       }
     },
     {
@@ -138,7 +173,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 3,
+          "order": 4,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -147,7 +182,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 421.0
+        "y": 533.0
       }
     },
     {
@@ -177,7 +212,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 4,
+          "order": 5,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -186,7 +221,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 533.0
+        "y": 645.0
       }
     },
     {
@@ -213,7 +248,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 5,
+          "order": 6,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -222,7 +257,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 645.0
+        "y": 757.0
       }
     },
     {
@@ -252,7 +287,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 6,
+          "order": 7,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -261,7 +296,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 757.0
+        "y": 869.0
       }
     },
     {
@@ -287,43 +322,6 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 7,
-          "width": 150,
-          "height": 58,
-          "emphasis": "normal",
-          "collapsed": false
-        }
-      },
-      "position": {
-        "x": 560.0,
-        "y": 869.0
-      }
-    },
-    {
-      "data": {
-        "id": "ip-post_crta",
-        "label": "POST CRTA",
-        "type": "sw",
-        "layer": "framework",
-        "ip_ref": "ip-cpu-s5e9965",
-        "summary_badges": [
-          "camera",
-          "<sw>"
-        ],
-        "capability_badges": [
-          "CPU",
-          "control"
-        ],
-        "shared_resource": false,
-        "matched_issues": [],
-        "detail_items": [
-          "Role: sw_task"
-        ],
-        "warning": false,
-        "collapsed_children_count": 0,
-        "view_hints": {
-          "lane": "framework",
-          "stage": "processing",
           "order": 8,
           "width": 150,
           "height": 58,
@@ -332,14 +330,14 @@
         }
       },
       "position": {
-        "x": 350.0,
+        "x": 560.0,
         "y": 981.0
       }
     },
     {
       "data": {
-        "id": "ip-pre_me_rta",
-        "label": "PRE ME RTA",
+        "id": "ip-post_crta",
+        "label": "POST CRTA",
         "type": "sw",
         "layer": "framework",
         "ip_ref": "ip-cpu-s5e9965",
@@ -375,6 +373,43 @@
     },
     {
       "data": {
+        "id": "ip-pre_me_rta",
+        "label": "PRE ME RTA",
+        "type": "sw",
+        "layer": "framework",
+        "ip_ref": "ip-cpu-s5e9965",
+        "summary_badges": [
+          "camera",
+          "<sw>"
+        ],
+        "capability_badges": [
+          "CPU",
+          "control"
+        ],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Role: sw_task"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "framework",
+          "stage": "processing",
+          "order": 10,
+          "width": 150,
+          "height": 58,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 350.0,
+        "y": 1205.0
+      }
+    },
+    {
+      "data": {
         "id": "ip-lme",
         "label": "LME",
         "type": "ip",
@@ -397,7 +432,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 10,
+          "order": 11,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -406,7 +441,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 1205.0
+        "y": 1317.0
       }
     },
     {
@@ -434,7 +469,7 @@
         "view_hints": {
           "lane": "framework",
           "stage": "processing",
-          "order": 11,
+          "order": 12,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -443,7 +478,7 @@
       },
       "position": {
         "x": 350.0,
-        "y": 1317.0
+        "y": 1429.0
       }
     },
     {
@@ -470,7 +505,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 12,
+          "order": 13,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -479,7 +514,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 1429.0
+        "y": 1541.0
       }
     },
     {
@@ -506,7 +541,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 13,
+          "order": 14,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -515,7 +550,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 1541.0
+        "y": 1653.0
       }
     },
     {
@@ -542,7 +577,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 14,
+          "order": 15,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -551,7 +586,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 1653.0
+        "y": 1765.0
       }
     },
     {
@@ -587,7 +622,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "processing",
-          "order": 15,
+          "order": 16,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -596,7 +631,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 1765.0
+        "y": 1877.0
       }
     },
     {
@@ -622,7 +657,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "encode",
-          "order": 16,
+          "order": 17,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -631,7 +666,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 1877.0
+        "y": 1989.0
       }
     },
     {
@@ -658,7 +693,7 @@
         "view_hints": {
           "lane": "hw",
           "stage": "display",
-          "order": 17,
+          "order": 18,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -667,7 +702,7 @@
       },
       "position": {
         "x": 560.0,
-        "y": 1989.0
+        "y": 2101.0
       }
     },
     {
@@ -693,7 +728,7 @@
         "view_hints": {
           "lane": "external",
           "stage": "display",
-          "order": 18,
+          "order": 19,
           "width": 150,
           "height": 58,
           "emphasis": "normal",
@@ -702,7 +737,7 @@
       },
       "position": {
         "x": 120.0,
-        "y": 2101.0
+        "y": 2213.0
       }
     },
     {
@@ -751,7 +786,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1093.0
+        "y": 1205.0
       }
     },
     {
@@ -800,7 +835,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1093.0
+        "y": 1205.0
       }
     },
     {
@@ -839,7 +874,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1093.0
+        "y": 1205.0
       }
     },
     {
@@ -878,7 +913,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1093.0
+        "y": 1205.0
       }
     },
     {
@@ -917,7 +952,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1093.0
+        "y": 1205.0
       }
     },
     {
@@ -956,7 +991,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 981.0
+        "y": 1093.0
       }
     },
     {
@@ -995,7 +1030,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 813.0
+        "y": 925.0
       }
     },
     {
@@ -1028,7 +1063,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1093.0
+        "y": 1205.0
       }
     },
     {
@@ -1061,7 +1096,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1205.0
+        "y": 1317.0
       }
     },
     {
@@ -1100,7 +1135,7 @@
       },
       "position": {
         "x": 800.0,
-        "y": 1877.0
+        "y": 1989.0
       }
     }
   ],
@@ -2103,9 +2138,9 @@
   },
   "metadata": {
     "canvas_w": 1120,
-    "canvas_h": 2848,
+    "canvas_h": 2940,
     "layout": "level0-resource-topology",
-    "active_node_count": 19,
+    "active_node_count": 20,
     "active_edge_count": 28,
     "buffer_node_count": 10,
     "variant_overlay": {
@@ -2129,7 +2164,7 @@
         "add_edges": 2,
         "remove_edges": 1
       },
-      "node_config_count": 21,
+      "node_config_count": 22,
       "buffer_override_count": 0,
       "sw_task_count": 0
     }
@@ -2165,6 +2200,25 @@
       },
       {
         "sequence_index": 2,
+        "node_id": "abox",
+        "label": "ABOX",
+        "resource_domain": "soc_resource",
+        "resource_kind": "audio",
+        "subsystem": "audio",
+        "role": "audio_capture",
+        "flow": "none",
+        "buffer_refs": [],
+        "input_buffer_refs": [],
+        "status": "active",
+        "badges": [
+          "AUDIO"
+        ],
+        "detail_items": [
+          "Role: audio_capture"
+        ]
+      },
+      {
+        "sequence_index": 3,
         "node_id": "csis",
         "label": "CSIS",
         "resource_domain": "soc_resource",
@@ -2184,7 +2238,7 @@
         ]
       },
       {
-        "sequence_index": 3,
+        "sequence_index": 4,
         "node_id": "pdp",
         "label": "PDP",
         "resource_domain": "soc_resource",
@@ -2205,7 +2259,7 @@
         ]
       },
       {
-        "sequence_index": 4,
+        "sequence_index": 5,
         "node_id": "byrp",
         "label": "BYRP",
         "resource_domain": "soc_resource",
@@ -2226,7 +2280,7 @@
         ]
       },
       {
-        "sequence_index": 5,
+        "sequence_index": 6,
         "node_id": "rgbp",
         "label": "RGBP",
         "resource_domain": "soc_resource",
@@ -2254,7 +2308,7 @@
         ]
       },
       {
-        "sequence_index": 6,
+        "sequence_index": 7,
         "node_id": "yuvsc",
         "label": "YUVSC",
         "resource_domain": "soc_resource",
@@ -2274,7 +2328,7 @@
         ]
       },
       {
-        "sequence_index": 7,
+        "sequence_index": 8,
         "node_id": "mlsc",
         "label": "MLSC",
         "resource_domain": "soc_resource",
@@ -2312,7 +2366,7 @@
         ]
       },
       {
-        "sequence_index": 8,
+        "sequence_index": 9,
         "node_id": "vps_od",
         "label": "VPS OD",
         "resource_domain": "soc_resource",
@@ -2339,7 +2393,7 @@
         ]
       },
       {
-        "sequence_index": 9,
+        "sequence_index": 10,
         "node_id": "post_crta",
         "label": "POST CRTA",
         "resource_domain": "soc_resource",
@@ -2359,7 +2413,7 @@
         ]
       },
       {
-        "sequence_index": 10,
+        "sequence_index": 11,
         "node_id": "pre_me_rta",
         "label": "PRE ME RTA",
         "resource_domain": "soc_resource",
@@ -2379,7 +2433,7 @@
         ]
       },
       {
-        "sequence_index": 11,
+        "sequence_index": 12,
         "node_id": "lme",
         "label": "LME",
         "resource_domain": "soc_resource",
@@ -2407,7 +2461,7 @@
         ]
       },
       {
-        "sequence_index": 12,
+        "sequence_index": 13,
         "node_id": "post_irta",
         "label": "POST IRTA",
         "resource_domain": "soc_resource",
@@ -2427,7 +2481,7 @@
         ]
       },
       {
-        "sequence_index": 13,
+        "sequence_index": 14,
         "node_id": "mtnr",
         "label": "MTNR",
         "resource_domain": "soc_resource",
@@ -2459,7 +2513,7 @@
         ]
       },
       {
-        "sequence_index": 14,
+        "sequence_index": 15,
         "node_id": "msnr",
         "label": "MSNR",
         "resource_domain": "soc_resource",
@@ -2479,7 +2533,7 @@
         ]
       },
       {
-        "sequence_index": 15,
+        "sequence_index": 16,
         "node_id": "yuvp",
         "label": "YUVP",
         "resource_domain": "soc_resource",
@@ -2505,7 +2559,7 @@
         ]
       },
       {
-        "sequence_index": 16,
+        "sequence_index": 17,
         "node_id": "mcsc",
         "label": "MCSC",
         "resource_domain": "soc_resource",
@@ -2536,7 +2590,7 @@
         ]
       },
       {
-        "sequence_index": 17,
+        "sequence_index": 18,
         "node_id": "mfc_enc",
         "label": "MFC ENC",
         "resource_domain": "soc_resource",
@@ -2563,7 +2617,7 @@
         ]
       },
       {
-        "sequence_index": 18,
+        "sequence_index": 19,
         "node_id": "dpu",
         "label": "DPU",
         "resource_domain": "soc_resource",
@@ -2591,7 +2645,7 @@
         ]
       },
       {
-        "sequence_index": 19,
+        "sequence_index": 20,
         "node_id": "panel",
         "label": "PANEL",
         "resource_domain": "external_sink",
@@ -2740,6 +2794,11 @@
       }
     ],
     "metric_breakdown": [
+      {
+        "subsystem": "audio",
+        "node_count": 1,
+        "warning_count": 0
+      },
       {
         "subsystem": "camera",
         "node_count": 16,

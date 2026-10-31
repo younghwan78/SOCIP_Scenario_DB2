@@ -44,7 +44,26 @@ def timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
         for node in graph.pipeline_nodes
         if node.get("id") and str(node["id"]) not in owners
     ]
+    for task in tasks:
+        _apply_independent_cadence(task, (graph.variant.node_configs or {}).get(str(task["id"])) or {})
     return apply_source_sink_constraints(graph, tasks, graph.pipeline_nodes)
+
+
+def _apply_independent_cadence(task: dict[str, Any], config: dict[str, Any]) -> None:
+    """Opt-in own cadence from ``node_configs.<node>.timeline`` (e.g. ABOX period IRQ).
+
+    The node then repeats every ``period_ms`` outside the frame DAG; ``duration_ms``
+    is used when no calculated HW time exists for it.
+    """
+    timeline = config.get("timeline") or {}
+    period = float(timeline.get("period_ms") or 0.0)
+    if period <= 0:
+        return
+    task["independent_period_ms"] = period
+    if timeline.get("phase_ms") is not None:
+        task["independent_phase_ms"] = float(timeline["phase_ms"])
+    if not float(task.get("duration_ms") or 0.0) and timeline.get("duration_ms") is not None:
+        task["duration_ms"] = float(timeline["duration_ms"])
 
 
 def timeline_edges(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:

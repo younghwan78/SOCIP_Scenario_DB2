@@ -376,3 +376,39 @@ def test_control_release_delay_does_not_consume_cpu_runtime():
     sw = next(event for event in events if event.node_id == "sw" or event.task_id == "sw")
     assert sw.start_ms == pytest.approx(3.0)
     assert sw.duration_ms == pytest.approx(0.3)
+
+
+def test_independent_cadence_task_repeats_outside_frame_path():
+    # ABOX-style own cadence: 20 ms period over a 3 x 33.3 ms frame window -> 5 runs,
+    # no frame index, no edge into the frame DAG, never on the frame critical path.
+    events = build_timeline_events(
+        tasks=[
+            {"id": "isp", "node_id": "isp", "duration_ms": 10.0},
+            {"id": "mfc", "node_id": "mfc", "duration_ms": 8.0},
+            {"id": "abox", "node_id": "abox", "duration_ms": 0.8, "independent_period_ms": 20.0},
+        ],
+        edges=[{"from": "isp", "to": "mfc", "type": "M2M"}, {"from": "isp", "to": "abox", "type": "M2M"}],
+        frame_count=3,
+        frame_period_ms=100.0 / 3,
+        critical_budget_ms=100.0 / 3,
+    )
+    abox = [event for event in events if event.node_id == "abox"]
+    assert [event.task_id for event in abox] == [f"abox#c{i}" for i in range(5)]
+    assert [event.start_ms for event in abox] == pytest.approx([0.0, 20.0, 40.0, 60.0, 80.0])
+    assert all(event.frame_index is None and event.independent_period_ms == 20.0 for event in abox)
+    assert all(not event.predecessors and not event.critical for event in abox)
+    frame = [event for event in events if event.node_id != "abox"]
+    assert len(frame) == 6 and all(event.frame_index is not None for event in frame)
+    assert all("independent_period_ms" not in event.model_dump() for event in frame)
+
+
+def test_frame_tasks_unchanged_by_independent_cadence_task():
+    tasks = [{"id": "isp", "duration_ms": 10.0}, {"id": "mfc", "duration_ms": 8.0}]
+    edges = [{"from": "isp", "to": "mfc", "type": "M2M"}]
+    base = build_timeline_events(tasks=tasks, edges=edges, frame_count=2, frame_period_ms=33.0)
+    with_abox = build_timeline_events(
+        tasks=[*tasks, {"id": "abox", "duration_ms": 0.8, "independent_period_ms": 20.0}],
+        edges=edges, frame_count=2, frame_period_ms=33.0,
+    )
+    framed = [event for event in with_abox if event.frame_index is not None]
+    assert [event.model_dump() for event in framed] == [event.model_dump() for event in base]

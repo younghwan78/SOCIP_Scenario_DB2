@@ -53,6 +53,7 @@ class Evidence(Base):
     timing_breakdown    = Column(JSONB)             # sim only
     dvfs_breakdown      = Column(JSONB)             # sim only
     timeline_events     = Column(JSONB)             # sim + meas
+    handoff_flows       = Column(JSONB)             # meas: sdb.handoff/1 hand-off order
     external_devices    = Column(JSONB)             # sim only
     topology_order      = Column(ARRAY(Text))       # sim only
     vdd_power           = Column(JSONB)             # sim + meas (rail별 전력)

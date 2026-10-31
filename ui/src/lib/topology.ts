@@ -6,7 +6,7 @@ import type { IpLink, IpModel, Lane, PipelineModel } from './model'
 
 export const TOPO = { W: 122, H: 50, COL: 38, ROW: 14, TOP: 30, LEFT: 8, SEC_HEAD: 18, SEC_GAP: 16 }
 
-export type ColumnId = 'sensor' | 'rt' | 'pre' | 'nrt' | 'post' | 'codec' | 'display' | 'other'
+export type ColumnId = 'sensor' | 'rt' | 'pre' | 'nrt' | 'post' | 'codec' | 'display' | 'audio' | 'other'
 export type SectionId = 'main' | 'sw' | 'm2m'
 export interface TopoNode { ip: IpModel; x: number; y: number; col: number; rank: number; column: ColumnId; section: SectionId }
 export interface TopoSection { id: SectionId; label: string; y: number; h: number }
@@ -15,11 +15,11 @@ export interface TopoGhost { label: string; note: string; x: number; y: number; 
 export interface TopoLayout { nodes: TopoNode[]; columns: TopoColumn[]; ghosts: TopoGhost[]; links: IpLink[]; width: number; height: number }
 
 const COLUMN_LABEL: Record<ColumnId, string> = {
-  sensor: 'Sensor', rt: 'ISP RT', pre: 'Pre-NRT', nrt: 'ISP NRT', post: 'Post-NRT', codec: 'Codec', display: 'Display', other: 'Other',
+  sensor: 'Sensor', rt: 'ISP RT', pre: 'Pre-NRT', nrt: 'ISP NRT', post: 'Post-NRT', codec: 'Codec', display: 'Display', audio: 'Audio', other: 'Other',
 }
 const SECTION_LABEL: Record<SectionId, string> = { main: '', sw: 'CPU SW', m2m: 'M2M accel' }
-const COLUMN_ORDER: ColumnId[] = ['sensor', 'rt', 'pre', 'nrt', 'post', 'codec', 'display', 'other']
-const DIRECT: Partial<Record<Lane, ColumnId>> = { sensor: 'sensor', rt: 'rt', nrt: 'nrt', codec: 'codec', display: 'display', other: 'other' }
+const COLUMN_ORDER: ColumnId[] = ['sensor', 'rt', 'pre', 'nrt', 'post', 'codec', 'display', 'audio', 'other']
+const DIRECT: Partial<Record<Lane, ColumnId>> = { sensor: 'sensor', rt: 'rt', nrt: 'nrt', codec: 'codec', display: 'display', audio: 'audio', other: 'other' }
 /** Post-NRT M2M slot kept visible for scenarios that route through the M2M scaler. */
 export const M2M_SCALER_RE = /(^|[_-])(m2msc|m2m[_-]?scaler|m2m[_-]?sc|msc)([_-]|$)|m2m-scaler/i
 

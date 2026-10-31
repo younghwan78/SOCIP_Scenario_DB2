@@ -120,6 +120,10 @@ pipeline:
     ip_ref: ip-display-panel-s5e9965
     role: display_output
     instance_index: 0
+  - id: abox
+    ip_ref: ip-abox-s5e9965
+    role: audio_capture
+    instance_index: 0
   edges:
   - from: sensor_rear
     to: csis
@@ -990,6 +994,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -1186,6 +1213,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -1390,6 +1440,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -1624,6 +1697,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -1812,6 +1908,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -2008,6 +2127,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -2213,6 +2355,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -2416,6 +2581,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -2619,6 +2807,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -2856,6 +3067,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -3076,6 +3310,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -3335,6 +3592,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -3577,6 +3857,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -3771,6 +4074,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -3962,6 +4288,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -4134,6 +4483,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -4327,6 +4699,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -4517,6 +4912,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -4704,6 +5122,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -4931,6 +5372,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -5124,6 +5588,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -5329,6 +5816,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -5530,6 +6040,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -5759,6 +6292,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -5952,6 +6508,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -6168,6 +6747,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -6410,6 +7012,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -6600,6 +7225,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -6791,6 +7439,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -6996,6 +7667,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -7237,6 +7931,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -7430,6 +8147,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -7671,6 +8411,29 @@ variants:
         height: 1080
         format: YUV420
         bitwidth: 8
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -8346,6 +9109,29 @@ variants:
         height: 1080
         format: YUV420
         bitwidth: 8
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -8976,6 +9762,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode58
     post_crta:
@@ -9184,6 +9993,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode10
     post_crta:
@@ -9388,6 +10220,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode6
     post_crta:
@@ -9584,6 +10439,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode9
     post_crta:
@@ -9782,6 +10660,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode13
     post_crta:
@@ -9976,6 +10877,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode13
     post_crta:
@@ -10169,6 +11093,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode6
     sensor_rear3:
@@ -10367,6 +11314,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode9
     sensor_rear3:
@@ -10566,6 +11536,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode13
     sensor_rear3:
@@ -10762,6 +11755,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_rear2:
       selected_mode: mode13
     sensor_rear3:
@@ -10953,6 +11969,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode58
     post_crta:
@@ -11144,6 +12183,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode58
     post_crta:
@@ -11335,6 +12397,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode25
     post_crta:
@@ -11526,6 +12611,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode57
     post_crta:
@@ -11718,6 +12826,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode10
     post_crta:
@@ -11906,6 +13037,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode10
     post_crta:
@@ -12095,6 +13249,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode11
     post_crta:
@@ -12282,6 +13459,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sensor_front:
       selected_mode: mode57
     post_crta:
@@ -12528,6 +13728,29 @@ variants:
         height: 1080
         format: YUV420
         bitwidth: 8
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -13203,6 +14426,29 @@ variants:
         height: 1080
         format: YUV420
         bitwidth: 8
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -13834,6 +15080,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -14028,6 +15297,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -14216,6 +15508,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -14416,6 +15731,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -14615,6 +15953,29 @@ variants:
         inherit_shape: true
         width: 1920
         height: 1080
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     post_crta:
       sw_timing:
         min_ms: 0.1
@@ -14883,6 +16244,29 @@ variants:
         height: 1080
         format: YUV420
         bitwidth: 8
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000
@@ -15219,6 +16603,29 @@ variants:
         height: 1080
         format: YUV420
         bitwidth: 8
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     mpeg_writer:
       sw_bitrate_scaling:
         reference_bitrate_mbps: 1000

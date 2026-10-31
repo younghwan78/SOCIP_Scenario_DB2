@@ -2,10 +2,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { withReadSignal } from './readRequestScope'
 
-export type Page = 'home' | 'explorer' | 'matrix' | 'pipeline' | 'compare' | 'timing' | 'timing-fleet' | 'explore' | 'predictions' | 'reports' | 'calibration' | 'cpu' | 'whatif' | 'library' | 'settings'
+export type Page = 'home' | 'explorer' | 'matrix' | 'pipeline' | 'behavior' | 'compare' | 'timing' | 'timing-fleet' | 'explore' | 'predictions' | 'reports' | 'calibration' | 'cpu' | 'whatif' | 'library' | 'settings'
 export interface Route { page: Page; params: Record<string, string> }
 
-const PAGES: Page[] = ['home', 'explorer', 'matrix', 'pipeline', 'compare', 'timing', 'timing-fleet', 'explore', 'predictions', 'reports', 'calibration', 'cpu', 'whatif', 'library', 'settings']
+const PAGES: Page[] = ['home', 'explorer', 'matrix', 'pipeline', 'behavior', 'compare', 'timing', 'timing-fleet', 'explore', 'predictions', 'reports', 'calibration', 'cpu', 'whatif', 'library', 'settings']
 
 export function parseHash(hash: string): Route {
   const raw = hash.replace(/^#\/?/, '')

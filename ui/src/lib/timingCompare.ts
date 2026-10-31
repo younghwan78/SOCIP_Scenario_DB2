@@ -21,7 +21,7 @@ export interface TimingComparison {
   period: number | null
 }
 
-const HW_LANES = new Set(['rt', 'nrt', 'm2m', 'codec', 'display'])
+const HW_LANES = new Set(['rt', 'nrt', 'm2m', 'codec', 'display', 'audio'])
 
 export function compareTimelines(a: Timeline, b: Timeline, view: ViewResponse | undefined, fps: number | null, laneOfPid: (pid: string) => string | undefined): TimingComparison {
   const ta = stageTimings(a), tb = stageTimings(b)

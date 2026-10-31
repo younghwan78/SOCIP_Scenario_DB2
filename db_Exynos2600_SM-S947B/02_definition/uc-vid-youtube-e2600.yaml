@@ -41,6 +41,10 @@ pipeline:
     ip_ref: ip-display-panel-s5e9965
     role: display_output
     instance_index: 0
+  - id: abox
+    ip_ref: ip-abox-s5e9965
+    role: audio_playback
+    instance_index: 0
   edges:
   - from: network
     to: sw_demux
@@ -229,6 +233,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -374,6 +402,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -519,6 +571,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -666,6 +742,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -818,6 +918,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -970,6 +1094,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -1120,6 +1268,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -1265,6 +1437,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -1412,6 +1608,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -1564,6 +1784,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -1678,6 +1922,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -1819,6 +2087,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3
@@ -1982,6 +2274,30 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload). AUD
+          operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
     sw_demux:
       sw_timing:
         min_ms: 0.3

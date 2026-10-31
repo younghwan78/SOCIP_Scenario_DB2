@@ -67,7 +67,7 @@ def test_existing_duplicate_legacy_head_is_repaired_only_by_upgrade(legacy_db):
         assert conn.exec_driver_sql("SELECT COUNT(*) FROM alembic_version").scalar_one() == 2
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
-        assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == ["0032"]
+        assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == ["0033"]
 
 
 def test_schema_drift_startup_check_fails_on_missing_orm_column(legacy_db, monkeypatch, capsys):

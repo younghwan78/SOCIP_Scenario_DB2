@@ -102,6 +102,29 @@
     dpu:
       sim:
         inherit_shape: true
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 0
+        capture_streams: 1
+        offload: false
+      bw_kb_s:
+        read: 0
+        write: 188
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: Recording audio capture (built-in mic, 48 kHz stereo). AUD operating point is assumed, same mid level as the
+          CPU-fed playback path.
+      timeline:
+        period_ms: 20.0
+        duration_ms: 0.8
+        value_source: assumed
+        note: ABOX capture period IRQ. Runs on its own cadence, outside the frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
   topology_patch:
     add_edges:
     - from: mcsc

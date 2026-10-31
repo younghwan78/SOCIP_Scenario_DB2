@@ -113,6 +113,9 @@ def build_simulation_inputs(
 
     for node in graph.pipeline_nodes:
         node_id = str(node.get("id") or "")
+        # own-cadence endpoint (ABOX period IRQ …) fully covered by its driver model: no pixel workload
+        if node_id in calculated_driver_nodes and (((graph.variant.node_configs or {}).get(node_id) or {}).get("timeline") or {}).get("period_ms"):
+            continue
         workload = build_workload_for_node(
             graph,
             node,

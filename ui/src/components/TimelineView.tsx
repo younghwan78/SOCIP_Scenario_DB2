@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { CAT_LABEL, FRAME_HUES, frameSliceStyle, frameStarts, neighbours, sliceCat, sliceColor, type Slice, type SliceCat, type Timeline } from '../lib/timeline'
+import { CAT_LABEL, chainOf, FRAME_HUES, frameSliceStyle, frameStarts, INDEPENDENT_STYLE, neighbours, sliceCat, sliceColor, type Slice, type SliceCat, type Timeline } from '../lib/timeline'
 import { useTip } from './ChartTip'
 
 const LABEL_W = 150
 const ROW = 22
 const HEAD = 34
+
+/** Which flows are drawn: neighbours = all, one-hop highlight (default) · chain = the selection's upstream + downstream only ·
+ *  frame = flows inside the selection's frame · all = all, no focus · none. */
+export type FlowMode = 'neighbours' | 'chain' | 'frame' | 'all' | 'none'
+/** Hand-off kinds of full-stack flows (lib/timeline Flow.type). */
+export const HANDOFF: Record<string, { label: string; color: string; dash?: string }> = {
+  kick: { label: 'kick · 시작 요청', color: '#2563EB' },
+  complete: { label: 'complete · 완료 통지', color: '#15803D', dash: '4 3' },
+  ipc: { label: 'cross-process', color: '#7C3AED' },
+  irq: { label: 'IRQ', color: '#B45309' },
+  data: { label: 'buffer · data', color: '#6B7280' },
+}
 
 interface Props {
   timeline: Timeline
@@ -13,6 +25,13 @@ interface Props {
   showFlows: boolean
   onSelect: (s: Slice | null) => void
   colorBy?: 'group' | 'frame'
+  flowMode?: FlowMode
+  /** label column width (default 150) */
+  labelWidth?: number
+  /** take keyboard focus on mount (W/S/A/D, ↑↓, F, Esc work without a click) */
+  autoFocus?: boolean
+  /** colored stripe on group rows / track labels (e.g. full-stack layer) */
+  groupColor?: (group: string) => string | undefined
 }
 
 export const FRAME_COLORS = FRAME_HUES.map((h) => `hsl(${h} 70% 62%)`)
@@ -48,7 +67,8 @@ function niceStep(span: number): number {
  * Perfetto-style track view. Ruler stays fixed, tracks scroll vertically.
  * wheel = vertical scroll · Ctrl+wheel = zoom at cursor · Shift+wheel / drag = horizontal pan · W/S/A/D.
  */
-export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows, onSelect, colorBy = 'group' }: Props) {
+export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows, onSelect, colorBy = 'group', flowMode = 'neighbours', labelWidth, autoFocus, groupColor }: Props) {
+  const lw = labelWidth ?? LABEL_W
   const defaultRange = useCallback((): [number, number] => [timeline.start, Math.min(timeline.end, timeline.start + 100)], [timeline])
   const [range, setRange] = useState<[number, number]>(defaultRange)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -66,8 +86,8 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
   }, [])
 
   const [t0, t1] = range
-  const plotW = Math.max(160, width - LABEL_W - 10)
-  const x = (t: number) => LABEL_W + ((t - t0) / (t1 - t0)) * plotW
+  const plotW = Math.max(160, width - lw - 10)
+  const x = (t: number) => lw + ((t - t0) / (t1 - t0)) * plotW
   const full = Math.max(timeline.end - timeline.start, 1)
 
   const setClamped = useCallback((a: number, span: number) => {
@@ -104,7 +124,17 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
   }, [rows, collapsed, timeline])
 
   const byId = useMemo(() => new Map(timeline.slices.map((s) => [s.id, s])), [timeline])
-  const focus = useMemo(() => (selectedSlice ? neighbours(timeline, selectedSlice) : new Set<string>()), [timeline, selectedSlice])
+  const focus = useMemo(() => {
+    if (!selectedSlice) return new Set<string>()
+    if (flowMode === 'chain') return chainOf(timeline, selectedSlice)
+    const f = flowMode === 'frame' ? byId.get(selectedSlice)?.frame : null
+    if (f !== null && f !== undefined) return new Set(timeline.slices.filter((s) => s.frame === f).map((s) => s.id))
+    return flowMode === 'frame' ? chainOf(timeline, selectedSlice) : neighbours(timeline, selectedSlice)
+  }, [timeline, selectedSlice, flowMode, byId])
+  // chain / frame: only flows inside the focus are drawn (nothing until a slice is selected)
+  const scoped = flowMode === 'chain' || flowMode === 'frame'
+  const drawnFlows = !showFlows || flowMode === 'none' ? [] : scoped ? timeline.flows.filter((f) => focus.has(f.from) && focus.has(f.to)) : timeline.flows
+  useEffect(() => { if (autoFocus) rootRef.current?.focus({ preventScroll: true }) }, [autoFocus])
   const visible = timeline.slices.filter((s) => s.end >= t0 && s.start <= t1 && yOf.has(s.track))
   const step = niceStep(t1 - t0)
   const ticks: number[] = []
@@ -129,7 +159,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       const r = el.getBoundingClientRect()
-      const px = e.clientX - r.left - LABEL_W
+      const px = e.clientX - r.left - lw
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
         setRange(([a, b]) => {
@@ -172,21 +202,35 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
   const onPointerUp = () => { if (drag.current?.moved) suppress.current = true; drag.current = null }
 
   const onKey = (e: React.KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return
     const k = e.key.toLowerCase()
-    if (k === 'w') zoomAt(0.75); else if (k === 's') zoomAt(1.33); else if (k === 'a') pan(-0.2); else if (k === 'd') pan(0.2); else return
+    const body = bodyRef.current
+    if (k === 'w') zoomAt(0.75); else if (k === 's') zoomAt(1.33); else if (k === 'a') pan(-0.2); else if (k === 'd') pan(0.2)
+    else if (k === 'arrowdown' && body) body.scrollTop += ROW * 3
+    else if (k === 'arrowup' && body) body.scrollTop -= ROW * 3
+    else if (k === 'pagedown' && body) body.scrollTop += body.clientHeight * 0.9
+    else if (k === 'pageup' && body) body.scrollTop -= body.clientHeight * 0.9
+    else if (k === 'f' && selectedSlice && byId.get(selectedSlice)) {
+      // Perfetto F: fit the selection (with the rest of its chain / frame when one is in focus)
+      const sel = scoped ? timeline.slices.filter((s) => focus.has(s.id)) : [byId.get(selectedSlice)!]
+      const a = Math.min(...sel.map((s) => s.start)), b = Math.max(...sel.map((s) => s.end))
+      const span = Math.max(0.2, (b - a) * 1.15)
+      setClamped(a - (span - (b - a)) / 2, span)
+    } else if (k === 'escape') onSelect(null)
+    else return
     e.preventDefault()
   }
 
   return (
-    <div className="tl" ref={rootRef} tabIndex={0} onKeyDown={onKey} aria-label="Timeline (W/S zoom, A/D pan)">
+    <div className="tl" ref={rootRef} tabIndex={0} onKeyDown={onKey} aria-label="Timeline (W/S zoom, A/D pan, ↑↓ scroll, F fit, Esc clear)">
       <svg width={width} height={HEAD} style={{ display: 'block', flexShrink: 0, cursor: 'ew-resize' }}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
-        <rect x={0} y={0} width={LABEL_W} height={HEAD} fill="var(--surface-soft)" />
-        <rect x={LABEL_W} y={0} width={width - LABEL_W} height={HEAD} fill="#fff" />
+        <rect x={0} y={0} width={lw} height={HEAD} fill="var(--surface-soft)" />
+        <rect x={lw} y={0} width={width - lw} height={HEAD} fill="#fff" />
         <line x1={0} y1={HEAD - 0.5} x2={width} y2={HEAD - 0.5} stroke="var(--line)" />
         <text x={10} y={22} fontSize={10.5} fill="var(--faint)" fontFamily="var(--mono)">{`${t0.toFixed(1)}–${t1.toFixed(1)} ms`}</text>
-        <svg x={LABEL_W} y={0} width={plotW + 10} height={HEAD} overflow="hidden" onClick={() => { if (!suppress.current) onSelect(null); suppress.current = false }}>
-          <g transform={`translate(${-LABEL_W} 0)`}>
+        <svg x={lw} y={0} width={plotW + 10} height={HEAD} overflow="hidden" onClick={() => { if (!suppress.current) onSelect(null); suppress.current = false }}>
+          <g transform={`translate(${-lw} 0)`}>
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={x(t)} y1={18} x2={x(t)} y2={HEAD} stroke="#B9B0A2" />
@@ -210,8 +254,9 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
           <defs>
             <marker id="f-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#174D47" /></marker>
             <marker id="f-lo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#9A9184" /></marker>
+            {Object.entries(HANDOFF).map(([k, v]) => <marker key={k} id={`f-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={v.color} /></marker>)}
             <PatternDefs />
-            <clipPath id="tl-plot"><rect x={LABEL_W} y={0} width={plotW + 10} height={rows.height} /></clipPath>
+            <clipPath id="tl-plot"><rect x={lw} y={0} width={plotW + 10} height={rows.height} /></clipPath>
           </defs>
           <g clipPath="url(#tl-plot)">
             {ticks.map((t) => <line key={t} x1={x(t)} y1={0} x2={x(t)} y2={rows.height} stroke="#F4F0EA" />)}
@@ -220,16 +265,18 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
           {rows.list.map((r) => r.kind === 'group' ? (
             <g key={r.id} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setCollapsed((c) => { const s = new Set(c); if (s.has(r.name)) s.delete(r.name); else s.add(r.name); return s }) }}>
               <rect x={0} y={r.y} width={width} height={ROW} fill="#F3EFE8" />
+              {groupColor?.(r.group) && <rect x={0} y={r.y} width={4} height={ROW} fill={groupColor(r.group)} />}
               <text x={8} y={r.y + 15} fontSize={11.5} fontWeight={700} fill="var(--text-2)">{collapsed.has(r.name) ? '▸' : '▾'} {r.name}</text>
             </g>
           ) : (
             <g key={r.id}>
-              <rect x={0} y={r.y} width={LABEL_W} height={ROW} fill="var(--surface-soft)" />
+              <rect x={0} y={r.y} width={lw} height={ROW} fill="var(--surface-soft)" />
+              {groupColor?.(r.group) && <rect x={0} y={r.y} width={4} height={ROW} fill={groupColor(r.group)} opacity={0.45} />}
               <text x={20} y={r.y + 15} fontSize={11} fill="#4A4F5A">{r.name}</text>
               <line x1={0} y1={r.y + ROW} x2={width} y2={r.y + ROW} stroke="#F1ECE4" />
             </g>
           ))}
-          <line x1={LABEL_W} y1={0} x2={LABEL_W} y2={rows.height} stroke="var(--line)" />
+          <line x1={lw} y1={0} x2={lw} y2={rows.height} stroke="var(--line)" />
           <g clipPath="url(#tl-plot)">
             {visible.map((s) => {
               const y = yOf.get(s.track)!
@@ -237,28 +284,31 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
               const isSel = s.id === selectedSlice
               const hot = isSel || (highlightNode !== null && s.nodeId === highlightNode) || focus.has(s.id)
               const dimmed = (selectedSlice !== null || highlightNode !== null) && !hot
-              const st = colorBy === 'frame' && s.frame !== null ? frameSliceStyle(s.frame, s.group) : null
+              const dimTo = scoped ? 0.25 : 0.45
+              const st = colorBy === 'frame' ? (s.frame !== null ? frameSliceStyle(s.frame, s.group) : s.layer ? INDEPENDENT_STYLE : null) : null
               const fill = st ? st.fill : sliceColor(s.group)
               return (
-                <g key={s.id} style={{ cursor: 'pointer' }} opacity={dimmed ? 0.45 : 1} onClick={(e) => { e.stopPropagation(); onSelect(s) }}
+                <g key={s.id} style={{ cursor: 'pointer' }} opacity={dimmed ? dimTo : 1} onClick={(e) => { e.stopPropagation(); onSelect(s) }}
                   {...tip(() => sliceTip(s, timeline, fill))}>
                   <rect x={sx} y={y + 3} width={w} height={ROW - 6} rx={2} fill={fill}
                     stroke={isSel ? '#174D47' : hot ? '#2F6F68' : st ? st.stroke : 'rgba(0,0,0,0.08)'} strokeDasharray={!isSel && !hot ? st?.dash : undefined} strokeWidth={isSel ? 2.2 : hot ? 1.4 : 1} />
                   {st?.pattern && <rect x={sx} y={y + 3} width={w} height={ROW - 6} rx={2} fill={`url(#tl-pat-${st.pattern})`} pointerEvents="none" />}
-                  {w > 40 && <text x={Math.max(sx, LABEL_W) + 4} y={y + 15} fontSize={10} fill={st ? st.text : '#2B2F38'} fontFamily="var(--mono)" pointerEvents="none">{s.label}{s.frame !== null ? ` f${s.frame}` : ''}</text>}
+                  {w > 40 && <text x={Math.max(sx, lw) + 4} y={y + 15} fontSize={10} fill={st ? st.text : '#2B2F38'} fontFamily="var(--mono)" pointerEvents="none">{s.label}{s.frame !== null ? ` f${s.frame}` : ''}</text>}
                 </g>
               )
             })}
-            {showFlows && timeline.flows.map((f) => {
+            {drawnFlows.map((f) => {
               const a = byId.get(f.from), b = byId.get(f.to)
-              if (!a || !b || !yOf.has(a.track) || !yOf.has(b.track) || a.track === b.track) return null
+              if (!a || !b || !yOf.has(a.track) || !yOf.has(b.track) || yOf.get(a.track) === yOf.get(b.track)) return null
               if ((a.end < t0 && b.start < t0) || (a.start > t1 && b.start > t1)) return null
-              const hi = selectedSlice !== null && (f.from === selectedSlice || f.to === selectedSlice)
+              const hi = scoped || (selectedSlice !== null && (f.from === selectedSlice || f.to === selectedSlice))
+              const kind = f.type ? HANDOFF[f.type] : undefined
               const y1 = yOf.get(a.track)! + ROW / 2, y2 = yOf.get(b.track)! + ROW / 2
               // Streaming (OTF) successors start before the predecessor ends: anchor start-to-start.
               const x1 = b.start < a.end ? x(a.start) + 3 : x(a.end), x2 = x(b.start), dx = Math.max(14, Math.abs(x2 - x1) / 2)
               return <path key={`${f.from}>${f.to}`} d={`M${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`} fill="none" pointerEvents="none"
-                stroke={hi ? '#174D47' : '#9A9184'} strokeWidth={hi ? 1.8 : 1} opacity={selectedSlice && !hi ? 0.25 : 0.85} markerEnd={`url(#${hi ? 'f-hi' : 'f-lo'})`} />
+                stroke={kind && hi ? kind.color : hi ? '#174D47' : '#9A9184'} strokeDasharray={kind && hi ? kind.dash : undefined} strokeWidth={hi ? 1.8 : 1}
+                opacity={selectedSlice && !hi ? 0.25 : 0.85} markerEnd={`url(#${kind && hi ? `f-${f.type}` : hi ? 'f-hi' : 'f-lo'})`} />
             })}
           </g>
         </svg>
@@ -270,7 +320,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
         <button className="btn" onClick={() => pan(0.25)} title="D">▶</button>
         <button className="btn" onClick={() => setRange([timeline.start, timeline.end])}>전체</button>
         <button className="btn" onClick={() => setRange(defaultRange())}>100 ms</button>
-        <span className="mono faint" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>drag·Shift+wheel 이동 · Ctrl+wheel/W·S 확대 · wheel 세로 스크롤</span>
+        <span className="mono faint" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>drag·Shift+wheel·A/D 이동 · Ctrl+wheel/W·S 확대 · wheel·↑↓·PgUp/Dn 세로 · F 선택 맞춤 · Esc 해제</span>
       </div>
     </div>
   )
@@ -285,7 +335,9 @@ function sliceTip(s: Slice, tl: Timeline, color: string) {
     title: `${s.label}${s.frame !== null ? ` · f${s.frame}` : ''}`, color,
     head: { label: '소요 시간', value: `${dur.toFixed(3)} ms`, tone: 'strong' as const },
     rows: [
-      { k: '분류', v: CAT_LABEL[sliceCat(s.group)] === s.group || sliceCat(s.group) === 'SW' ? CAT_LABEL[sliceCat(s.group)] : `${CAT_LABEL[sliceCat(s.group)]} · ${s.group}` },
+      s.layer ? { k: '계층', v: `${s.group}${s.nodeId ? ` · node ${s.nodeId}` : ''}` }
+        : { k: '분류', v: CAT_LABEL[sliceCat(s.group)] === s.group || sliceCat(s.group) === 'SW' ? CAT_LABEL[sliceCat(s.group)] : `${CAT_LABEL[sliceCat(s.group)]} · ${s.group}` },
+      ...(s.period ? [{ k: '자기 주기', v: `${s.period.toFixed(2)} ms (${(1000 / s.period).toFixed(1)} Hz) · frame 경로 밖` }] : []),
       ...(origin !== undefined ? [{ k: 'frame 시작 기준', v: `+${(s.start - origin).toFixed(2)} → +${(s.end - origin).toFixed(2)} ms` }] : []),
       ...(prev ? [{ k: '직전 frame 대비 시작 간격', v: `${(s.start - prev.start).toFixed(3)} ms` }] : []),
       { k: '절대 시각', v: `${s.start.toFixed(3)} – ${s.end.toFixed(3)} ms`, tone: 'muted' as const },

@@ -18,6 +18,7 @@ from scenario_db.models.evidence.metrics import (
 )
 
 from scenario_db.models.evidence.camera import CameraPipeline, ProfilingMetadata, StageTiming, validate_camera_evidence
+from scenario_db.models.evidence.handoff import HandoffDoc
 from scenario_db.models.evidence.profiling import HwTaskTiming, SwEventLatency
 
 _KPI_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -173,6 +174,8 @@ class MeasurementEvidence(BaseScenarioModel):
     # only rails the name heuristic gets wrong need declaring.
     vdd_power: dict[str, dict[str, float | str]] = Field(default_factory=dict)
     timeline_events: list[dict[str, Any]] = Field(default_factory=list)
+    # In-house hand-off order as data (sdb.handoff/1), drawn on Behavior / 처리 흐름
+    handoff_flows: HandoffDoc | None = None
     metric_observations: list[MetricObservation] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
 

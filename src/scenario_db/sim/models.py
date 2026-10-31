@@ -445,6 +445,8 @@ class TimelineEvent(BaseScenarioModel):
     critical: bool = False
     critical_path_rank: int | None = None
     predecessors: list[str] = Field(default_factory=list)
+    # Own-cadence task (ABOX period IRQ …): frame_index is None; omitted for frame tasks
+    independent_period_ms: float | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class SimRunResult(BaseScenarioModel):

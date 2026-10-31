@@ -141,4 +141,8 @@ files = [
     "src/scenario_db/api/services/cpu.py",
     "src/scenario_db/meas_import/table_adapter.py",
     "src/scenario_db/api/services/failures.py",
+    "src/scenario_db/api/services/sim_inputs.py",
+    "src/scenario_db/api/routers/behavior.py",
+    "src/scenario_db/meas_import/fullstack.py",
+    "src/scenario_db/models/evidence/handoff.py",
 ]

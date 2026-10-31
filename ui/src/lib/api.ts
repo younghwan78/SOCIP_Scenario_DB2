@@ -109,10 +109,25 @@ export interface Evidence {
   provenance?: Dict | null
   profiling_metadata?: Dict | null
   timeline_events?: TimelineEvent[] | null
+  /** measurement: in-house hand-off order (sdb.handoff/1), drawn on Behavior / 처리 흐름 */
+  handoff_flows?: HandoffDoc | null
   /** simulation: tool (scenariodb-sim = Simulate 기본 조건, scenariodb-timing-budget = Timing Budget 조건), timestamp, config profile, writer */
   run_info?: Dict | null
   measured_at?: string | null
 }
+
+/** sdb.handoff/1 — docs/design/handoff-flow-ko.md (validated on import; layer / kind values as in the backend model) */
+export interface HandoffParticipant { id: string; layer: string; name: string; detail?: string }
+export interface HandoffCadence { id: string; name: string; kind: 'frame' | 'vsync' | 'period' | 'chunk' | 'divided' | 'event'; period_ms?: number; of?: string; every?: number; note?: string }
+export interface HandoffStep {
+  from?: string; to?: string; call?: string; task?: string; slice?: string; node?: string
+  handoff?: string; branch?: string; cadence?: string; every?: number; frame_offset?: number
+  t_ms?: number; dur_ms?: number; note?: string; over?: string[]
+}
+export interface HandoffFlow { id: string; name: string; cadence: string; summary?: string; steps: HandoffStep[] }
+export interface HandoffDoc { format: 'sdb.handoff/1'; generator?: string; participants: HandoffParticipant[]; cadences: HandoffCadence[]; flows: HandoffFlow[] }
+
+export interface BehaviorEntry { scenario_ref: string; variant_ref: string; evidence_ids: string[]; full_stack: boolean; flows: number }
 
 export interface TimelineEvent {
   task_id: string
@@ -128,6 +143,15 @@ export interface TimelineEvent {
   logical_task_id?: string | null
   source_slice_name?: string | null
   critical?: boolean
+  /** full-stack trace: app | framework | hal | kernel | fw | hw (absent on pipeline traces) */
+  layer?: string | null
+  process?: string | null
+  thread?: string | null
+  /** hand-off into this slice: kick | complete | ipc | irq | data */
+  handoff?: string | null
+  /** own-cadence work (ABOX, AAC, chunk write …): period over the full capture */
+  cadence_period_ms?: number | null
+  independent_period_ms?: number | null
 }
 
 export interface BufferDef {
@@ -150,6 +174,31 @@ export interface ScenarioDef {
   metadata_?: Dict
   pipeline: { nodes?: { id: string; ip_ref?: string; role?: string }[]; buffers?: Record<string, BufferDef>; architecture_graph?: Dict }
   size_profile?: { anchors?: Record<string, string> } | null
+}
+
+/** GET …/sim-inputs — what the simulation charges per node (Pipeline "Sim 입력" lens). */
+export interface SimInputRow {
+  node_id: string
+  ip_ref?: string | null
+  role?: string | null
+  kind: 'hw' | 'sw'
+  cadence: { path: 'frame' | 'independent'; rate_hz: number | null; period_ms: number | null; per_frame: number | null; value_source?: string | null }
+  duration: { mean_ms: number | null; min_ms?: number | null; max_ms?: number | null; p95_ms?: number | null; basis: string; value_source?: string | null } | null
+  load: { cpu_ms_per_s?: number; duty_pct?: number; wall_ms_per_s?: number; included_hw_ms?: number; cpu_active_ratio?: number } | null
+  power: { mw: number | null; basis: string; status?: string | null } | null
+  bw_mbs: { read: number; write: number } | null
+}
+export interface SimInputCheck { kind: 'value' | 'rate' | 'add' | 'info'; node_id: string | null; title: string; detail: string }
+export interface SimInputs {
+  scenario_id: string
+  variant_id: string
+  fps: number | null
+  timing_case: string
+  simulation_ref: string | null
+  measurement_ref: string | null
+  rows: SimInputRow[]
+  totals: { sw_cpu_ms_per_s: number; independent_nodes: number }
+  checks: SimInputCheck[]
 }
 
 export interface VariantDetail {
@@ -290,6 +339,9 @@ export const api = {
   view: (scenarioId: string, variantId: string, level = 1) => getJson<ViewResponse>(variantId ? `/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}/view` : `/scenarios/${enc(scenarioId)}/view`, { level }),
   scenario: (scenarioId: string) => getJson<ScenarioDef>(`/scenarios/${enc(scenarioId)}`),
   variant: (scenarioId: string, variantId: string) => getJson<VariantDetail>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}`),
+  simInputs: (scenarioId: string, variantId: string) => getJson<SimInputs>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}/sim-inputs`),
+  /** variants with a full-stack trace or a sdb.handoff/1 document (Scenario page Behavior filter) */
+  behaviorIndex: (project?: string) => getJson<BehaviorEntry[]>(`/behavior/index${project ? `?project_ref=${enc(project)}` : ''}`),
   ipCatalog: (ipId: string) => getJson<IpCatalog>(`/ip-catalogs/${enc(ipId)}`),
   evidenceList: (scenarioId: string, variantId: string, projectRef?: string) => allPages<Evidence>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, project_ref: projectRef }, 200),
   evidence: (id: string) => getJson<Evidence>(`/evidence/${enc(id)}`),

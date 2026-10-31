@@ -100,6 +100,10 @@ def upsert_measurement(raw: dict, sha256: str, session: Session) -> None:
     ] or None
     row.vdd_power           = obj.vdd_power or None
     row.timeline_events     = list(obj.timeline_events) or None
+    row.handoff_flows       = (
+        obj.handoff_flows.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True)
+        if obj.handoff_flows else None
+    )
     row.artifacts           = [a.model_dump(exclude_none=True) for a in obj.artifacts] or None
     row.provenance          = obj.provenance.model_dump(exclude_none=True)
     row.yaml_sha256         = sha256
