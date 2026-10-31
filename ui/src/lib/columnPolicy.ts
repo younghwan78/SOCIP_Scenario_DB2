@@ -6,13 +6,16 @@ export interface IdleColumn { key: string; label: string; kind: 'empty' | 'const
 
 const text = (v: SortValue): string | null => (v === null || v === undefined || v === '' || v === '—' ? null : String(v))
 
-/** Columns among ``keys`` (value = the column's sort accessor) that are empty or constant over ``rows``. */
-export function idleColumns<T>(columns: Column<T>[], rows: T[], keys: string[], labelOf: (c: Column<T>) => string): IdleColumn[] {
+/** Columns among ``keys`` that are empty or constant over ``rows``. The value compared is the column's sort accessor, or
+ *  ``shown[key]`` where the sort key does not determine the cell (e.g. a date sort key over cells that also show power). */
+export function idleColumns<T>(columns: Column<T>[], rows: T[], keys: string[], labelOf: (c: Column<T>) => string,
+  shown: Record<string, (row: T) => SortValue> = {}): IdleColumn[] {
   if (!rows.length) return []
   const out: IdleColumn[] = []
   for (const c of columns) {
-    if (!keys.includes(c.key) || !c.sort) continue
-    const values = new Set(rows.map((r) => text(c.sort!(r))))
+    const value = shown[c.key] ?? c.sort
+    if (!keys.includes(c.key) || !value) continue
+    const values = new Set(rows.map((r) => text(value(r))))
     if (values.size === 1 && values.has(null)) out.push({ key: c.key, label: labelOf(c), kind: 'empty', value: null })
     else if (values.size === 1 && rows.length > 1) out.push({ key: c.key, label: labelOf(c), kind: 'constant', value: [...values][0] })
   }

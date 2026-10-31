@@ -24,6 +24,14 @@ describe('Compare headline guard (G-02)', () => {
     expect(html).not.toContain('＝+0.0')
     expect(html).toContain('미모델')
   })
+  it('renders while views are loading (a row with no values yet reads as missing, not a crash)', () => {
+    const html = render([
+      { group: 'BW', key: 'dram', label: 'DRAM', unit: 'MB/s', values: [] },
+      { group: 'Power', key: 'total_power_mw', label: 'Total power', unit: 'mW', values: [500] },
+    ])
+    expect(html).toContain('미계산')
+    expect(html).toContain('500.0')
+  })
   it('same-source values keep their Δ and ranking', () => {
     const html = render([{ group: 'Power', key: 'total_power_mw', label: 'Total power', unit: 'mW', values: [500, 600], sources: ['즉석 계산', '즉석 계산'] }])
     expect(html).toContain('+20.0%')

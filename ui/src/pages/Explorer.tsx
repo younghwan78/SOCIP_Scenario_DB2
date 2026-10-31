@@ -17,7 +17,7 @@ import { ProvBadge } from '../components/Provenance'
 import { VERDICT_HELP, VerdictPopover } from '../components/VerdictDetail'
 import { BasisInfoButton } from '../components/BasisDetail'
 import { MeasurePopover } from '../components/MeasurePopover'
-import { calibrationApi, freshnessOf, measTooltip, predictionTooltip, simTooltip, uniqueShortIds, type Coverage } from '../lib/calibration'
+import { calibrationApi, freshnessOf, measCellKey, measTooltip, predictionTooltip, predSw, shownMeas, simTooltip, swDiffers, uniqueShortIds, type Coverage } from '../lib/calibration'
 import { batteryNote, maText, useBattery } from '../lib/battery'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
 import { idleColumns } from '../lib/columnPolicy'
@@ -180,11 +180,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       sort: (r) => { const m = (cov(r.variant_id)?.measurements ?? [])[0]; return m ? `${m.synthetic ? 0 : 1}${m.at ?? ''}` : null },
       title: (r) => { const c = cov(r.variant_id); return c ? measTooltip(c) : '' },
       render: (r) => { const c = cov(r.variant_id); if (!covQ.data) return null
-        const m = (c?.measurements ?? []).find((x) => x.shown) ?? (c?.measurements ?? [])[0]
+        const m = shownMeas(c)
         if (!c || !m) return c && (c.measurement || c.synthetic) ? <span>{c.measurement ? '실측' : '합성'}</span> : <span className="faint">—</span>
-        // only a prediction fed by a measured trace has a SW build to compare; defined timing has none
-        const psw = c.current_prediction?.sw?.source === 'measured' ? c.current_prediction.sw.ref : null
-        const swDiff = psw && m.sw_baseline_ref && psw !== m.sw_baseline_ref
+        const psw = predSw(c), swDiff = swDiffers(c, m)
         return <button type="button" className={`link-btn ${m.synthetic ? 'meas-syn' : ''}`} aria-label={`${r.variant_id} 실측 상세`}
           onClick={(e) => { e.stopPropagation(); const b = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMeasAt(measAt?.id === m.id ? null : { id: m.id, scenario: r.scenario_id, x: b.left, y: b.bottom }) }}>
           {m.synthetic ? '합성 ' : ''}{(m.at ?? '').slice(5, 10).replace('-', '/') || '날짜?'}{m.total_mw != null ? <span className="mono faint"> · {m.total_mw.toFixed(0)}</span> : null}{swDiff ? <span className="fr fr-basis" title={`예측 SW ${psw} ≠ 측정 SW ${m.sw_baseline_ref}`}> · SW≠</span> : null}</button> } },
@@ -213,7 +211,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const [showIdle, setShowIdle] = usePref('explorer.idleCols', false)
   const dataReady = !!covQ.data && !boardQ.loading && !variantsQ.loading && !leverQ.loading
   const idle = dataReady ? idleColumns(columns, rows.filter((r) => showDerived || !r.derived_from_variant),
-    ['pred', 'meas', 'pw', 'vd', 'llc', 'sbwc', 'votf', 'load', ...COLS.map((c) => c.key)], (c) => (typeof c.label === 'string' ? c.label : c.key)) : []
+    ['pred', 'meas', 'pw', 'vd', 'llc', 'sbwc', 'votf', 'load', ...COLS.map((c) => c.key)], (c) => (typeof c.label === 'string' ? c.label : c.key),
+    { meas: (r) => measCellKey(cov(r.variant_id)) }) : []
   const shownColumns = showIdle ? columns : columns.filter((c) => !idle.some((i) => i.key === c.key))
   const idleTitle = idle.map((i) => `${i.label}: ${i.kind === 'empty' ? '전부 비어 있음' : `모두 ${i.value}`}`).join('\n')
 

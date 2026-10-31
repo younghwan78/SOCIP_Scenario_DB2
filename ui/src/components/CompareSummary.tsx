@@ -69,11 +69,13 @@ export function deltaText(d: Delta, unit: string, digits: number): string {
 }
 const ARROW = { good: '▼', bad: '▲', same: '＝' } as const
 
-export function CompareSummary({ items, metrics, battery = DEFAULT_BATTERY, batteries, onUnify }: { items: ItemInfo[]; metrics: MetricRow[]; battery?: Battery
+export function CompareSummary({ items, metrics: given, battery = DEFAULT_BATTERY, batteries, onUnify }: { items: ItemInfo[]; metrics: MetricRow[]; battery?: Battery
   /** per-column Vbat / efficiency (each result's project); ΔI = I(column) − I(★) with each column's own setting */
   batteries?: Battery[]
   /** recompute every column with the same simulation model (shown where a headline mixes sources) */
   onUnify?: () => void }) {
+  // one value per item: a row still loading (values = []) reads as missing, never as undefined
+  const metrics = given.map((m) => ({ ...m, values: items.map((_, i) => m.values[i] ?? null) }))
   const bat = (i: number) => batteries?.[i] ?? battery
   const mixedAt = (i: number) => !sameBattery(bat(i), bat(0))
   const anyMixed = items.some((_, i) => mixedAt(i))
