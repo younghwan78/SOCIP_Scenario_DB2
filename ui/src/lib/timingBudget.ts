@@ -62,6 +62,13 @@ export interface PowerSplit {
   cpu_profile?: CpuProfileTerm
   cpu_mw_flat?: number; bw_sw_mw_model?: number
 }
+/** CPU model the server applied: a requested profile model falls back to flat (no CPU profile for the variant,
+ * no cpu.clusters in the params) and says so in power.cpu_profile; before a result, the request. */
+export function appliedCpuModel(r: Pick<TimingReport, 'power'> | null | undefined, requested: CpuModel): CpuModel {
+  if (!r) return requested
+  return r.power.cpu_profile?.kind === 'profile' ? 'profile' : 'flat'
+}
+
 export interface CpuProfileTerm {
   kind: 'profile' | 'flat'; note?: string; profile_ref?: string | null; growth?: number
   clusters?: Record<string, { mhz: number; total_mw: number; busy_ms: number }>; dsu_mhz?: number | null; dsu_mw?: number

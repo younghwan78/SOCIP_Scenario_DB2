@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { updateExperimentContext } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, DEFAULT_STATISTIC, STAT_TIP, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
+import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -131,7 +131,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
           </select></label>
         <TimingInputsHelp inputs={{ statistic, throughput: effTp, margin, profile: prof, basisCode: sp.basis?.code ?? null, measured,
           measuredOption: (measQ.data ?? []).find((o) => o.id === measured?.measurement_ref) ?? null, powerParams: pp, defaultPowerParams: defaultPp,
-          pinnedDomains: Object.keys(overrides).sort(), cpuModel: measured?.cpu ? 'profile' : cpuModel }} />
+          pinnedDomains: Object.keys(overrides).sort(), cpuModel: appliedCpuModel(r, measured?.cpu ? 'profile' : cpuModel) }} />
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}
