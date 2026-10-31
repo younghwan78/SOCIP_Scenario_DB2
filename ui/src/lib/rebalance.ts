@@ -108,9 +108,11 @@ export function bigVerdict(b: NonNullable<RbStrategies['big_check']>): { text: s
 
 /** Budget verdict of a split. Own slack (budget − own time) decides feasibility; the shared bound (budget − own − same-CPU
  *  co-runner time, priority and phase ignored) only flags a risk: met on own time, missed if the task waits behind every co-runner. */
-export interface SlackVerdict { tier: 'ok' | 'shared' | 'miss'; task?: string; shared_ms?: number; wait_ms?: number }
+export interface SlackVerdict { tier: 'ok' | 'shared' | 'unchecked' | 'miss'; task?: string; shared_ms?: number; wait_ms?: number }
 export function slackVerdict(s: RbSplit): SlackVerdict {
   if (!s.feasible) return { tier: 'miss' }
+  // move-curve points come from the search model only: no co-runner check was run (≠ checked with no shared CPU = {})
+  if (s.response_ms === undefined && s.min_slack_shared_ms === undefined) return { tier: 'unchecked' }
   let worst: SlackVerdict | null = null
   for (const [t, resp] of Object.entries(s.response_ms ?? {})) {
     const own = s.slack_ms?.[t], ms = s.task_ms?.[t]
@@ -123,10 +125,11 @@ export function slackVerdict(s: RbSplit): SlackVerdict {
   if (!worst && s.min_slack_shared_ms != null && s.min_slack_shared_ms < -1e-3) return { tier: 'shared', shared_ms: s.min_slack_shared_ms }
   return { tier: 'ok' }
 }
-export const SLACK_TIER_LABEL: Record<SlackVerdict['tier'], string> = { ok: '충족', shared: '조건부', miss: '미충족' }
+export const SLACK_TIER_LABEL: Record<SlackVerdict['tier'], string> = { ok: '충족', shared: '조건부', unchecked: '자체 충족', miss: '미충족' }
 export function slackVerdictNote(v: SlackVerdict): string {
   if (v.tier === 'ok') return 'budget 충족 — 같은 CPU co-runner 대기를 모두 더해도 충족'
   if (v.tier === 'miss') return 'budget 미충족 (자체 실행시간 기준)'
+  if (v.tier === 'unchecked') return 'budget 충족 (자체 실행시간 기준) — 같은 CPU co-runner 대기는 이 분배에서 검사하지 않음 (상위 목록에서 검증)'
   const who = v.task ? `${v.task}: ` : ''
   const wait = v.wait_ms !== undefined ? ` (co-runner ${fmt(v.wait_ms, 2)} ms)` : ''
   return `조건부 충족 — 자체 실행시간으로는 충족, 같은 CPU co-runner를 모두 기다리면 ${who}slack ${fmt(v.shared_ms!, 2)} ms${wait}. `

@@ -29,6 +29,11 @@ describe('CPU rebalance slack verdict', () => {
     // rounding noise at zero is not a risk
     expect(slackVerdict(split({ response_ms: { post_crta: 0.5383 }, min_slack_shared_ms: -0.0003 })).tier).toBe('ok')
   })
+  it('a split without the co-runner check (move-curve point) is unchecked, not 충족', () => {
+    const v = slackVerdict(split({ response_ms: undefined, min_slack_shared_ms: undefined }))
+    expect(v.tier).toBe('unchecked')
+    expect(slackVerdictNote(v)).toContain('검사하지 않음')
+  })
   it('falls back to the minimum when an older server sends no per-task response', () => {
     const v = slackVerdict(split({ response_ms: undefined, min_slack_shared_ms: -2 }))
     expect(v).toEqual({ tier: 'shared', shared_ms: -2 })

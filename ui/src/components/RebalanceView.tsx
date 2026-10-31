@@ -179,8 +179,8 @@ export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; on
 }
 
 const SHARED_NOTE = 'budget − (자기 + 같은 CPU co-runner 실행시간) — 우선순위·위상을 무시한 대기 상한, 판정에는 쓰지 않음'
-const TIER_ORDER = { ok: 0, shared: 1, miss: 2 } as const
-const TIER_CLASS = { ok: 'v-ok', shared: 'v-warn', miss: 'v-fail' } as const
+const TIER_ORDER = { ok: 0, unchecked: 1, shared: 2, miss: 3 } as const
+const TIER_CLASS = { ok: 'v-ok', shared: 'v-warn', unchecked: 'v-na', miss: 'v-fail' } as const
 /** own-time verdict, with "조건부" when the shared-CPU wait bound misses */
 export function VerdictBadge({ s, long = false }: { s: RbSplit; long?: boolean }) {
   const v = slackVerdict(s)
@@ -189,7 +189,7 @@ export function VerdictBadge({ s, long = false }: { s: RbSplit; long?: boolean }
 }
 function verdictRow(s: RbSplit) {
   const v = slackVerdict(s)
-  return { k: '판정', v: v.tier === 'shared' ? `조건부${v.task ? ` (${v.task} ${fmt(v.shared_ms!, 2)} ms)` : ''}` : v.tier === 'ok' ? 'budget 충족' : '미충족',
+  return { k: '판정', v: v.tier === 'shared' ? `조건부${v.task ? ` (${v.task} ${fmt(v.shared_ms!, 2)} ms)` : ''}` : v.tier === 'ok' ? 'budget 충족' : v.tier === 'unchecked' ? 'budget 충족 (자체 · 대기 미검사)' : '미충족',
     tone: v.tier === 'ok' ? 'good' as const : v.tier === 'miss' ? 'bad' as const : 'muted' as const }
 }
 

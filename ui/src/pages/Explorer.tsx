@@ -212,8 +212,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const dataReady = !!covQ.data && !boardQ.loading && !variantsQ.loading && !leverQ.loading
   const idle = dataReady ? idleColumns(columns, rows.filter((r) => showDerived || !r.derived_from_variant),
     ['pred', 'meas', 'pw', 'vd', 'llc', 'sbwc', 'votf', 'load', ...COLS.map((c) => c.key)], (c) => (typeof c.label === 'string' ? c.label : c.key),
-    // compare the shown text where a sort key is coarser (rf sorts by the short side only; 실측 by date)
-    { meas: (r) => measCellKey(cov(r.variant_id)), ...Object.fromEntries(COLS.map((c) => [c.key, (r: VariantRow) => { const v = c.get(r.design_conditions); return v === MISSING ? null : v }])) }) : []
+    // compare the shown text where a sort key is coarser (rf: short side only · 실측: date · LLC: +? · vOTF: which links)
+    { meas: (r) => measCellKey(cov(r.variant_id)), llc: (r) => { const t = llcText(memOf(r.variant_id)); return t === MISSING ? null : t },
+      votf: (r) => (memOf(r.variant_id)?.votf?.length ? memOf(r.variant_id)!.votf!.join(', ') : null), ...Object.fromEntries(COLS.map((c) => [c.key, (r: VariantRow) => { const v = c.get(r.design_conditions); return v === MISSING ? null : v }])) }) : []
   const shownColumns = showIdle ? columns : columns.filter((c) => !idle.some((i) => i.key === c.key))
   const idleTitle = idle.map((i) => `${i.label}: ${i.kind === 'empty' ? '전부 비어 있음' : `모두 ${i.value}`}`).join('\n')
 
