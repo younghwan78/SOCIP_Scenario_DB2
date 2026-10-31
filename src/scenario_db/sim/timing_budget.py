@@ -1140,7 +1140,13 @@ def _verdict(stages, intervals, ips, domains=None, period: float | None = None) 
     rt = next(s for s in stages if s["id"] == "rt")
     if rt["hw_ms"] > rt["budget_ms"] * 1.0001:
         pct = round(100 * (1.0 - float(rt.get("margin", 0.25))))
-        reasons.append(f"RT HW {rt['hw_ms']:.2f} ms > {pct}% budget {rt['budget_ms']:.2f} ms")
+        msg = f"RT HW {rt['hw_ms']:.2f} ms > {pct}% budget {rt['budget_ms']:.2f} ms"
+        # read-out-clocked RT streams at the sensor rate: a faster clock cannot shorten it
+        readout = max((float(i.get("sensor_readout_ms") or 0.0) for i in ips if i.get("stage") == "rt"), default=0.0)
+        if readout > 0 and rt["hw_ms"] <= readout * 1.0001:
+            share = f" (frame period의 {100 * readout / period:.0f}%)" if period else ""
+            msg += f" — sensor readout {readout:.2f} ms{share}가 정하는 시간이라 clock으로 줄일 수 없음 (sensor mode · blanking 또는 margin 조정)"
+        reasons.append(msg)
     for key in ("preview", "video"):
         s = intervals[key]
         if s["ok"] is False:

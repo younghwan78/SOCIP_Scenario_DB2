@@ -75,6 +75,17 @@ def test_rt_keeps_25_percent_rule(graph_factory):
     assert rt["margin"] == 0.25
 
 
+def test_rt_over_budget_from_the_sensor_readout_names_the_readout(graph_factory):
+    # 8K30: the RT stream lasts the sensor read-out whatever the clock, so a 35% margin cannot be met by a clock raise
+    r = tb.analyze_timing_budget(graph_factory("cam-rec-r1-8k30-sdr"), tb.TimingBudgetOptions(rt_margin=0.35, output_margin=0.35))
+    rt = _stage(r, "rt")
+    assert rt["hw_ms"] > rt["budget_ms"]
+    [reason] = [x for x in r["verdict"]["reasons"] if x.startswith("RT HW")]
+    assert "— sensor readout" in reason and "clock으로 줄일 수 없음" in reason
+    # within the budget there is no RT reason at all
+    assert not [x for x in tb.analyze_timing_budget(graph_factory("cam-rec-r1-8k30-sdr"))["verdict"]["reasons"] if x.startswith("RT HW")]
+
+
 def test_mean_statistic_lowers_nrt_clock(graph_factory):
     g = graph_factory("cam-rec-r1-uhd30-vdis")
     mx = tb.summarize(g, tb.TimingBudgetOptions(statistic="max"))

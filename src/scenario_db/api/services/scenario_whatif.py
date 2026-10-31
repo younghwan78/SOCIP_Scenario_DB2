@@ -30,7 +30,7 @@ from scenario_db.sim.measured_timing import baseline_fingerprint
 from scenario_db.sim.service import _enforce_input_limits
 from scenario_db.sim.timing_budget import _stage_slack, analyze_timing_budget
 
-ENGINE_REV = "scenario-whatif/3"  # 3: SBWC mean ratio = typical in the engine baseline
+ENGINE_REV = "scenario-whatif/4"  # 4: v2-vf clock term uses the work clock; 3: SBWC mean ratio = typical in the engine baseline
 _log = logging.getLogger("scenario_db.api.analysis")
 
 

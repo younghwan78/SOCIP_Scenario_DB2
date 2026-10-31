@@ -125,14 +125,31 @@ def test_v2_equals_v1_without_a_clock_fraction():
     assert v2.total_power_mw == pytest.approx(v1.total_power_mw) and v2.clock_overhead_mw == 0.0
 
 
-def test_v2_charges_the_clock_set_above_the_throughput_need():
+def test_v2_charges_the_clock_set_above_the_work_clock():
     v1 = DvfsResolver(TABLE).resolve([_wl()])["isp"]
     cfg = DvfsResolver(TABLE, power_model=resolve_power_model("v2-vf")).resolve([_wl(clock_power_fraction=0.3)])["isp"]
-    ratio = cfg.set_clock_mhz / cfg.base_required_clock_mhz
+    # f_ref = pixels x fps / ppc: busy the whole period, without the SW-margin reserve of the set-clock rule
+    assert cfg.clock_ref_mhz == pytest.approx(3840 * 2160 * 30 / 2 / 1e6)
+    assert cfg.clock_ref_mhz == pytest.approx(cfg.base_required_clock_mhz * (1 - _wl().sw_margin))
+    ratio = cfg.set_clock_mhz / cfg.clock_ref_mhz
     assert ratio > 1
     assert cfg.total_power_mw == pytest.approx(v1.total_power_mw * (0.7 + 0.3 * ratio))
     assert cfg.clock_overhead_mw == pytest.approx(cfg.total_power_mw - v1.total_power_mw)
     assert cfg.clock_power_fraction == 0.3
+
+
+def test_v2_power_follows_the_sw_margin_only_through_the_set_clock():
+    model = resolve_power_model("v2-vf")
+    gated = {"clock_power_fraction": 0.3, "clock_gating_eff": 0.5, "power_gating_eff": 0.5, "leakage_mw": 5.0}
+    at = {m: DvfsResolver(TABLE, power_model=model).resolve([_wl(**gated).model_copy(update={"sw_margin": m})])["isp"]
+          for m in (0.05, 0.25, 0.45)}
+    # one 600 MHz level: every margin lands on the same clock and voltage, so the IP does the same work
+    assert {c.set_clock_mhz for c in at.values()} == {600.0}
+    assert at[0.05].base_required_clock_mhz < at[0.45].base_required_clock_mhz  # the rule still follows the margin
+    assert at[0.05].total_power_mw == pytest.approx(at[0.25].total_power_mw) == pytest.approx(at[0.45].total_power_mw)
+    # busy share = HW time / period
+    hw_ms = 3840 * 2160 / 2 / 600e6 * 1e3
+    assert at[0.25].clock_ref_mhz / at[0.25].set_clock_mhz == pytest.approx(hw_ms / (1000 / 30))
 
 
 def test_v2_default_fraction_comes_from_power_params():
@@ -159,7 +176,7 @@ def test_clock_reference_counts_physical_needs_but_not_alignment():
 
     model = resolve_power_model("v2-vf")
     need = _wl(clock_power_fraction=0.3)
-    throughput = DvfsResolver({}, power_model=model).resolve([need])["isp"].base_required_clock_mhz
+    throughput = DvfsResolver({}, power_model=model).resolve([need])["isp"].clock_ref_mhz  # work clock
     vvalid = need.model_copy(update={"clock_constraints": [ClockConstraint(kind="vvalid_stream", mhz=throughput * 2)],
                                      "clock_correction_mhz": throughput * 2})
     cfg = DvfsResolver({}, power_model=model).resolve([vvalid])["isp"]

@@ -34,6 +34,14 @@ def test_rt_budget_and_passthrough():
     assert first_text([], 30) == "원인 미기록"
 
 
+def test_read_out_bound_rt_points_at_the_sensor_not_the_clock():
+    e = explain("RT HW 23.35 ms > 65% budget 21.67 ms — sensor readout 23.35 ms (frame period의 70%)가 정하는 시간이라 "
+                "clock으로 줄일 수 없음 (sensor mode · blanking 또는 margin 조정)", 1.08)
+    assert e["code"] == "rt_budget" and "sensor readout 23.35 ms가 정함" in e["text"]
+    assert "clock으로는 줄지 않음" in e["action"] and "SW margin 29% 이하" in e["action"]  # 1 - 23.35 / 33.34
+    assert "RT clock ×" not in e["action"]
+
+
 def test_off_target_summary_kept_when_no_stream_detail():
     assert [e["code"] for e in explain_all(["preview/video interval off target"], 30)] == ["interval"]
 

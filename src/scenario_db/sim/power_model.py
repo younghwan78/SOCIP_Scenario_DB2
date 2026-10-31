@@ -172,10 +172,13 @@ class V2VfClockModel(V1VfpsModel):
 
     - ``P_v1`` = unit_power · MP · (V / ref_V)² · (fps / ref_fps): the work
       done per frame at the resolved voltage (unchanged physics).
-    - ``f_ref``: the clock the IP physically needs — throughput (pixels·fps /
-      util-cap / ppc) or a physical lower bound (sensor ingress, v-valid
-      streaming, SW-stage budget), whichever is higher; the operating point
-      ``unit_power_mw_mp`` stands for.
+    - ``f_ref``: the clock the IP physically needs — the work clock
+      (pixels·fps / ppc, busy the whole period; no SW-margin reserve) or a
+      physical lower bound (sensor ingress, v-valid streaming, SW-stage
+      budget), whichever is higher; the operating point ``unit_power_mw_mp``
+      stands for. busy = f_ref / f_set is then the IP's real activity
+      (HW time / period), and the SW margin changes power only through the
+      set clock and voltage it selects.
     - ``a`` (``clock_power_fraction``): share of that power that scales with
       the set clock instead of the work. Per IP/mode in the catalog sim block,
       otherwise ``power_model_params.ip_clock_power_fraction``, otherwise 0.
@@ -189,7 +192,7 @@ class V2VfClockModel(V1VfpsModel):
     """
 
     model_id: str = "v2-vf"
-    version: str = "1.1"
+    version: str = "1.2"  # 1.2: f_ref = work clock (was the SW-margin rule clock)
     default_clock_power_fraction: float = 0.0
 
     def with_params(self, params: PowerModelParams) -> V2VfClockModel:
