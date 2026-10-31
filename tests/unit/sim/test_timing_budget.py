@@ -139,6 +139,12 @@ def test_parallel_sw_chains_do_not_add(graph_factory):
     assert nrt["sw_ms"] < total  # front/rear chains run in parallel
     assert any(ip["shared_streams"] == 2 for ip in r["ips"])  # streams time-multiplexed on one IP
     assert r["intervals"]["ok"] is True
+    # the v2-vf clock term sees the IP's whole work clock (x streams), so the pair is not charged twice
+    plan = tb._plan(graph_factory("cam-rec-pip-uhd30"), tb.TimingBudgetOptions(), tb.SimulationRunConfig())
+    inputs = tb._budget_inputs(graph_factory("cam-rec-pip-uhd30"), tb.TimingBudgetOptions(), tb.SimulationRunConfig(), plan, plan["margins"])
+    shared = {w.node_id: w.time_shared_streams for w in inputs.workloads if w.node_id in plan["shared"]}
+    assert shared and set(shared.values()) == {2}
+    assert all(w.time_shared_streams is None for w in inputs.workloads if w.node_id not in plan["shared"])
 
 
 def test_mfc_dual_core_halves_clock_keeps_time(graph_factory):

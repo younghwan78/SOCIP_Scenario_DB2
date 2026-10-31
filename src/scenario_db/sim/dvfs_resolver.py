@@ -507,13 +507,14 @@ def _work_clock_mhz(workload: IPWorkload) -> float:
     """Clock that keeps the IP busy the whole frame period (pixels · fps / ppc): the power model's f_ref.
 
     No SW-margin reserve: the margin decides the set clock (``_base_required_mhz``), not the work, so with the
-    set clock unchanged a different margin must not change the busy share or the power.
+    set clock unchanged a different margin must not change the busy share or the power. A stream sharing its IP
+    with k-1 equal streams uses the IP's whole work clock (x k), so the k streams together pay one IP's clock cost.
     """
     if workload.readout_clocked:
         return 0.0
     params = workload.sim_params
     if workload.pixels > 0 and workload.fps > 0 and params.ppc > 0:
-        return workload.pixels * workload.fps / params.ppc / 1e6
+        return workload.pixels * workload.fps * (workload.time_shared_streams or 1) / params.ppc / 1e6
     return 0.0
 
 

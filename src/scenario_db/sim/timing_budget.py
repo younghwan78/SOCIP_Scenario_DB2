@@ -776,6 +776,9 @@ def _budget_inputs(graph, options, config, plan, margins) -> SimulationInputs:
         cores = plan["dual"].get(workload.node_id)
         if cores:
             workload.width = max(1, workload.width // cores)
+        shared = plan["shared"].get(workload.node_id, 1)
+        if shared > 1:
+            workload.time_shared_streams = shared  # the margin above carries the share for timing; power needs it too
     _apply_sw(inputs, plan, options)
     return inputs
 

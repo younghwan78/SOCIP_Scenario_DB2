@@ -152,6 +152,24 @@ def test_v2_power_follows_the_sw_margin_only_through_the_set_clock():
     assert at[0.25].clock_ref_mhz / at[0.25].set_clock_mhz == pytest.approx(hw_ms / (1000 / 30))
 
 
+def test_v2_streams_sharing_one_ip_pay_one_clock_cost():
+    """Two 2 MP streams time-multiplexed on one IP cost what one 4 MP stream does (no double clock charge)."""
+    model = resolve_power_model("v2-vf")
+    table = {"CAM": DVFSTable(domain="CAM", levels=[DVFSLevel(level=0, speed_mhz=160.0, voltages={4: 710.0})])}
+
+    def wl(node: str, height: int, **kw) -> IPWorkload:
+        return IPWorkload(node_id=node, ip_ref="ip-isp", hw_name="ISP", width=2000, height=height, fps=30.0,
+                          sim_params=IPSimParams(hw_name="ISP", ppc=1, unit_power_mw_mp=10, dvfs_group="CAM",
+                                                 clock_power_fraction=0.3), **kw)
+
+    alone = DvfsResolver(table, power_model=model).resolve([wl("isp", 2000)])["isp"]
+    pair = DvfsResolver(table, power_model=model).resolve([wl("a", 1000, time_shared_streams=2),
+                                                           wl("b", 1000, time_shared_streams=2)])
+    assert alone.total_power_mw == pytest.approx(44.0, rel=1e-3)        # 40 x (0.7 + 0.3 x 160 / 120)
+    assert pair["a"].total_power_mw + pair["b"].total_power_mw == pytest.approx(alone.total_power_mw)
+    assert pair["a"].clock_ref_mhz == pytest.approx(alone.clock_ref_mhz)  # the IP's whole work clock
+
+
 def test_v2_default_fraction_comes_from_power_params():
     model = resolve_power_model("v2-vf", _params(ip_model="v2-vf", ip_clock_power_fraction=0.2))
     cfg = DvfsResolver(TABLE, power_model=model).resolve([_wl()])["isp"]

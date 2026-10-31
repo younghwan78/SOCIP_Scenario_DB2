@@ -144,6 +144,9 @@ class IPWorkload(BaseScenarioModel):
     # read-out instead of the SW-margin rule (running faster buys nothing).
     sensor_readout_ms: float | None = Field(default=None, gt=0, exclude_if=lambda v: v is None)
     readout_clocked: bool = Field(default=False, exclude_if=lambda v: not v)
+    # Streams time-multiplexed on one physical IP (PIP / dual camera on one resource), equal shares: the IP's
+    # work clock is this stream's x k, so each stream pays only its share of the set-clock cost. None = alone.
+    time_shared_streams: int | None = Field(default=None, ge=1, exclude_if=lambda v: v is None)
     sim_params: IPSimParams
 
     @property
