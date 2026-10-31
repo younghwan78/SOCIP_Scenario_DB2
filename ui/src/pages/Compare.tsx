@@ -436,7 +436,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
           <span className="muted" style={{ fontSize: 12 }}>{pmTarget.sim!.id} ↔ {pmTarget.meas!.id}</span></div>
         {pmQ.error && <div className="err">{pmQ.error}</div>}
         {pmQ.data && <PredMeasGroups detail={pmQ.data} simId={pmTarget.sim!.id}
-          href={`#/calibration?scenario=${encodeURIComponent(cItems[pmTarget.i].scenario)}&variant=${encodeURIComponent(cItems[pmTarget.i].variant)}&m=${encodeURIComponent(pmTarget.meas!.id)}`} />}
+          href={`#/calibration?scenario=${encodeURIComponent(cItems[pmTarget.i].scenario)}&variant=${encodeURIComponent(cItems[pmTarget.i].variant)}&m=${encodeURIComponent(pmTarget.meas!.id)}&real=0&caps=1`} />}
       </> }] : undefined} />
   )
 }
