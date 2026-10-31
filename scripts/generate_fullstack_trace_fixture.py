@@ -2,7 +2,7 @@
 
 Writes one measurement evidence per scenario into ``db_Exynos2600_SM-S947B/03_evidence``:
 
-  camrec    uc-cam-recording-e2600 / cam-rec-r1-uhd30-vdis   (frame 30 Hz, vsync 60, VPS OD ÷5, ABOX 20 ms, AAC, 1 s chunk)
+  camrec    uc-cam-recording-e2600 / cam-rec-r1-uhd30-vdis   (frame 30 Hz, vsync 60, VPS_OD ÷5, ABOX 20 ms, AAC, 1 s chunk)
   youtube   uc-vid-youtube-e2600 / yt-1080p30-h264-sdr        (video frame 30 Hz, ExoPlayer tick 10 ms, vsync, AudioFlinger 20 ms, ABOX 10 ms, segment fetch)
   playback  uc-vid-playback-local-e2600 / vplay-local-h264-fhd30-sdr (video frame 30 Hz, vsync, UFS readahead)
   game      uc-game-play-e2600 / game-fhd-60fps-sdr           (game frame 60 Hz, vsync, touch 240 Hz)
@@ -138,7 +138,7 @@ CAMREC = {
     "cadences": [
         dict(id="frame", name="Sensor frame", kind="frame", period_ms=100 / 3, loops=["frame", "req"]),
         dict(id="vsync", name="Display vsync", kind="vsync", period_ms=1000 / 60, loops=["vsync"]),
-        dict(id="od", name="VPS OD", kind="divided", of="frame", every=5, note="object detection every 5th frame"),
+        dict(id="od", name="VPS_OD", kind="divided", of="frame", every=5, note="object detection every 5th frame"),
         dict(id="abox", name="ABOX period", kind="period", period_ms=20.0, loops=["abox"], note="48 kHz · 960 samples"),
         dict(id="aac", name="AAC frame", kind="period", period_ms=64 / 3, loops=["aac"], note="1024 samples @ 48 kHz"),
         dict(id="mux", name="MPEG4 chunk", kind="chunk", period_ms=1000.0, loops=["mux"], note="interleave chunk write"),
@@ -207,7 +207,7 @@ CAMREC = {
           branches={"sf.commit": "preview", "enc.feed": "encode", "app.result": "app result"},
           stop={"dpu.scan"},
           notes={"sensor.readout": "request는 4 frame 앞서 들어감 · 영상 buffer는 app을 거치지 않음",
-                 "vps.od": "VPS OD는 5 frame에 한 번 (6 Hz)", "eis.warp": "VDISCore가 gyro와 함께 warp matrix 계산"}),
+                 "vps.od": "VPS_OD는 5 frame에 한 번 (6 Hz)", "eis.warp": "VDISCore가 gyro와 함께 warp matrix 계산"}),
         F("audio-period", "Audio period", "abox", "aud.aac", 3, "up", notes_first="App은 MediaRecorder start / stop 제어만 · 주기 처리는 audioserver · mediaserver",
           summary="ABOX 20 ms period → audio HAL → AudioRecord → AAC (1024 sample)",
           notes={"abox.dsp": "frame과 무관한 독립 주기 · muxer에서 timestamp로 합류"}),

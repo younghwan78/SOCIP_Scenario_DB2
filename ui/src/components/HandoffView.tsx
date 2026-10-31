@@ -4,7 +4,7 @@
 // what runs independently (audio, UI, chunk write …) and where those loops hand work to each other.
 import { useMemo } from 'react'
 import type { HandoffDoc, HandoffStep } from '../lib/api'
-import { cadenceLinks, cadenceLabel, cadencePeriod, fmtHz, layerColor, layoutFlows, loopKind, LAYER_LABEL, type ColumnMode, type FlowLayout, type Frame } from '../lib/handoff'
+import { cadenceLinks, cadenceLabel, cadencePeriod, fmtHz, layerColor, layoutFlows, loopKind, LAYER_LABEL, stepName, type ColumnMode, type FlowLayout, type Frame } from '../lib/handoff'
 import { HANDOFF } from './TimelineView'
 
 export const ALL_LOOPS = 'all'
@@ -52,7 +52,7 @@ export function HandoffView({ doc, flowId, onFlow, mode, onMode, source, canOpen
         <span className="grow" />
         <span className="legend-mini">
           {Object.entries(HANDOFF).map(([k, v]) => <span key={k} className="legend-item"><svg width="18" height="6"><line x1="0" y1="3" x2="18" y2="3" stroke={v.color} strokeWidth="2" strokeDasharray={DASHED.has(k) ? '4 3' : undefined} /></svg>{v.label}</span>)}
-          <span className="legend-item">★ Pipeline node</span><span className="legend-item">Δ 대기</span>
+          <span className="legend-item" title="Pipeline timing에도 같은 이름으로 나오는 단계">★ Pipeline</span><span className="legend-item">Δ 대기</span>
         </span>
       </div>
       <LoopStrip doc={doc} active={active} onPick={(cad) => { const f = doc.flows.find((x) => x.cadence === cad); if (f) onFlow(f.id) }} />
@@ -213,16 +213,17 @@ function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: Extract<FlowLayout['r
   const color = HANDOFF[kind].color, dash = DASHED.has(kind) ? '5 3' : undefined
   const x2 = x(r.to)
   const last = r.folded?.[r.folded.length - 1]
-  const call = last ? `${s.call ?? s.task} → ${last.call ?? last.task}` : s.call ?? s.task ?? ''
-  const task = last ? `${r.folded!.length} 단계` : s.task && s.task !== s.call ? s.task : ''
+  // name as on the timelines (SENSOR_REAR, HAL_REQUEST); the call the trace recorded follows it, faint
+  const name = last ? `${stepName(s)} → ${stepName(last)}` : stepName(s)
+  const detail = last ? `${r.folded!.length} 단계` : s.call && s.call !== name ? s.call : ''
   const dur = last && s.t_ms !== undefined && last.t_ms !== undefined ? last.t_ms + (last.dur_ms ?? 0) - s.t_ms : s.dur_ms
   const label = <>
-    {s.node && <tspan fill="#B7791F">★ </tspan>}{call}
-    {task && <tspan fontFamily="var(--mono)" fontSize={10} fill="#8A8274"> {task}</tspan>}
+    {s.node && <tspan fill="#B7791F">★ </tspan>}{name}
+    {detail && <tspan fontSize={10} fill="#8A8274"> {detail}</tspan>}
     {dur !== undefined && <tspan fontFamily="var(--mono)" fontSize={10} fill="#6B6558"> {dur.toFixed(2)}</tspan>}
   </>
   const halo = { paintOrder: 'stroke' as const, stroke: '#fff', strokeWidth: 3 }
-  const labelW = chars(`★ ${call} ${task} 00.00`) * 0.95
+  const labelW = chars(`★ ${name} ${detail} 00.00`) * 0.95
   // labels next to the last column go left of its lifeline instead of into the badge column,
   // clear of the start marker (·→) when the row starts the unit
   const roomRight = W - RIGHT - x2 - 34 > labelW
@@ -242,7 +243,8 @@ function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: Extract<FlowLayout['r
   let bx = W - RIGHT + 10
   return (
     <g style={open ? { cursor: 'pointer' } : undefined} onClick={open}>
-      <title>{[`#${r.n} ${call}`, ...(r.folded ?? []).map((f) => `  · ${f.call ?? f.task} ${(f.dur_ms ?? 0).toFixed(2)} ms`), s.task && `task ${s.task}`, s.slice && `slice ${s.slice}`, s.node && `node ${s.node}`, `hand-off ${kind}`,
+      <title>{[`#${r.n} ${name}`, ...(r.folded ?? []).map((f) => `  · ${stepName(f)}${f.call ? ` (${f.call})` : ''} ${(f.dur_ms ?? 0).toFixed(2)} ms`),
+        !last && s.call && `call ${s.call}`, s.task && `trace 이름 ${s.task}`, s.slice && `slice ${s.slice}`, s.node && 'Pipeline timing에도 같은 이름', `hand-off ${kind}`,
         s.t_ms !== undefined && `t ${s.t_ms.toFixed(3)} ms · 실행 ${(s.dur_ms ?? 0).toFixed(3)} ms`, open && '클릭: Full-stack timing에서 열기'].filter(Boolean).join('\n')}</title>
       <rect x={0} y={y - h / 2} width={W} height={h} fill="transparent" />
       <circle cx={16} cy={y} r={9} fill="#3B3F4A" /><text x={16} y={y + 3.5} fontSize={9.5} fontWeight={700} textAnchor="middle" fill="#fff">{r.n}</text>

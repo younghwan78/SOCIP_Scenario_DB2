@@ -4,10 +4,13 @@ import type { TimelineEvent } from './api'
 
 export interface Slice {
   id: string; track: string; group: string; start: number; end: number; label: string; frame: number | null; nodeId: string | null; kind: string
+  /** common task name of the trace (sensor.readout): the key shared with hand-off documents; `label` is its display name */
+  task: string
   /** full-stack traces: layer and own-cadence period (ms) */
   layer?: string | null; period?: number | null
 }
-export interface Track { id: string; group: string; name: string }
+/** name = what the row shows; sub = faint context after it; context = full-stack process · thread */
+export interface Track { id: string; group: string; name: string; sub?: string; context?: string }
 export interface TrackGroup { name: string; tracks: Track[] }
 /** type = hand-off kind of the successor (kick | complete | ipc | irq | data), full-stack traces only */
 export interface Flow { from: string; to: string; type?: string }
@@ -30,17 +33,41 @@ export function groupForNode(node: string | null | undefined, kind: string | nul
   return 'SW'
 }
 
-function trackOf(e: TimelineEvent): { group: string; name: string } {
+/** Name of a task in Pipeline timing and every Behavior view: the Pipeline node in capitals (SENSOR_REAR),
+ *  else the common task name in the same form (hal.request → HAL_REQUEST). */
+export const displayName = (raw: string) => raw.replace(/^stage:/, '').replace(/[.\s-]+/g, '_').toUpperCase()
+
+function trackOf(e: TimelineEvent): { group: string; name: string; context?: string } {
   const parts = String(e.resource_name ?? '').split('/').map((s) => s.trim()).filter(Boolean)
-  if (parts.length >= 3) return { group: parts[1].toUpperCase(), name: parts.slice(2).join(' / ') }
+  if (parts.length >= 3) return { group: parts[1].toUpperCase(), name: parts.slice(2).join(' / '), context: parts.slice(2).join(' / ') }
   const group = groupForNode(e.node_id, e.task_type, e.resource_id)
   const raw = e.node_id ?? e.hw_name ?? e.resource_id ?? e.logical_task_id ?? e.task_id
-  return { group, name: String(raw).replace(/^stage:/, '').toUpperCase() }
+  return { group, name: displayName(String(raw)) }
 }
 
-function sliceLabel(e: TimelineEvent): string {
+function sliceTask(e: TimelineEvent): string {
   const base = e.logical_task_id ?? e.node_id ?? e.hw_name ?? e.task_id
-  return String(base).replace(/^stage:/, '').replace(/#f\d+$/, '')
+  return String(base).replace(/^stage:/, '').replace(/#[fc]\d+(\.\d+)?$/, '')
+}
+
+/** Full-stack tracks are execution contexts (process · thread). A HW track running one Pipeline node takes the
+ *  node's Pipeline name with the context after it (SENSOR_REAR  Sensor · rear readout); others show process, then thread. */
+function nameContextTracks(tracks: Iterable<Track>, slices: Slice[]) {
+  const nodes = new Map<string, Set<string | null>>()
+  for (const s of slices) nodes.set(s.track, (nodes.get(s.track) ?? new Set()).add(s.nodeId))
+  for (const t of tracks) {
+    if (!t.context) continue
+    const [proc, ...rest] = t.context.split(' · ')
+    const thread = rest.join(' · ')
+    const ns = [...(nodes.get(t.id) ?? [])]
+    if (t.group === 'HW' && ns.length === 1 && ns[0]) {
+      t.name = displayName(ns[0])
+      t.sub = displayName(thread) === t.name ? proc : t.context
+    } else {
+      t.name = proc
+      if (thread) t.sub = thread
+    }
+  }
 }
 
 /** Full-stack trace (events carry a `layer`): group order App → Framework → HAL → Kernel → FW → HW. */
@@ -56,12 +83,14 @@ export function buildTimeline(events: TimelineEvent[], opts: { maxFrames?: numbe
   const slices: Slice[] = kept.map((e) => {
     const t = trackOf(e)
     const id = `${t.group}/${t.name}`
-    if (!trackMap.has(id)) trackMap.set(id, { id, group: t.group, name: t.name })
+    if (!trackMap.has(id)) trackMap.set(id, { id, group: t.group, name: t.name, ...(t.context ? { context: t.context } : {}) })
+    const task = sliceTask(e)
     const s: Slice = { id: e.task_id, track: id, group: t.group, start: e.start_ms, end: e.end_ms,
-      label: sliceLabel(e), frame: e.frame_index ?? null, nodeId: e.node_id ?? null, kind: String(e.task_type ?? '') }
+      label: displayName(e.node_id ?? task), task, frame: e.frame_index ?? null, nodeId: e.node_id ?? null, kind: String(e.task_type ?? '') }
     if (e.layer) { s.layer = e.layer; s.period = e.cadence_period_ms ?? e.independent_period_ms ?? null }
     return s
   })
+  nameContextTracks(trackMap.values(), slices)
   const ids = new Set(slices.map((s) => s.id))
   const flows: Flow[] = []
   for (const e of kept) for (const p of e.predecessors ?? []) if (ids.has(p)) flows.push(e.handoff ? { from: p, to: e.task_id, type: e.handoff } : { from: p, to: e.task_id })

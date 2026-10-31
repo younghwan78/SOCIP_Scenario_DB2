@@ -107,12 +107,12 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
   const pan = useCallback((frac: number) => setRange(([a, b]) => { const d = (b - a) * frac; return [a + d, b + d] }), [])
 
   const rows = useMemo(() => {
-    const out: { kind: 'group' | 'track'; id: string; name: string; group: string; y: number }[] = []
+    const out: { kind: 'group' | 'track'; id: string; name: string; sub?: string; group: string; y: number }[] = []
     let y = 0
     for (const g of timeline.groups) {
       out.push({ kind: 'group', id: `g:${g.name}`, name: g.name, group: g.name, y }); y += ROW
       if (collapsed.has(g.name)) continue
-      for (const t of g.tracks) { out.push({ kind: 'track', id: t.id, name: t.name, group: g.name, y }); y += ROW }
+      for (const t of g.tracks) { out.push({ kind: 'track', id: t.id, name: t.name, sub: t.sub, group: g.name, y }); y += ROW }
     }
     return { list: out, height: y + 6 }
   }, [timeline, collapsed])
@@ -272,7 +272,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
             <g key={r.id}>
               <rect x={0} y={r.y} width={lw} height={ROW} fill="var(--surface-soft)" />
               {groupColor?.(r.group) && <rect x={0} y={r.y} width={4} height={ROW} fill={groupColor(r.group)} opacity={0.45} />}
-              <text x={20} y={r.y + 15} fontSize={11} fill="#4A4F5A">{r.name}</text>
+              <text x={20} y={r.y + 15} fontSize={11} fill="#4A4F5A">{r.sub && <title>{`${r.name} · ${r.sub}`}</title>}{r.name}{r.sub && <tspan fill="#8A8274" fontSize={10}>  {r.sub}</tspan>}</text>
               <line x1={0} y1={r.y + ROW} x2={width} y2={r.y + ROW} stroke="#F1ECE4" />
             </g>
           ))}
@@ -335,8 +335,9 @@ function sliceTip(s: Slice, tl: Timeline, color: string) {
     title: `${s.label}${s.frame !== null ? ` · f${s.frame}` : ''}`, color,
     head: { label: '소요 시간', value: `${dur.toFixed(3)} ms`, tone: 'strong' as const },
     rows: [
-      s.layer ? { k: '계층', v: `${s.group}${s.nodeId ? ` · node ${s.nodeId}` : ''}` }
+      s.layer ? { k: '계층', v: `${s.group}${s.nodeId ? ' · Pipeline timing에도 같은 이름' : ''}` }
         : { k: '분류', v: CAT_LABEL[sliceCat(s.group)] === s.group || sliceCat(s.group) === 'SW' ? CAT_LABEL[sliceCat(s.group)] : `${CAT_LABEL[sliceCat(s.group)]} · ${s.group}` },
+      ...(s.layer ? [{ k: 'trace 이름', v: s.task, tone: 'muted' as const }] : []),
       ...(s.period ? [{ k: '자기 주기', v: `${s.period.toFixed(2)} ms (${(1000 / s.period).toFixed(1)} Hz) · frame 경로 밖` }] : []),
       ...(origin !== undefined ? [{ k: 'frame 시작 기준', v: `+${(s.start - origin).toFixed(2)} → +${(s.end - origin).toFixed(2)} ms` }] : []),
       ...(prev ? [{ k: '직전 frame 대비 시작 간격', v: `${(s.start - prev.start).toFixed(3)} ms` }] : []),

@@ -125,8 +125,8 @@ function SelectionLine({ timeline, selected, flowMode }: { timeline: Timeline; s
   const track = timeline.groups.flatMap((g) => g.tracks).find((t) => t.id === selected.track)
   return (
     <div className="behavior-status">
-      <b>{selected.label}</b>{selected.nodeId && <span className="chip" title="Pipeline timing에 나오는 node">node {selected.nodeId}</span>}
-      <span>{selected.group} · {track?.name}</span>
+      <b title={`trace 이름 ${selected.task}`}>{selected.label}</b>{selected.nodeId && <PipelineChip />}
+      <span>{selected.group} · {track?.name}{track?.sub && <span className="faint"> {track.sub}</span>}</span>
       <span className="mono">{selected.start.toFixed(2)} → {selected.end.toFixed(2)} ms ({(selected.end - selected.start).toFixed(2)})</span>
       {selected.frame !== null ? <span className="mono">f{selected.frame}</span> : selected.period ? <span className="mono">자기 주기 {selected.period.toFixed(1)} ms</span> : null}
       <span className="faint">chain {chain.size - 1}단계 · {(b - a).toFixed(1)} ms{flowMode !== 'chain' ? ' (화살표: 선택 chain에서 표시)' : ''}</span>
@@ -134,10 +134,14 @@ function SelectionLine({ timeline, selected, flowMode }: { timeline: Timeline; s
   )
 }
 
+/** Marks a task that Pipeline timing shows under the same name. */
+const PipelineChip = () => <span className="chip" style={{ marginLeft: 6 }} title="Pipeline timing에도 같은 이름으로 나옴">Pipeline</span>
+
 /// ---------------------------------------------------------------- Cadence
 type PeriodBasis = 'doc' | 'trace' | 'frame' | 'window' | 'borrowed'
 export interface CadRow {
-  name: string; group: string; track: string; node: string | null; n: number; dur: number; min: number; max: number
+  /** display name (SENSOR_REAR, HAL_REQUEST); task = common name in the trace and the hand-off document */
+  name: string; task: string; group: string; track: string; trackSub?: string; node: string | null; n: number; dur: number; min: number; max: number
   period: number | null; frameLocked: boolean; load: number | null
   /** where the period comes from: hand-off document, trace-wide capture, frame gap, window gaps, or borrowed frame period */
   basis: PeriodBasis; cadence: string | null; ids: string[]
@@ -164,16 +168,16 @@ export function declaredCadences(doc: HandoffDoc | null | undefined): Map<string
 export function cadenceRows(tl: Timeline, doc?: HandoffDoc | null): CadRow[] {
   const declaredDoc = declaredCadences(doc)
   const byName = new Map<string, Slice[]>()
-  for (const s of tl.slices) byName.set(s.label, [...(byName.get(s.label) ?? []), s])
-  const trackName = new Map(tl.groups.flatMap((g) => g.tracks).map((t) => [t.id, t.name]))
+  for (const s of tl.slices) byName.set(s.task, [...(byName.get(s.task) ?? []), s])
+  const trackOf = new Map(tl.groups.flatMap((g) => g.tracks).map((t) => [t.id, t]))
   const median = (v: number[]) => (v.length ? [...v].sort((x, y) => x - y)[Math.floor(v.length / 2)] : null)
   const gapsOf = (ss: Slice[]) => ss.slice(1).map((s, i) => s.start - ss[i].start)
   // frame period = median start gap of frame-locked tasks seen more than once (a task seen once borrows it)
   const framePeriod = median([...byName.values()].filter((ss) => !ss.some((s) => s.period) && ss.some((s) => s.frame !== null) && ss.length > 1)
     .map((ss) => median(gapsOf([...ss].sort((x, y) => x.start - y.start)))!))
-  return [...byName.entries()].map(([name, ss]) => {
+  return [...byName.entries()].map(([task, ss]) => {
     ss.sort((x, y) => x.start - y.start)
-    const fromDoc = declaredDoc.get(name)
+    const fromDoc = declaredDoc.get(task)
     const declared = ss.find((s) => s.period)?.period ?? null
     const windowGap = median(gapsOf(ss))
     let period: number | null, basis: PeriodBasis, frameLocked: boolean
@@ -188,7 +192,8 @@ export function cadenceRows(tl: Timeline, doc?: HandoffDoc | null): CadRow[] {
     const durs = ss.map((s) => s.end - s.start)
     const dur = durs.reduce((a, b) => a + b, 0) / durs.length
     const sw = ss[0].group !== 'HW'
-    return { name, group: ss[0].group, track: trackName.get(ss[0].track) ?? '', node: ss[0].nodeId, n: ss.length, dur, min: Math.min(...durs), max: Math.max(...durs),
+    const track = trackOf.get(ss[0].track)
+    return { name: ss[0].label, task, group: ss[0].group, track: track?.name ?? '', trackSub: track?.sub, node: ss[0].nodeId, n: ss.length, dur, min: Math.min(...durs), max: Math.max(...durs),
       period, frameLocked, basis, cadence: fromDoc?.id ?? null, ids: ss.map((s) => s.id),
       load: period ? (sw ? dur * (1000 / period) : (dur * (1000 / period)) / 10) : null }
   }).sort((a, b) => (b.period ? 1000 / b.period : 0) - (a.period ? 1000 / a.period : 0) || FULLSTACK_GROUPS.indexOf(a.group) - FULLSTACK_GROUPS.indexOf(b.group))
@@ -210,8 +215,8 @@ export function CadenceTab({ timeline, doc, onOpenSlice, onOpenFlow }: { timelin
     return [...m.entries()].map(([key, rs]) => ({ key, rs, rate: hz(rs[0].period), frame: key === 'frame' }))
   }, [rows])
   const links = useMemo(() => {
-    const cls = new Map(rows.map((r) => [r.name, classKey(r)]))
-    const label = new Map(timeline.slices.map((s) => [s.id, s.label]))
+    const cls = new Map(rows.map((r) => [r.task, classKey(r)]))
+    const label = new Map(timeline.slices.map((s) => [s.id, s.task]))
     const m = new Map<string, number>()
     for (const f of timeline.flows) {
       const a = cls.get(label.get(f.from) ?? ''), b = cls.get(label.get(f.to) ?? '')
@@ -224,14 +229,14 @@ export function CadenceTab({ timeline, doc, onOpenSlice, onOpenFlow }: { timelin
     <div className="behavior-cadence">
       <CadenceMap classes={classes} links={links} onPick={(cls, e) => setPop({ cls, at: at(e) })} />
       <table className="grid cad-table">
-        <thead><tr><th>주기</th><th>task (공통 name)</th><th>계층 · thread</th><th className="num">rate Hz</th><th>근거</th><th className="num">실행 ms</th><th className="num">부하</th><th className="num">창 안 횟수</th></tr></thead>
+        <thead><tr><th>주기</th><th>task</th><th>계층 · thread</th><th className="num">rate Hz</th><th>근거</th><th className="num">실행 ms</th><th className="num">부하</th><th className="num">창 안 횟수</th></tr></thead>
         <tbody>
           {classes.map((c) => c.rs.map((r, i) => (
-            <tr key={r.name} className={i === 0 ? 'first' : ''} onClick={(e) => setPop({ row: r, at: at(e) })} title="클릭: 요약">
+            <tr key={r.task} className={i === 0 ? 'first' : ''} onClick={(e) => setPop({ row: r, at: at(e) })} title="클릭: 요약">
               {i === 0 && <td rowSpan={c.rs.length} className="cad-class" onClick={(e) => { e.stopPropagation(); setPop({ cls: c, at: at(e) }) }}>
                 <b>{c.frame ? 'frame' : `${fmtHz(c.rate)} Hz`}</b><div className="faint">{c.frame ? 'frame 경로' : '자기 주기 · frame 경로 밖'}</div></td>}
-              <td><span className="mono">{r.name}</span>{r.node && <span className="chip" style={{ marginLeft: 6 }} title="Pipeline timing에 나오는 node">{r.node}</span>}</td>
-              <td><span className="layer-dot" style={{ background: layerColor(r.group) }} />{r.group} · {r.track}</td>
+              <td><span className="mono" title={`trace 이름 ${r.task}`}>{r.name}</span>{r.node && <PipelineChip />}</td>
+              <td><span className="layer-dot" style={{ background: layerColor(r.group) }} />{r.group} · {r.track}{r.trackSub && <span className="faint"> {r.trackSub}</span>}</td>
               <td className="num mono">{fmtHz(hz(r.period))}</td>
               <td><span className={`basis b-${r.basis}`} title={BASIS_TEXT[r.basis]}>{{ doc: '문서', trace: 'capture', frame: 'frame', window: '창 추정', borrowed: '차용' }[r.basis]}</span></td>
               <td className="num mono">{r.dur.toFixed(2)}</td>
@@ -261,33 +266,34 @@ function CadencePopover({ pop, timeline, rows, doc, onClose, onRow, onOpenSlice,
         <span>CPU</span><span className="mono">{cpu.toFixed(1)} ms/s</span>
         <span>HW duty</span><span className="mono">{hw.length ? hw.map((r) => `${r.name} ${r.load?.toFixed(1) ?? '—'} %`).join(' · ') : '—'}</span>
       </div></Sec>
-      <Sec title="task"><div className="cad-pop-list">{c.rs.map((r) => <button key={r.name} className="link-btn" onClick={(e) => onRow(r, e)}>
+      <Sec title="task"><div className="cad-pop-list">{c.rs.map((r) => <button key={r.task} className="link-btn" onClick={(e) => onRow(r, e)}>
         <span className="layer-dot" style={{ background: layerColor(r.group) }} />{r.name} <span className="faint mono">{r.dur.toFixed(2)} ms</span></button>)}</div></Sec>
     </Shell>
   }
   const r = pop.row
   const ids = new Set(r.ids)
-  const label = new Map(timeline.slices.map((s) => [s.id, s.label]))
-  const cls = new Map(rows.map((x) => [x.name, x]))
-  const ends = (pick: 'from' | 'to', other: 'from' | 'to') => [...new Set(timeline.flows.filter((f) => ids.has(f[pick])).map((f) => label.get(f[other]) ?? ''))].filter((n) => n && n !== r.name)
+  const task = new Map(timeline.slices.map((s) => [s.id, s.task]))
+  const cls = new Map(rows.map((x) => [x.task, x]))
+  const ends = (pick: 'from' | 'to', other: 'from' | 'to') => [...new Set(timeline.flows.filter((f) => ids.has(f[pick])).map((f) => task.get(f[other]) ?? ''))].filter((n) => n && n !== r.task)
   const ins = ends('to', 'from'), outs = ends('from', 'to')
-  const rate = (n: string) => { const x = cls.get(n); return x ? (x.frameLocked ? 'frame' : `${fmtHz(hz(x.period))} Hz`) : '' }
-  const flows = (doc?.flows ?? []).filter((f) => f.steps.some((s) => s.task === r.name))
+  const named = (n: string) => { const x = cls.get(n); return x ? `${x.name} (${x.frameLocked ? 'frame' : `${fmtHz(hz(x.period))} Hz`})` : n }
+  const flows = (doc?.flows ?? []).filter((f) => f.steps.some((s) => s.task === r.task))
   const loop = r.cadence && doc ? `${cadenceLabel(doc, r.cadence)} · ${loopKind(doc, r.cadence)}` : null
-  return <Shell title={<>{r.name}{r.node && <span className="chip" style={{ marginLeft: 6 }}>node {r.node}</span>}</>} at={pop.at} onClose={onClose} width={480}>
+  return <Shell title={<>{r.name}{r.node && <PipelineChip />}</>} at={pop.at} onClose={onClose} width={480}>
     <Sec title="주기"><div className="vp-kv">
       <span>rate</span><span className="mono">{fmtHz(hz(r.period))} Hz{r.period ? ` · ${r.period.toFixed(2)} ms` : ''}</span>
       <span>loop</span><span>{loop ?? (r.frameLocked ? 'frame에 묶여 반복' : r.period ? 'frame과 독립적인 자기 주기' : '—')}</span>
       <span>근거</span><span>{BASIS_TEXT[r.basis]}</span>
     </div></Sec>
     <Sec title="실행"><div className="vp-kv">
-      <span>계층</span><span><span className="layer-dot" style={{ background: layerColor(r.group) }} />{r.group} · {r.track}</span>
+      <span>계층</span><span><span className="layer-dot" style={{ background: layerColor(r.group) }} />{r.group} · {r.track}{r.trackSub && <span className="faint"> {r.trackSub}</span>}</span>
+      <span>trace 이름</span><span className="mono faint">{r.task}</span>
       <span>실행 ms</span><span className="mono">mean {r.dur.toFixed(2)} · min {r.min.toFixed(2)} · max {r.max.toFixed(2)} (창 안 {r.n}회)</span>
       <span>부하</span><span className="mono">{loadText(r)}</span>
     </div></Sec>
     <Sec title="연결"><div className="vp-kv">
-      <span>받는 곳</span><span>{ins.length ? ins.map((n) => `${n} (${rate(n)})`).join(' · ') : '— (loop 시작)'}</span>
-      <span>넘기는 곳</span><span>{outs.length ? outs.map((n) => `${n} (${rate(n)})`).join(' · ') : '—'}</span>
+      <span>받는 곳</span><span>{ins.length ? ins.map(named).join(' · ') : '— (loop 시작)'}</span>
+      <span>넘기는 곳</span><span>{outs.length ? outs.map(named).join(' · ') : '—'}</span>
     </div></Sec>
     <div className="cad-pop-actions">
       <button className="btn" onClick={() => onOpenSlice(r.ids[0])}>Full-stack timing에서 보기</button>
