@@ -269,3 +269,15 @@ def test_lineage_differences_against_legacy_predictions():
     fields = {c["field"] for c in lineage_differences(None, new)}
     assert fields == {"bw_power_model", "bw_coefficient", "power_params_hash"}
     assert lineage_differences(None, run_model_lineage(SimulationRunConfig())) == []
+
+
+def test_lineage_reports_a_power_formula_revision():
+    v2_now = run_model_lineage(SimulationRunConfig(power_model="v2-vf"))
+    assert v2_now["power_model_version"] == "1.2"
+    # a v2-vf prediction stored before versions were recorded was made with 1.1 -> the formula changed
+    v2_before = {k: v for k, v in v2_now.items() if k != "power_model_version"}
+    assert lineage_differences(v2_before, v2_now) == [{"field": "power_model_version", "old": "1.1", "new": "1.2"}]
+    assert lineage_differences(v2_now, dict(v2_now)) == []
+    # v1 did not change: an unversioned v1 lineage still matches
+    v1_now = run_model_lineage(SimulationRunConfig())
+    assert lineage_differences({k: v for k, v in v1_now.items() if k != "power_model_version"}, v1_now) == []

@@ -1146,7 +1146,8 @@ def _verdict(stages, intervals, ips, domains=None, period: float | None = None) 
         if readout > 0 and rt["hw_ms"] <= readout * 1.0001:
             # the exact period lets readers derive the largest margin that fits (the budget % above is rounded)
             share = f" (frame period {period:.3f} ms의 {100 * readout / period:.0f}%)" if period else ""
-            msg += f" — sensor readout {readout:.2f} ms{share}가 정하는 시간이라 clock으로 줄일 수 없음 (sensor mode · blanking 또는 margin 조정)"
+            fix = "sensor mode · fps 하향" if period and readout >= period else "sensor mode · blanking 또는 margin 조정"
+            msg += f" — sensor readout {readout:.2f} ms{share}가 정하는 시간이라 clock으로 줄일 수 없음 ({fix})"
         reasons.append(msg)
     for key in ("preview", "video"):
         s = intervals[key]

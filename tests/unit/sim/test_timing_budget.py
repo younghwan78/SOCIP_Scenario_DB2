@@ -82,6 +82,13 @@ def test_rt_over_budget_from_the_sensor_readout_names_the_readout(graph_factory)
     assert rt["hw_ms"] > rt["budget_ms"]
     [reason] = [x for x in r["verdict"]["reasons"] if x.startswith("RT HW")]
     assert "— sensor readout" in reason and "clock으로 줄일 수 없음" in reason
+    assert "frame period 33.333 ms" in reason and "margin 조정" in reason
+    # at 60 fps the 8K read-out is longer than the period: no margin advice
+    from scenario_db.sim.models import SimulationRunConfig
+
+    fast = tb.analyze_timing_budget(graph_factory("cam-rec-r1-8k30-sdr"), config=SimulationRunConfig(fps=60))
+    [reason] = [x for x in fast["verdict"]["reasons"] if x.startswith("RT HW")]
+    assert "fps 하향" in reason and "margin 조정" not in reason
     # within the budget there is no RT reason at all
     assert not [x for x in tb.analyze_timing_budget(graph_factory("cam-rec-r1-8k30-sdr"))["verdict"]["reasons"] if x.startswith("RT HW")]
 

@@ -52,6 +52,9 @@ def test_read_out_bound_rt_points_at_the_sensor_not_the_clock():
     # no period in the line: the caller's frame period, else no margin advice
     assert "SW margin 29% 이하" in explain(_readout(65, 21.67, None), 1000 / 30)["action"]
     assert "SW margin" not in explain(_readout(65, 21.67, None))["action"]
+    # read-out longer than the period (8K read-out at 60 fps): no margin fixes it
+    long = explain(_readout(75, 12.50, 16.667))["action"]
+    assert "SW margin" not in long and "margin으로는 불가, fps 하향" in long
 
 
 def test_off_target_summary_kept_when_no_stream_detail():

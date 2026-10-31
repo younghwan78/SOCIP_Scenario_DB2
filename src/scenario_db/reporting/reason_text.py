@@ -44,7 +44,8 @@ def explain(reason: str, period_ms: float | None = None) -> dict[str, str]:
             period = float(m["period"]) if m["period"] else period_ms
             if period:
                 limit = math.floor(100 * (1 - (hw + 0.005) / period))
-                action += f", 또는 SW margin {max(0, limit)}% 이하"
+                # read-out longer than the frame period: no margin fits, only a shorter read-out or a lower fps
+                action += f", 또는 SW margin {limit}% 이하" if limit >= 0 else f" — readout이 frame period {period:.2f} ms보다 길어 margin으로는 불가, fps 하향"
             return {"code": "rt_budget", "raw": reason, "text": f"{text} — sensor readout {float(m['readout']):.2f} ms가 정함",
                     "action": action}
         return {"code": "rt_budget", "raw": reason, "text": text,
