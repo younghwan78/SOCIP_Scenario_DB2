@@ -188,9 +188,23 @@ scheduler:
   deadline_boost: true
   capacity: {}               # {MID_LF0: 350, ...} sysfs cpu_capacity
   energy_includes_static: false
-  task_policy:               # 현재 기기의 cpuset / uclamp / prefer_idle / threads
-    post_irta: {prefer_idle: true}
+  task_policy:               # 현재 기기의 cpuset / uclamp / prefer_idle / threads / 스케줄링 클래스
+    post_irta: {prefer_idle: true, sched_class: fifo, rt_priority: 1}
+    eis: {sched_class: normal, nice: -10}
 ```
+
+`sched_class`(`fifo` / `rr` / `normal`), `rt_priority`(1~99, RT), `nice`(−20~19, normal)는 `ps -eo cls,rtprio,ni,comm`
+또는 perfetto `sched_slice.priority`(RT = 99 − rt_priority, normal = 120 + nice) 값으로 채운다. 하나라도 지정하면
+같은 CPU를 쓰는 task의 응답을 우선순위로 계산해 `response_prio_ms` / `min_slack_prio_ms`로 낸다 (미지정 task = normal nice 0).
+
+| 클래스 | 같은 CPU에서 기다리는 시간 (frame 시작에 동시 실행 가능, frame당 1회) |
+|---|---|
+| RT (fifo / rr) | 같거나 높은 우선순위 RT co-runner 실행시간 합 (같은 우선순위는 먼저 깬 쪽이 앞 → 보수적으로 포함) |
+| normal | RT co-runner 전부 + normal co-runner마다 min(C_j, C × w_j / w) (nice weight 비율 공유) |
+
+placement · 전력 · `feasible`(자기 실행시간 기준)은 바뀌지 않는다. 재분배 화면의 판정 열만 이 값으로
+**충족 / 대기 미충족**을 가르고, 우선순위가 없으면 대기 상한(co-runner 전부)으로 **조건부**만 표시한다.
+위상(실제로 겹치지 않는 순차 stage), binder 우선순위 상속, RT placement(cpupri)는 모델에 없다.
 
 화면 구성:
 - ③ **Sweep 범위**: cluster 열(core 수 · capacity · OPP 범위), 칸 = fmax에서 task 시간(✓ budget 충족, ⚠ capacity 초과 = EAS가 보내지 않음), 체크 = sweep 포함(기본: budget을 맞출 수 있는 cluster), 파란 칸 = 측정 위치. thread 수·budget·증가 배율을 task별로 입력.

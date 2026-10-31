@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { fmt } from '../lib/timingBudget'
 import { partColor, sortClusters } from '../lib/powerModel'
-import { applyDsuRebalance, bigVerdict, SLACK_TIER_LABEL, slackVerdict, slackVerdictNote, strategyVerdict, type CpuRebalance, type RbBoundary, type RbSplit, type RbStrategyRow } from '../lib/rebalance'
+import { applyDsuRebalance, bigVerdict, schedText, SLACK_TIER_LABEL, slackVerdict, slackVerdictNote, strategyVerdict, type CpuRebalance, type RbBoundary, type RbSplit, type RbStrategyRow } from '../lib/rebalance'
 import { shiftVote, type DsuPolicy } from '../lib/dsu'
 import { useTip } from './ChartTip'
 import { useWidth } from './Charts'
@@ -179,23 +179,29 @@ export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; on
 }
 
 const SHARED_NOTE = 'budget − (자기 + 같은 CPU co-runner 실행시간) — 우선순위·위상을 무시한 대기 상한, 판정에는 쓰지 않음'
-const TIER_ORDER = { ok: 0, unchecked: 1, shared: 2, miss: 3 } as const
-const TIER_CLASS = { ok: 'v-ok', shared: 'v-warn', unchecked: 'v-na', miss: 'v-fail' } as const
-/** own-time verdict, with "조건부" when the shared-CPU wait bound misses */
+const PRIO_NOTE = 'budget − 우선순위 반영 응답 — RT는 같거나 높은 RT co-runner만, normal은 RT 전부 + nice 비율만큼 대기 (scheduler.task_policy)'
+const TIER_ORDER = { ok: 0, unchecked: 1, shared: 2, wait_miss: 3, miss: 4 } as const
+const TIER_CLASS = { ok: 'v-ok', shared: 'v-warn', wait_miss: 'v-fail', unchecked: 'v-na', miss: 'v-fail' } as const
+/** own-time verdict graded by the shared-CPU wait: 조건부 (bound, no priorities) / 대기 미충족 (with priorities) */
 export function VerdictBadge({ s, long = false }: { s: RbSplit; long?: boolean }) {
   const v = slackVerdict(s)
-  const text = long && v.tier === 'shared' ? `조건부 충족${v.task ? ` · ${v.task} 대기 시 ${fmt(v.shared_ms!, 2)} ms` : ''}` : SLACK_TIER_LABEL[v.tier]
+  const at = v.task ? ` · ${v.task} 대기 시 ${fmt(v.shared_ms!, 2)} ms` : ''
+  const text = long && v.tier === 'shared' ? `조건부 충족${at}` : long && v.tier === 'wait_miss' ? `대기 미충족${at}`
+    : long && v.tier === 'ok' && v.basis === 'priority' ? '충족 · 우선순위 반영' : SLACK_TIER_LABEL[v.tier]
   return <span className={`badge ${TIER_CLASS[v.tier]} rb-verdict`} title={slackVerdictNote(v)}>{text}</span>
 }
 function verdictRow(s: RbSplit) {
   const v = slackVerdict(s)
-  return { k: '판정', v: v.tier === 'shared' ? `조건부${v.task ? ` (${v.task} ${fmt(v.shared_ms!, 2)} ms)` : ''}` : v.tier === 'ok' ? 'budget 충족' : v.tier === 'unchecked' ? 'budget 충족 (자체 · 대기 미검사)' : '미충족',
-    tone: v.tier === 'ok' ? 'good' as const : v.tier === 'miss' ? 'bad' as const : 'muted' as const }
+  const at = v.task ? ` (${v.task} ${fmt(v.shared_ms!, 2)} ms)` : ''
+  return { k: '판정', v: v.tier === 'shared' ? `조건부${at}` : v.tier === 'wait_miss' ? `대기 미충족${at}` : v.tier === 'ok' ? 'budget 충족' : v.tier === 'unchecked' ? 'budget 충족 (자체 · 대기 미검사)' : '미충족',
+    tone: v.tier === 'ok' ? 'good' as const : v.tier === 'miss' || v.tier === 'wait_miss' ? 'bad' as const : 'muted' as const }
 }
 
 function SplitDetail({ s, r, title, knob = 'cpuset' }: { s: RbSplit; r: CpuRebalance; title: string; knob?: Knob }) {
   const units = r.units
-  const hasShared = Object.keys(s.response_ms ?? {}).length > 0
+  // with task_policy priorities the wait is the class / priority response, else the all-co-runners bound
+  const prio = !!s.response_prio_ms, response = s.response_prio_ms ?? s.response_ms ?? {}
+  const hasShared = Object.keys(response).length > 0
   return (
     <Card id="cpu-rb-detail" title={title} defaultWide note="task별 cluster · 시간 · budget" help={CPU_HELP.rbDetail}>
       <div className="toolbar" style={{ gap: 12, fontSize: 12, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -206,17 +212,18 @@ function SplitDetail({ s, r, title, knob = 'cpuset' }: { s: RbSplit; r: CpuRebal
       </div>
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th>task</th><th>측정 → 배치</th><th style={{ textAlign: 'right' }}>task ms</th><th style={{ textAlign: 'right' }}>budget</th><th style={{ textAlign: 'right' }}>slack</th>
-          {hasShared && <th style={{ textAlign: 'right' }} title={SHARED_NOTE}>대기 포함</th>}</tr></thead>
+          {hasShared && <th style={{ textAlign: 'right' }} title={prio ? PRIO_NOTE : SHARED_NOTE}>{prio ? '대기 (우선순위)' : '대기 포함'}</th>}</tr></thead>
         <tbody>{units.flatMap((u) => u.tasks.map((t) => {
-          const at = s.assign[u.unit] ?? u.home, ms = s.task_ms?.[t], sl = s.slack_ms?.[t], resp = s.response_ms?.[t]
+          const at = s.assign[u.unit] ?? u.home, ms = s.task_ms?.[t], sl = s.slack_ms?.[t], resp = response[t], cls = schedText(r.task_sched?.[t])
           const sh = sl !== undefined && ms !== undefined && resp !== undefined ? sl - (resp - ms) : undefined
-          return <tr key={t}><td className="mono">{t}{u.tasks.length > 1 && <span className="faint"> ({u.unit})</span>}</td>
+          return <tr key={t}><td className="mono">{t}{u.tasks.length > 1 && <span className="faint"> ({u.unit})</span>}
+            {cls && <span className="faint" style={{ fontSize: 11 }} title="scheduler.task_policy 스케줄링 클래스 · 우선순위"> · {cls}</span>}</td>
             <td>{u.home}{at !== u.home ? <b> → {at}</b> : ''}</td>
             <td className="mono" style={{ textAlign: 'right' }}>{ms !== undefined ? fmt(ms, 2) : '—'}</td>
             <td className="mono" style={{ textAlign: 'right' }}>{fmt(u.budget_ms, 2)}</td>
             <td className={`mono ${sl !== undefined && sl < 0 ? 'pm-up' : ''}`} style={{ textAlign: 'right' }}>{sl !== undefined ? fmt(sl, 2) : '—'}</td>
             {hasShared && <td className={`mono ${sh !== undefined && sh < -1e-3 ? '' : 'faint'}`} style={{ textAlign: 'right', color: sh !== undefined && sh < -1e-3 ? 'var(--warn-text)' : undefined }}
-              title={sh !== undefined ? `co-runner ${fmt(resp! - ms!, 2)} ms 포함 응답 ${fmt(resp!, 2)} ms (상한)` : '같은 CPU co-runner 없음'}>{sh !== undefined ? fmt(sh, 2) : '—'}</td>}</tr>
+              title={sh !== undefined ? `co-runner ${fmt(resp! - ms!, 2)} ms 포함 응답 ${fmt(resp!, 2)} ms (${prio ? '우선순위 반영' : '상한'})` : '같은 CPU co-runner 없음'}>{sh !== undefined ? fmt(sh, 2) : '—'}</td>}</tr>
         }))}</tbody>
       </table>
     </Card>
@@ -255,7 +262,7 @@ export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity,
     { key: 'dsu', label: 'DSU', width: 64, align: 'right', sort: (c) => c.mhz.dsu, render: (c) => <span className="mono">{c.mhz.dsu}</span> },
     { key: 'slack', label: 'slack ms', width: 70, align: 'right', sort: (c) => c.min_slack_ms ?? null, headTitle: '최소 slack = budget − 자기 실행시간 (판정 기준)',
       render: (c) => <span className={`mono ${c.min_slack_ms != null && c.min_slack_ms < 0 ? 'pm-up' : ''}`}>{c.min_slack_ms == null ? '—' : fmt(c.min_slack_ms, 2)}</span> },
-    { key: 'verdict', label: '판정', width: 78, headTitle: '충족 = 같은 CPU 대기를 모두 더해도 충족 · 조건부 = 자체 실행시간으로만 충족 (우선순위 미모델) · hover = 원인 task', sort: (c) => TIER_ORDER[slackVerdict(c).tier], render: (c) => <VerdictBadge s={c} /> },
+    { key: 'verdict', label: '판정', width: 78, headTitle: '충족 = 같은 CPU 대기를 더해도 충족 · 조건부 = 자체 실행시간으로만 충족 (우선순위 미지정) · 대기 미충족 = 우선순위(task_policy) 반영 대기로 budget 초과 · hover = 원인 task', sort: (c) => TIER_ORDER[slackVerdict(c).tier], render: (c) => <VerdictBadge s={c} /> },
     { key: 'mv', label: '옮긴 task → cluster', width: 420, title: (c) => c.moved.map((u) => `${u}→${c.assign[u]}`).join('\n'), render: (c) => <span className="mono faint" style={{ fontSize: 11.5 }}>{c.moved.map((u) => `${u}→${c.assign[u]}`).join(' · ') || <span className="badge">현재 배치 그대로</span>}</span> },
   ], [r]) // eslint-disable-line react-hooks/exhaustive-deps
   const tile = (label: string, value: string, note: string, tone = '') =>

@@ -176,3 +176,20 @@ def test_ratio_curves_move_units_onto_one_target_and_leave_search_unchanged():
     off = _run(ratio_curves=False)
     assert off["ratio_curves"] == []
     assert off["best"]["total_mw"] == r["best"]["total_mw"] and off["evaluated"] == r["evaluated"]
+
+
+def test_task_priorities_survive_the_per_split_policies():
+    """scheduler.task_policy sched_class reaches every verified split (policies are rebuilt per cluster assignment)."""
+    raw = yaml.safe_load((TOPO / "pmp-exynos2600-cpu-example.yaml").read_text(encoding="utf-8"))
+    raw["cpu"].setdefault("scheduler", {})["task_policy"] = {"isp": {"sched_class": "fifo", "rt_priority": 50}}
+    prio = cpu_rebalance(_profile("MID_LF0"), target=CpuPowerModel.from_params(PowerModelParams.model_validate(raw)), fps=30.0,
+                         spec=RebalanceSpec(budgets_ms=BUDGETS, dsu_mode="vote", dsu_vote=VOTE))
+    plain = _run()
+    assert [c["total_mw"] for c in prio["cases"]] == [c["total_mw"] for c in plain["cases"]]   # placement / power unchanged
+    assert "isp" in prio["reference"]["response_prio_ms"]       # isp shares a CPU in the measured placement
+    for c in [prio["reference"], *prio["cases"]]:
+        assert "response_prio_ms" in c and "min_slack_prio_ms" in c
+        if "isp" in c["response_prio_ms"]:                       # the RT task never waits behind normal co-runners
+            assert c["response_prio_ms"]["isp"] == pytest.approx(c["task_ms"]["isp"], abs=1e-3)
+    assert all("response_prio_ms" not in c for c in plain["cases"])
+    assert prio["task_sched"] == {"isp": {"sched_class": "fifo", "rt_priority": 50}} and "task_sched" not in plain

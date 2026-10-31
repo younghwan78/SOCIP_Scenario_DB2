@@ -171,13 +171,36 @@ class CpuDsuParams(BaseScenarioModel):
 
 
 class CpuTaskPolicy(BaseScenarioModel):
-    """Android scheduling attributes of one SW task (cpuset / affinity, uclamp, prefer_idle)."""
+    """Android scheduling attributes of one SW task (cpuset / affinity, uclamp, prefer_idle, class / priority).
+
+    ``sched_class`` / ``rt_priority`` / ``nice`` (``ps -eo cls,rtprio,ni``) only change the reported response on a
+    shared CPU (``response_prio_ms``); unset tasks count as SCHED_NORMAL nice 0 once any task sets a class.
+    """
 
     allowed: list[str] | None = None      # cluster names or core types (cpuset / affinity); None = all
     uclamp_min: int | None = Field(default=None, ge=0, le=1024)
     uclamp_max: int | None = Field(default=None, ge=0, le=1024)
     prefer_idle: bool = False             # latency-sensitive: take an idle CPU before saving energy
     threads: int | None = Field(default=None, ge=1, le=64)   # when the profile has no per-thread data
+    sched_class: Literal["fifo", "rr", "normal"] | None = None
+    rt_priority: int | None = Field(default=None, ge=1, le=99)   # fifo / rr
+    nice: int | None = Field(default=None, ge=-20, le=19)        # normal
+
+    @model_validator(mode="after")
+    def _class_fields(self) -> CpuTaskPolicy:
+        check_sched_class(self.sched_class, self.rt_priority, self.nice)
+        return self
+
+
+def check_sched_class(sched_class: str | None, rt_priority: int | None, nice: int | None) -> None:
+    """rt_priority only with fifo / rr (and required there), nice only with normal (YAML and API requests)."""
+    rt = sched_class in ("fifo", "rr")
+    if rt_priority is not None and not rt:
+        raise ValueError("task_policy.rt_priority needs sched_class fifo or rr")
+    if nice is not None and sched_class != "normal":
+        raise ValueError("task_policy.nice needs sched_class normal")
+    if rt and rt_priority is None:
+        raise ValueError("task_policy sched_class fifo / rr needs rt_priority (1..99)")
 
 
 class CpuSchedulerParams(BaseScenarioModel):

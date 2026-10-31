@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from scenario_db.sim import cpu_dsu
@@ -132,15 +132,13 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
             continue
         lock = spec.locks.get(task)
         if lock and lock != "exclude":
-            pinned[task] = TaskPolicy(allowed=(lock,), uclamp_min=base_pol.uclamp_min, uclamp_max=base_pol.uclamp_max,
-                                      prefer_idle=base_pol.prefer_idle)
+            pinned[task] = replace(base_pol, allowed=(lock,))
         else:
-            pinned[task] = TaskPolicy(allowed=tuple(measured[task]), uclamp_min=base_pol.uclamp_min,
-                                      uclamp_max=base_pol.uclamp_max, prefer_idle=base_pol.prefer_idle)
+            pinned[task] = replace(base_pol, allowed=tuple(measured[task]))
     ref_pol = dict(pinned)
     for task in unit_of:
         b = prep.base_policies.get(task, TaskPolicy())
-        ref_pol[task] = TaskPolicy(allowed=(home[task],), uclamp_min=b.uclamp_min, uclamp_max=b.uclamp_max, prefer_idle=b.prefer_idle)
+        ref_pol[task] = replace(b, allowed=(home[task],))
     slots, _ = eas_place(threads, ctx, ref_pol)
     frozen_at: dict[Thread, str] = {th: name for name, cpus in slots.items() for ths in cpus for th in ths if th.task not in unit_of}
     frozen: dict[str, list[Thread]] = {c: [th for th, n in frozen_at.items() if n == c] for c in every}
@@ -157,8 +155,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         for i, g in enumerate(units):
             for t in g:
                 b = prep.base_policies.get(t, TaskPolicy())
-                pol[t] = TaskPolicy(allowed=(pool[assign[i]],), uclamp_min=b.uclamp_min, uclamp_max=b.uclamp_max,
-                                    prefer_idle=b.prefer_idle)
+                pol[t] = replace(b, allowed=(pool[assign[i]],))
         return pol
 
     # ---- per-cluster state memo: (cluster, unit mask) -> state
@@ -176,7 +173,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         pol: dict[str, TaskPolicy] = {}
         for th in ths:
             b = prep.base_policies.get(th.task, TaskPolicy())
-            pol[th.task] = TaskPolicy(allowed=(c,), uclamp_min=b.uclamp_min, uclamp_max=b.uclamp_max, prefer_idle=b.prefer_idle)
+            pol[th.task] = replace(b, allowed=(c,))
         sl, over = eas_place(ths, ctx, pol)
         row = _cluster_eval(ctx, c, sl[c], pol)
         cl = ctx.by_name[c]
@@ -442,6 +439,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         if case is not None:
             out |= {"task_ms": case["task_ms"], "slack_ms": case["slack_ms"], "min_slack_ms": case["min_slack_ms"],
                     "response_ms": case["response_ms"], "min_slack_shared_ms": case["min_slack_shared_ms"],
+                    **{k: case[k] for k in ("response_prio_ms", "min_slack_prio_ms") if k in case},
                     "flags": case["flags"], "clusters": {n: {"mhz": r["mhz"], "busy_ms": r["busy_ms"], "total_mw": r["total_mw"], "util": r["util"]}
                                                          for n, r in case["clusters"].items()},
                     "dsu": case["dsu"], "verified": True}
@@ -619,6 +617,11 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "budget_source": budget_source,
         "warnings": warnings,
     }
+    # task_policy scheduling class / priority behind response_prio_ms (absent when none is set)
+    sched_of = {t: {k: v for k, v in p.describe().items() if k in ("sched_class", "rt_priority", "nice")}
+                for t, p in sorted(prep.base_policies.items()) if p.sched_class}
+    if sched_of:
+        out["task_sched"] = sched_of
     out["why"] = explain(out)
     return out
 

@@ -13,11 +13,14 @@ export interface RbSplit {
   task_ms?: Record<string, number>; slack_ms?: Record<string, number>; min_slack_ms?: number | null
   /** API ≥ 2026-10-28, shared CPU only: own + same-CPU co-runner time (upper bound) and the budget slack against it */
   response_ms?: Record<string, number>; min_slack_shared_ms?: number | null
+  /** only with scheduler.task_policy sched_class: shared-CPU response with the class / priority (RT preempts, nice share) */
+  response_prio_ms?: Record<string, number>; min_slack_prio_ms?: number | null
   flags?: Record<string, string[] | boolean>; verified?: boolean; model_err_mw?: number
   clusters?: Record<string, { mhz: number; busy_ms: number; total_mw: number; util: number }>
   dsu?: { mhz: number; active_ratio: number; total_mw: number } | null
   label?: string
 }
+export interface TaskSched { sched_class: 'fifo' | 'rr' | 'normal'; rt_priority?: number; nice?: number }
 export interface RbUnit { unit: string; tasks: string[]; home: string; budget_ms: number | null; budget_source?: 'user' | 'stretch' | null; threads: number; util_fmax: Record<string, number>; t_fmax_ms: Record<string, number> }
 export interface RbBoundary { cluster: string; mhz: number; mv: number; peak_cpu_util: number; capacity: number; sched_mhz?: number; boosted_by?: string[]; next_lower_mhz?: number; next_lower_mv?: number; delta_util_needed?: number; candidates?: [string, number][] }
 export interface RbState { mhz: Record<string, number>; count: number; min_mw: number; max_mw: number; representative: Record<string, string>; rep_mw: Record<string, number>; busy_mhz: Record<string, number>; dsu_active: number }
@@ -57,6 +60,8 @@ export interface CpuRebalance {
   timing_mode?: 'off' | 'stage_slack'
   /** stage_slack + latency_trade: what a longer pipeline latency (period-only search) would buy */
   latency_trade?: LatencyTrade | null
+  /** scheduling class / priority from scheduler.task_policy (absent when none is set; unset tasks = normal nice 0) */
+  task_sched?: Record<string, TaskSched>
 }
 export interface LatencyTrade { best_total_mw: number; moved: string[]; delta_mw: number; delta_vs_reference_mw: number; extra_latency_frames: number; min_slack_ms: number | null; impact: TimingImpact[] }
 export interface RatioPoint { util_pct: number; moved_unit: string | null; total_mw: number; feasible: boolean; mhz: Record<string, number> }
@@ -106,34 +111,56 @@ export function bigVerdict(b: NonNullable<RbStrategies['big_check']>): { text: s
   return { text: `BIG 사용 이득 없음: 가장 유리한 경우(${m.unit} → ${m.cluster})도 +${m.delta_mw.toFixed(1)} mW.`, tone: 'ok' }
 }
 
-/** Budget verdict of a split. Own slack (budget − own time) decides feasibility; the shared bound (budget − own − same-CPU
- *  co-runner time, priority and phase ignored) only flags a risk: met on own time, missed if the task waits behind every co-runner. */
-export interface SlackVerdict { tier: 'ok' | 'shared' | 'unchecked' | 'miss'; task?: string; shared_ms?: number; wait_ms?: number }
-export function slackVerdict(s: RbSplit): SlackVerdict {
-  if (!s.feasible) return { tier: 'miss' }
-  // move-curve points come from the search model only: no co-runner check was run (≠ checked with no shared CPU = {})
-  if (s.response_ms === undefined && s.min_slack_shared_ms === undefined) return { tier: 'unchecked' }
-  let worst: SlackVerdict | null = null
-  for (const [t, resp] of Object.entries(s.response_ms ?? {})) {
+/** Budget verdict of a split. Own slack (budget − own time) decides feasibility. The wait on a shared CPU only grades it:
+ *  with task_policy priorities (``response_prio_ms``) the class / priority response decides 충족 vs 대기 미충족; without them
+ *  the bound (every same-CPU co-runner ahead, priority and phase ignored) can only say 조건부. */
+export interface SlackVerdict {
+  tier: 'ok' | 'shared' | 'wait_miss' | 'unchecked' | 'miss'; task?: string; shared_ms?: number; wait_ms?: number
+  /** which wait the tier rests on: scheduling class / priority, or the all-co-runners bound */
+  basis?: 'priority' | 'bound'
+}
+/** task with the lowest budget − response (= own slack − wait) */
+function worstWait(s: RbSplit, response: Record<string, number>): { task: string; shared_ms: number; wait_ms: number } | null {
+  let worst: { task: string; shared_ms: number; wait_ms: number } | null = null
+  for (const [t, resp] of Object.entries(response)) {
     const own = s.slack_ms?.[t], ms = s.task_ms?.[t]
     if (own === undefined || ms === undefined) continue
-    const shared = own - (resp - ms)   // = budget − response
-    if (!worst || shared < worst.shared_ms!) worst = { tier: 'shared', task: t, shared_ms: shared, wait_ms: resp - ms }
+    if (!worst || own - (resp - ms) < worst.shared_ms) worst = { task: t, shared_ms: own - (resp - ms), wait_ms: resp - ms }
   }
-  if (worst && worst.shared_ms! < -1e-3) return worst
-  // older servers send only the minimum
-  if (!worst && s.min_slack_shared_ms != null && s.min_slack_shared_ms < -1e-3) return { tier: 'shared', shared_ms: s.min_slack_shared_ms }
-  return { tier: 'ok' }
+  return worst
 }
-export const SLACK_TIER_LABEL: Record<SlackVerdict['tier'], string> = { ok: '충족', shared: '조건부', unchecked: '자체 충족', miss: '미충족' }
+export function slackVerdict(s: RbSplit): SlackVerdict {
+  if (!s.feasible) return { tier: 'miss' }
+  if (s.response_prio_ms) {
+    const w = worstWait(s, s.response_prio_ms)
+    return w && w.shared_ms < -1e-3 ? { tier: 'wait_miss', basis: 'priority', ...w } : { tier: 'ok', basis: 'priority' }
+  }
+  // move-curve points come from the search model only: no co-runner check was run (≠ checked with no shared CPU = {})
+  if (s.response_ms === undefined && s.min_slack_shared_ms === undefined) return { tier: 'unchecked' }
+  const w = worstWait(s, s.response_ms ?? {})
+  if (w && w.shared_ms < -1e-3) return { tier: 'shared', basis: 'bound', ...w }
+  // older servers send only the minimum
+  if (!w && s.min_slack_shared_ms != null && s.min_slack_shared_ms < -1e-3) return { tier: 'shared', basis: 'bound', shared_ms: s.min_slack_shared_ms }
+  return { tier: 'ok', basis: 'bound' }
+}
+export const SLACK_TIER_LABEL: Record<SlackVerdict['tier'], string> = { ok: '충족', shared: '조건부', wait_miss: '대기 미충족', unchecked: '자체 충족', miss: '미충족' }
 export function slackVerdictNote(v: SlackVerdict): string {
-  if (v.tier === 'ok') return 'budget 충족 — 같은 CPU co-runner 대기를 모두 더해도 충족'
+  if (v.tier === 'ok') return v.basis === 'priority'
+    ? 'budget 충족 — 같은 CPU 대기를 스케줄링 클래스 · 우선순위(task_policy)로 계산해도 충족'
+    : 'budget 충족 — 같은 CPU co-runner 대기를 모두 더해도 충족'
   if (v.tier === 'miss') return 'budget 미충족 (자체 실행시간 기준)'
   if (v.tier === 'unchecked') return 'budget 충족 (자체 실행시간 기준) — 같은 CPU co-runner 대기는 이 분배에서 검사하지 않음 (상위 목록에서 검증)'
   const who = v.task ? `${v.task}: ` : ''
   const wait = v.wait_ms !== undefined ? ` (co-runner ${fmt(v.wait_ms, 2)} ms)` : ''
+  if (v.tier === 'wait_miss') return `대기 미충족 — 자체 실행시간으로는 충족, 스케줄링 클래스 · 우선순위(task_policy)로 같은 CPU 대기를 더하면 ${who}slack ${fmt(v.shared_ms!, 2)} ms${wait}. `
+    + '우선순위 상향(RT) 또는 co-runner 분리 검토'
   return `조건부 충족 — 자체 실행시간으로는 충족, 같은 CPU co-runner를 모두 기다리면 ${who}slack ${fmt(v.shared_ms!, 2)} ms${wait}. `
-    + '우선순위 미모델: RT 우선순위 또는 co-runner 분리가 필요'
+    + '우선순위 미지정: scheduler.task_policy에 sched_class · rt_priority / nice를 넣으면 충족 / 대기 미충족으로 판정'
+}
+/** "FIFO 2" / "RR 5" / "nice −10" / "nice 0" */
+export function schedText(p: TaskSched | undefined): string | null {
+  if (!p) return null
+  return p.sched_class === 'normal' ? `nice ${(p.nice ?? 0) < 0 ? '−' : ''}${Math.abs(p.nice ?? 0)}` : `${p.sched_class.toUpperCase()} ${p.rt_priority ?? 1}`
 }
 
 /** client default pool when no result yet: clusters whose name has no "BIG" (≥ 2), else all */

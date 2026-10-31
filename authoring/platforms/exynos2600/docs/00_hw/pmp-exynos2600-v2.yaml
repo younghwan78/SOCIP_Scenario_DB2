@@ -167,8 +167,36 @@ cpu:
     capacity: {}
     energy_includes_static: false
     task_policy:
+      # sched_class / rt_priority / nice: ASSUMED example (AOSP defaults where they exist) - replace with the
+      # device's values (ps -eo cls,rtprio,ni,comm or perfetto sched_slice.priority); unset = SCHED_NORMAL nice 0
+      surfaceflinger:
+        sched_class: fifo
+        rt_priority: 2
+      audio_hal:
+        sched_class: normal
+        nice: -19
+      camera_hal_request:
+        sched_class: normal
+        nice: -10
+      camera_hal_result:
+        sched_class: normal
+        nice: -10
+      c2_encoder:
+        sched_class: normal
+        nice: -10
+      eis:
+        sched_class: normal
+        nice: -10
+      pre_me_rta:
+        sched_class: fifo
+        rt_priority: 1
+      post_crta:
+        sched_class: fifo
+        rt_priority: 1
       post_irta:
         prefer_idle: true
+        sched_class: fifo
+        rt_priority: 1
     source: SYNTHETIC example - replace with the device's EAS / governor tunables
   source: SYNTHETIC example - replace opps/leakage with the in-house EM table and rail names
 calibration:

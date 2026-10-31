@@ -54,6 +54,19 @@ top candidates are checked with full scheduler evaluation; `verified` and
 `model_err_mw` expose that check. A local-search best is the best found candidate,
 not a guarantee of a global optimum.
 
+## Shared-CPU wait
+
+Verified splits report `task_ms` / `slack_ms` (own time; `feasible` uses only these),
+and for tasks on a shared CPU `response_ms` / `min_slack_shared_ms`: an upper bound with
+every same-CPU co-runner ahead. When any `scheduler.task_policy` entry sets
+`sched_class` (`fifo` / `rr` with `rt_priority`, or `normal` with `nice`), verified
+splits also report `response_prio_ms` / `min_slack_prio_ms` (RT waits for higher or
+equal RT co-runners only; normal waits for all RT plus a nice-weighted share of each
+normal co-runner; unset tasks are normal nice 0), and the result lists `task_sched`.
+Placement, power, `feasible` and ranking do not change; clients grade the verdict
+with the priority response when present, else mark a negative bound as conditional.
+Move-curve points carry no wait fields.
+
 ## SW growth sweep
 
 `POST /cpu/rebalance/sweep` accepts the rebalance request plus 2–13 `growths`

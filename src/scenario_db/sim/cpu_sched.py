@@ -74,9 +74,30 @@ class TaskPolicy:
     uclamp_max: float = SCALE
     prefer_idle: bool = False
     threads: int | None = None
+    sched_class: str | None = None    # "fifo" / "rr" (RT) or "normal" (CFS/EEVDF); None = SCHED_NORMAL nice 0
+    rt_priority: int | None = None    # 1..99, RT only
+    nice: int | None = None           # -20..19, normal only
 
     def clamp(self, util: float) -> float:
         return min(max(util, self.uclamp_min), self.uclamp_max)
+
+    @property
+    def is_rt(self) -> bool:
+        return self.sched_class in ("fifo", "rr")
+
+    @property
+    def kernel_prio(self) -> int:
+        """Linux ``task->prio``: lower runs first (RT 0..98 = 99 - rt_priority, normal 100..139 = 120 + nice)."""
+        return 99 - (self.rt_priority or 1) if self.is_rt else 120 + self.nice_value
+
+    @property
+    def weight(self) -> int:
+        return _NICE_WEIGHT[self.nice_value + 20]
+
+    @property
+    def nice_value(self) -> int:
+        """nice counts only for SCHED_NORMAL (a stray nice without the class is ignored, as validation rejects it)"""
+        return (self.nice or 0) if self.sched_class == "normal" else 0
 
     def describe(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -90,10 +111,47 @@ class TaskPolicy:
             out["prefer_idle"] = True
         if self.threads:
             out["threads"] = self.threads
+        if self.sched_class:
+            out["sched_class"] = self.sched_class
+            if self.is_rt:
+                out["rt_priority"] = self.rt_priority or 1
+            elif self.nice:
+                out["nice"] = self.nice
         return out
 
 
 _DEFAULT_POLICY = TaskPolicy()
+# Linux sched_prio_to_weight, nice -20..19
+_NICE_WEIGHT = (88761, 71755, 56483, 46273, 36291, 29154, 23254, 18705, 14949, 11916,
+                9548, 7620, 6100, 4904, 3906, 3121, 2501, 1991, 1586, 1277,
+                1024, 820, 655, 526, 423, 335, 272, 215, 172, 137,
+                110, 87, 70, 56, 45, 36, 29, 23, 18, 15)
+
+
+def priority_response(ths: list[Thread], own: list[float], policies: dict[str, TaskPolicy]) -> list[float]:
+    """Response per thread of one CPU with the scheduling class / priority, all released at the frame start.
+
+    One activation per frame, so a co-runner interferes once within the frame (ceil(R/T) = 1):
+    RT     R = C + sum C_j over RT co-runners of higher or equal priority (FIFO order among equals unknown)
+    normal R = C + sum C_j over RT co-runners + sum min(C_j, C * w_j / w) over normal co-runners
+           (fair share by nice weight while both are runnable; a shorter co-runner finishes first)
+    Blocking (non-preemptible sections, binder priority inheritance) and RT placement (cpupri) are not modelled.
+    """
+    pols = [policies.get(th.task, _DEFAULT_POLICY) for th in ths]
+    out: list[float] = []
+    for i, (p, c) in enumerate(zip(pols, own)):
+        r = c
+        for j, (q, cj) in enumerate(zip(pols, own)):
+            if j == i:
+                continue
+            if p.is_rt:
+                r += cj if q.is_rt and q.kernel_prio <= p.kernel_prio else 0.0
+            elif q.is_rt:
+                r += cj
+            else:
+                r += min(cj, c * q.weight / p.weight)
+        out.append(r)
+    return out
 
 
 def policy_from(raw: Any) -> TaskPolicy:
@@ -111,6 +169,9 @@ def policy_from(raw: Any) -> TaskPolicy:
         uclamp_max=float(umax) if umax is not None else SCALE,
         prefer_idle=bool(data.get("prefer_idle") or False),
         threads=int(data["threads"]) if data.get("threads") else None,
+        sched_class=data.get("sched_class") or None,
+        rt_priority=int(data["rt_priority"]) if data.get("rt_priority") is not None else None,
+        nice=int(data["nice"]) if data.get("nice") is not None else None,
     )
 
 
@@ -483,6 +544,9 @@ def evaluate(
     # upper bound with every co-runner of the same CPU ahead of the thread (no priority model): task_ms stays the
     # own-time value used for feasibility; this bound shows how optimistic it is on a shared CPU
     response_ms: dict[str, float] = {}
+    # opt-in (any task_policy with sched_class): response with the scheduling class / priority instead of the bound
+    prio_model = any(p.sched_class for p in policies.values())
+    response_prio: dict[str, float] = {}
     overloaded = False
     for c in ctx.model.clusters:
         row = _cluster_eval(ctx, c.name, slots[c.name], policies)
@@ -492,17 +556,21 @@ def evaluate(
             if len({t.task for t in ths}) > 1:
                 shared.update(t.task for t in ths)
             own = [th.ms(c, row["mhz"]) for th in ths]
-            for th, ms in zip(ths, own):
+            prio = priority_response(ths, own, policies) if prio_model else own
+            for th, ms, rp in zip(ths, own, prio):
                 task_ms[th.task] = max(task_ms.get(th.task, 0.0), ms)
                 response_ms[th.task] = max(response_ms.get(th.task, 0.0), sum(own))
+                response_prio[th.task] = max(response_prio.get(th.task, 0.0), rp)
                 where.setdefault(th.task, set()).add(c.name)
                 signature.append((th.label, c.name, index))
         overloaded = overloaded or any(r["overloaded"] for r in row["cpus"])
     # every CPU of a task counts (an unshared long thread can dominate); reported for shared tasks only
     response_ms = {t: v for t, v in response_ms.items() if t in shared}
+    response_prio = {t: v for t, v in response_prio.items() if t in shared} if prio_model else {}
     period = ctx.period
     slack = {t: round(budgets_ms[t] - task_ms.get(t, 0.0), 4) for t in budgets_ms if t in task_ms}
     slack_shared = {t: round(budgets_ms[t] - response_ms[t], 4) for t in budgets_ms if t in response_ms}
+    slack_prio = {t: round(budgets_ms[t] - response_prio[t], 4) for t in budgets_ms if t in response_prio}
     misses = sorted(t for t, s in slack.items() if s < -1e-9)
     late = sorted(t for t, ms in task_ms.items() if ms > period + 1e-9)
     feasible = not overloaded and not misses and not late
@@ -539,6 +607,9 @@ def evaluate(
         "response_ms": {t: round(v, 4) for t, v in sorted(response_ms.items())},
         "slack_shared_ms": slack_shared,
         "min_slack_shared_ms": min(slack_shared.values()) if slack_shared else None,
+        # only with priorities in task_policy (else absent): response with the class / priority, not used for feasibility
+        **({"response_prio_ms": {t: round(v, 4) for t, v in sorted(response_prio.items())}, "slack_prio_ms": slack_prio,
+            "min_slack_prio_ms": min(slack_prio.values()) if slack_prio else None} if prio_model else {}),
         "flags": {k: v for k, v in {"overutilized": sorted(set(overutilized)), "budget_miss": misses,
                                     "over_period": late, "shared_cpu": sorted(shared),
                                     "overloaded_cpu": overloaded}.items() if v},
