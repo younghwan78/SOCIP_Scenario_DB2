@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { Ctx } from '../App'
 
-export type Lens = 'sequence' | 'dma' | 'ip'
+export type Lens = 'sequence' | 'dma' | 'ip' | 'sim'
 export type Mode = 'split' | 'graph' | 'timing'
-const legacyLens = (l?: string): Lens => l === 'topology' ? 'sequence' : l === 'transform' ? 'ip' : l === 'dma' || l === 'ip' || l === 'sequence' ? l : 'sequence'
+const legacyLens = (l?: string): Lens => l === 'topology' ? 'sequence' : l === 'transform' ? 'ip' : l === 'dma' || l === 'ip' || l === 'sequence' || l === 'sim' ? l : 'sequence'
 
 export function usePipelineNavigation(ctx: Pick<Ctx, 'scenario' | 'variant' | 'params' | 'navigate'>, mode: Mode, setMode: (mode: Mode) => void) {
   const lens = legacyLens(ctx.params.lens)

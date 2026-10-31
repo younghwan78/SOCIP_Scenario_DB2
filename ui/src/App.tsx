@@ -13,6 +13,7 @@ import { AdmissionWaitPill } from './components/AdmissionWait'
 const ExplorerPage = lazy(() => import('./pages/Explorer').then((m) => ({ default: m.ExplorerPage })))
 const MatrixPage = lazy(() => import('./pages/Matrix').then((m) => ({ default: m.MatrixPage })))
 const PipelinePage = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.PipelinePage })))
+const BehaviorPage = lazy(() => import('./pages/Behavior').then((m) => ({ default: m.BehaviorPage })))
 const ComparePage = lazy(() => import('./pages/Compare').then((m) => ({ default: m.ComparePage })))
 const TimingBudgetPage = lazy(() => import('./pages/TimingBudget').then((m) => ({ default: m.TimingBudgetPage })))
 const TimingFleetPage = lazy(() => import('./pages/TimingFleet').then((m) => ({ default: m.TimingFleetPage })))
@@ -32,6 +33,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
   { title: '1 · 선택', items: [
     { page: 'explorer', label: 'Scenario', icon: 'explorer', also: ['matrix'] },
     { page: 'pipeline', label: 'Pipeline', icon: 'pipeline' },
+    { page: 'behavior', label: 'Behavior', icon: 'timer' },
     { page: 'compare', label: 'Compare', icon: 'compare' }] },
   { title: '2 · 예측', items: [
     { page: 'whatif', label: 'What-if', icon: 'probe' },
@@ -57,7 +59,7 @@ const NEXT: Partial<Record<Page, { page: Page; label: string }>> = {
 }
 
 const TITLES: Record<Page, string> = {
-  home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget · variant', 'timing-fleet': 'Timing Budget · 전체 variant',
+  home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', behavior: 'Behavior · full-stack', compare: 'Compare', timing: 'Timing Budget · variant', 'timing-fleet': 'Timing Budget · 전체 variant',
   explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', whatif: 'What-if · 조건 · 한계 · 병목', library: 'Library', settings: '설정',
 }
 
@@ -195,7 +197,7 @@ export default function App() {
             {route.page === 'compare'
               ? <span style={{ color: 'var(--text)', fontWeight: 600 }}>{currentItems.length}개 비교 · 과제 {new Set(currentItems.map((i) => catalog.find((c) => c.scenario_id === i.scenario)?.project_id)).size}개</span>
               : <span style={{ color: 'var(--text)', fontWeight: 600 }}>{scenarioItem?.scenario_name ?? scenario}</span>}
-            {(route.page === 'pipeline' || route.page === 'timing') && variant && <><span className="sep">›</span>
+            {(route.page === 'pipeline' || route.page === 'behavior' || route.page === 'timing') && variant && <><span className="sep">›</span>
               <button className="crumb-variant" onClick={() => setPicker('open')}>{variant}<Icon name="chevron" size={12} /></button></>}
           </div>
           <span className="grow" />
@@ -223,6 +225,7 @@ export default function App() {
         {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage key={project} ctx={ctx} />}
         {!catalogQ.error && route.page === 'pipeline' && <PipelinePage key={`${scenario}:${variant}`} ctx={ctx} />}
+        {!catalogQ.error && route.page === 'behavior' && <BehaviorPage key={`${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'compare' && <ComparePage ctx={ctx} />}
         {!catalogQ.error && route.page === 'timing' && <TimingBudgetPage key={`${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'timing-fleet' && <TimingFleetPage key={scenario} ctx={ctx} />}
@@ -239,7 +242,7 @@ export default function App() {
       </div>
       <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} projects={projects} scenarioId={scenario}
         onPick={(s, v) => (picker === 'compare' || route.page === 'compare' ? toCompare(s, v)
-          : navigate(route.page === 'timing' ? 'timing' : 'pipeline', { scenario: s, variant: v }))}
+          : navigate(route.page === 'timing' ? 'timing' : route.page === 'behavior' ? 'behavior' : 'pipeline', { scenario: s, variant: v }))}
         onAddCompare={toCompare} />
       <AdmissionWaitPill />
     </div>

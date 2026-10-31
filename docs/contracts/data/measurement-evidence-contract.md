@@ -46,6 +46,7 @@ artifacts/{project_id}/{scenario_id}/{variant_id}/{YYYYMMDD}-{sw_build}/
 | `sw_task_timing` | list | perfetto 기반 task별 수행시간 digest. 아래 참조 |
 | `vdd_power` | dict[rail][metric] | rail별 전력. sim의 `vdd_power`와 같은 컬럼을 공유하므로 rail 이름을 sim fixture와 일치시킬 것 |
 | `timeline_events` | list[dict] | frame drop 등 이벤트 digest. 자유 스키마(초기) |
+| `handoff_flows` | object | 사내 hand-off 순서 (`sdb.handoff/1`). 참여자 · cadence · flow step. Schema: [sdb-handoff-1.schema.json](sdb-handoff-1.schema.json), 설계: [handoff-flow-ko.md](../../design/handoff-flow-ko.md) |
 | `artifacts` | list[Artifact] | 원본 포인터. §1 참조 |
 
 ### cpu_breakdown

@@ -47,7 +47,16 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     return m
   }, [ctx.catalog])
   const totalVariants = ctx.catalog.reduce((s, c) => s + c.variant_count, 0)
-  const scenarios = ctx.catalog.filter((c) => type === 'all' || primaryCategory(c.category) === type)
+  // Behavior data (full-stack trace / hand-off flows) per scenario → variants; an older API just hides the filter
+  const behaviorQ = useAsync(() => api.behaviorIndex(ctx.project).catch(() => null), [ctx.project])
+  const behavior = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    for (const e of behaviorQ.data ?? []) m.set(e.scenario_ref, new Set([...(m.get(e.scenario_ref) ?? []), e.variant_ref]))
+    return m
+  }, [behaviorQ.data])
+  const bh = ctx.params.bh === 'with' || ctx.params.bh === 'without' ? ctx.params.bh : 'all'
+  const inType = ctx.catalog.filter((c) => type === 'all' || primaryCategory(c.category) === type)
+  const scenarios = inType.filter((c) => bh === 'all' || (bh === 'with') === behavior.has(c.scenario_id))
     .sort((a, b) => catRank(a.category) - catRank(b.category)
       || (canonicalOf(a) === DEFAULT_CANONICAL ? -1 : canonicalOf(b) === DEFAULT_CANONICAL ? 1 : a.scenario_name.localeCompare(b.scenario_name)))
   const selected = scenarios.find((s) => s.scenario_id === ctx.scenario) ?? scenarios[0]
@@ -194,7 +203,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     ...(hasLever ? memCols : []),
     { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
     { key: 'delta', label: '다른 조건', width: 84, align: 'right', firstDir: -1, headTitle: '기준 variant(파생은 부모)와 값이 다른 조건 수 — 노란 셀이 그 조건', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
-    { key: 'open', label: '', width: 76, render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a> },
+    { key: 'open', label: '', width: 124, render: (r) => <span style={{ display: 'inline-flex', gap: 8 }}>
+      <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a>
+      {behavior.get(r.scenario_id)?.has(r.variant_id) && <a href="#" title="full-stack timing · cadence · processing flow" onClick={(e) => { e.preventDefault(); ctx.navigate('behavior', { scenario: r.scenario_id, variant: r.variant_id }) }}>Behavior</a>}</span> },
   ]
 
   return (
@@ -206,6 +217,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
           <button key={c} className={`tpill cat ${type === c ? 'on' : ''}`} style={catStyle(c)} onClick={() => ctx.navigate(undefined, { type: c, scenario: ctx.catalog.find((s) => primaryCategory(s.category) === c)?.scenario_id, variant: undefined })} title={`${byType.get(c)} scenarios · ${variantsByType.get(c) ?? 0} variants`}>
             <Icon name={c} />{CATEGORY_LABEL[c]} <span className="cnt">({byType.get(c)})</span></button>
         ))}
+        {behaviorQ.data && <span className="bh-filter" role="group" aria-label="Behavior filter">
+          <span className="muted" style={{ fontSize: 13 }} title="full-stack trace 또는 hand-off flow(sdb.handoff/1)가 등록된 scenario">Behavior</span>
+          {(['all', 'with', 'without'] as const).map((k) => {
+            const n = k === 'all' ? inType.length : inType.filter((c) => (k === 'with') === behavior.has(c.scenario_id)).length
+            return <button key={k} className={`tpill ${bh === k ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { bh: k === 'all' ? undefined : k })}>
+              {{ all: '전체', with: '등록', without: '미등록' }[k]} <span className="cnt">({n})</span></button>
+          })}
+        </span>}
       </div>} main={
       <div className="explorer">
         <section className="panel scn-list" aria-label="Scenario 목록" style={{ width: listW.size }}>
@@ -217,7 +236,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
               {head && <div className="scn-group"><span className="scn-dot" />{CATEGORY_LABEL[cat] ?? cat} <span className="cnt">scenario {inCat.length} · variant {inCat.reduce((n, x) => n + x.variant_count, 0)}</span></div>}
               <button className={`scn-item ${s.scenario_id === selected?.scenario_id ? 'on' : ''}`}
                 onClick={() => { ctx.navigate(undefined, { scenario: s.scenario_id, variant: undefined }); setFacets({}); setPicked(new Set()) }}>
-                <span className="nm">{s.scenario_name} <span className="cnt" title="variant 수">({s.variant_count})</span></span>
+                <span className="nm">{s.scenario_name} <span className="cnt" title="variant 수">({s.variant_count})</span>
+                  {behavior.has(s.scenario_id) && <span className="bh-badge" title={`Behavior 등록 variant: ${[...behavior.get(s.scenario_id)!].join(', ')}`}>Behavior {behavior.get(s.scenario_id)!.size}</span>}</span>
                 <span className="ds">{scenarioPurpose(s.scenario_id).split(/[·:]/)[1]?.trim().slice(0, 42) ?? ''}</span>
                 <span className="ct">variant {s.variant_count} · node {s.node_count} · buffer {s.buffer_count}</span>
               </button></div> })}

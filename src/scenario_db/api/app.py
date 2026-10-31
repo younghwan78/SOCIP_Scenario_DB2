@@ -16,7 +16,7 @@ from scenario_db.api.services.whatif_jobs import shutdown_whatif_jobs
 from scenario_db.api.exceptions import register_handlers
 from scenario_db.api.routers import admin, capability, catalog, cdgm, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
 from scenario_db.api.routers.utility import health_router
-from scenario_db.api.routers import camera_profiling, sensors, driver_models
+from scenario_db.api.routers import behavior, camera_profiling, sensors, driver_models, sim_inputs
 from scenario_db.api.routers import timing_budget as timing_budget_router
 from scenario_db.api.routers import arch_exploration as arch_exploration_router
 from scenario_db.api.routers import calibration as calibration_router
@@ -108,6 +108,8 @@ def create_app() -> FastAPI:
         capability.router,
         sensors.router,
         driver_models.router,
+        sim_inputs.router,
+        behavior.router,
         catalog.router,
         cdgm.router,
         definition.router,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import math
 from contextlib import ExitStack
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -46,7 +47,7 @@ def timeline_dependencies_status() -> dict[str, Any]:
 class _TaskRun:
     instance_id: str
     base_id: str
-    frame_index: int
+    frame_index: int | None
     task: dict[str, Any]
     predecessors: list[str] = field(default_factory=list)
     release_ms: float = 0.0
@@ -70,6 +71,9 @@ class _TaskRun:
     bottleneck_reason: str | None = None
     critical: bool = False
     critical_path_rank: int | None = None
+    # Own-cadence task (e.g. ABOX period IRQ): released every `independent_period_ms`
+    # across the frame window, outside the frame DAG and the frame critical path.
+    independent_period_ms: float | None = None
 
 
 def build_timeline_events(
@@ -91,6 +95,8 @@ def build_timeline_events(
       - resource or resource_id
       - resource_capacity
       - release_period_ms
+      - independent_period_ms (+ independent_phase_ms): own cadence, outside the
+        frame DAG; repeated across frame_count x frame_period_ms
       - source_valid_ms or v_valid_ms
       - deadline_ms
 
@@ -297,7 +303,8 @@ def build_timeline_events(
             env.process(run_task(instance_id))
     env.run()
 
-    _mark_critical_path(runs, graph, critical_budget_ms=critical_budget_ms)
+    frame_runs = {key: run for key, run in runs.items() if run.independent_period_ms is None}
+    _mark_critical_path(frame_runs, graph, critical_budget_ms=critical_budget_ms)
     return _timeline_events(runs, graph)
 
 
@@ -337,8 +344,11 @@ def _expand_task_runs(
     frame_period_ms: float,
 ) -> dict[str, _TaskRun]:
     runs: dict[str, _TaskRun] = {}
+    independent = {task_id for task_id, task in tasks.items() if _independent_period(task) > 0}
     for frame_index in range(frame_count):
         for task_id, task in tasks.items():
+            if task_id in independent:
+                continue
             release_period = float(task.get("release_period_ms") or frame_period_ms)
             release_ms = frame_index * release_period
             instance_id = _instance_id(task_id, frame_index, frame_count)
@@ -350,8 +360,25 @@ def _expand_task_runs(
                 predecessors=[
                     _instance_id(pred, frame_index, frame_count)
                     for pred in graph.predecessors(task_id)
+                    if pred not in independent
                 ],
                 release_ms=release_ms,
+            )
+    horizon_ms = frame_count * frame_period_ms
+    for task_id in independent:
+        task = tasks[task_id]
+        period = _independent_period(task)
+        phase = float(task.get("independent_phase_ms") or 0.0)
+        count = max(1, math.ceil((horizon_ms - phase) / period - 1e-9)) if horizon_ms > 0 else frame_count
+        for index in range(count):
+            instance_id = task_id if count == 1 else f"{task_id}#c{index}"
+            runs[instance_id] = _TaskRun(
+                instance_id=instance_id,
+                base_id=task_id,
+                frame_index=None,
+                task=task,
+                release_ms=phase + index * period,
+                independent_period_ms=period,
             )
     return runs
 
@@ -515,7 +542,8 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
     ordered = sorted(
         runs.values(),
         key=lambda item: (
-            item.frame_index,
+            item.frame_index is None,
+            item.frame_index or 0,
             item.start_ms,
             rank.get(item.instance_id, 0),
             item.end_ms,
@@ -558,6 +586,7 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
                 critical=run.critical,
                 critical_path_rank=run.critical_path_rank,
                 predecessors=list(graph.predecessors(run.instance_id)),
+                independent_period_ms=run.independent_period_ms,
             )
         )
     return result
@@ -628,6 +657,10 @@ def _task_duration(task: dict[str, Any], frame_index: int | None = None) -> floa
     if duration is None or float(duration or 0.0) <= 0.0:
         duration = task.get("source_valid_ms") or task.get("v_valid_ms")
     return float(duration or 0.0)
+
+
+def _independent_period(task: dict[str, Any]) -> float:
+    return float(task.get("independent_period_ms") or 0.0)
 
 
 def _task_latency_offset(task: dict[str, Any]) -> float:

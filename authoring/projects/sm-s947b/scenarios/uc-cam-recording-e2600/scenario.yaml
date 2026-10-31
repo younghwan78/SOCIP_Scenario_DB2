@@ -120,6 +120,10 @@ pipeline:
     ip_ref: ip-display-panel-s5e9965
     role: display_output
     instance_index: 0
+  - id: abox
+    ip_ref: ip-abox-s5e9965
+    role: audio_capture
+    instance_index: 0
   edges:
   - from: sensor_rear
     to: csis

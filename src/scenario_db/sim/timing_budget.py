@@ -618,6 +618,8 @@ def _classify(tasks, edges, workloads, overrides) -> dict[str, Stage]:
                 (workloads.get(tid).ip_ref if tid in workloads else "") or task.get("hw_name") or ""
             )
         )
+        if task.get("independent_period_ms"):
+            continue  # own cadence (ABOX …): outside the frame stages
         if tid in rt:
             stage[tid] = "rt"
         elif task.get("task_type") == "sw":

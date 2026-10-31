@@ -121,6 +121,30 @@
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload).
+          AUD operating point is assumed, same mid level as the CPU-fed streaming path.
+      timeline:
+        period_ms: 10.0
+        duration_ms: 0.6
+        value_source: assumed
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
 - id: yt-1080p60-h264-sdr
   extends: yt-1080p30-h264-sdr
   severity: medium

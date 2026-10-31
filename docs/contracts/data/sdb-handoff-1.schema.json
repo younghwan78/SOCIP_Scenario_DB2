@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "HandoffCadence": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "frame",
+            "vsync",
+            "period",
+            "chunk",
+            "divided",
+            "event"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "period_ms": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Period Ms"
+        },
+        "of": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Of"
+        },
+        "every": {
+          "anyOf": [
+            {
+              "minimum": 2,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Every"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "title": "HandoffCadence",
+      "type": "object"
+    },
+    "HandoffFlow": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "cadence": {
+          "title": "Cadence",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/HandoffStep"
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "cadence",
+        "steps"
+      ],
+      "title": "HandoffFlow",
+      "type": "object"
+    },
+    "HandoffParticipant": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "layer": {
+          "enum": [
+            "app",
+            "framework",
+            "hal",
+            "kernel",
+            "fw",
+            "hw"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "name"
+      ],
+      "title": "HandoffParticipant",
+      "type": "object"
+    },
+    "HandoffStep": {
+      "additionalProperties": false,
+      "description": "A call (``to`` set, ``from`` optional for the unit's start) or a note (``note`` + ``over``).",
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To"
+        },
+        "call": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Call"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task"
+        },
+        "slice": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slice"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node"
+        },
+        "handoff": {
+          "default": "data",
+          "enum": [
+            "kick",
+            "complete",
+            "ipc",
+            "irq",
+            "data"
+          ],
+          "title": "Handoff",
+          "type": "string"
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Branch"
+        },
+        "cadence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cadence"
+        },
+        "every": {
+          "anyOf": [
+            {
+              "minimum": 2,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Every"
+        },
+        "frame_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Offset"
+        },
+        "t_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "T Ms"
+        },
+        "dur_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dur Ms"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "over": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Over",
+          "type": "array"
+        }
+      },
+      "title": "HandoffStep",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "sdb.handoff/1",
+      "title": "Format",
+      "type": "string"
+    },
+    "generator": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Generator"
+    },
+    "participants": {
+      "items": {
+        "$ref": "#/$defs/HandoffParticipant"
+      },
+      "minItems": 1,
+      "title": "Participants",
+      "type": "array"
+    },
+    "cadences": {
+      "items": {
+        "$ref": "#/$defs/HandoffCadence"
+      },
+      "minItems": 1,
+      "title": "Cadences",
+      "type": "array"
+    },
+    "flows": {
+      "items": {
+        "$ref": "#/$defs/HandoffFlow"
+      },
+      "minItems": 1,
+      "title": "Flows",
+      "type": "array"
+    }
+  },
+  "required": [
+    "format",
+    "participants",
+    "cadences",
+    "flows"
+  ],
+  "title": "HandoffDoc",
+  "type": "object"
+}

@@ -146,6 +146,34 @@
     },
     {
       "data": {
+        "id": "grp-audio",
+        "label": "Audio",
+        "type": "submodule",
+        "layer": "meta",
+        "hierarchy_group": "Audio",
+        "semantic_source": "level1-semantic-group",
+        "summary_badges": [],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "order": 10,
+          "width": 360,
+          "height": 220,
+          "emphasis": "muted",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 870.0,
+        "y": 80.0
+      }
+    },
+    {
+      "data": {
         "id": "grp-vps",
         "label": "VPS",
         "type": "submodule",
@@ -168,7 +196,7 @@
         }
       },
       "position": {
-        "x": 870.0,
+        "x": 1000.0,
         "y": 80.0
       }
     },
@@ -654,6 +682,36 @@
     },
     {
       "data": {
+        "id": "grp-audio-abox",
+        "label": "ABOX",
+        "type": "submodule",
+        "layer": "meta",
+        "parent": "grp-audio",
+        "hierarchy_group": "Audio",
+        "ip_group": "ABOX",
+        "semantic_source": "level1-semantic-group",
+        "summary_badges": [],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "order": 200,
+          "width": 260,
+          "height": 150,
+          "emphasis": "muted",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1660.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
         "id": "grp-vps-vps",
         "label": "VPS",
         "type": "submodule",
@@ -678,7 +736,7 @@
         }
       },
       "position": {
-        "x": 1660.0,
+        "x": 1750.0,
         "y": 210.0
       }
     },
@@ -1460,6 +1518,46 @@
         "x": 810.0,
         "y": 1452.0
       }
+    },
+    {
+      "data": {
+        "id": "ip-abox",
+        "label": "ABOX",
+        "type": "ip",
+        "layer": "hw",
+        "parent": "grp-audio-abox",
+        "ip_ref": "ip-abox-s5e9965",
+        "hierarchy_group": "Audio",
+        "ip_group": "ABOX",
+        "semantic_source": "hw_properties",
+        "summary_badges": [
+          "Audio",
+          "ABOX"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Role: audio_capture",
+          "Hierarchy: Audio",
+          "IP block: ABOX"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 19,
+          "width": 160,
+          "height": 62,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1080.0,
+        "y": 1526.0
+      }
     }
   ],
   "edges": [
@@ -2207,11 +2305,11 @@
   },
   "metadata": {
     "canvas_w": 1280,
-    "canvas_h": 2656,
+    "canvas_h": 2830,
     "layout": "level1-semantic-ip-dag",
-    "active_node_count": 19,
+    "active_node_count": 20,
     "active_edge_count": 28,
-    "group_count": 23,
+    "group_count": 25,
     "variant_overlay": {
       "resolved": true,
       "inheritance_chain": [
@@ -2233,7 +2331,7 @@
         "add_edges": 2,
         "remove_edges": 1
       },
-      "node_config_count": 21,
+      "node_config_count": 22,
       "buffer_override_count": 0,
       "sw_task_count": 0
     }

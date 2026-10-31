@@ -120,6 +120,17 @@ def root(tmp_path: Path) -> Path:
             if name.startswith("PYRAMID"):
                 buf["compression"] = "COMP_OFF"
         yamlio.dump(path, doc)
+    # 2026-10-31: ABOX node (own cadence) added to the 2600 recording (capture, 20 ms) and
+    # YouTube (playback, 10 ms) only; the ejected 2700 scenarios keep their pre-eject graph.
+    for sid in ("uc-cam-recording-e2600", "uc-vid-youtube-e2600"):
+        sdir = r / f"projects/sm-s947b/scenarios/{sid}"
+        doc = yamlio.load(sdir / "scenario.yaml")
+        doc["pipeline"]["nodes"] = [n for n in doc["pipeline"]["nodes"] if n.get("id") != "abox"]
+        yamlio.dump(sdir / "scenario.yaml", doc)
+        variants = yamlio.load(sdir / "variants.yaml")
+        for item in variants:
+            (item.get("node_configs") or {}).pop("abox", None)
+        yamlio.dump(sdir / "variants.yaml", variants)
     proj = r / POST_EJECT_PROJECT_2600
     pdoc = yaml.safe_load(proj.read_text(encoding="utf-8"))
     (pdoc["document"].get("globals") or {}).pop("review_policy", None)

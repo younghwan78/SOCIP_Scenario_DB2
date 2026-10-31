@@ -20,7 +20,7 @@ function usePopDismiss(ref: RefObject<HTMLDivElement | null>, onClose: () => voi
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('mousedown', click); clearTimeout(t) }
   }, [ref, onClose])
 }
-function Shell({ title, at, onClose, children, width = 560 }: { title: ReactNode; at: { x: number; y: number }; onClose: () => void; children: ReactNode; width?: number }) {
+export function Shell({ title, at, onClose, children, width = 560 }: { title: ReactNode; at: { x: number; y: number }; onClose: () => void; children: ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null)
   usePopDismiss(ref, onClose)
   const w = Math.min(width, window.innerWidth - 16)
@@ -30,7 +30,7 @@ function Shell({ title, at, onClose, children, width = 560 }: { title: ReactNode
     {children}
   </div>
 }
-function Sec({ title, badge, children }: { title: string; badge?: ReactNode; children: ReactNode }) {
+export function Sec({ title, badge, children }: { title: string; badge?: ReactNode; children: ReactNode }) {
   return <section className="bd-sec"><h4>{title}{badge}</h4>{children}</section>
 }
 function KV({ k, children }: { k: string; children: ReactNode }) {

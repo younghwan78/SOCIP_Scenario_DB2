@@ -11,7 +11,7 @@ const VERDICT: Record<Verdict, { label: string; cls: string }> = {
   ok: { label: 'fps 충족', cls: 'v-ok' }, warn: { label: '주의', cls: 'v-warn' }, fail: { label: 'fps 미달', cls: 'v-fail' }, na: { label: '판정 불가', cls: 'v-na' },
 }
 const LANE_GROUP: Record<string, string> = { sensor: 'SENSOR', rt: 'RT', nrt: 'NRT', m2m: 'M2M', sw: 'SW', codec: 'CODEC', display: 'DISPLAY', other: 'SW' }
-const LANE_COLOR: Record<string, string> = { sensor: '#94A3B8', rt: '#F4A06B', sw: '#E2C15B', nrt: '#E07B39', m2m: '#C9A27E', codec: '#A78BCA', display: '#6CB8A8', other: '#C4BBAE' }
+const LANE_COLOR: Record<string, string> = { sensor: '#94A3B8', rt: '#F4A06B', sw: '#E2C15B', nrt: '#E07B39', m2m: '#C9A27E', codec: '#A78BCA', display: '#6CB8A8', audio: '#8FB86C', other: '#C4BBAE' }
 
 /** Frame pipeline Gantt: one row per frame, bars per lane window → RT(N+1) ∥ NRT/Output(N) overlap. */
 function FramePipeline({ windows, period, colorBy = 'group', onPick, picked }: {

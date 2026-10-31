@@ -5,10 +5,10 @@ import type { BufferDef, Dict, IpCatalog, ScenarioDef, VariantDetail, ViewEdgeDa
 import { frameMb, isExternal, pipelineIdOf } from './graph'
 import { compInfo, llcInfo, type CompCatalog, type CompInfo, type LlcInfo } from './memLever'
 
-export type Lane = 'sensor' | 'rt' | 'sw' | 'nrt' | 'm2m' | 'codec' | 'display' | 'other'
-export const LANE_ORDER: Lane[] = ['sensor', 'rt', 'sw', 'nrt', 'm2m', 'codec', 'display', 'other']
+export type Lane = 'sensor' | 'rt' | 'sw' | 'nrt' | 'm2m' | 'codec' | 'display' | 'audio' | 'other'
+export const LANE_ORDER: Lane[] = ['sensor', 'rt', 'sw', 'nrt', 'm2m', 'codec', 'display', 'audio', 'other']
 export const LANE_LABEL: Record<Lane, string> = {
-  sensor: 'Sensor', rt: 'ISP RT', sw: 'CPU · SW', nrt: 'ISP NRT', m2m: 'M2M accel', codec: 'Codec', display: 'Display', other: 'Other',
+  sensor: 'Sensor', rt: 'ISP RT', sw: 'CPU · SW', nrt: 'ISP NRT', m2m: 'M2M accel', codec: 'Codec', display: 'Display', audio: 'Audio', other: 'Other',
 }
 
 const RT_DEFAULT = ['csis', 'pdp', 'byrp', 'rgbp', 'yuvsc', 'mlsc']
@@ -31,7 +31,8 @@ export function laneOf(n: ViewNodeData, ch: { rt: string[]; nrt: string[] }): La
   if (ch.nrt.includes(pid)) return 'nrt'
   if (/^(mfc|apv|codec|jpeg|hevc)/.test(pid) || /mfc|apv|codec/.test(ref)) return 'codec'
   if (/^(dpu|panel|decon|display)/.test(pid) || /dpu|panel|display/.test(ref) || isExternal(n)) return 'display'
-  if (/^(lme|vps|gdc|g2d|npu|gpu|dsp|abox|m2msc|m2m_?sc|msc|m2m_?scaler)/.test(pid) || /m2m-scaler/.test(ref)) return 'm2m'
+  if (/^(abox|audio|aud_|speaker|mic|bt_codec)/.test(pid) || /abox/.test(ref)) return 'audio'
+  if (/^(lme|vps|gdc|g2d|npu|gpu|dsp|m2msc|m2m_?sc|msc|m2m_?scaler)/.test(pid) || /m2m-scaler/.test(ref)) return 'm2m'
   return 'other'
 }
 
