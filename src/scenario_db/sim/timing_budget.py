@@ -466,8 +466,8 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         if edge.get("latency_ms"):
             edge_latency[dst] = max(edge_latency.get(dst, 0.0), float(edge["latency_ms"]))
     for task_id, task in tasks.items():
-        if task.get("task_type") != "sw":
-            continue
+        if task.get("task_type") != "sw" or task_id not in stage:
+            continue  # own-cadence SW (independent_period_ms) is outside the frame budget
         st = stage[task_id]
         if task_id in eis_tasks and not eis_on:
             continue
@@ -636,7 +636,7 @@ def _classify(tasks, edges, workloads, overrides) -> dict[str, Stage]:
     ancestors = _closure(nrt_hw, pred)
     descendants = _closure(nrt_hw, succ)
     for tid, task in tasks.items():
-        if tid in stage:
+        if tid in stage or task.get("independent_period_ms"):
             continue
         if _downstream_of(tid, pred, stage, "output"):
             stage[tid] = "output"

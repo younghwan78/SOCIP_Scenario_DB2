@@ -380,3 +380,15 @@ def test_condition_hash_tracks_dvfs_content(graph_factory, dvfs, monkeypatch):
     first = next(iter(tables.values()))
     first.levels[0] = first.levels[0].model_copy(update={"speed_mhz": first.levels[0].speed_mhz + 1})
     assert _condition_hash(graph, request.options, shim, tables) != before
+
+
+def test_own_cadence_sw_task_is_outside_the_frame_budget(graph_factory):
+    """A SW task given its own cadence (node_configs.<task>.timeline.period_ms) leaves the frame stages:
+    the timeline releases it on its own clock, so the NRT budget must not charge it every frame."""
+    base = _stage(tb.analyze_timing_budget(graph_factory("cam-rec-r1-uhd30-vdis")), "nrt")
+    graph = graph_factory("cam-rec-r1-uhd30-vdis")
+    graph.variant.node_configs.setdefault("post_irta", {})["timeline"] = {"period_ms": 100.0}
+    nrt = _stage(tb.analyze_timing_budget(graph), "nrt")
+    assert "post_irta" not in {i["task"] for i in nrt["sw_items"]}
+    assert nrt["sw_ms"] < base["sw_ms"]
+    assert nrt["budget_ms"] > base["budget_ms"]

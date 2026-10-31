@@ -220,8 +220,15 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         {behaviorQ.data && <span className="bh-filter" role="group" aria-label="Behavior filter">
           <span className="muted" style={{ fontSize: 13 }} title="full-stack trace 또는 hand-off flow(sdb.handoff/1)가 등록된 scenario">Behavior</span>
           {(['all', 'with', 'without'] as const).map((k) => {
-            const n = k === 'all' ? inType.length : inType.filter((c) => (k === 'with') === behavior.has(c.scenario_id)).length
-            return <button key={k} className={`tpill ${bh === k ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { bh: k === 'all' ? undefined : k })}>
+            const shown = k === 'all' ? inType : inType.filter((c) => (k === 'with') === behavior.has(c.scenario_id))
+            const n = shown.length
+            // the filter may hide the current scenario: move scenario / variant / picks together, never only the list
+            const pick = () => {
+              const bhParam = k === 'all' ? undefined : k
+              if (shown.some((c) => c.scenario_id === selected?.scenario_id)) { ctx.navigate(undefined, { bh: bhParam }); return }
+              ctx.navigate(undefined, { bh: bhParam, scenario: shown[0]?.scenario_id, variant: undefined }); setFacets({}); setPicked(new Set())
+            }
+            return <button key={k} className={`tpill ${bh === k ? 'on' : ''}`} onClick={pick}>
               {{ all: '전체', with: '등록', without: '미등록' }[k]} <span className="cnt">({n})</span></button>
           })}
         </span>}

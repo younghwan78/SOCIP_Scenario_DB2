@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
 from scenario_db.api.deps import get_db
@@ -34,13 +34,20 @@ def behavior_index(rows: list[Any]) -> list[dict[str, Any]]:
     return sorted(out.values(), key=lambda e: (e["scenario_ref"], e["variant_ref"]))
 
 
+def index_filter():
+    """Rows worth reading: a hand-off document (a JSON object — an absent one may be stored as JSON ``null``,
+    which is not SQL NULL) or layered (full-stack) timeline events."""
+    return or_(func.jsonb_typeof(Evidence.handoff_flows) == "object",
+               cast(Evidence.timeline_events, String).like(_LAYER_KEY))
+
+
 @router.get("/behavior/index")
 def get_behavior_index(project_ref: str | None = Query(None), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     """Variants with a full-stack trace or a hand-off flow document (Scenario page filter, Behavior links)."""
     q = db.query(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at,
                  Evidence.timeline_events, Evidence.handoff_flows).filter(
         Evidence.kind == "evidence.measurement",
-        or_(Evidence.handoff_flows.isnot(None), cast(Evidence.timeline_events, String).like(_LAYER_KEY)),
+        index_filter(),
     )
     if project_ref:
         q = q.filter(Evidence.project_ref == project_ref)

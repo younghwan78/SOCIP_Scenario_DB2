@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HandoffDoc, TimelineEvent } from '../lib/api'
 import { buildTimeline, FULLSTACK_GROUPS } from '../lib/timeline'
-import { CadenceTab } from './Behavior'
+import { CadenceTab, cadenceRows } from './Behavior'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
@@ -43,5 +43,15 @@ describe('Cadence tab', () => {
     expect(onOpenSlice).toHaveBeenCalledWith('aud.read#c0')
     act(() => { btn(/Processing flow · Audio period/).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(onOpenFlow).toHaveBeenCalledWith('audio')
+  })
+
+  it('an aperiodic (kind: event) declaration wins over the capture / window period', () => {
+    const evDoc: HandoffDoc = { ...doc, cadences: [{ id: 'touch', name: 'Touch', kind: 'event' }],
+      flows: [{ id: 'touch', name: 'Touch', cadence: 'touch', steps: [{ to: 'hal', task: 'aud.read' }] }] }
+    const row = cadenceRows(tl, evDoc).find((r) => r.name === 'aud.read')!
+    expect(row.basis).toBe('doc')
+    expect(row.period).toBeNull()
+    expect(row.load).toBeNull()
+    expect(cadenceRows(tl, doc).find((r) => r.name === 'aud.read')!.period).toBe(20)
   })
 })

@@ -34,9 +34,10 @@ export function SimInputsView({ data, error, loading, selected, onSelect }: {
     { key: 'dur', label: '실행 ms', width: 92, align: 'right', sort: (r) => r.duration?.mean_ms,
       title: (r) => (r.duration ? `${r.duration.basis}${r.duration.value_source ? ` · ${r.duration.value_source}` : ''}${r.duration.min_ms != null ? ` · ${r.duration.min_ms}–${r.duration.max_ms}` : ''}` : undefined),
       render: (r) => <span className="mono">{num(r.duration?.mean_ms, 2)}{r.duration?.p95_ms != null && <span className="faint"> · p95 {num(r.duration.p95_ms)}</span>}</span> },
-    { key: 'load', label: 'sim 반영', width: 120, firstDir: -1, headTitle: 'SW: CPU ms/s = 실행 × rate · HW: duty % = 실행 × rate / 10',
+    { key: 'load', label: 'sim 반영', width: 120, firstDir: -1, headTitle: 'SW: CPU ms/s = (실행 − 포함된 HW) × CPU active 비율 × rate (sim CPU power와 같은 규칙) · HW: duty % = 실행 × rate / 10',
       sort: (r) => r.load?.cpu_ms_per_s ?? r.load?.duty_pct,
-      render: (r) => <span className="mono">{r.load?.cpu_ms_per_s !== undefined ? `CPU ${num(r.load.cpu_ms_per_s, 0)} ms/s` : r.load?.duty_pct !== undefined ? `duty ${num(r.load.duty_pct)} %` : '—'}</span> },
+      render: (r) => <span className="mono" title={r.load?.wall_ms_per_s !== undefined ? `wall ${num(r.load.wall_ms_per_s, 0)} ms/s · 포함된 HW ${num(r.load.included_hw_ms ?? 0)} ms · active 비율 ${r.load.cpu_active_ratio ?? 1}` : undefined}>
+        {r.load?.cpu_ms_per_s !== undefined ? `CPU ${num(r.load.cpu_ms_per_s, 0)} ms/s` : r.load?.duty_pct !== undefined ? `duty ${num(r.load.duty_pct)} %` : '—'}</span> },
     { key: 'power', label: 'power mW', width: 92, align: 'right', firstDir: -1, sort: (r) => r.power?.mw,
       title: (r) => (r.power ? `${r.power.basis}${r.power.status ? ` · ${r.power.status}` : ''}` : undefined),
       render: (r) => (r.power?.mw != null ? <span className="mono">{num(r.power.mw)}</span> : r.power?.status ? <span className="faint">{r.power.status}</span> : <span className="faint">—</span>) },

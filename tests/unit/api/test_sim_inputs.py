@@ -57,3 +57,14 @@ def test_defined_sw_timing_far_from_measurement_is_a_value_check(graph):
     assert [c["node_id"] for c in checks] == ["eis"]
     assert "eis_warp" in checks[0]["detail"] and "meas-1" in checks[0]["detail"]
     assert out["measurement_ref"] == "meas-1"
+
+
+def test_sw_cpu_load_excludes_included_hw_like_the_cpu_power_model(graph):
+    """pre_me_rta wall time includes LME: CPU ms/s follows sim.cpu_power (wall − included HW) × active ratio."""
+    sim = SimpleNamespace(id="sim-x", timing_breakdown=[{"node_id": "lme", "hw_time_ms": 1.5}], ip_breakdown=[], dma_breakdown=[])
+    rows = {r["node_id"]: r for r in build_sim_inputs(graph, sim=sim)["rows"]}
+    rta = rows["pre_me_rta"]
+    mean = rta["duration"]["mean_ms"]
+    assert rta["load"]["wall_ms_per_s"] == pytest.approx(mean * 30, abs=1e-3)
+    assert rta["load"]["included_hw_ms"] == pytest.approx(1.5)
+    assert rta["load"]["cpu_ms_per_s"] == pytest.approx((mean - 1.5) * rta["load"]["cpu_active_ratio"] * 30, abs=1e-3)

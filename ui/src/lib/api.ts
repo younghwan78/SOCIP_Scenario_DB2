@@ -184,7 +184,7 @@ export interface SimInputRow {
   kind: 'hw' | 'sw'
   cadence: { path: 'frame' | 'independent'; rate_hz: number | null; period_ms: number | null; per_frame: number | null; value_source?: string | null }
   duration: { mean_ms: number | null; min_ms?: number | null; max_ms?: number | null; p95_ms?: number | null; basis: string; value_source?: string | null } | null
-  load: { cpu_ms_per_s?: number; duty_pct?: number } | null
+  load: { cpu_ms_per_s?: number; duty_pct?: number; wall_ms_per_s?: number; included_hw_ms?: number; cpu_active_ratio?: number } | null
   power: { mw: number | null; basis: string; status?: string | null } | null
   bw_mbs: { read: number; write: number } | null
 }

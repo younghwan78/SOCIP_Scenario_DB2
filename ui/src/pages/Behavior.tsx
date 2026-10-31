@@ -177,7 +177,8 @@ export function cadenceRows(tl: Timeline, doc?: HandoffDoc | null): CadRow[] {
     const declared = ss.find((s) => s.period)?.period ?? null
     const windowGap = median(gapsOf(ss))
     let period: number | null, basis: PeriodBasis, frameLocked: boolean
-    if (fromDoc?.period) { period = fromDoc.period; basis = 'doc'; frameLocked = fromDoc.frame }
+    // a declared loop wins even when it is aperiodic (kind: event → period null, no periodic load)
+    if (fromDoc) { period = fromDoc.period; basis = 'doc'; frameLocked = fromDoc.frame }
     else if (declared) { period = declared; basis = 'trace'; frameLocked = false }
     else {
       frameLocked = ss.some((s) => s.frame !== null)

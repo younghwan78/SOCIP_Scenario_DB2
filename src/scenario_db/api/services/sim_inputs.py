@@ -107,8 +107,16 @@ def build_sim_inputs(
             duration = None
         mean = float(duration["mean_ms"]) if duration and duration.get("mean_ms") is not None else None
         load = None
-        if mean is not None and rate:
-            load = {"cpu_ms_per_s": round(mean * rate, 3)} if kind == "sw" else {"duty_pct": round(mean * rate / 10.0, 3)}
+        if mean is not None and rate and kind == "sw":
+            # same CPU-active rule as sim.cpu_power.sw_task_cpu_power: wall minus included HW, times the active ratio
+            included = sum(float(hw_time.get(str(n)) or 0.0) for n in (profile or {}).get("includes_hw_nodes") or [])
+            ratio = (profile or {}).get("cpu_active_ratio")
+            ratio = 1.0 if ratio is None else float(ratio)
+            load = {"cpu_ms_per_s": round(max(0.0, mean - included) * ratio * rate, 3)}
+            if included or ratio != 1.0:
+                load.update(wall_ms_per_s=round(mean * rate, 3), included_hw_ms=round(included, 4), cpu_active_ratio=ratio)
+        elif mean is not None and rate:
+            load = {"duty_pct": round(mean * rate / 10.0, 3)}
 
         drv = drivers.get(node_id)
         if drv is not None:

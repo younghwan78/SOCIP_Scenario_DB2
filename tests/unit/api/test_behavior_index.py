@@ -21,3 +21,14 @@ def test_index_keeps_variants_with_layered_events_or_flows_newest_first():
         {"scenario_ref": "uc-cam", "variant_ref": "r1", "evidence_ids": ["new", "old"], "full_stack": True, "flows": 2},
         {"scenario_ref": "uc-yt", "variant_ref": "v1", "evidence_ids": ["yt"], "full_stack": True, "flows": 1},
     ]
+
+
+def test_index_filter_skips_json_null_handoff():
+    """An absent hand-off document can be stored as JSON null (not SQL NULL); only a JSON object counts."""
+    from sqlalchemy.dialects import postgresql
+
+    from scenario_db.api.routers.behavior import index_filter
+
+    sql = str(index_filter().compile(dialect=postgresql.dialect()))
+    assert "jsonb_typeof(evidence.handoff_flows)" in sql
+    assert "IS NOT NULL" not in sql
