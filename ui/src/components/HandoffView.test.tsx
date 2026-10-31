@@ -74,7 +74,7 @@ describe('HandoffView', () => {
     const { onOpen } = render()
     expect(textNode(/render <b>pass<\/b>/)).toBeTruthy()
     expect(host.querySelector('b b')).toBeNull()
-    click(textNode(/^★ update/))
+    click(textNode(/^★ CPU update/))
     expect(onOpen).toHaveBeenCalledWith('game.update#f3')
     onOpen.mockClear()
     click(textNode(/render <b>pass<\/b>/))

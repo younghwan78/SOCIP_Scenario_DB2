@@ -41,7 +41,7 @@ handoff_flows:
   cadences:                              # 시나리오 안의 모든 주기
     - {id: frame, name: Sensor frame, kind: frame,  period_ms: 33.333}
     - {id: vsync, name: Display vsync, kind: vsync, period_ms: 16.667}
-    - {id: od,    name: VPS OD,       kind: divided, of: frame, every: 5}   # 6 fps
+    - {id: od,    name: VPS_OD,      kind: divided, of: frame, every: 5}   # 6 fps
     - {id: abox,  name: ABOX period,  kind: period, period_ms: 20}
     - {id: mux,   name: MPEG4 chunk,  kind: chunk,  period_ms: 1000}
     - {id: touch, name: Touch input,  kind: event}                          # 비주기
@@ -88,7 +88,7 @@ handoff_flows:
 |---|---|
 | 단위 선택 | 기본은 `All loops`다. 모든 flow를 공통 열 위에 쌓고, 각 flow를 자기 loop 테두리로 감싼다. flow 버튼마다 주기(Hz)를 함께 표시한다. |
 | loop 테두리 | `loop [Sensor frame · 30 Hz] frame loop`처럼 단위와 loop 종류를 표시한다. 종류는 frame loop · vsync loop · independent loop · slow chunk loop · every N-th · event-driven이다. frame에 묶인 loop는 실선 청록, 독립 loop는 주황 점선이다. |
-| 하위 loop | 한 flow 안에서 다른 주기로 도는 step(예: vsync scanout, AAC, VPS OD ÷5)은 안쪽 loop 테두리로 감싸고 오른쪽 배지에도 표시한다. |
+| 하위 loop | 한 flow 안에서 다른 주기로 도는 step(예: vsync scanout, AAC, VPS_OD ÷5)은 안쪽 loop 테두리로 감싸고 오른쪽 배지에도 표시한다. |
 | Loops 줄 | 시나리오의 모든 cadence를 rate 순으로 보여 준다. 그 아래에 loop 사이에 넘겨주는 지점과 넘겨주는 호출을 적는다. 예: `ABOX period · 50 Hz → AAC frame · 47 Hz via AAC encode`. |
 | 열 | 기본은 계층 6열(`Layer`)이다. `Process`로 바꾸면 process 단위로 펼친다. |
 | 행 | 자동 번호, 시각 t, 대기 Δ, 호출 이름, 공통 name, 실행 시간을 보여 준다. ★는 Pipeline node다. 한 participant 안에서 이어지는 단계(CSIS → MLSC)는 한 행으로 접는다. |
@@ -118,7 +118,7 @@ aperiodic(event-driven) 작업, burst, 주기 변경(예: UI 애니메이션 중
 
 | 시나리오 | 단위 (cadence) |
 |---|---|
-| Camera 녹화 | sensor frame 30 Hz, preview → vsync 60 Hz, VPS OD ÷5, ABOX 20 ms, AAC 1024 sample, Camera UI (App), MPEG4 chunk 1 s |
+| Camera 녹화 | sensor frame 30 Hz, preview → vsync 60 Hz, VPS_OD ÷5, ABOX 20 ms, AAC 1024 sample, Camera UI (App), MPEG4 chunk 1 s |
 | YouTube | video frame 30 Hz, ExoPlayer tick 10 ms (AudioTrack write), AudioFlinger mix 20 ms, ABOX 10 ms, vsync 60 Hz, network segment |
 | Local playback | video frame 30 Hz, extractor read chunk, vsync 60 Hz |
 | Game | game frame 60 Hz, touch input (event · 240 Hz sampling), vsync 60 Hz |
