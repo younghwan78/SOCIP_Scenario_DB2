@@ -63,6 +63,9 @@ const TITLES: Record<Page, string> = {
   explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', whatif: 'What-if · 조건 · 한계 · 병목', library: 'Library', settings: '설정',
 }
 
+/** Where a variant picked in the picker opens: pages with a variant crumb stay where they are, else Pipeline. */
+export const pickerTarget = (page: Page): Page => (page === 'timing' || page === 'behavior' || page === 'cpu' ? page : 'pipeline')
+
 export interface Ctx {
   /** scenarios of the selected project (과제) */
   catalog: CatalogItem[]
@@ -197,7 +200,7 @@ export default function App() {
             {route.page === 'compare'
               ? <span style={{ color: 'var(--text)', fontWeight: 600 }}>{currentItems.length}개 비교 · 과제 {new Set(currentItems.map((i) => catalog.find((c) => c.scenario_id === i.scenario)?.project_id)).size}개</span>
               : <span style={{ color: 'var(--text)', fontWeight: 600 }}>{scenarioItem?.scenario_name ?? scenario}</span>}
-            {(route.page === 'pipeline' || route.page === 'behavior' || route.page === 'timing') && variant && <><span className="sep">›</span>
+            {(route.page === 'pipeline' || route.page === 'behavior' || route.page === 'timing' || route.page === 'cpu') && variant && <><span className="sep">›</span>
               <button className="crumb-variant" onClick={() => setPicker('open')}>{variant}<Icon name="chevron" size={12} /></button></>}
           </div>
           <span className="grow" />
@@ -242,7 +245,7 @@ export default function App() {
       </div>
       <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} projects={projects} scenarioId={scenario}
         onPick={(s, v) => (picker === 'compare' || route.page === 'compare' ? toCompare(s, v)
-          : navigate(route.page === 'timing' ? 'timing' : route.page === 'behavior' ? 'behavior' : 'pipeline', { scenario: s, variant: v }))}
+          : navigate(pickerTarget(route.page), { scenario: s, variant: v }))}
         onAddCompare={toCompare} />
       <AdmissionWaitPill />
     </div>

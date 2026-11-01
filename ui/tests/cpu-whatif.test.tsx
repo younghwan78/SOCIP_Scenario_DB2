@@ -66,7 +66,7 @@ it('resets task edits on selection and ignores late responses, including referen
     await act(async () => host.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click())
     expect(pending[1].request.reference).toBe('eas')
     expect(pending[1].request.growth).toEqual({ ui: 2 })
-    const selector = host.querySelector('select')!
+    const selector = host.querySelector<HTMLSelectElement>('select[aria-label="측정 profile"]')!
     await act(async () => { selector.value = 'p2'; selector.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(pending[2].request.cpu_profile_ref).toBe('p2')
     expect(pending[2].request.growth).toEqual({})

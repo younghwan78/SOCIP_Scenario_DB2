@@ -51,13 +51,15 @@ export function Seg({ label, value, options, onChange, disabled }: {
 export interface SetupRow { task: string; home: string; budget: number | null; util?: Record<string, number>; tms?: Record<string, number> }
 
 /** ③ 분배 대상 — pool clusters, per-task state, co-move groups. Edits never start a run by themselves. */
-export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState, groups, setGroup, budgets, setBudget, space, method, busy, onRun, top, setTop, hasResult, knob, setKnob }: {
+export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState, groups, setGroup, budgets, setBudget, space, method, busy, onRun, top, setTop, hasResult, stale = false, knob, setKnob }: {
   clusters: string[]; pool: string[]; setPool: (p: string[]) => void
   rows: SetupRow[]; states: Record<string, TaskState>; setState: (task: string, s: TaskState) => void
   groups: Record<string, string>; setGroup: (task: string, g: string) => void
   budgets: Record<string, string>; setBudget: (task: string, v: string) => void
   space: { units: number; splits: number; reduced: number }; method?: string
   busy: boolean; onRun: () => void; top: number; setTop: (n: number) => void; hasResult: boolean
+  /** the displayed result was computed from other inputs */
+  stale?: boolean
   knob: Knob; setKnob: (k: Knob) => void
 }) {
   const keys = clusters.map((c) => `cpu.${c}`)
@@ -106,7 +108,7 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
         <span className="grow" />
         <label className="faint" style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>결과 상위
           <select value={top} onChange={(e) => setTop(Number(e.target.value))} aria-label="재분배 결과 상위 N">{[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}</select>개</label>
-        <button className="btn primary" disabled={busy || pool.length < 2} onClick={onRun}>{busy ? '계산 중…' : hasResult ? '다시 계산' : '재분배 계산'}</button>
+        <button className="btn primary" disabled={busy || pool.length < 2} onClick={onRun}>{busy ? '계산 중…' : !hasResult ? '재분배 계산' : stale ? '변경 반영 계산' : '다시 계산'}</button>
       </div>
     </Card>
   )
