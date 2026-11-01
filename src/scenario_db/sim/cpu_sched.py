@@ -818,8 +818,10 @@ def measured_task_ms(profile: Any, *, model: CpuPowerModel, fps: float, spec: Sw
     """Unrounded task times of the measured placement on the SoC the profile was measured on (``model``): the
     anchor of the RT chain check. The variant's Timing Budget SW belongs to that device, so a slower target SoC
     shows up as a longer chain instead of cancelling out against a target-side anchor."""
-    prep = _prepare(profile, target=model, fps=fps, spec=replace(spec, serial_stages=(), serial_pairs=(), stretch_budgets={}),
-                    base=None)
+    # CPU time only: the target's DSU rule (vote table, fixed clock) does not apply to the measured SoC
+    prep = _prepare(profile, target=model, fps=fps, base=None,
+                    spec=replace(spec, serial_stages=(), serial_pairs=(), stretch_budgets={},
+                                 dsu_mode="auto", dsu_vote=None, dsu_fixed_mhz=None))
     names = {c.name for c in model.clusters}
     policies = dict(prep.base_policies)
     for task, ds in prep.need.items():
@@ -963,11 +965,16 @@ def cpu_sweep(
         measured_policies[task] = replace(measured_policies.get(task, TaskPolicy()), allowed=tuple(where))
     budgets = dict(spec.budgets_ms)
     budget_source = {t: "user" for t in budgets}
+    cross_soc = base is not None and base is not target
+    on_measured = measured_task_ms(profile, model=base or target, fps=fps, spec=spec) \
+        if spec.serial_stages or (spec.stretch_budgets and cross_soc) else {}
     if spec.serial_stages:
-        ctx.anchor_ms = measured_task_ms(profile, model=base or target, fps=fps, spec=spec)
+        ctx.anchor_ms = on_measured
     if spec.stretch_budgets:
-        anchor = evaluate(threads, ctx, measured_policies, budgets_ms={}, dsu_residency=dsu_res, bw_mbs=bw_mbs,
-                          dsu_policy=dsu_policy)["task_ms"]
+        # the stage room belongs to the measured device: on another SoC the budget stays the measured time x stretch,
+        # so a slower target overruns it instead of stretching the budget with itself
+        anchor = on_measured if cross_soc else evaluate(threads, ctx, measured_policies, budgets_ms={}, dsu_residency=dsu_res,
+                                                        bw_mbs=bw_mbs, dsu_policy=dsu_policy)["task_ms"]
         for task, factor in spec.stretch_budgets.items():
             ms = anchor.get(task)
             if ms:

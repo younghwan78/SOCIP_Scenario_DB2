@@ -371,3 +371,17 @@ def test_chain_anchor_is_unrounded_and_on_the_measured_soc():
     same = cpu_sweep(profile, target=_mid(1.0), fps=30, spec=SweepSpec(serial_stages=(st,)))["reference"]
     slow = cpu_sweep(profile, target=_mid(0.25), base=_mid(1.0), fps=30, spec=SweepSpec(serial_stages=(st,)))["reference"]
     assert same["chain_serial"] == ["nrt"] and slow["chain_serial"] == []
+
+
+def test_cross_soc_stage_budgets_stay_on_the_measured_time_and_the_anchor_ignores_the_target_dsu():
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="MID", cycles=6666667.0)],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    fast, slow = _mid(1.0), _mid(0.25)
+    measured = measured_task_ms(profile, model=fast, fps=30, spec=SweepSpec())["a"]
+    out = cpu_sweep(profile, target=slow, base=fast, fps=30, spec=SweepSpec(stretch_budgets={"a": 1.2}))
+    assert out["budgets_ms"]["a"] == pytest.approx(measured * 1.2, rel=1e-4)        # not the 4x slower target time
+    assert not out["measured_placement"]["feasible"]                                  # the slower SoC overruns the stage room
+    same = cpu_sweep(profile, target=fast, fps=30, spec=SweepSpec(stretch_budgets={"a": 1.2}))
+    assert same["budgets_ms"]["a"] == pytest.approx(measured * 1.2, rel=1e-4) and same["measured_placement"]["feasible"]
+    # a DSU rule of the target never reaches the measured-SoC anchor (that SoC has no DSU / vote table here)
+    assert measured_task_ms(profile, model=fast, fps=30, spec=SweepSpec(dsu_mode="vote"))["a"] == pytest.approx(measured)
