@@ -16,7 +16,7 @@ from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_profile import cpu_profile_from_evidence
 from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance
-from scenario_db.sim.cpu_sched import StageOrder, SweepSpec, cpu_sweep
+from scenario_db.sim.cpu_sched import StageOrder, SweepSpec, cpu_sweep, longest_path
 from scenario_db.sim.cpu_whatif import WhatIfSpec, cpu_whatif
 from scenario_db.sim.power_params import power_params_from_row
 
@@ -172,11 +172,13 @@ def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dic
     out = []
     ref_ms, new_ms = reference.get("task_ms") or {}, case.get("task_ms") or {}
     for st in coupling["stages"]:
-        add = 0.0
-        for it in st["tasks"]:
-            a, b = ref_ms.get(it["task"]), new_ms.get(it["task"])
-            if a and b:
-                add += it["ms"] * (b / a - 1.0)
+        scaled = {it["task"]: it["ms"] * (new_ms[it["task"]] / ref_ms[it["task"]])
+                  if ref_ms.get(it["task"]) and new_ms.get(it["task"]) else it["ms"] for it in st["tasks"]}
+        if "order" in st:     # the stage SW is its critical path: parallel branches do not add up
+            pairs = [(a, b) for a, b in st["order"]]
+            add = longest_path(scaled, pairs) - longest_path({it["task"]: it["ms"] for it in st["tasks"]}, pairs)
+        else:                 # an older coupling without the order: every item in sequence
+            add = sum(scaled[it["task"]] - it["ms"] for it in st["tasks"])
         sw = st["sw_ms"] + add
         period = coupling["period_ms"]
         chain0 = st["sw_ms"] + st["hw_ms"] + st["overhead_ms"]

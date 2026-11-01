@@ -16,7 +16,7 @@ from scenario_db.sim import cpu_sched
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance
 from scenario_db.sim.cpu_sched import (SchedConfig, StageOrder, SweepSpec, Thread, TaskPolicy, _Ctx, beam_starts, capacities,
-                                       cpu_sweep, eas_place, packed_ms)
+                                       cpu_sweep, eas_place, evaluate, longest_path, packed_ms)
 from scenario_db.sim.models import CpuClusterProfile, CpuProfile, CpuTaskProfile
 from scenario_db.sim.timing_budget import _sw_order
 
@@ -248,3 +248,43 @@ def test_beam_also_starts_from_the_measured_placement():
     # a pinned to its measured B; b measured on two clusters and c without a pin option stay on EAS
     assert starts == [(0, 0, 0), (2, 0, 0)]
     assert beam_starts(["b"], options, {"b": ["L", "B"]}) == [(0,)]       # no second start when it equals EAS
+
+
+def test_parallel_branches_use_the_critical_path_not_the_sum():
+    """PIP-like stage: rear chain r1 -> r2 next to front f (parallel). Rear x2, front x0.5 must lengthen the chain."""
+    pairs = (("r1", "r2"),)
+    base = {"r1": 3.0, "r2": 3.0, "f": 5.0}
+    assert longest_path(base, pairs) == pytest.approx(6.0)
+    assert longest_path({"r1": 6.0, "r2": 6.0, "f": 2.5}, pairs) == pytest.approx(12.0)
+    st = StageOrder(stage="nrt", pairs=pairs, sw_ms=6.0, fixed_ms=24.0, items=tuple(base.items()), period_ms=33.3)
+    anchor = {"r1": 1.0, "r2": 1.0, "f": 1.0}
+    assert st.holds(anchor, anchor)
+    # the sum of changes (+6 -2.5 = +3.5) would read 33.5 -> still over; make it tight: the critical path says +6
+    tight = StageOrder(stage="nrt", pairs=pairs, sw_ms=6.0, fixed_ms=22.0, items=tuple(base.items()), period_ms=33.3)
+    assert not tight.holds({"r1": 2.0, "r2": 2.0, "f": 0.5}, anchor)     # 22 + 12 = 34 > 33.3 (sum rule: 31.5)
+    # the stage timing impact follows the same path
+    coupling = {"period_ms": 33.3, "stages": [{"stage": "nrt", "sw_ms": 6.0, "hw_ms": 22.0, "overhead_ms": 0.0, "room_ms": 11.3,
+                                              "tasks": [{"task": t, "ms": ms} for t, ms in base.items()], "order": [list(pairs[0])]}]}
+    row = svc.timing_impact(coupling, {"task_ms": anchor}, {"task_ms": {"r1": 2.0, "r2": 2.0, "f": 0.5}})[0]
+    assert row["delta_sw_ms"] == pytest.approx(6.0)
+
+
+def test_cpupri_places_again_when_the_candidate_loses_the_chain_order():
+    model = _model(cores=2, rt_placement="cpupri", task_policy={"x": RT, "y": RT})
+    ths = [Thread("cfs", "cfs", 9e6, 0.0), Thread("x", "x", 1e6, 0.0), Thread("y", "y", 1e6, 0.0)]
+    pol = {t: cpu_sched.policy_from(RT) for t in ("x", "y")}
+    st = StageOrder(stage="nrt", pairs=(("x", "y"),), sw_ms=2.0, fixed_ms=30.0, items=(("x", 1.0), ("y", 1.0)), period_ms=33.3)
+
+    def where(anchor):
+        sched = SchedConfig.from_model(model)
+        ctx = _Ctx(model, sched, 1000 / 30, capacities(model, sched), {c.name: c for c in model.clusters}, {},
+                   frozenset({frozenset(("x", "y"))}), frozenset(), (st,), anchor)
+        case = evaluate(ths, ctx, pol, budgets_ms={}, bw_mbs=0.0)
+        return [sorted(t for t in cpu["threads"]) for cpu in case["clusters"]["MID"]["cpus"]], case["chain_serial"]
+
+    # order holds (task times as measured): the chain members may share a CPU
+    shared, held = where({"x": 10.0, "y": 10.0})
+    assert held == ["nrt"] and sorted(shared) == [["cfs"], ["x", "y"]]
+    # the candidate is much slower than measured: the chain overruns the period, so the RT threads spread
+    spread, held = where({"x": 0.1, "y": 0.1})
+    assert held == [] and sorted(len(c) for c in spread) == [1, 2] and ["x", "y"] not in spread
