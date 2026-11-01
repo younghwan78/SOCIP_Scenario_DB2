@@ -146,3 +146,21 @@ it('page: the scenario menu moves the app selection; edits mark the result stale
     expect(status()).toContain('조건 변경됨')
   } finally { act(() => root.unmount()); inputs.mockRestore(); sweep.mockRestore(); localStorage.clear() }
 })
+
+it('a failed comparison or growth stage after the main result ends the workflow as partial, naming the stages', async () => {
+  const g = gated(), analysis = createCpuAnalysis(g.adapter)
+  const done = analysis.execute({ mode: 'rebalance', request: request(), growths: [1], comparison: 'other' })
+  g.pending[0].resolve(rebalance); await settle()
+  g.pending[1].reject(new Error('comparison failed')); await settle()
+  g.pending[2].resolve(growth()); await settle()
+  g.pending[3].reject(new Error('comparison growth failed')); await done
+  expect(analysis.getSnapshot()).toMatchObject({ rebalance, error: null, comparisonError: 'comparison failed',
+    done: { outcome: 'partial', failed: ['comparison', 'growth-comparison'] } })
+})
+
+it('a variant picked on the CPU page opens in the CPU page (as on Timing / Behavior)', async () => {
+  const { pickerTarget } = await import('../src/App')
+  expect(pickerTarget('cpu')).toBe('cpu')
+  expect(pickerTarget('timing')).toBe('timing')
+  expect(pickerTarget('explore')).toBe('pipeline')
+})

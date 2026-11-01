@@ -236,9 +236,8 @@ it('refreshes the comparison sweep on topology changes and records the computed 
   }
 })
 
-it('first run on a profile applies the saved cgroups whose tasks share one measured cluster, and shows the result as current', async () => {
+it('first run on a profile leaves the saved cgroups out (homes are known after it) and says so; the next run applies them', async () => {
   localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
-  // camera-daemon: both on MID_LF0 → applied; media: MID_LF0 + MID_LF1 → left to a manual run (the server rejects it)
   localStorage.setItem('sdb.cpu.rb.cgroup', JSON.stringify({ cam_hal_request: 'camera-daemon', cam_hal_result: 'camera-daemon', isp_ctrl: 'media', audio_hal: 'media' }))
   const growth = vi.spyOn(sweepApi, 'run').mockRejectedValue(new Error('growth sweep not under test'))
   const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
@@ -251,10 +250,10 @@ it('first run on a profile applies the saved cgroups whose tasks share one measu
   const host = document.createElement('div'), root = createRoot(host)
   try {
     await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
-    expect(calls[0].co_move).toEqual([['cam_hal_request', 'cam_hal_result']])
+    expect(calls[0].co_move).toEqual([])
     expect(calls[0].pool).toEqual([])
-    // the media cgroup was not part of the run, so the shown result is not the current inputs' result
-    expect(host.querySelector('[aria-label="계산 상태"]')!.textContent).toContain('조건 변경됨')
+    // the saved cgroups were not part of the run, so the shown result is not the current inputs' result
+    expect(host.querySelector('[aria-label="계산 상태"]')!.textContent).toContain('저장된 cgroup 2개 미반영')
     await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '변경 반영 계산')!.click())
     expect(calls.at(-1)!.co_move).toEqual([['cam_hal_request', 'cam_hal_result'], ['isp_ctrl', 'audio_hal']])
     expect(host.querySelector('[aria-label="계산 상태"]')!.textContent).toContain('결과 = 현재 조건')

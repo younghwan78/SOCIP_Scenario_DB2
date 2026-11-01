@@ -34,8 +34,11 @@ export type CpuAnalysisPlan =
 export type CpuStage = 'sweep' | 'rebalance' | 'comparison' | 'growth' | 'growth-comparison'
 /** The workflow in flight: its planned stages, the one running now and when it started (ms epoch). */
 export interface CpuProgress { mode: 'sweep' | 'rebalance' | 'growth'; stages: CpuStage[]; index: number; startedAt: number }
-/** How the last workflow ended; `ms` = wall time of all its stages. */
-export interface CpuDone { mode: 'sweep' | 'rebalance' | 'growth'; outcome: 'ok' | 'error' | 'cancelled'; at: number; ms: number }
+/**
+ * How the last workflow ended; `ms` = wall time of all its stages. `partial` = the main result arrived but a later
+ * stage (`failed`) did not; `error` = the first stage failed.
+ */
+export interface CpuDone { mode: 'sweep' | 'rebalance' | 'growth'; outcome: 'ok' | 'partial' | 'error' | 'cancelled'; at: number; ms: number; failed?: CpuStage[] }
 
 export const STAGE_LABEL: Record<CpuStage, string> = {
   sweep: 'knob 자동 탐색', rebalance: 'MID 재분배', comparison: '과제 비교 재분배',
@@ -115,12 +118,13 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
     const index = p.stages.indexOf(stage, p.index)
     if (index > p.index) publish({ progress: { ...p, index } })
   }
-  const finish = (owner: string, outcome: CpuDone['outcome']) => {
+  const finish = (owner: string, outcome: CpuDone['outcome'], failed: CpuStage[] = []) => {
     const p = state.progress
     if (progressOwner !== owner || !p) return
     progressOwner = null
     const at = now()
-    publish({ progress: null, done: { mode: p.mode, outcome, at, ms: at - p.startedAt } })
+    const result = outcome === 'ok' && failed.length ? 'partial' : outcome
+    publish({ progress: null, done: { mode: p.mode, outcome: result, at, ms: at - p.startedAt, ...(failed.length ? { failed } : {}) } })
   }
   /** Stop publishing for the current workflow and growth; displayed results are left as is. */
   const cancel = () => {
@@ -130,8 +134,10 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
     if (progressOwner !== null) { progressOwner = null; publish({ progress: null }) }
   }
   const withComparison = (comparison: string | undefined, target: string) => !!comparison && comparison !== target
+  /** Resolves to the stages that failed (empty = all published). */
   const runGrowth = async (request: GrowthRequest, comparison: string | undefined, id: number, key: string | undefined,
-                           owner?: string) => {
+                           owner?: string): Promise<CpuStage[]> => {
+    const failed: CpuStage[] = []
     const token = ++growthToken
     growthController?.abort()
     const controller = growthController = new AbortController()
@@ -145,7 +151,7 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
     publish({ growthBusy: true, growthError: null, snapshotRequest: null, comparisonGrowth: null, comparisonGrowthError: null })
     try {
       const result = await adapter.growth(request, controller.signal)
-      if (!live()) return
+      if (!live()) return failed
       publish({ growth: { result, request }, snapshotRequest: request, keys: { ...state.keys, growth: key ?? null } })
       if (cmp) {
         if (mine) step(mine, 'growth-comparison')
@@ -153,18 +159,21 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
           const result = await adapter.growth({ ...onComparison(request, comparison!), growths: request.growths }, controller.signal)
           if (live()) publish({ comparisonGrowth: result })
         } catch (error) {
+          failed.push('growth-comparison')
           if (live()) publish({ comparisonGrowthError: message(error) })
         }
       }
     } catch (error) {
       outcome = 'error'
+      failed.push('growth')
       if (live()) publish({ growthError: message(error), growth: null, keys: { ...state.keys, growth: null } })
     } finally {
       if (token === growthToken) {
         publish({ growthBusy: false })
-        if (!owner && mine) finish(mine, outcome)
+        if (!owner && mine) finish(mine, outcome, outcome === 'ok' ? failed : [])
       }
     }
+    return failed
   }
   const execute = async (input: CpuAnalysisPlan) => {
     // Freeze the calculation's inputs before the first await, including nested task edits and growths.
@@ -184,6 +193,7 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
       : ['rebalance', ...(cmp ? ['comparison' as const] : []), 'growth', ...(cmp ? ['growth-comparison' as const] : [])]
     begin(owner, plan.mode, stages)
     let outcome: CpuDone['outcome'] = 'ok'
+    const failed: CpuStage[] = []
     publish({
       busy: true, error: null,
       ...(plan.mode === 'rebalance'
@@ -206,6 +216,7 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
           const response = await adapter.rebalance(onComparison(plan.request, plan.comparison!), controller.signal)
           if (id === generation) { publish({ comparison: response }); comparison = response }
         } catch (error) {
+          failed.push('comparison')
           if (id === generation) publish({ comparisonError: message(error) })
         }
       }
@@ -224,12 +235,12 @@ export function createCpuAnalysis(adapter: CpuAnalysisAdapter, initialRuns: CpuR
         }
         publish({ runs: [...state.runs.slice(-19), run] })
       }
-      if (id === generation) await runGrowth({ ...plan.request, growths: plan.growths }, plan.comparison, id, plan.growthKey, owner)
+      if (id === generation) failed.push(...await runGrowth({ ...plan.request, growths: plan.growths }, plan.comparison, id, plan.growthKey, owner))
     } catch (error) {
       outcome = 'error'
       if (id === generation) publish({ error: message(error) })
     } finally {
-      if (id === generation) { publish({ busy: false }); finish(owner, outcome) }
+      if (id === generation) { publish({ busy: false }); finish(owner, outcome, failed) }
     }
   }
   return {

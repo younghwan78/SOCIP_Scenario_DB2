@@ -133,18 +133,18 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const showInputs = mode === 'sweep' || inputsOpen || !rbRaw
   /**
    * Rebalance request of the current inputs. `fresh` = the first run on a newly selected profile: default pool, no
-   * locks yet, and only the saved cgroups whose tasks all sit on one measured cluster of this profile (a cgroup over
-   * several home clusters is rejected by the server; a manual run still sends it so the user sees why).
+   * locks and no saved cgroups yet. A cgroup must sit on one measured home cluster, and only the server knows the
+   * homes of a new profile (its largest demand, not the inputs' largest raw cycles) — so saved cgroups wait for
+   * the next run, and the status bar says they are not applied yet.
    */
   const rbRequest = (base: CpuSweepRequest, fresh = false): CpuRebalanceRequest => {
     const states = fresh ? {} : taskStates
     const locks: Record<string, string> = {}
     for (const [t, st] of Object.entries(states)) if (st === 'exclude') locks[t] = 'exclude'; else if (st.startsWith('pin:')) locks[t] = st.slice(4)
-    const homes = new Map<string, Set<string>>()
-    for (const t of prof?.tasks ?? []) if (t.task !== '(other)') homes.set(t.task, (homes.get(t.task) ?? new Set<string>()).add(t.cluster))
+    const present = new Set((prof?.tasks ?? []).map((t) => t.task).filter((t) => t !== '(other)'))
     const byGroup = new Map<string, string[]>()
-    for (const [t, g] of Object.entries(groups)) if (g && homes.has(t) && (states[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
-    const coMove = [...byGroup.values()].filter((g) => g.length > 1 && (!fresh || new Set(g.flatMap((t) => [...homes.get(t)!])).size === 1))
+    for (const [t, g] of Object.entries(groups)) if (g && present.has(t) && (states[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
+    const coMove = fresh ? [] : [...byGroup.values()].filter((g) => g.length > 1)
     return { ...base, top: rbTop, pool: fresh ? [] : pool, locks, co_move: coMove, timing_coupling: timingMode, latency_trade: timingMode === 'stage_slack' }
   }
   // input fingerprints stored with each result: a result whose fingerprint differs from the current inputs is stale.
@@ -282,6 +282,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const currentRb = mode === 'rebalance' && profile && target ? rbRequest(request()) : null
   const stale = hasResult && (mode === 'sweep' ? execution.keys.sweep !== JSON.stringify(request()) : !!currentRb && execution.keys.rebalance !== rbKey(currentRb))
   const growthStale = !!sweep && !!currentRb && execution.keys.growth !== growthKey(currentRb)
+  // the only change since the shown result is the saved cgroups (a fresh run leaves them out)
+  const groupsPending = stale && !!currentRb && currentRb.co_move.length > 0 && execution.keys.rebalance === rbKey({ ...currentRb, co_move: [] })
 
   return (
     <div className="page tb-page">
@@ -311,6 +313,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         {mode === 'rebalance' && <button className="btn tb-mini" onClick={() => setInputsOpen((o) => !o)} aria-expanded={showInputs}>{showInputs ? '조건 접기 ▴' : '조건 편집 ▾'}</button>}
       </div>
       <CpuRunStatus progress={execution.progress} done={execution.done} busy={busy || sweepBusy} stale={stale} hasResult={hasResult}
+        staleNote={groupsPending ? `조건 변경됨 · 저장된 cgroup ${currentRb!.co_move.length}개 미반영 (새 profile의 첫 계산은 cgroup 없이)` : undefined}
         canRun={!!profile && !!target && (mode === 'sweep' || pool.length >= 2)} onRun={() => void run()} onStop={analysis.stop} />
       </div>
       {inputs.error && <div className="err">{inputs.error}</div>}
