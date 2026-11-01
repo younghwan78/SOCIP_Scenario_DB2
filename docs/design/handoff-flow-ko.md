@@ -90,8 +90,8 @@ handoff_flows:
 | loop 테두리 | `loop [Sensor frame · 30 Hz] frame loop`처럼 단위와 loop 종류를 표시한다. 종류는 frame loop · vsync loop · independent loop · slow chunk loop · every N-th · event-driven이다. frame에 묶인 loop는 실선 청록, 독립 loop는 주황 점선이다. |
 | 하위 loop | 한 flow 안에서 다른 주기로 도는 step(예: vsync scanout, AAC, VPS_OD ÷5)은 안쪽 loop 테두리로 감싸고 오른쪽 배지에도 표시한다. |
 | Loops 줄 | 시나리오의 모든 cadence를 rate 순으로 보여 준다. 그 아래에 loop 사이에 넘겨주는 지점과 넘겨주는 호출을 적는다. 예: `ABOX period · 50 Hz → AAC frame · 47 Hz via AAC encode`. |
-| 열 | 기본은 계층 6열(`Layer`)이다. `Process`로 바꾸면 process 단위로 펼친다. |
-| 행 | 자동 번호, 시각 t, 대기 Δ, 호출 이름, 공통 name, 실행 시간을 보여 준다. ★는 Pipeline node다. 한 participant 안에서 이어지는 단계(CSIS → MLSC)는 한 행으로 접는다. |
+| 열 | 기본은 계층 6열(`Layer`)이다. `Process`로 바꾸면 모든 계층을 process 단위로 펼친다. 머리글의 계층 띠(`▸ HW · 10`)를 누르면 그 계층만 펼치거나 접는다. process가 하나뿐인 계층은 띠를 눌러도 바뀌지 않는다. 지금 보는 flow가 쓰는 process만 열이 된다. |
+| 행 | 자동 번호, 시각 t, 대기 Δ, 호출 이름, 공통 name, 실행 시간을 보여 준다. 열이 많아 가로로 스크롤해도 번호 · Δ는 왼쪽에, t · rate 배지는 오른쪽에 고정된다. ★는 Pipeline node다. 한 participant 안에서 이어지는 단계(CSIS → MLSC)는 한 행으로 접는다. |
 | 화살표 | 시작시킴(kick) · 넘김(ipc · data)은 실선, 완료 · IRQ는 점선이다. 색은 Full-stack timing과 같다. |
 | par | preview / encode처럼 갈라지는 구간은 par 블록으로 묶는다. |
 | 요약 | flow 하나일 때는 end-to-end, 선행 시간, 동시에 진행 중인 단위 수(= ⌈e2e / 주기⌉), HW · SW 실행 합을 보여 준다. All loops일 때는 loop 종류별 개수를 보여 준다. |

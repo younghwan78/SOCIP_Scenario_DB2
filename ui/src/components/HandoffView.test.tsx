@@ -3,6 +3,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HandoffDoc } from '../lib/api'
+import type { ColumnSpec } from '../lib/handoff'
 import { HandoffView } from './HandoffView'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -35,14 +36,14 @@ let root: ReturnType<typeof createRoot> | null = null
 let host: HTMLDivElement
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null })
 
-function render(flowId: string | null = null) {
-  const onFlow = vi.fn(), onOpen = vi.fn()
+function render(flowId: string | null = null, d: HandoffDoc = doc, columns: ColumnSpec = 'layer') {
+  const onFlow = vi.fn(), onOpen = vi.fn(), onColumns = vi.fn()
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
-  act(() => root!.render(<HandoffView doc={doc} flowId={flowId} onFlow={onFlow} mode="layer" onMode={vi.fn()} source="test"
+  act(() => root!.render(<HandoffView doc={d} flowId={flowId} onFlow={onFlow} columns={columns} onColumns={onColumns} source="test"
     canOpen={(id) => id === 'game.update#f3'} onOpen={onOpen} />))
-  return { onFlow, onOpen }
+  return { onFlow, onOpen, onColumns }
 }
 const buttons = () => [...host.querySelectorAll('button')]
 const button = (re: RegExp) => buttons().find((b) => re.test(b.textContent ?? ''))!
@@ -91,5 +92,68 @@ describe('HandoffView', () => {
   it('a step on another cadence carries a rate badge', () => {
     render('touch')
     expect(textNode(/^↻ Game frame · 60 Hz$/)).toBeTruthy()
+  })
+
+  it('# and Δ sit in the left gutter, t and rate badges in the right one; both open the row like the lanes', () => {
+    const { onOpen } = render('touch')
+    // visible labels only (the row's hover title carries every field)
+    const shown = (sel: string) => [...host.querySelectorAll(`${sel} text`)].map((t) => t.textContent)
+    expect(shown('.handoff-body .handoff-gut')).toEqual(['1', '2', 'Δ0.35'])
+    expect(shown('.handoff-body .handoff-rate')).toEqual(['0.00', '0.40', '↻ Game frame · 60 Hz'])
+    expect(shown('.handoff-body svg[role=img]').some((t) => /Δ|^0\.40$/.test(t ?? ''))).toBe(false)
+    expect(host.querySelector('.handoff-head .handoff-gut')!.textContent).toBe('# · 대기 Δ')
+    expect(host.querySelector('.handoff-head .handoff-rate')!.textContent).toContain('t ms')
+    act(() => root!.unmount()); host.remove()
+    const r2 = render('game')
+    click([...host.querySelectorAll('.handoff-body .handoff-gut text')].find((t) => t.textContent === '1')!)
+    expect(r2.onOpen).toHaveBeenCalledWith('game.update#f3')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('labels and notes wider than the lanes widen them instead of going under the sticky gutters', () => {
+    const one: HandoffDoc = { ...doc, participants: [{ id: 'hal.cam', layer: 'hal', name: 'camera.provider' }],
+      flows: [{ id: 'one', name: 'one', cadence: 'frame', steps: [
+        { to: 'hal.cam', task: 'hal.request_with_a_very_long_common_name', call: 'processCaptureRequest_long_call', t_ms: 0, dur_ms: 2 },
+        { note: 'DB는 storage를 frame마다(30 Hz) 모델링 · 실제는 chunk 단위로 몰아서 씀 — 아주 긴 메모', over: ['hal.cam'] },
+      ] }] }
+    render('one', one)
+    const lanes = host.querySelector('.handoff-body svg[role=img]')!
+    const W = Number(lanes.getAttribute('width'))
+    // the one-column label is placed left of its lifeline: the lanes start far enough left to hold it
+    const label = [...lanes.querySelectorAll('text')].find((t) => /HAL_REQUEST_WITH_A_VERY_LONG/.test(t.textContent ?? ''))!
+    expect(label.getAttribute('text-anchor')).toBe('end')
+    const est = [...(label.textContent ?? '')].reduce((a, c) => a + (c.charCodeAt(0) > 0x2e80 ? 11 : 6.3), 0) * 0.9
+    expect(Number(label.getAttribute('x')) - est).toBeGreaterThanOrEqual(0)
+    // the note box fits inside the lanes on both sides
+    const note = [...lanes.querySelectorAll('rect')].find((r) => r.getAttribute('fill') === '#FFF6D6')!
+    const nx = Number(note.getAttribute('x')), nw = Number(note.getAttribute('width'))
+    expect(nx).toBeGreaterThanOrEqual(0)
+    expect(nx + nw).toBeLessThanOrEqual(W)
+    // header lanes have the same width, so columns stay aligned with the body
+    expect(Number(host.querySelector('.handoff-head svg:not(.handoff-gut):not(.handoff-rate)')!.getAttribute('width'))).toBe(W)
+  })
+
+  it('a layer band with several processes spreads or folds that layer alone', () => {
+    const two: HandoffDoc = { ...doc, participants: [...doc.participants, { id: 'hw.dpu', layer: 'hw', name: 'DPU' }],
+      flows: [{ ...doc.flows[0], steps: [...doc.flows[0].steps, { from: 'hw.gpu', to: 'hw.dpu', call: 'scanout', t_ms: 14, dur_ms: 2 }] }] }
+    const band = (re: RegExp) => [...host.querySelectorAll('.handoff-layer')].find((g) => re.test(g.textContent ?? ''))!
+    const { onColumns } = render(null, two)
+    // single-process layers are not toggles
+    expect(host.querySelectorAll('.handoff-layer')).toHaveLength(1)
+    expect(band(/▸ HW · 2/).getAttribute('aria-expanded')).toBe('false')
+    click(band(/HW/))
+    expect(onColumns).toHaveBeenCalledWith(['hw'])
+    act(() => root!.unmount()); host.remove()
+    const spread = render(null, two, ['hw', 'kernel'])
+    expect(band(/▾ HW/).getAttribute('aria-expanded')).toBe('true')
+    expect(button(/^Process$/).className).toBe('on')
+    click(band(/HW/))
+    expect(spread.onColumns).toHaveBeenCalledWith(['kernel'])
+    act(() => root!.unmount()); host.remove()
+    const all = render(null, two, 'participant')
+    click(band(/HW/))
+    // folding one layer out of "all": every other known layer stays spread
+    expect(all.onColumns.mock.calls[0][0]).toEqual(expect.arrayContaining(['app', 'kernel']))
+    expect(all.onColumns.mock.calls[0][0]).not.toContain('hw')
   })
 })

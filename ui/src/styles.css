@@ -424,8 +424,16 @@ th.sorted .sort-ind { opacity: 1; }
 .handoff-links { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: #4A4F5A; margin-left: 8px; }
 .handoff-summary { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); position: sticky; left: 0; max-width: calc(100vw - 260px); }
 .handoff-seq { position: relative; }
-.handoff-head { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line-soft); width: max-content; }
-.handoff-seq > svg { display: block; }
+.handoff-head { position: sticky; top: 0; z-index: 3; background: var(--surface); border-bottom: 1px solid var(--line-soft); width: max-content; display: flex; }
+.handoff-body { display: flex; width: max-content; }
+.handoff-body > svg, .handoff-head > svg { display: block; flex: none; }
+/* # · Δ on the left and t · rate on the right stay in view while the lanes scroll sideways */
+.handoff-gut, .handoff-rate { position: sticky; z-index: 2; background: var(--surface); }
+.handoff-gut { left: 0; border-right: 1px solid var(--line-soft); }
+.handoff-rate { right: 0; border-left: 1px solid var(--line-soft); }
+.handoff-layer { cursor: pointer; }
+.handoff-layer:hover rect { opacity: 0.35; }
+.handoff-layer:focus-visible { outline: 2px solid var(--accent, #2F6F68); outline-offset: -2px; }
 /* Scenario page: Behavior filter / badge */
 .bh-filter { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding-left: 12px; border-left: 1px solid var(--line); }
 .bh-badge { margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: #EEE9FD; color: #5B3FD0; border: 1px solid #D5CBFA; vertical-align: 1px; }
