@@ -62,18 +62,26 @@ export interface CpuRebalance {
   latency_trade?: LatencyTrade | null
   /** scheduling class / priority from scheduler.task_policy (absent when none is set; unset tasks = normal nice 0) */
   task_sched?: Record<string, TaskSched>
+  /** API ≥ 2026-11-01: RT thread placement inside a cluster (eas | cpupri) */
+  rt_placement?: 'eas' | 'cpupri'
 }
 export interface LatencyTrade { best_total_mw: number; moved: string[]; delta_mw: number; delta_vs_reference_mw: number; extra_latency_frames: number; min_slack_ms: number | null; impact: TimingImpact[] }
 export interface RatioPoint { util_pct: number; moved_unit: string | null; total_mw: number; feasible: boolean; mhz: Record<string, number> }
 export interface RatioCurve { target: string; start_util_pct: number; points: RatioPoint[]; best_index: number | null }
 export interface BwCoefficient { mw_per_mbs: number; source: 'prediction' | 'builtin'; prediction_ref: string | null; bw_power_model: string | null }
 export interface BwPower extends BwCoefficient { cpu_bw_mbs: number | null; bw_mw: number | null; reference_total_mw: number | null; best_total_mw: number | null }
-export interface TimingStage { stage: string; sw_ms: number; hw_ms: number; overhead_ms: number; room_ms: number; slack_ms: number; stretch: number; tasks: { task: string; ms: number }[] }
+export interface TimingStage {
+  stage: string; sw_ms: number; hw_ms: number; overhead_ms: number; room_ms: number; slack_ms: number; stretch: number; tasks: { task: string; ms: number }[]
+  /** API ≥ 2026-11-01: SW pairs [a, b] the variant's pipeline orders within one frame (b after a: the RT chain), and whether
+   *  that order holds (serial: the stage chain fits one period, so these tasks never run at once) */
+  order?: [string, string][]; serial?: boolean
+}
 export interface TimingImpact { stage: string; sw_ms: number; delta_sw_ms: number; slack_ms: number; chain_ms: number; extra_latency_frames: number; ok: boolean }
 export interface TimingCoupling {
   mode: 'stage_slack'; enforced: boolean; scenario_id: string; variant_id: string; statistic: string; runtime_scale: number; period_ms: number
   stages: TimingStage[]; stretch: Record<string, number>; matched_tasks: string[]; unmatched_tasks: string[]
   impact: { reference: TimingImpact[]; best: TimingImpact[] | null }
+  serial_pairs?: [string, string][]
 }
 export interface RbWhy {
   delta_mw: number
@@ -86,8 +94,7 @@ export interface RbWhy {
 }
 export interface CpuRebalanceRequest extends CpuSweepRequest {
   pool: string[]; movable?: string[]; locks: Record<string, string>; co_move: string[][]; verify_k?: number; max_exhaustive?: number
-  /** stage_slack = Timing Budget stage SW slack bounds each SW task (no extra pipeline latency); off = frame only */
-  timing_coupling?: 'off' | 'stage_slack'; timing_statistic?: 'min' | 'mean' | 'max'; latency_trade?: boolean
+  latency_trade?: boolean
 }
 export const rebalanceApi = {
   run: (req: CpuRebalanceRequest, signal?: AbortSignal) => postCalculation<{ result: CpuRebalance }>('/cpu/rebalance', req, signal).then((r) => r.result),
@@ -120,7 +127,7 @@ export interface SlackVerdict {
   basis?: 'priority' | 'bound'
 }
 /** task with the lowest budget − response (= own slack − wait) */
-function worstWait(s: RbSplit, response: Record<string, number>): { task: string; shared_ms: number; wait_ms: number } | null {
+function worstWait(s: VerdictInput, response: Record<string, number>): { task: string; shared_ms: number; wait_ms: number } | null {
   let worst: { task: string; shared_ms: number; wait_ms: number } | null = null
   for (const [t, resp] of Object.entries(response)) {
     const own = s.slack_ms?.[t], ms = s.task_ms?.[t]
@@ -129,7 +136,9 @@ function worstWait(s: RbSplit, response: Record<string, number>): { task: string
   }
   return worst
 }
-export function slackVerdict(s: RbSplit): SlackVerdict {
+/** what a verdict reads: a rebalance split or a sweep case */
+export type VerdictInput = Pick<RbSplit, 'feasible' | 'slack_ms' | 'task_ms' | 'response_ms' | 'min_slack_shared_ms' | 'response_prio_ms'>
+export function slackVerdict(s: VerdictInput): SlackVerdict {
   if (!s.feasible) return { tier: 'miss' }
   if (s.response_prio_ms) {
     const w = worstWait(s, s.response_prio_ms)

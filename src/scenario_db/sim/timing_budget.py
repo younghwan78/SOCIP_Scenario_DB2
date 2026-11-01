@@ -573,6 +573,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
             )
             if want and "apv" not in (node + str(workload.ip_ref)).lower():
                 dual[node] = 2
+    sw_order = _sw_order(sw_items, edges)
     if any(i["source"] == "assumed" for items in sw_items.values() for i in items):
         warnings.append(
             "SW timing contains 'assumed' values; replace with previous-project measurements."
@@ -590,6 +591,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "stage": stage,
         "tasks": tasks,
         "sw_items": sw_items,
+        "sw_order": sw_order,
         "budgets": budgets,
         "margins": margins,
         "dual": dual,
@@ -690,6 +692,25 @@ def _critical_sw(items: list[dict[str, Any]], edges: list) -> float:
             node = parent.get(node)
     overhead = sum(i["runtime_ms"] for i in items if i["kind"] == "ip_overhead")
     return (max(best.values()) if best else 0.0) + overhead
+
+
+def _sw_order(sw_items: dict[str, list[dict[str, Any]]], edges: list) -> dict[str, list[list[str]]]:
+    """Ordered SW pairs of each stage: ``[a, b]`` when b depends on a within the same frame, through any
+    timeline node (SW or HW). Edges with a ``frame_offset`` link different frames and do not order. Two SW
+    items of a stage without such a path may run at the same time (parallel branches, e.g. front / rear)."""
+    succ: dict[str, set[str]] = {}
+    for edge in edges:
+        if edge.get("frame_offset"):
+            continue
+        a, b = _edge_pair(edge)
+        succ.setdefault(a, set()).add(b)
+    out: dict[str, list[list[str]]] = {}
+    for st, items in sw_items.items():
+        names = list(dict.fromkeys(i["task"] for i in items if i["kind"] == "sw"))
+        reach = {n: _closure([n], succ) for n in names}
+        # a cycle (both ways) leaves the pair unordered
+        out[st] = sorted([a, b] for a in names for b in names if a != b and b in reach[a] and a not in reach[b])
+    return out
 
 
 def _closure(start, adjacency) -> set[str]:
@@ -913,6 +934,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "throughput": options.throughput_model if st in ("nrt", "post") else "frame",
                 "longest_sw_ms": round(b["longest_sw_ms"], 3),
                 "cpu_groups": b.get("cpu_groups", []),
+                "sw_order": plan["sw_order"].get(st, []),
                 "chain_ms": round(b["sw_ms"] + stage_hw.get(st, 0.0), 3),
                 "fill_pct": round(100 * (b["sw_ms"] + stage_hw.get(st, 0.0)) / period, 1)
                 if st in ("nrt", "post")

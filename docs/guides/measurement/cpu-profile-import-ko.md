@@ -146,7 +146,8 @@ stop
 |---|---|
 | util | thread를 frame마다 1회 실행으로 보고 PELT로 환산. `util_est`(기본) = 그 실행의 PELT peak, `pelt_avg` = 평균. 주파수·capacity 불변 (`t·f/fmax`) |
 | capacity | `scheduler.capacity`(기기 `/sys/devices/system/cpu/cpuN/cpu_capacity`) 또는 `1024·ipc_rel·fmax / max` |
-| 배치 | thread를 util 큰 순으로: 허용 cluster(cpuset) 중 `clamp(util)·fits_margin ≤ cap`, cluster 안에서 여유 capacity가 가장 큰 CPU, cluster 간에는 **동적 전력 증가가 가장 작은 곳** (Linux EM; `energy_includes_static`로 leakage 포함). `prefer_idle` task는 idle CPU 우선. 들어갈 곳이 없으면 overutilized → 여유가 가장 큰 CPU |
+| 배치 | thread를 util 큰 순으로: 허용 cluster(cpuset) 중 `clamp(util)·fits_margin ≤ cap`, cluster 안에서 여유 capacity가 가장 큰 CPU, cluster 간에는 **동적 전력 증가가 가장 작은 곳** (Linux EM; `energy_includes_static`로 leakage 포함). `prefer_idle` task는 idle CPU 우선. 들어갈 곳이 없으면 overutilized → 여유가 가장 큰 CPU. `rt_placement: cpupri`이면 RT(fifo / rr) thread는 cluster 안에서 **동시에 돌 수 있는 RT thread의 우선순위가 가장 낮은 CPU**(RT가 없는 CPU 먼저)로 간다 (Linux RT push / cpupri 근사; cluster 선택은 EAS와 같음) |
+| task 시간 | CPU별로 그 CPU에 있는 같은 task의 thread 시간을 **더한 값**(한 CPU에서는 순서대로 실행)의 최댓값. budget · slack · deadline boost가 이 값을 쓴다 |
 | 주파수 | schedutil: `f = 다음 OPP ≥ freq_margin · max_cpu(clamp(Σutil)) / cap · fmax` (stall 때문에 고정점 반복). `deadline_boost`(기본 on): budget이 있는 task는 budget을 맞추는 OPP까지 올림 (ADPF hint / HAL uclamp.min) |
 | 전력 | CPU별 `busy/period · P_core(f)` + `leak(V)·(active + idle·(1−pg))`, DSU active = CPU 활동의 합집합, DSU 주파수 = 아래 DSU vote 규칙 |
 
@@ -188,6 +189,7 @@ scheduler:
   deadline_boost: true
   capacity: {}               # {MID_LF0: 350, ...} sysfs cpu_capacity
   energy_includes_static: false
+  rt_placement: cpupri       # eas(기본) | cpupri: RT thread는 RT가 없는 CPU 먼저
   task_policy:               # 현재 기기의 cpuset / uclamp / prefer_idle / threads / 스케줄링 클래스
     post_irta: {prefer_idle: true, sched_class: fifo, rt_priority: 1}
     eis: {sched_class: normal, nice: -10}
@@ -202,9 +204,32 @@ scheduler:
 | RT (fifo / rr) | 같거나 높은 우선순위 RT co-runner 실행시간 합 (같은 우선순위는 먼저 깬 쪽이 앞 → 보수적으로 포함) |
 | normal | RT co-runner 전부 + normal co-runner마다 min(C_j, C × w_j / w) (nice weight 비율 공유) |
 
-placement · 전력 · `feasible`(자기 실행시간 기준)은 바뀌지 않는다. 재분배 화면의 판정 열만 이 값으로
-**충족 / 대기 미충족**을 가르고, 우선순위가 없으면 대기 상한(co-runner 전부)으로 **조건부**만 표시한다.
-위상(실제로 겹치지 않는 순차 stage), binder 우선순위 상속, RT placement(cpupri)는 모델에 없다.
+전력 · `feasible`(자기 실행시간 기준)은 바뀌지 않는다. 재분배 · 자동 탐색의 판정만 이 값으로
+**충족 / 대기 미충족**을 가르고, 우선순위가 없으면 대기 상한(동시에 돌 수 있는 co-runner 전부)으로 **조건부**만 표시한다.
+
+**RT chain (pipeline 순서).** profile이 scenario variant에서 측정된 것이면, 그 variant의 Timing Budget stage마다
+pipeline task graph(HW node 경유 포함, `frame_offset`이 있는 다음 frame 간선 제외)에서 SW task의 순서를 읽는다
+(`timing_budget` stage의 `sw_order`). 예: E2600 uhd30 NRT = `post_crta → pre_me_rta → post_irta`.
+
+- 순서가 정해진 두 task는 한 frame 안에서 동시에 돌지 않으므로 같은 CPU에 있어도 **서로의 대기에 넣지 않는다**
+  (`priority_response`, 대기 상한 모두). cpupri 배치에서도 서로를 피하지 않는다.
+- 순서는 stage chain(SW + HW + overhead)이 frame 주기 안에 끝날 때만 쓴다. chain이 주기보다 길면 다음 frame의
+  같은 stage와 겹칠 수 있으므로 모두 대기에 넣는다 (보수적; SW 증가 배율이 커져 넘어가는 경우 포함).
+- stage가 다른 task, pipeline에 없는 task(HAL thread 등), 순서 없는 병렬 분기는 동시에 돌 수 있는 것으로 본다.
+- 순서는 variant의 pipeline에서 읽으므로 **다음 과제에서 RT chain 구성(member · 순서 · 분기 · stage)이 바뀌어도
+  코드 수정 없이 반영**된다. 스케줄링 클래스는 그 과제 power model의 `task_policy`가 정한다. chain에서 RT task와
+  순서로 이어진 task에 `sched_class`가 없으면 결과 `warnings`에 `RT chain: ...`으로 알린다.
+- 화면의 **RT chain · 대기 계산 기준** 카드가 stage별 순서, 각 task의 클래스, 순서 적용 여부(순서 고정 / 대기에 포함)를 보여 준다.
+
+모델에 없는 것: binder 우선순위 상속, non-preemptible 구간, stage 사이의 실제 위상(서로 다른 stage는 겹친다고 가정).
+
+### Timing Budget 연동 (자동 탐색 · 재분배 공통, `timing_coupling`)
+
+`stage_slack`(화면 기본 "SW 여유 제약")이면 profile variant의 Timing Budget에서 stage SW 여유
+(`(P − HW − overhead) / SW`, ≥ 1)를 읽어, stage에 속한 SW task의 budget을 **측정 배치의 task 시간 × stage stretch**로 둔다
+(사용자가 더 작은 budget을 넣으면 그 값). 결과의 `budgets_ms` / `budget_source`(`user` / `stretch`)와
+`timing_coupling`(stage 표, 영향)이 함께 온다. `off`("CPU 주기만")는 frame 주기와 입력 budget만 제약하고 stage 영향은 보고만 한다.
+자동 탐색의 beam 탐색은 EAS 기본과 측정 배치(각 task를 측정 cluster에 고정) 두 곳에서 시작한다.
 
 화면 구성:
 - ③ **Sweep 범위**: cluster 열(core 수 · capacity · OPP 범위), 칸 = fmax에서 task 시간(✓ budget 충족, ⚠ capacity 초과 = EAS가 보내지 않음), 체크 = sweep 포함(기본: budget을 맞출 수 있는 cluster), 파란 칸 = 측정 위치. thread 수·budget·증가 배율을 task별로 입력.
@@ -217,4 +242,4 @@ placement · 전력 · `feasible`(자기 실행시간 기준)은 바뀌지 않�
 3. "모델 확인"에서 측정 대비 주파수·util 차이를 `pelt_halflife_ms`/`freq_margin`으로 맞춤.
 4. sweep 결과의 knob을 기기에서 적용 → 재측정 → 다시 import 해 비교.
 
-한계: frame 정상상태(시계열·burst 없음), thread는 frame당 1회 실행 가정, CPU 공유 시 대기 시간 미반영(`shared_cpu` 표시), vendor scheduler(EMS 등)의 추가 heuristic 미반영(보정값으로 근사).
+한계: frame 정상상태(시계열·burst 없음), thread는 frame당 1회 실행 가정, CPU 공유 대기는 판정에만 쓰고 feasibility · 순위에는 넣지 않음(`shared_cpu` 표시), vendor scheduler(EMS 등)의 추가 heuristic 미반영(보정값으로 근사).

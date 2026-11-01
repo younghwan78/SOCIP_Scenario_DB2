@@ -50,9 +50,8 @@ class RebalanceSpec(SweepSpec):
     verify_k: int = 30
     max_exhaustive: int = 300_000
     top: int = 20
-    # task -> allowed slow-down vs its measured-placement time (e.g. Timing Budget stage SW slack); becomes
-    # budgets_ms[task] = reference ms x factor unless budgets_ms already names the task
-    stretch_budgets: dict[str, float] = field(default_factory=dict)
+    # stretch_budgets / serial_pairs: the Timing Budget coupling (SweepSpec); the stretch is anchored on the
+    # measured placement's task time
     ratio_curves: bool = True                     # CPU-07 per-target distribution-ratio curves (sweeps skip them)
 
 
@@ -179,8 +178,11 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         cl = ctx.by_name[c]
         task_ms: dict[str, float] = {}
         for cpu in sl[c]:
+            mine: dict[str, float] = {}       # a task's threads on one CPU run one after another (as in evaluate)
             for th in cpu:
-                task_ms[th.task] = max(task_ms.get(th.task, 0.0), th.ms(cl, row["mhz"]))
+                mine[th.task] = mine.get(th.task, 0.0) + th.ms(cl, row["mhz"])
+            for task, ms in mine.items():
+                task_ms[task] = max(task_ms.get(task, 0.0), ms)
         idle = 1.0
         for r in row["cpus"]:
             idle *= 1.0 - min(1.0, r["busy_ms"] / period)
@@ -615,6 +617,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "cpu_bw_mbs": round(prep.bw_mbs, 3),
         "budgets_ms": {t: round(v, 4) for t, v in verification_budgets.items()},
         "budget_source": budget_source,
+        "rt_placement": prep.sched.rt_placement,
         "warnings": warnings,
     }
     # task_policy scheduling class / priority behind response_prio_ms (absent when none is set)

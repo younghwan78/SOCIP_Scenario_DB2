@@ -92,6 +92,12 @@ class CpuSweepRequest(BaseModel):
     dsu_mode: DsuMode = "auto"
     dsu_vote: dict[str, Annotated[list[tuple[Mhz, Mhz]], Field(min_length=1)]] | None = None
     dsu_fixed_mhz: Mhz | None = None
+    # SW-timing coupling with the profile variant's Timing Budget: a task of a stage with SW items may slow
+    # down only by that stage's room ((P - HW - overhead) / SW, >= 1) -> no extra pipeline latency.
+    # "off" = only the frame period (and budgets_ms) bound the task time. With a profile on a scenario variant the
+    # coupling is also used for the stage's SW order (RT chain: ordered tasks never wait for each other).
+    timing_coupling: Literal["off", "stage_slack"] = "off"
+    timing_statistic: Literal["min", "mean", "max"] = "max"
 
 
 class CpuRebalanceRequest(CpuSweepRequest):
@@ -104,11 +110,6 @@ class CpuRebalanceRequest(CpuSweepRequest):
     verify_k: int = Field(default=30, ge=1, le=200)
     max_exhaustive: int = Field(default=300_000, ge=1, le=2_000_000)
     top: int = Field(default=20, ge=1, le=200)
-    # SW-timing coupling with the profile variant's Timing Budget: a task of a stage with SW items may slow
-    # down only by that stage's room ((P - HW - overhead) / SW, >= 1) -> no extra pipeline latency.
-    # "off" = only the frame period (and budgets_ms) bound the task time.
-    timing_coupling: Literal["off", "stage_slack"] = "off"
-    timing_statistic: Literal["min", "mean", "max"] = "max"
     # with stage_slack: also search without the stage budgets and report what a longer pipeline latency would
     # buy (result.latency_trade) — an explicit trade instead of a mode toggle; one extra search (single run only)
     latency_trade: bool = False

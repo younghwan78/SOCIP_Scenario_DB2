@@ -1,0 +1,171 @@
+"""RT chain order, RT placement (cpupri), per-CPU task time and the Timing Budget coupling of the CPU sweep.
+
+The RT chain is whatever the variant's pipeline orders within one frame (``timing_budget._sw_order``), so a
+next project with another chain structure needs no code change: its pipeline gives the order.
+"""
+from __future__ import annotations
+
+import pytest
+
+from scenario_db.api.services.cpu import _mark_serial, coupling_pairs, scale_coupling
+from scenario_db.models.capability.power_model import CpuSchedulerParams, PowerModelParams
+from scenario_db.sim import cpu_sched
+from scenario_db.sim.cpu_power import CpuPowerModel
+from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance
+from scenario_db.sim.cpu_sched import SchedConfig, SweepSpec, Thread, TaskPolicy, _Ctx, beam_starts, capacities, cpu_sweep, eas_place
+from scenario_db.sim.models import CpuClusterProfile, CpuProfile, CpuTaskProfile
+from scenario_db.sim.timing_budget import _sw_order
+
+
+def _model(cores: int = 2, **sched) -> CpuPowerModel:
+    return CpuPowerModel.from_params(PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x", "cpu": {
+            "clusters": [{"name": "MID", "core_type": "M", "cores": cores, "ipc_rel": 1.0, "opps": [
+                {"mhz": 1000, "mv": 700, "mw_per_core": 100}, {"mhz": 2000, "mv": 850, "mw_per_core": 300}]}],
+            "default_cluster": 0, **({"scheduler": sched} if sched else {})}}))
+
+
+def _ctx(model: CpuPowerModel, serial=()) -> _Ctx:
+    sched = SchedConfig.from_model(model)
+    return _Ctx(model, sched, 1000 / 30, capacities(model, sched), {c.name: c for c in model.clusters}, {},
+                frozenset(frozenset(p) for p in serial))
+
+
+RT = {"sched_class": "fifo", "rt_priority": 1}
+
+
+# ---------------------------------------------------------------- pipeline order
+def test_sw_order_follows_the_task_graph_through_hw_and_ignores_cross_frame_edges():
+    sw = {"nrt": [{"task": t, "kind": "sw"} for t in ("crta", "me", "irta", "side")] + [{"task": "MCSC", "kind": "ip_overhead"}]}
+    edges = [{"from": "crta", "to": "ISP"}, {"from": "ISP", "to": "me"}, {"from": "me", "to": "MTNR"},
+             {"from": "MTNR", "to": "irta"},
+             {"from": "irta", "to": "crta", "frame_offset": 1},       # next frame's input: not an in-frame order
+             {"from": "ISP", "to": "side"}]                           # parallel branch after ISP
+    order = _sw_order(sw, edges)["nrt"]
+    assert ["crta", "me"] in order and ["me", "irta"] in order and ["crta", "irta"] in order
+    assert ["crta", "side"] in order                                   # side waits for crta through ISP
+    assert not any("side" in p and ("me" in p or "irta" in p) for p in order)   # parallel: unordered
+    assert all(p[1] != "crta" for p in order)
+    # a same-frame cycle leaves the pair unordered instead of ordering both ways
+    assert _sw_order({"x": [{"task": "a", "kind": "sw"}, {"task": "b", "kind": "sw"}]},
+                     [{"from": "a", "to": "b"}, {"from": "b", "to": "a"}])["x"] == []
+
+
+def test_stage_order_is_serial_only_while_the_stage_chain_fits_one_period():
+    coupling = {"period_ms": 33.3, "runtime_scale": 1.0, "stretch": {}, "stages": [
+        {"stage": "nrt", "sw_ms": 10.0, "hw_ms": 18.0, "overhead_ms": 0.0, "room_ms": 15.3, "tasks": [], "order": [["a", "b"]]},
+        {"stage": "post", "sw_ms": 6.0, "hw_ms": 30.0, "overhead_ms": 0.0, "room_ms": 3.3, "tasks": [], "order": [["c", "d"]]}]}
+    out = _mark_serial(coupling)
+    assert [s["serial"] for s in out["stages"]] == [True, False]       # post: 36 ms > 33.3 ms overlaps the next frame
+    assert coupling_pairs(out) == (("a", "b"),)
+    # more SW at a higher growth can push a stage over the period: its order no longer counts
+    assert coupling_pairs(scale_coupling(out, 1.6)) == ()
+
+
+# ---------------------------------------------------------------- wait (response) model
+def test_ordered_chain_members_never_wait_for_each_other():
+    ths = [Thread(t, t, 1e6, 0.0) for t in ("crta", "me", "other_rt")]
+    pol = {t.task: TaskPolicy(sched_class="fifo", rt_priority=1) for t in ths}
+    free = cpu_sched.priority_response(ths, [1.0, 2.0, 4.0], pol)
+    chain = cpu_sched.priority_response(ths, [1.0, 2.0, 4.0], pol, frozenset({frozenset(("crta", "me"))}))
+    assert free == [pytest.approx(7.0), pytest.approx(7.0), pytest.approx(7.0)]   # equal FIFO: everyone ahead
+    assert chain == [pytest.approx(5.0), pytest.approx(6.0), pytest.approx(7.0)]  # the chain pair drops out
+
+
+def test_task_time_on_a_cpu_sums_its_threads_there_and_the_bound_skips_ordered_co_runners():
+    one = _model(cores=1)
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="MID", cycles=8e6, threads={"1": 4e6, "2": 4e6}),
+                                CpuTaskProfile(task="b", cluster="MID", cycles=2e6)],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    ref = cpu_sweep(profile, target=one, fps=30, spec=SweepSpec())["reference"]
+    mhz = ref["clusters"]["MID"]["mhz"]
+    assert ref["task_ms"]["a"] == pytest.approx(8e6 / (mhz * 1000), abs=1e-3)       # both threads, one CPU
+    assert ref["response_ms"]["b"] == pytest.approx(ref["task_ms"]["a"] + ref["task_ms"]["b"], abs=1e-3)
+    chained = cpu_sweep(profile, target=one, fps=30, spec=SweepSpec(serial_pairs=(("a", "b"),)))["reference"]
+    assert chained["response_ms"]["b"] == pytest.approx(chained["task_ms"]["b"], abs=1e-3)
+    assert chained["response_ms"]["a"] == pytest.approx(chained["task_ms"]["a"], abs=1e-3)
+
+
+# ---------------------------------------------------------------- RT placement
+def test_cpupri_spreads_concurrent_rt_threads_and_lets_chain_members_share():
+    model = _model(cores=2, rt_placement="cpupri", task_policy={"x": RT, "y": RT, "cfs": {}})
+    eas = _model(cores=2, task_policy={"x": RT, "y": RT})
+    big = [Thread("cfs", "cfs", 9e6, 0.0)]
+    rts = [Thread("x", "x", 1e6, 0.0), Thread("y", "y", 1e6, 0.0)]
+    pol = {t: cpu_sched.policy_from(RT) for t in ("x", "y")}
+
+    def cpus(m, serial=()):
+        slots, _ = eas_place(big + rts, _ctx(m, serial), pol)
+        return [sorted(t.task for t in c) for c in slots["MID"]]
+
+    # EAS: both RT threads join the CPU with the most spare capacity
+    assert sorted(cpus(eas)) == [["cfs"], ["x", "y"]]
+    # cpupri: the second RT thread avoids the CPU that runs the first one (CFS does not block an RT thread)
+    assert sorted(cpus(model)) == [["cfs", "y"], ["x"]]
+    # members of an ordered RT chain do not run at once, so they stay on the CPU with the most spare capacity
+    assert sorted(cpus(model, serial=[("x", "y")])) == [["cfs"], ["x", "y"]]
+    with pytest.raises(ValueError):
+        CpuSchedulerParams(rt_placement="push")
+
+
+def test_rt_chain_member_without_a_class_is_reported():
+    model = _model(cores=2, task_policy={"crta": RT})
+    profile = CpuProfile(tasks=[CpuTaskProfile(task=t, cluster="MID", cycles=2e6) for t in ("crta", "me")],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    out = cpu_sweep(profile, target=model, fps=30, spec=SweepSpec(serial_pairs=(("crta", "me"),)))
+    assert any("RT chain: 'me'" in w for w in out["warnings"])
+    assert not any("RT chain" in w for w in cpu_sweep(profile, target=model, fps=30, spec=SweepSpec())["warnings"])
+
+
+# ---------------------------------------------------------------- Timing Budget coupling of the sweep
+def test_sweep_applies_stage_budgets_anchored_on_the_measured_placement():
+    two = CpuPowerModel.from_params(PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x", "cpu": {"clusters": [
+            {"name": "LITTLE", "core_type": "L", "cores": 2, "ipc_rel": 0.5, "opps": [
+                {"mhz": 500, "mv": 600, "mw_per_core": 20}, {"mhz": 1000, "mv": 700, "mw_per_core": 50}]},
+            {"name": "BIG", "core_type": "B", "cores": 2, "ipc_rel": 1.0, "opps": [
+                {"mhz": 1000, "mv": 700, "mw_per_core": 150}, {"mhz": 2000, "mv": 850, "mw_per_core": 450}]}],
+            "default_cluster": 0}}))
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="eis", cluster="BIG", cycles=6e6),
+                                CpuTaskProfile(task="ui", cluster="LITTLE", cycles=1e6)],
+                         clusters={"BIG": CpuClusterProfile(freq_residency={2000: 1}),
+                                   "LITTLE": CpuClusterProfile(freq_residency={1000: 1})})
+    free = cpu_sweep(profile, target=two, fps=30, spec=SweepSpec())
+    tied = cpu_sweep(profile, target=two, fps=30, spec=SweepSpec(stretch_budgets={"eis": 1.2}))
+    ms = free["measured_placement"]["task_ms"]["eis"]
+    assert tied["budgets_ms"]["eis"] == pytest.approx(ms * 1.2, rel=1e-5) and tied["budget_source"] == {"eis": "stretch"}
+    assert tied["measured_placement"]["feasible"] and tied["measured_placement"]["slack_ms"]["eis"] >= 0
+    # without the stage budget, moving eis to LITTLE (much slower) looks like a saving; with it, it misses
+    slow = lambda r: [c for c in r["cases"] + r["others"] if c["placement"].get("eis") == ["LITTLE"]]   # noqa: E731
+    assert any(c["feasible"] for c in slow(free))
+    assert slow(tied) and not any(c["feasible"] for c in slow(tied))
+    assert next(t for t in tied["range"]["tasks"] if t["task"] == "eis")["budget_source"] == "stretch"
+    # an explicit tighter budget wins over the stretch
+    user = cpu_sweep(profile, target=two, fps=30, spec=SweepSpec(budgets_ms={"eis": ms * 1.05}, stretch_budgets={"eis": 1.2}))
+    assert user["budget_source"] == {"eis": "user"}
+
+
+def test_rebalance_uses_the_chain_order_for_the_wait_and_keeps_feasibility():
+    mid2 = CpuPowerModel.from_params(PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x", "cpu": {"clusters": [
+            {"name": n, "core_type": "M", "cores": 1, "ipc_rel": 1.0, "opps": [
+                {"mhz": 1000, "mv": 700, "mw_per_core": 100}, {"mhz": 2000, "mv": 850, "mw_per_core": 300}]} for n in ("A", "B")],
+            "default_cluster": 0, "scheduler": {"task_policy": {"crta": RT, "me": RT}}}}))
+    profile = CpuProfile(tasks=[CpuTaskProfile(task=t, cluster="A", cycles=2e6) for t in ("crta", "me")],
+                         clusters={"A": CpuClusterProfile(freq_residency={2000: 1})})
+    spec = RebalanceSpec(pool=("A", "B"), budgets_ms={"crta": 1.5, "me": 1.5})
+    free = cpu_rebalance(profile, target=mid2, fps=30, spec=spec)
+    chained = cpu_rebalance(profile, target=mid2, fps=30, spec=RebalanceSpec(pool=("A", "B"), budgets_ms={"crta": 1.5, "me": 1.5},
+                                                                             serial_pairs=(("crta", "me"),)))
+    assert free["reference"]["min_slack_prio_ms"] < 0 <= chained["reference"]["min_slack_prio_ms"]
+    assert [c["assign"] for c in free["cases"]] == [c["assign"] for c in chained["cases"]]     # ranking unchanged
+
+
+def test_beam_also_starts_from_the_measured_placement():
+    options = {"a": [{"kind": "eas"}, {"kind": "pin", "clusters": ["L"]}, {"kind": "pin", "clusters": ["B"]}],
+               "b": [{"kind": "eas"}, {"kind": "pin", "clusters": ["L"]}],
+               "c": [{"kind": "eas"}, {"kind": "upto", "clusters": ["L", "M"]}]}
+    starts = beam_starts(["a", "b", "c"], options, {"a": ["B"], "b": ["L", "B"], "c": ["L"]})
+    # a pinned to its measured B; b measured on two clusters and c without a pin option stay on EAS
+    assert starts == [(0, 0, 0), (2, 0, 0)]
+    assert beam_starts(["b"], options, {"b": ["L", "B"]}) == [(0,)]       # no second start when it equals EAS

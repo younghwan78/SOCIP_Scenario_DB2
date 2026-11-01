@@ -1,3 +1,4 @@
+import type { TimingCoupling } from './rebalance'
 import type { DsuMode, DsuModelInfo, DsuParams, VoteTable } from './dsu'
 // CPU placement / frequency what-if (POST /cpu/whatif) and its pickers (GET /cpu/inputs).
 import { getJson } from './api'
@@ -80,13 +81,17 @@ export interface SweepCase {
   dsu: { mhz?: number; active_ratio: number; dynamic_mw: number; static_mw: number; total_mw: number } | null
   total_mw: number; delta_mw?: number; feasible: boolean; task_ms: Record<string, number>; slack_ms: Record<string, number>
   min_slack_ms: number | null; flags: Record<string, string[] | boolean>; cpu_bw_mbs: number
+  /** shared CPU only: own + concurrent same-CPU co-runners (upper bound) and the budget slack against it */
+  response_ms?: Record<string, number>; slack_shared_ms?: Record<string, number>; min_slack_shared_ms?: number | null
+  /** only with scheduler.task_policy sched_class: the response with the class / priority */
+  response_prio_ms?: Record<string, number>; slack_prio_ms?: Record<string, number>; min_slack_prio_ms?: number | null
   knobs: Record<string, KnobOption>; moved?: string[]
   equivalents?: { knobs: Record<string, KnobOption>; total_mw: number; placement: Record<string, string[]> }[]
 }
 export interface SweepCell { t_fmax_ms: number; util_fmax: number; fits: boolean; meets: boolean; in_sweep: boolean }
 export interface SweepRangeTask {
   task: string; threads: { name: string; t_fmax_ms: number }[]; thread_source: 'measured' | 'given' | 'single'
-  measured: string[]; policy: Record<string, unknown>; budget_ms: number | null; growth: number
+  measured: string[]; policy: Record<string, unknown>; budget_ms: number | null; budget_source?: 'user' | 'stretch' | null; growth: number
   cells: Record<string, SweepCell>; options: KnobOption[]
 }
 export interface SweepRangeCluster {
@@ -96,7 +101,9 @@ export interface SweepRangeCluster {
 export interface CpuSweep {
   scheduler: { model: string; freq_margin: number; fits_margin: number; util_model: string; pelt_halflife_ms: number
     deadline_boost: boolean; energy_includes_static: boolean; capacity: Record<string, number>; power_gating_eff: number
-    from_params: boolean; source: string | null }
+    from_params: boolean; source: string | null
+    /** RT thread placement inside a cluster (API ≥ 2026-11-01): eas | cpupri */
+    rt_placement?: 'eas' | 'cpupri' }
   fps: number; period_ms: number
   range: { clusters: SweepRangeCluster[]; tasks: SweepRangeTask[]; knobs: string[]; space: number; evaluated: number; unique: number; method: 'exhaustive' | 'beam' }
   measured_mw: number | null
@@ -109,6 +116,9 @@ export interface CpuSweep {
   /** DSU rule actually used (API ≥ DSU vote); absent on older servers */
   dsu_model?: DsuModelInfo | null; dsu_params?: DsuParams | null; dsu_measured?: Record<string, number> | null
   dsu_check?: { measured_mean_mhz: number; model_mhz: number | null } | null
+  /** API ≥ 2026-11-01: task budgets in effect (user / stretch = Timing Budget stage room) and the coupling */
+  budgets_ms?: Record<string, number>; budget_source?: Record<string, 'user' | 'stretch'>
+  timing_coupling?: TimingCoupling; timing_mode?: 'off' | 'stage_slack'
 }
 export interface CpuSweepRequest {
   cpu_profile_ref: string; power_params_ref: string; base_power_params_ref?: string; fps: number
@@ -120,6 +130,9 @@ export interface CpuSweepRequest {
   /** better cases returned (power ascending); server default 60 */
   top?: number
   dsu_mode?: DsuMode; dsu_vote?: VoteTable; dsu_fixed_mhz?: number
+  /** stage_slack = Timing Budget stage SW room bounds each SW task (no extra pipeline latency); off = frame only.
+   *  Either way the variant's stage SW order (RT chain) decides which co-runners can wait for each other. */
+  timing_coupling?: 'off' | 'stage_slack'; timing_statistic?: 'min' | 'mean' | 'max'
 }
 
 export const cpuApi = {

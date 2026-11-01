@@ -63,16 +63,27 @@ def _sweep_fields(request: CpuSweepRequest) -> dict[str, Any]:
 
 
 def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
-    profile = _profile(db, request)
-    target = _model(db, request.power_params_ref)
-    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
-    spec = SweepSpec(**_sweep_fields(request))
+    data = _rebalance_data(db, request)
+    # the same Timing Budget coupling as the rebalance: stage budgets (stage_slack) and the stage SW order
+    coupling, enforce = _timing_coupling(db, request, data)
+    spec = SweepSpec(**_sweep_fields(request), stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {},
+                     serial_pairs=coupling_pairs(coupling))
     release_read_connection(db)
     try:
-        result = cpu_sweep(profile, target=target, base=base, fps=request.fps, spec=spec)
+        result = cpu_sweep(data.profile, target=data.target, base=data.base, fps=request.fps, spec=spec)
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
-    return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
+    if coupling:
+        ref = result["reference"]
+        coupling["enforced"] = enforce
+        matched = sorted(t for t in coupling["stretch"] if t in (ref.get("task_ms") or {}))
+        coupling["matched_tasks"], coupling["unmatched_tasks"] = matched, sorted(set(coupling["stretch"]) - set(matched))
+        best = (result.get("cases") or [None])[0]
+        coupling["impact"] = {"reference": timing_impact(coupling, ref, ref),
+                              "best": timing_impact(coupling, ref, best) if best else None}
+        result["timing_coupling"] = coupling
+    result["timing_mode"] = request.timing_coupling
+    return CpuWhatIfResponse(profile_ref=data.profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
 
 
 def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic: Literal["min", "mean", "max"] = "max",
@@ -109,10 +120,30 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
         stages.append({"stage": st["id"], "sw_ms": round(sw, 3), "hw_ms": round(float(st.get("hw_ms") or 0.0), 3),
                        "overhead_ms": round(float(st.get("overhead_ms") or 0.0), 3), "room_ms": round(room, 3),
                        "slack_ms": round(room - sw, 3), "stretch": round(factor, 3),
-                       "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0)} for i in items]})
-    return {"mode": "stage_slack", "scenario_id": scenario_id, "variant_id": variant_id, "statistic": statistic,
-            "runtime_scale": runtime_scale, "period_ms": period, "stages": stages,
-            "stretch": {k: round(v, 4) for k, v in stretch.items()}}
+                       "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0)} for i in items],
+                       # SW pairs the pipeline orders within one frame (RT chain), from the variant's task graph
+                       "order": [list(pair) for pair in st.get("sw_order") or []]})
+    return _mark_serial({"mode": "stage_slack", "scenario_id": scenario_id, "variant_id": variant_id, "statistic": statistic,
+                         "runtime_scale": runtime_scale, "period_ms": period, "stages": stages,
+                         "stretch": {k: round(v, 4) for k, v in stretch.items()}})
+
+
+def _mark_serial(coupling: dict[str, Any]) -> dict[str, Any]:
+    """``serial`` per stage and ``serial_pairs``: a stage's SW order holds within one frame only while the stage
+    chain (SW + HW + overhead) fits one period; a longer chain overlaps the next frame's members, so they count
+    as concurrent (conservative)."""
+    pairs: list[list[str]] = []
+    for st in coupling["stages"]:
+        st["serial"] = bool(st.get("order")) and st["sw_ms"] + st["hw_ms"] + st["overhead_ms"] <= coupling["period_ms"] + 1e-6
+        if st["serial"]:
+            pairs += st["order"]
+    coupling["serial_pairs"] = pairs
+    return coupling
+
+
+def coupling_pairs(coupling: dict[str, Any] | None) -> tuple[tuple[str, str], ...]:
+    """``SweepSpec.serial_pairs`` of a coupling (also when it is only reported: ordering is not a budget)."""
+    return tuple((str(a), str(b)) for a, b in (coupling or {}).get("serial_pairs") or [])
 
 
 def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dict[str, Any]) -> list[dict[str, Any]]:
@@ -162,7 +193,7 @@ def scale_coupling(coupling: dict[str, Any], runtime_scale: float) -> dict[str, 
         for t in tasks:
             stretch[t["task"]] = min(stretch.get(t["task"], math.inf), factor)
         stages.append(st | {"sw_ms": round(sw, 3), "slack_ms": round(st["room_ms"] - sw, 3), "stretch": round(factor, 3), "tasks": tasks})
-    return coupling | {"runtime_scale": runtime_scale, "stages": stages, "stretch": {t: round(v, 4) for t, v in stretch.items()}}
+    return _mark_serial(coupling | {"runtime_scale": runtime_scale, "stages": stages, "stretch": {t: round(v, 4) for t, v in stretch.items()}})
 
 
 @dataclass(frozen=True)
@@ -173,7 +204,7 @@ class _RebalanceData:
     scope: tuple[str, str] | None
 
 
-def _rebalance_data(db: Session, request: CpuRebalanceRequest) -> _RebalanceData:
+def _rebalance_data(db: Session, request: CpuSweepRequest) -> _RebalanceData:
     """Resolve invariant CPU inputs once; no ORM objects escape this preparation."""
     profile = _profile(db, request)
     target = _model(db, request.power_params_ref)
@@ -191,7 +222,19 @@ def _rebalance_inputs(db: Session, request: CpuRebalanceRequest, *, coupling_bas
     ``coupling_base``: a ``timing_stretch`` result of the same variant (uniform growth only) reused by a sweep.
     """
     data = prepared or _rebalance_data(db, request)
-    # the Timing Budget of the profile's variant: enforced as task budgets (stage_slack) or only reported (off)
+    coupling, enforce = _timing_coupling(db, request, data, coupling_base)
+    spec = RebalanceSpec(**_sweep_fields(request), pool=tuple(request.pool),
+                         movable=tuple(request.movable) if request.movable is not None else None,
+                         locks=dict(request.locks), co_move=tuple(tuple(g) for g in request.co_move),
+                         verify_k=request.verify_k, max_exhaustive=request.max_exhaustive,
+                         stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {},
+                         serial_pairs=coupling_pairs(coupling))
+    return data.profile, data.target, data.base, spec, coupling, enforce
+
+
+def _timing_coupling(db: Session, request: CpuSweepRequest, data: _RebalanceData,
+                     coupling_base: dict[str, Any] | None = None) -> tuple[dict[str, Any] | None, bool]:
+    """The Timing Budget of the profile's variant: enforced as task budgets (stage_slack) or only reported (off)."""
     enforce = request.timing_coupling != "off"
     coupling = None
     if enforce and request.cpu_profile is not None:
@@ -210,12 +253,7 @@ def _rebalance_inputs(db: Session, request: CpuRebalanceRequest, *, coupling_bas
                 raise UnprocessableError(f"timing coupling: {exc}") from exc
     elif enforce:
         raise UnprocessableError("timing_coupling needs a cpu_profile_ref measured on a scenario variant")
-    spec = RebalanceSpec(**_sweep_fields(request), pool=tuple(request.pool),
-                         movable=tuple(request.movable) if request.movable is not None else None,
-                         locks=dict(request.locks), co_move=tuple(tuple(g) for g in request.co_move),
-                         verify_k=request.verify_k, max_exhaustive=request.max_exhaustive,
-                         stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {})
-    return data.profile, data.target, data.base, spec, coupling, enforce
+    return coupling, enforce
 
 
 def _rebalance_compute(profile: Any, target: CpuPowerModel, base: CpuPowerModel | None, fps: float,

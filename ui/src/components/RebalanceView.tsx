@@ -180,8 +180,8 @@ export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; on
   )
 }
 
-const SHARED_NOTE = 'budget − (자기 + 같은 CPU co-runner 실행시간) — 우선순위·위상을 무시한 대기 상한, 판정에는 쓰지 않음'
-const PRIO_NOTE = 'budget − 우선순위 반영 응답 — RT는 같거나 높은 RT co-runner만, normal은 RT 전부 + nice 비율만큼 대기 (scheduler.task_policy)'
+const SHARED_NOTE = 'budget − (자기 + 같은 CPU에서 동시에 돌 수 있는 co-runner 실행시간) — 우선순위를 무시한 대기 상한 · RT chain에서 순서가 정해진 task는 제외'
+const PRIO_NOTE = 'budget − 우선순위 반영 응답 — RT는 같거나 높은 RT co-runner만, normal은 RT 전부 + nice 비율만큼 대기 (scheduler.task_policy) · RT chain에서 순서가 정해진 task는 제외'
 const TIER_ORDER = { ok: 0, unchecked: 1, shared: 2, wait_miss: 3, miss: 4 } as const
 const TIER_CLASS = { ok: 'v-ok', shared: 'v-warn', wait_miss: 'v-fail', unchecked: 'v-na', miss: 'v-fail' } as const
 /** own-time verdict graded by the shared-CPU wait: 조건부 (bound, no priorities) / 대기 미충족 (with priorities) */

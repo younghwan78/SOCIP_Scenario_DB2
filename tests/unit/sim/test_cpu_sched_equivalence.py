@@ -47,16 +47,22 @@ def _legacy_cluster_eval(ctx, name, cpus, policies):
     sched_mhz = mhz
     boosted = []
     if ctx.sched.deadline_boost and ctx.budgets_ms:
-        need = [t for ths in cpus for t in ths if t.task in ctx.budgets_ms]
-        late = [t for t in need if t.ms(c, mhz) > ctx.budgets_ms[t.task] + 1e-9]
+        # deliberate model change (2026-11): a task's threads on one CPU run one after another, so the budget
+        # bounds their sum on that CPU (it bounded each thread alone before)
+        need = {}
+        for index, ths in enumerate(cpus):
+            for t in ths:
+                if t.task in ctx.budgets_ms:
+                    need.setdefault((index, t.task), []).append(t)
+        late = [k for k, ts in need.items() if sum(t.ms(c, mhz) for t in ts) > ctx.budgets_ms[k[1]] + 1e-9]
         if late:
             for f in freqs:
-                if f > mhz and all(t.ms(c, f) <= ctx.budgets_ms[t.task] + 1e-9 for t in need):
+                if f > mhz and all(sum(t.ms(c, f) for t in ts) <= ctx.budgets_ms[k[1]] + 1e-9 for k, ts in need.items()):
                     mhz = f
                     break
             else:
                 mhz = freqs[-1]
-            boosted = sorted({t.task for t in late})
+            boosted = sorted({k[1] for k in late})
     mv = c.voltage_mv(mhz, ctx.model.fallback_mv)
     p_core = c.core_mw(mhz, ctx.model.fallback_mv)
     leak = c.leak_mw_per_core(mv)
