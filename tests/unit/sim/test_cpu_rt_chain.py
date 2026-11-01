@@ -473,3 +473,42 @@ def test_cross_soc_timing_impact_scales_from_the_measured_soc(monkeypatch):
     row = res["timing_coupling"]["impact"]["reference"][0]
     assert row["chain_ms"] == pytest.approx(55.0, abs=1e-3) and not row["ok"]
     assert svc.latency_trade(coupling, res, res["reference"])["impact"][0]["chain_ms"] == pytest.approx(55.0, abs=1e-3)
+
+
+def test_a_longer_serial_chain_is_not_reported_ok_and_the_stage_room_holds_the_serial_hw(monkeypatch):
+    """SW 10 ms with serial HW 10 + 10 ms in 33.3 ms: SW x1.5 -> 35 ms chain, one buffered frame, not ok."""
+    graph = {"hw_ms": {"H1": 10.0, "H2": 10.0}, "edges": [["a", "H1"], ["H1", "H2"], ["H2", "b"], ["a", "b"]]}
+    report = {"period_ms": 1000 / 30, "stages": [{"id": "nrt", "sw_ms": 10.0, "hw_ms": 10.0, "overhead_ms": 0.0,
+                                                  "sw_items": [{"task": "a", "kind": "sw", "runtime_ms": 5.0},
+                                                               {"task": "b", "kind": "sw", "runtime_ms": 5.0}],
+                                                  "sw_order": [["a", "b"]], "chain_graph": graph}]}
+    monkeypatch.setattr("scenario_db.api.services.timing_budget.analyze_timing_budget_request",
+                        lambda db, req: type("R", (), {"report": report})())
+    coupling = svc.timing_stretch(None, "uc", "v")
+    st = coupling["stages"][0]
+    # the room is P - the serial HW (20 ms), not P - the busiest HW (10 ms); the shown chain is the path
+    assert st["room_ms"] == pytest.approx(13.333, abs=1e-3) and st["chain_ms"] == pytest.approx(30.0)
+    assert st["stretch"] == pytest.approx(1.333, abs=1e-3)
+    row = svc.timing_impact(coupling, {"task_ms": {"a": 1.0, "b": 1.0}}, {"task_ms": {"a": 1.5, "b": 1.5}})[0]
+    assert row["chain_ms"] == pytest.approx(35.0) and row["extra_latency_frames"] == 1
+    assert row["slack_ms"] == pytest.approx(-1.667, abs=1e-3) and not row["ok"]
+    # unchanged times stay ok
+    assert svc.timing_impact(coupling, {"task_ms": {"a": 1.0}}, {"task_ms": {"a": 1.0}})[0]["ok"]
+
+
+def test_measured_anchor_matches_profile_cluster_names_case_insensitively():
+    two = CpuPowerModel.from_params(PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x", "cpu": {"clusters": [
+            {"name": "LITTLE", "core_type": "L", "cores": 2, "ipc_rel": 0.5, "opps": [
+                {"mhz": 500, "mv": 600, "mw_per_core": 20}, {"mhz": 1000, "mv": 700, "mw_per_core": 50}]},
+            {"name": "BIG", "core_type": "B", "cores": 2, "ipc_rel": 1.0, "opps": [
+                {"mhz": 1000, "mv": 700, "mw_per_core": 150}, {"mhz": 2000, "mv": 850, "mw_per_core": 450}]}],
+            "default_cluster": 0}}))
+    # measured on "big" (profile spelling); EAS alone would put the light task on LITTLE
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="big", cycles=1e6)],
+                         clusters={"big": CpuClusterProfile(freq_residency={2000: 1})})
+    upper = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="BIG", cycles=1e6)],
+                       clusters={"BIG": CpuClusterProfile(freq_residency={2000: 1})})
+    lower = measured_task_ms(profile, model=two, fps=30, spec=SweepSpec())["a"]
+    assert lower == pytest.approx(measured_task_ms(upper, model=two, fps=30, spec=SweepSpec())["a"])
+    assert lower < cpu_sweep(profile, target=two, fps=30, spec=SweepSpec())["eas_default"]["task_ms"]["a"]

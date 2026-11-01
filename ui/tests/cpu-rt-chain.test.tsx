@@ -37,6 +37,9 @@ it('RT chain: members in pipeline order with their class; a chain longer than a 
     expect(host.textContent).toContain('cpupri')
     await act(async () => root.render(<RtChainCard coupling={coupling({ hw_ms: 30, serial: false })} sched={{}} />))
     expect(host.textContent).toContain('대기에 포함')
+    // the length the server judged with (serial HW on the path), not SW + the busiest HW
+    await act(async () => root.render(<RtChainCard coupling={coupling({ hw_ms: 10, chain_ms: 35, serial: false })} sched={{}} />))
+    expect(host.textContent).toContain('chain 35.0 ms')
     await act(async () => root.render(<RtChainCard coupling={coupling({ order: [] })} sched={{}} />))
     expect(host.textContent).toBe('')
   } finally { act(() => root.unmount()) }

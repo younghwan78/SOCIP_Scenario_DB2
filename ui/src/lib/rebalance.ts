@@ -75,6 +75,8 @@ export interface TimingStage {
   /** API ≥ 2026-11-01: SW pairs [a, b] the variant's pipeline orders within one frame (b after a: the RT chain), and whether
    *  that order holds (serial: the stage chain fits one period, so these tasks never run at once) */
   order?: [string, string][]; serial?: boolean
+  /** the stage chain length that verdict uses: the longest path over the stage's SW and HW (serial HW adds up) */
+  chain_ms?: number
 }
 export interface TimingImpact { stage: string; sw_ms: number; delta_sw_ms: number; slack_ms: number; chain_ms: number; extra_latency_frames: number; ok: boolean }
 export interface TimingCoupling {

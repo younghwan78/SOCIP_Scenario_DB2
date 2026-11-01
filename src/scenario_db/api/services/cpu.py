@@ -120,19 +120,23 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
         sw = float(st.get("sw_ms") or 0.0)
         if not items or sw <= 0:
             continue
-        room = period - float(st.get("hw_ms") or 0.0) - float(st.get("overhead_ms") or 0.0)
+        row: dict[str, Any] = {
+            "stage": st["id"], "sw_ms": round(sw, 3), "hw_ms": round(float(st.get("hw_ms") or 0.0), 3),
+            "overhead_ms": round(float(st.get("overhead_ms") or 0.0), 3),
+            "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0),
+                       "latency_ms": float(i.get("latency_ms") or 0.0)} for i in items],
+            # SW pairs the pipeline orders within one frame (RT chain), from the variant's task graph
+            "order": [list(pair) for pair in st.get("sw_order") or []],
+            # SW + HW nodes in their in-frame order: the stage chain through serial HW
+            "chain_graph": st.get("chain_graph") or {"hw_ms": {}, "edges": []}}
+        # room = P - what the chain holds besides the SW: the busiest HW + overhead, or more when HW sits in series
+        # with the SW (chain_graph)
+        beside_sw = _stage_order(row, period).chain_ms({}, {}) - sw
+        room = period - max(float(st.get("hw_ms") or 0.0) + float(st.get("overhead_ms") or 0.0), beside_sw)
         factor = max(1.0, room / sw)
         for i in items:
             stretch[i["task"]] = min(stretch.get(i["task"], math.inf), factor)
-        stages.append({"stage": st["id"], "sw_ms": round(sw, 3), "hw_ms": round(float(st.get("hw_ms") or 0.0), 3),
-                       "overhead_ms": round(float(st.get("overhead_ms") or 0.0), 3), "room_ms": round(room, 3),
-                       "slack_ms": round(room - sw, 3), "stretch": round(factor, 3),
-                       "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0),
-                                  "latency_ms": float(i.get("latency_ms") or 0.0)} for i in items],
-                       # SW pairs the pipeline orders within one frame (RT chain), from the variant's task graph
-                       "order": [list(pair) for pair in st.get("sw_order") or []],
-                       # SW + HW nodes in their in-frame order: the stage chain through serial HW
-                       "chain_graph": st.get("chain_graph") or {"hw_ms": {}, "edges": []}})
+        stages.append(row | {"room_ms": round(room, 3), "slack_ms": round(room - sw, 3), "stretch": round(factor, 3)})
     return _mark_serial({"mode": "stage_slack", "scenario_id": scenario_id, "variant_id": variant_id, "statistic": statistic,
                          "runtime_scale": runtime_scale, "period_ms": period, "stages": stages,
                          "stretch": {k: round(v, 4) for k, v in stretch.items()}})
@@ -160,6 +164,8 @@ def _mark_serial(coupling: dict[str, Any]) -> dict[str, Any]:
     pairs: list[list[str]] = []
     orders = {o.stage: o for o in coupling_stages(coupling)}
     for st in coupling["stages"]:
+        # the chain length the verdict uses (shown next to it), at the measured placement
+        st["chain_ms"] = round(_stage_order(st, float(coupling["period_ms"])).chain_ms({}, {}), 3)
         # the same chain rule as the per-candidate check (StageOrder), at the measured placement
         st["serial"] = st["stage"] in orders and orders[st["stage"]].holds({}, {})
         if st["serial"]:
@@ -217,9 +223,11 @@ def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dic
         sw = st["sw_ms"] + add
         # pipelined: fps holds while each task fits a frame; a longer SW+HW chain only adds buffered frames (latency)
         extra = max(0, math.ceil(chain / period - 1e-9) - math.ceil(chain0 / period - 1e-9)) if period > 0 else 0
+        # the SW room, and with the stage graph also the chain itself (serial HW the room alone can miss)
+        slack = st["room_ms"] - sw if "order" not in st else min(st["room_ms"] - sw, period - chain)
         out.append({"stage": st["stage"], "sw_ms": round(sw, 3), "delta_sw_ms": round(add, 3),
-                    "slack_ms": round(st["room_ms"] - sw, 3), "chain_ms": round(chain, 3),
-                    "extra_latency_frames": extra, "ok": st["room_ms"] - sw >= -1e-6 or add <= 1e-6})
+                    "slack_ms": round(slack, 3), "chain_ms": round(chain, 3),
+                    "extra_latency_frames": extra, "ok": slack >= -1e-6 or (add <= 1e-6 and chain <= chain0 + 1e-6)})
     return out
 
 

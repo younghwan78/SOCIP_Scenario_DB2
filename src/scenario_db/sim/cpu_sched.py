@@ -831,10 +831,11 @@ def measured_task_ms(profile: Any, *, model: CpuPowerModel, fps: float, spec: Sw
     prep = _prepare(profile, target=model, fps=fps, base=None,
                     spec=replace(spec, serial_stages=(), serial_pairs=(), stretch_budgets={},
                                  dsu_mode="auto", dsu_vote=None, dsu_fixed_mhz=None))
-    names = {c.name for c in model.clusters}
+    # profile cluster names match the topology case-insensitively, as everywhere else (_map_to_target)
+    names = {c.name.lower(): c.name for c in model.clusters}
     policies = dict(prep.base_policies)
     for task, ds in prep.need.items():
-        where = tuple(sorted({d.base_cluster for d in ds if d.base_cluster in names}))
+        where = tuple(sorted({names[d.base_cluster.lower()] for d in ds if d.base_cluster.lower() in names}))
         if where:
             policies[task] = replace(policies.get(task, TaskPolicy()), allowed=where)
     return dict(_place_and_time(prep.threads, prep.ctx, policies, None)[4])

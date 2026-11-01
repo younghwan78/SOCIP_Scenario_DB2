@@ -222,6 +222,8 @@ pipeline task graph(HW node 경유 포함, `frame_offset`이 있는 다음 frame
   group 시간 한 번으로 센다. 가장 바쁜 HW 자원 점유(같은 IP를 나눠 쓰는 stream 합)보다 짧게 잡지 않는다.
   후보마다 다시 판정한다: 각 SW item의 runtime을 후보의 CPU 시간 ÷ 측정 배치 시간만큼 늘리고(release latency · HW는
   고정) 최장 경로를 다시 구한다 — 병렬 분기(PIP front / rear)는 더하지 않는다.
+  stage SW 여유(room)도 이 그래프에서 SW 밖에 남는 시간(직렬 HW)을 빼서 구하고, timing 영향의 `slack_ms` / `ok`는
+  SW 여유와 `주기 − chain` 중 작은 쪽으로 판정한다. 카드의 chain 길이는 서버가 판정에 쓴 값(`chain_ms`)이다.
 - 기준 시간은 **측정 SoC**의 측정 배치다. `base_power_params_ref`로 다른 SoC에서 잰 profile을 쓰면 순서 판정,
   stage budget, timing 영향(`timing_coupling.impact`) 모두 측정 SoC의 task 시간(`measured_soc_task_ms`)에서 늘린다 —
   target이 느리면 그만큼 chain이 길어진다.
