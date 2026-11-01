@@ -61,6 +61,22 @@ def test_off_target_summary_kept_when_no_stream_detail():
     assert [e["code"] for e in explain_all(["preview/video interval off target"], 30)] == ["interval"]
 
 
+def test_pipelined_failures_are_sw_budget_with_a_thread_action():
+    """The pipelined verdict names one thread or one shared CPU, not the stage SW: both are SW-budget causes
+    (validity rules apply), never "other" with no action."""
+    from scenario_db.reporting.reason_text import diagnose
+
+    e = explain("NRT: SW task 9.10 ms > frame period (한 thread가 1 frame 안에 못 끝남)", 1000 / 240)
+    assert e["code"] == "sw_budget" and "최장 SW task 9.1 ms > frame 주기 4.17 ms" in e["text"]
+    assert "4.9 ms 이상 단축" in e["action"] and "3-frame batch" in e["action"]
+    g = explain("Post-NRT: CPU CPU (shared_cpu)의 SW 합 12.00 ms > frame period (같은 thread/core: eis, post_irta)", 1000 / 120)
+    assert g["code"] == "sw_budget" and "CPU (shared_cpu)" in g["text"] and "(eis, post_irta)" in g["text"]
+    assert "다른 core" in g["action"] and "3.7 ms 이상 단축" in g["action"]
+    d = diagnose([e], 240)
+    assert d["code"] == "sw_budget" and "pipelined 판정" in d["focus"] and d["actions"][0] == e["action"]
+    assert d["severity"].startswith("SW 9.1 ms")
+
+
 def test_stage_names_with_punctuation():
     e = explain("Post-NRT (EIS/SW → GDC): SW 6.00 ms leaves no HW budget", 1000 / 240)
     assert e["code"] == "sw_budget" and e["text"].startswith("Post-NRT (EIS/SW → GDC) SW 6.0 ms")

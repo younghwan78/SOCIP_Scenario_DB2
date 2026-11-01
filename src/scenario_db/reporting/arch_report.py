@@ -12,6 +12,16 @@ from scenario_db.reporting.arch_opinions import build_opinions, classify
 from scenario_db.reporting.reason_text import diagnose, explain_all
 from scenario_db.reporting.clock_section import clock_block
 from scenario_db.reporting.review_snapshot import ReviewEvidence, _assemble_review
+from scenario_db.sim.arch_exploration import ENGINE_REV
+from scenario_db.sim.model_lineage import LINEAGE_FIELDS
+
+
+def _lineage(lin: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The comparable part of a variant's model lineage (small enough to freeze per row)."""
+    if not lin:
+        return None
+    return {k: lin.get(k) for k in (*LINEAGE_FIELDS, "power_params_ref") if k in lin}
+
 
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
 
@@ -60,6 +70,12 @@ def build_snapshot(
         rows.append({
             "cls": classify(v["variant_id"], v["scenario_id"], v["fps"], v["eis_on"], v.get("design_conditions"), v.get("severity")),
             "sw_margin_pct": worst.get("margin_pct"), "sw_stage": worst.get("stage"), "sw_bottleneck": worst.get("bottleneck"),
+            # throughput rule of the margin (engine ≥ 15; None = stage chain rule of older engines)
+            "sw_margin_basis": worst.get("basis"),
+            # what computed this row: a project report mixes runs, engines and model lineages
+            "engine_rev": (run.get("engine_by_variant") or {}).get(f"{v['scenario_id']}/{v['variant_id']}") or run.get("engine_rev"),
+            "model_lineage": _lineage(v.get("model_lineage")),
+            "cpu_basis": (v.get("objective_slice") or {}).get("cpu_basis"),
             "variant_id": v["variant_id"], "scenario_id": v["scenario_id"], "fps": v["fps"],
             "spec_ok": v["spec_ok"], "reasons": compact_reasons(v["spec_reasons"]), "eis_on": v["eis_on"],
             "status": v.get("status") or {},
@@ -168,7 +184,9 @@ def build_snapshot(
     for (sid, vid), ch in changes.items():
         history.append({"scenario_id": sid, "variant_id": vid, "delta_mw": ch["delta_mw"], "delta_pct": ch["delta_pct"],
                         "by_category": ch["by_category"], "top": ch["factors"][:4],
-                        "context": [_ctx(c) for c in ch["context_changes"] if c["item"] != "exploration_run_ref"]})
+                        "context": [_ctx(c) for c in ch["context_changes"] if c["item"] != "exploration_run_ref"],
+                        # the attribution splits the delta over design causes; a model / engine change is not one
+                        "model_changes": ch.get("lineage_changes") or [], "engine_change": ch.get("engine_change")})
 
     options = []
     for v in variants:
@@ -197,6 +215,13 @@ def build_snapshot(
     power_rows = [r for r in rows if r["spec_ok"] and r["power"].get("total_mw") is not None]
     totals = [r["power"]["total_mw"] for r in power_rows]
     lineage, mixed = run_lineage(run)
+    engines: dict[str, int] = {}
+    cpu_bases: dict[str, int] = {}
+    for r in rows:
+        engines[str(r["engine_rev"])] = engines.get(str(r["engine_rev"]), 0) + 1
+        if r.get("cpu_basis"):
+            cpu_bases[str(r["cpu_basis"])] = cpu_bases.get(str(r["cpu_basis"]), 0) + 1
+    timing = (run.get("spec") or {}).get("timing") or {}
     snap = {
         "overview": {
             "run_id": run["id"], "run_title": run["title"], "run_created_at": str(run.get("created_at") or ""),
@@ -204,7 +229,12 @@ def build_snapshot(
             "scenario_type": run["scenario_type"], "dvfs_table_ref": run.get("dvfs_table_ref"),
             "sample_dvfs": sample_dvfs, "objective": run["spec"].get("objective"),
             "axes": run["spec"].get("axes"), "constraints": run["spec"].get("constraints"),
-            "engine_rev": run.get("engine_rev"), "model_lineage": lineage, "model_limits": model_limits(lineage, mixed),
+            "engine_rev": run.get("engine_rev"),
+            # the engine this report was generated with, and the engines its rows came from (stale = differ)
+            "engine_current": ENGINE_REV, "engines": engines,
+            "cpu_model": {"basis": cpu_bases, "model": timing.get("cpu_model") or "flat"},
+            "model_lineage": lineage,
+            "model_limits": model_limits(lineage, mixed, cpu=cpu_bases),
         },
         "spec_summary": {
             # requested = evaluated + calc_failed; "explored" kept as the evaluated count (old snapshots)
@@ -269,15 +299,16 @@ def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:
     m = v.get("sw_margin") or {}
     w = m.get("worst") or {}
     period = v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None)
-    chain = (w.get("hw_ms") or 0) + (w.get("sw_ms") or 0) if w else None
-    stat = statistic or "max"
+    chain = w.get("chain_ms") or ((w.get("hw_ms") or 0) + (w.get("sw_ms") or 0) if w else None)
+    stat = statistic or m.get("statistic") or "max"
     growth = sorted(({"scale": s.get("runtime_scale"), "total_mw": (s.get("power") or {}).get("total_mw"),
                       "ok": (s.get("verdict") or {}).get("status") == "ok",
                       "nrt_fill_pct": ((s.get("stages") or {}).get("nrt") or {}).get("fill_pct")}
                      for s in v.get("slices") or [] if s.get("statistic") == stat and s.get("runtime_scale") is not None),
                     key=lambda g: g["scale"])
     return {"stage": w.get("stage"), "hw_ms": w.get("hw_ms"), "sw_ms": w.get("sw_ms"), "bottleneck_ms": w.get("bottleneck_ms"),
-            "period_ms": period, "in_flight": (int(-(-chain // period)) if chain and period else None),
+            "basis": w.get("basis"), "binding": w.get("binding"), "statistic": stat,
+            "period_ms": period, "in_flight": w.get("in_flight") or (int(-(-chain // period)) if chain and period else None),
             "growth_tolerance": m.get("growth_tolerance"), "growth_tolerance_fixed": m.get("growth_tolerance_fixed"),
             "growth_tested_max": m.get("growth_tested_max"), "growth": growth}
 
@@ -346,7 +377,7 @@ def _sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None]]:
          None if snap["compression"] or not tiered else "BW를 줄이는 compression buffer가 없음 — 조합 탐색 compression 축과 catalog 지원 buffer 확인"),
         ("Power option (IQ 평가 대상)", _power_options(snap.get("power_options") or []),
          None if snap.get("power_options") or not tiered else "power option 결과 없음 — 조합 탐색에서 power option을 켜고 실행하면 채워짐"),
-        ("SW margin Top5", _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or []),
+        ("SW margin Top5", _margins(snap["sw_margin_top5"], sw_statistic(snap)) + _fail_margins(snap.get("sw_margin_fail") or []),
          None if snap["sw_margin_top5"] or snap.get("sw_margin_fail") or not tiered else "SW margin 계산 결과 없음"),
         ("변경 이력", _history(snap["history"]),
          None if snap["history"] or not tiered else "이전 등록 예측 대비 변경 없음 (첫 등록이거나 같은 예측)"),
@@ -1130,8 +1161,31 @@ def _power_options(rows: list[dict[str, Any]]) -> str:
     return h + "</table>"
 
 
-def _margins(rows: list[dict[str, Any]]) -> str:
-    h = ("<p class='meta'>SW timing margin = (P − SW(runtime+latency) − IP overhead − HW@set clock) / P, NRT·Post-NRT 중 최소, 목적 통계 기준</p>"
+MARGIN_TEXT = {
+    "stage": "SW timing margin = (P − SW(runtime+latency) − IP overhead − HW@set clock) / P (stage 기준 — stage 전체가 1 frame 안)",
+    "pipelined": "SW timing margin = (P − max(최장 SW task, 같은 CPU에서 순차 실행되는 SW 합)) / P (pipelined — task마다 thread, "
+                 "stage chain(SW + HW)이 주기를 넘으면 그만큼 frame을 동시 처리: latency만 증가)",
+}
+
+
+def sw_statistic(snap: dict[str, Any]) -> str:
+    """SW timing statistic behind the margins and the growth slices (exploration objective; default max).
+    Timing Budget screens may show another statistic (mean by default)."""
+    return str((((snap.get("overview") or {}).get("objective") or {}).get("statistic")) or "max")
+
+
+def margin_text(rows: list[dict[str, Any]], statistic: str | None = None) -> str:
+    """Definition line of the SW margin column(s); ``rows`` carry ``basis`` (margin rows) or ``sw_margin_basis``."""
+    recorded = [r.get("basis") or r.get("sw_margin_basis") for r in rows]
+    bases = {str(b or "stage") for b in recorded}
+    text = " / ".join(MARGIN_TEXT[b] for b in sorted(bases) if b in MARGIN_TEXT) or MARGIN_TEXT["stage"]
+    if "pipelined" in bases and any(b is None for b in recorded):
+        text += " · 이전 engine 예측(margin 기준 미기록)은 stage 기준 값 — 재등록 시 갱신"
+    return text + f" · NRT·Post-NRT 중 최소 · SW {statistic or 'max'} 기준"
+
+
+def _margins(rows: list[dict[str, Any]], statistic: str | None = None) -> str:
+    h = (f"<p class='meta'>{escape(margin_text(rows, statistic))}</p>"
          "<table><tr><th>#</th><th>Scenario</th><th>fps</th><th>stage</th><th>margin</th><th>SW / P</th><th>병목 task</th><th title='DVFS를 growth마다 다시 고르면 허용되는 SW 증가 (재최적화 가능 범위)'>SW 증가 허용<br><span class=meta>DVFS 재선택</span></th>"
          "<th title='추천 DVFS level을 고정했을 때 흡수 가능한 SW 증가 (robustness)'>SW 증가 허용<br><span class=meta>추천 DVFS 고정</span></th><th>권고</th></tr>")
     for i, r in enumerate(rows, 1):
@@ -1152,14 +1206,23 @@ def _history(rows: list[dict[str, Any]]) -> str:
     quiet = len(rows) - len(shown)
     if not shown:
         return f"<p class='meta'>직전 등록 예측 대비 변화 없음 ({quiet}건 모두 |Δ| &lt; 1 mW · 입력 변경 없음)</p>"
-    h = (f"<p class='meta'>|Δ| ≥ 1 mW 또는 입력 변경 {len(shown)}건" + (f" · 변화 없음 {quiet}건 생략" if quiet else "") + "</p>"
-         "<table><tr><th>Scenario</th><th>ΔP</th><th>원인 (카테고리)</th><th>주요 항목</th><th>입력 변경</th></tr>")
-    for r in sorted(shown, key=lambda r: -abs(float(r.get("delta_mw") or 0))):
+    model = [r for r in shown if r.get("model_changes") or r.get("engine_change")]
+    h = (f"<p class='meta'>|Δ| ≥ 1 mW 또는 입력 변경 {len(shown)}건" + (f" · 변화 없음 {quiet}건 생략" if quiet else "") + "</p>")
+    if model:
+        h += (f"<p class=warn>모델 · engine 변경 포함 {len(model)}건 — ΔP의 일부(또는 전부)가 계산 모델 차이. 아래 원인 분해는 설계 변화로 "
+              "읽지 말 것 (같은 모델로 재등록한 예측끼리만 설계 변화로 비교).</p>")
+    h += ("<table><tr><th>Scenario</th><th>ΔP</th><th>원인 (카테고리)</th><th>주요 항목</th><th>입력 변경</th><th>모델 · engine 변경</th></tr>")
+    for r in sorted(shown, key=lambda r: (not (r.get("model_changes") or r.get("engine_change")), -abs(float(r.get("delta_mw") or 0)))):
         cats = ", ".join(f"{k} {v:+.1f}" for k, v in list(r["by_category"].items())[:4])
         top = ", ".join(f"{t['item']} {t['delta_mw']:+.1f}" for t in r["top"])
         ctx = ", ".join(f"{c['item']}: {c['old']}→{c['new']}" for c in r["context"][:5])
+        mc = [f"{c['field']}: {c['old']}→{c['new']}" for c in r.get("model_changes") or []]
+        if r.get("engine_change"):
+            mc.append(f"engine {r['engine_change'][0]}→{r['engine_change'][1]}")
+        flag = bool(mc)
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n><b>{r['delta_mw']:+.1f}</b> mW<br><span class=meta>{_f(r['delta_pct'],1)}%</span></td>"
-              f"<td>{escape(cats)}</td><td>{escape(top)}</td><td>{escape(ctx)}</td></tr>")
+              f"<td class='{'meta' if flag else ''}'>{escape(cats)}{' (참고)' if flag else ''}</td><td class='{'meta' if flag else ''}'>{escape(top)}</td>"
+              f"<td>{escape(ctx)}</td><td class='{'warn' if flag else 'meta'}'>{escape('; '.join(mc[:4])) or '—'}</td></tr>")
     return h + "</table>"
 
 

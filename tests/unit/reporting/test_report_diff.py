@@ -24,13 +24,33 @@ def test_report_diff_lists_risk_power_criteria_and_basis_changes():
                cpu=[{"variant_id": "a", "summary": {"tolerance": 1.1}}])
     d = report_diff(prev, cur, {"id": "RPT-prev", "generated_at": "2026-10-17T10:00"})
     assert d["risks"]["new"] == ["R-02 fresh"] and d["risks"]["resolved"] == ["R-01 old"]
-    assert d["power"]["changed"] == [{"variant_id": "b", "prev_mw": 200.0, "cur_mw": 260.0, "delta_mw": 60.0, "delta_pct": 30.0}]
+    # lineage not frozen in these snapshots: whether the model changed is unknown, not "same"
+    assert d["power"]["changed"] == [{"variant_id": "b", "prev_mw": 200.0, "cur_mw": 260.0, "delta_mw": 60.0, "delta_pct": 30.0,
+                                      "model_changed": None}]
     assert d["power"]["added"] == ["new"] and d["power"]["removed"] == ["gone"]
     assert {c["item"] for c in d["criteria"]} == {"fps_ok", "power_over"}
     assert d["basis"] == [{"item": "판정 기준", "prev": "stage", "cur": "pipelined"}]
     assert d["cpu"] == [{"variant_id": "a", "prev": 1.3, "cur": 1.1}]
     html = previous_block(d)
     assert "신규 risk 1" in html and "해소 후보 1" in html and "+60.0" in html and "pipelined" in html and "×1.1" in html
+
+
+def test_diff_names_a_model_only_change():
+    """A re-registration with another power model moves power with no design change: the diff says so."""
+    v1 = {"power_model": "v1-vfps", "bw_power_model": "builtin", "bw_coefficient": 80.0}
+    v2 = {"power_model": "v2-vf", "power_model_version": "1.2", "bw_power_model": "mif-linear", "power_params_ref": "pmp-x@2",
+          "power_params_hash": "abc", "clock_basis": "calculated"}
+    prev, cur = snap({}, crit(2, 0), {"model_lineages": ["v1"]}, []), snap({}, crit(2, 0), {"model_lineages": ["v2"]}, [])
+    prev["scenarios"] = [{"scenario_id": "s", "variant_id": "a", "power": {"total_mw": 200}, "model_lineage": v1},
+                         {"scenario_id": "s", "variant_id": "b", "power": {"total_mw": 100}, "model_lineage": v2}]
+    cur["scenarios"] = [{"scenario_id": "s", "variant_id": "a", "power": {"total_mw": 120}, "model_lineage": v2},
+                        {"scenario_id": "s", "variant_id": "b", "power": {"total_mw": 110}, "model_lineage": dict(v2)}]
+    d = report_diff(prev, cur, {})
+    flags = {r["variant_id"]: r["model_changed"] for r in d["power"]["changed"]}
+    assert flags == {"a": True, "b": False} and d["power"]["model_changed"] == 1
+    assert {"item": "계산 모델", "prev": ["v1"], "cur": ["v2"]} in d["basis"]
+    html = previous_block(d)
+    assert "계산 모델 변경" in html and "설계 변화로 읽지 말 것" in html and "['v1']" not in html
 
 
 def test_dumbbell_shows_reference_source_and_ma():

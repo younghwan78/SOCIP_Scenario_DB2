@@ -13,6 +13,7 @@ from html import escape
 from typing import Any
 
 from scenario_db.reporting import arch_report as ar
+from scenario_db.reporting.risk_rules import cpu_tolerance_min
 
 _f, _short = ar._f, ar._short
 
@@ -41,6 +42,15 @@ def _gx(g: float | None) -> str:
     return f"×{r:.1f}" if abs(r * 10 - round(r * 10)) < 1e-6 else f"×{r:.2f}"
 
 
+def _val(v: Any) -> str:
+    """A diff value as reader text (a list item per line, never a Python repr)."""
+    if v is None:
+        return "—"
+    if isinstance(v, (list, tuple)):
+        return "<br>".join(escape(str(x)) for x in v) or "—"
+    return escape(str(v))
+
+
 # ------------------------------------------------------------------- RPT-11
 def previous_block(p: dict[str, Any] | None) -> str:
     if not p:
@@ -60,10 +70,15 @@ def previous_block(p: dict[str, Any] | None) -> str:
         lines.append("risk 변화 없음")
     h += "<ul>" + "".join(f"<li>{x}</li>" for x in lines) + "</ul>"
     if pw.get("changed"):
+        mc = {True: "<b class=warn>계산 모델 변경</b>", False: "같은 모델", None: "<span class=meta>확인 불가</span>"}
         h += (f"<h3 style='margin:10px 0 4px'>Power 변화 상위 (|Δ| ≥ 1 mW · {pw.get('changed_count')}건)</h3>"
-              "<table><tr><th>Variant</th><th>직전 mW</th><th>현재 mW</th><th>Δ mW</th><th>Δ%</th></tr>"
+              + (f"<p class=warn>{pw['model_changed']}건은 계산 모델(power model · 계수 · BW model · clock 기준)이 달라진 변화 — "
+                 "설계 변화로 읽지 말 것</p>" if pw.get("model_changed") else "")
+              + ("<table><tr><th>Variant</th><th>직전 mW</th><th>현재 mW</th><th>Δ mW</th><th>Δ%</th>"
+                 + ("<th>모델</th>" if "model_changed" in pw else "") + "</tr>")
               + "".join(f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['prev_mw'])}</td><td class=n>{_f(r['cur_mw'])}</td>"
-                        f"<td class='n {'fail' if r['delta_mw'] > 0 else 'ok'}'>{r['delta_mw']:+.1f}</td><td class=n>{_f(r.get('delta_pct'))}%</td></tr>"
+                        f"<td class='n {'fail' if r['delta_mw'] > 0 else 'ok'}'>{r['delta_mw']:+.1f}</td><td class=n>{_f(r.get('delta_pct'))}%</td>"
+                        + (f"<td>{mc[r.get('model_changed')]}</td>" if "model_changed" in pw else "") + "</tr>"
                         for r in pw["changed"]) + "</table>")
     else:
         h += "<p class=meta>등록 예측 power 변화 없음</p>"
@@ -79,7 +94,7 @@ def previous_block(p: dict[str, Any] | None) -> str:
                 for c in p.get("cpu") or []]
     if changes:
         h += ("<h3 style='margin:10px 0 4px'>판정 · 기준 · 정책 변경</h3><table><tr><th>항목</th><th>직전</th><th>현재</th></tr>"
-              + "".join(f"<tr><td>{escape(k)}</td><td>{escape(str(a))}</td><td><b>{escape(str(b))}</b></td></tr>" for k, a, b in changes)
+              + "".join(f"<tr><td>{escape(k)}</td><td>{_val(a)}</td><td><b>{_val(b)}</b></td></tr>" for k, a, b in changes)
               + "</table>")
     else:
         h += "<p class=meta>판정 · 기준 · 정책 변경 없음</p>"
@@ -165,28 +180,49 @@ def power_top(snap: dict[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------- CPU-11 section
-def cpu_section(cpu: list[dict[str, Any]] | None) -> str:
+def _steps_text(s: dict[str, Any]) -> str:
+    """Every reference OPP step-up in the range (cpu-sweep/2), the binding one first-marked; older: the recorded one."""
+    steps = s.get("opp_steps")
+    if steps is None:
+        step = s.get("opp_step") or {}
+        return f"{step.get('cluster')} {_gx(step.get('growth_to'))} {float(step.get('delta_mw') or 0):+.0f} mW (가장 큰 계단)" if step else "없음"
+    if not steps:
+        return "없음"
+    return "<br>".join(f"{'<b>' if st.get('significant') else ''}{escape(str(st.get('cluster')))} {_gx(st.get('growth_from'))}→{_gx(st.get('growth_to'))} "
+                       f"{st['mhz'][0]:.0f}→{st['mhz'][1]:.0f} MHz {float(st.get('delta_mw') or 0):+.0f} mW{'</b>' if st.get('significant') else ''}"
+                       for st in steps[:4]) + (f"<br>외 {len(steps) - 4}" if len(steps) > 4 else "")
+
+
+def cpu_section(cpu: list[dict[str, Any]] | None, budget: float | None = None) -> str:
     if not cpu:
         return ""
+    need = float(budget) if budget else 1.2
+    stats = sorted({str(((c.get("summary") or {}).get("basis") or {}).get("timing_statistic") or "") for c in cpu} - {""})
     h = ("<p class=meta>CPU what-if에서 “검토서에 포함”한 결과 (서버가 같은 조건으로 SW 증가 sweep을 다시 계산한 요약). "
-         "허용치 = min(현재 배치의 가장 큰 OPP 상향 직전 배율, Timing Budget stage SW 여유 소진 배율).</p>"
-         "<table><tr><th>Variant</th><th>profile</th><th>topology</th><th>범위</th><th>허용치</th><th>제약</th><th>OPP 계단</th>"
+         "허용치 = min(현재 배치에서 비용 ≥ 5 mW 또는 5%인 첫 OPP 상향 직전 배율, Timing Budget stage 여유(RT chain 포함) 소진 배율)"
+         f" · 판정 기준 ×{need:.2f}{' (SW 증가 예산)' if budget else ''}"
+         + (f" · Timing Budget SW {', '.join(stats)} 기준" if stats else "") + ". 굵게 = 허용치를 정한 계단.</p>"
+         "<table><tr><th>Variant</th><th>profile</th><th>topology</th><th>범위</th><th>허용치</th><th>제약</th><th>OPP 상향 (배율 · MHz · ΔmW)</th>"
          "<th>현재 mW (시작 → 끝)</th><th>최적 배치 이득</th><th>CPU 기인 BW</th><th>의견</th></tr>")
     for c in cpu:
         s = c.get("summary") or {}
         pts = s.get("points") or []
         p0, pn = (pts[0] if pts else {}), (pts[-1] if pts else {})
-        step = s.get("opp_step") or {}
         b0 = s.get("best_at_start") or {}
         tol = s.get("tolerance")
-        step_txt = (f"{step.get('cluster')} {_gx(step.get('growth_to'))} {float(step.get('delta_mw') or 0):+.0f} mW" if step else "없음")
-        h += (f"<tr><td>{escape(_short(c['variant_id']))}</td>"
+        basis = s.get("basis") or {}
+        stale = c.get("calc_current") is False or (c.get("calc_current") is None and not basis.get("rev"))
+        h += (f"<tr><td>{escape(_short(c['variant_id']))}"
+              + (" <b class=warn title='RT chain timing · 첫 OPP 계단 기준 이전에 기록 — CPU what-if에서 갱신'>이전 계산</b>" if stale else "")
+              + "</td>"
               f"<td class=meta>{escape(_short(str(c['profile_ref'])))}{' <b class=warn>합성</b>' if s.get('profile_origin') == 'synthetic' else ''}</td>"
-              f"<td class=mono>{escape(str(c['power_params_ref']))}</td>"
+              f"<td class=mono>{escape(str(c['power_params_ref']))}"
+              + (f"<div class=meta>RT {escape(str(basis['rt_placement']))}</div>" if basis.get("rt_placement") else "") + "</td>"
               f"<td class=mono>{_gx((s.get('growth_range') or [None])[0])}–{_gx((s.get('growth_range') or [None, None])[1])}</td>"
-              f"<td class='n {'fail' if tol is not None and tol < 1.2 else 'ok'}'><b>{_gx(tol) if tol is not None else '범위 밖'}</b></td>"
-              f"<td>{'timing 여유' if s.get('binding') == 'timing' else 'OPP 계단' if s.get('binding') == 'opp' else '—'}</td>"
-              f"<td class=meta>{escape(step_txt)}</td>"
+              f"<td class='n {'fail' if tol is not None and tol < need - 1e-9 else 'ok'}'><b>{_gx(tol) if tol is not None else '범위 밖'}</b></td>"
+              f"<td>{'timing 여유' if s.get('binding') == 'timing' else 'OPP 계단' if s.get('binding') == 'opp' else '—'}"
+              + (f"<div class=meta>×{float(s['timing_fail_at']):.2f}부터 stage 여유 음수</div>" if s.get("timing_fail_at") is not None else "") + "</td>"
+              f"<td class=meta>{_steps_text(s)}</td>"
               f"<td class=n>{_f(p0.get('ref_mw'))} → {_f(pn.get('ref_mw'))}</td>"
               f"<td class=n>{_f(b0.get('delta_mw'))} mW <span class=meta>({len(b0.get('moved') or [])} task)</span></td>"
               f"<td class=n>{_f(p0.get('bw_mw'))} → {_f(pn.get('bw_mw'))} mW</td>"
@@ -254,7 +290,10 @@ def _lead_cpu(snap: dict[str, Any]) -> str:
     if not tols:
         return _lead(f"CPU what-if {len(cpu)}건 · 범위 안 허용치 제약 없음", "ok")
     t0 = min(tols)
-    return _lead(f"CPU what-if {len(cpu)}건 · SW 증가 허용치 최소 <b>{_gx(t0[0])}</b> ({escape(_short(t0[1]))})", "fail" if t0[0] < 1.2 else "ok")
+    need = cpu_tolerance_min(snap)
+    stale = sum(1 for c in cpu if c.get("calc_current") is False)
+    return _lead(f"CPU what-if {len(cpu)}건 · SW 증가 허용치 최소 <b>{_gx(t0[0])}</b> ({escape(_short(t0[1]))}) · 기준 ×{need:.2f}"
+                 + (f" · 이전 계산 {stale}건" if stale else ""), "fail" if t0[0] < need - 1e-9 else "warn" if stale else "ok")
 
 
 def _lead_model(snap: dict[str, Any]) -> str:
@@ -473,7 +512,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
             + f"<h3 style='margin:12px 0 4px'>Latency · 출력 간격 — 미달 · frame 지연 큰 {len(lat_top)}개</h3>" + ar._latency(lat_top)
             + (_more(f"Latency 전체 {len(lat_rows)}개", ar._latency(lat_rows)) if len(lat_rows) > len(lat_top) else "")
             + sw_table(snap)
-            + "<h3 style='margin:12px 0 4px'>SW margin</h3>" + (ar._margins(snap["sw_margin_top5"]) if snap["sw_margin_top5"] else "<p class=meta>SW margin 계산 결과 없음</p>")
+            + "<h3 style='margin:12px 0 4px'>SW margin</h3>" + (ar._margins(snap["sw_margin_top5"], ar.sw_statistic(snap)) if snap["sw_margin_top5"] else "<p class=meta>SW margin 계산 결과 없음</p>")
             + ar._fail_margins(snap.get("sw_margin_fail") or [])
             + f"<h3 style='margin:12px 0 4px'>IP 필요 clock — DVFS 여유 작은 순 (상위 {TOP_N} · spec 만족)</h3>"
             + ar._domains([d for d in doms if (d["scenario_id"], d["variant_id"]) in tight])
@@ -500,7 +539,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
         ("성능 · Timing", perf, None, 2),
         ("Power 구성", power, None, 2),
         ("Lever · 발열", lever, None, 2),
-        ("CPU · SW", _lead_cpu(snap) + cpu_section(snap.get("cpu")), None, 2),
+        ("CPU · SW", _lead_cpu(snap) + cpu_section(snap.get("cpu"), (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))), None, 2),
         ("예측 ↔ 실측", model, None, 2),
         ("분류별 검토 의견", ar._opinions(snap.get("opinions") or []), None, 2),
         ("검토 범위 · 모델", _coverage_table(snap.get("coverage")) + dq_table(snap) + ar._overview(snap["overview"]) + ar._scope(snap.get("scope"))

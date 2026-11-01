@@ -207,6 +207,63 @@ def test_data_quality_flags_identical_results_missing_conditions_and_kpi_gaps():
     assert dq["kpi_uncovered"]["level"] == "block"
 
 
+def test_data_quality_flags_old_engines_mixed_models_and_default_params():
+    """Measured-data reviews mix runs over months: rows from an older engine or another calculation model must be
+    acknowledged before publishing, and code-default coefficients are called out."""
+    from scenario_db.api.services.arch_exploration import report_blockers
+    from scenario_db.reporting.review_verdict import data_quality
+
+    v2 = {"power_model": "v2-vf", "power_model_version": "1.2", "bw_power_model": "mif-linear",
+          "power_params_ref": "pmp-e2600-v2@2", "power_params_hash": "h2", "clock_basis": "calculated"}
+    v1 = {"power_model": "v1-vfps", "bw_power_model": "builtin", "bw_coefficient": 80.0}
+    rows = [row("a", engine_rev="e/15", model_lineage=v2), row("b", engine_rev="e/15", model_lineage=dict(v2)),
+            row("c", engine_rev="e/14", model_lineage=v1), row("miss", spec_ok=False, prediction_id=None, engine_rev="e/15", model_lineage=None)]
+    s = snap(scenarios=rows, overview={"sample_dvfs": False, "engine_current": "e/15"},
+             cpu=[{"variant_id": "a", "calc_current": False, "summary": {}}])
+    dq = {d["key"]: d for d in data_quality(s)}
+    assert dq["stale_engine"]["variants"] == ["c"] and dq["stale_engine"]["level"] == "block" and "e/14 → e/15" in dq["stale_engine"]["text"]
+    assert dq["mixed_lineage"]["variants"] == ["c"] and "v2-vf 1.2" in dq["mixed_lineage"]["text"] and "v1-vfps 1.0" in dq["mixed_lineage"]["text"]
+    assert dq["default_params"]["variants"] == ["c"] and dq["default_params"]["level"] == "warn"
+    assert dq["cpu_snapshot_stale"]["variants"] == ["a"]
+    assert {b["key"] for b in report_blockers(s | {"criteria": {}})} >= {"stale_engine", "mixed_lineage"}
+    # one engine, one model: nothing to acknowledge; a snapshot without these fields (older report) is not judged
+    same = snap(scenarios=rows[:2], overview={"sample_dvfs": False, "engine_current": "e/15"})
+    assert not {"stale_engine", "mixed_lineage", "default_params"} & {d["key"] for d in data_quality(same)}
+    legacy = snap(scenarios=[row("x")])
+    assert not {"stale_engine", "mixed_lineage", "default_params"} & {d["key"] for d in data_quality(legacy)}
+
+
+def test_pipelined_margin_rows_use_frames_in_flight_for_the_parallel_label():
+    """Engine ≥ 15 rows: a positive per-thread margin with a chain over the period is still '병렬' (frames in flight)."""
+    r = row("fhd60", sw_margin_pct=40.0, sw_margin_basis="pipelined", sw={"in_flight": 2})
+    s = snap(scenarios=[r], references={},
+             review_context={"policy": {"throughput_model": "pipelined", "kpi": [{"variant_ref": "fhd60", "label": "FHD60"}]}, "rows": []})
+    assert scoreboard(s)[0]["fps"]["label"] == "충족 · 2 frame 병렬"
+    r["sw"] = {"in_flight": 1}
+    assert scoreboard(s)[0]["fps"]["label"] == "충족"
+
+
+def test_conclusion_reads_low_margin_against_the_growth_budget():
+    from scenario_db.reporting.arch_conclusion import _growth_outlook
+
+    low = [{"variant_id": "a", "tolerance": 1.3, "tested": 1.5}, {"variant_id": "b", "tolerance": 1.25, "tested": 1.5}]
+    pol = {"review_context": {"policy": {"sw_growth_budget": 1.2}}}
+    assert "≥ 예산 ×1.20" in _growth_outlook(low, pol) and "clock 상향" not in _growth_outlook(low, pol)
+    low[1]["tolerance"] = 1.1
+    assert "< 예산 ×1.20" in _growth_outlook(low, pol) and "clock 상향" in _growth_outlook(low, pol)
+    assert "미지정" in _growth_outlook(low, {})
+
+
+def test_cpu_tolerance_risk_uses_the_growth_budget():
+    cpu = [{"variant_id": "uhd30", "summary": {"tolerance": 1.3, "binding": "opp", "profile_origin": "physical_capture",
+                                               "opp_step": {"cluster": "MID_LF0", "mhz": [400, 1000], "growth_from": 1.3, "growth_to": 1.4, "delta_mw": 38},
+                                               "opp_steps": [{"cluster": "MID_LF0", "growth_from": 1.3}, {"cluster": "MID_HF", "growth_from": 1.4}]}}]
+    keys = lambda budget: {r["key"]: r for r in build_risks(snap(cpu=cpu, review_context={"policy": {"sw_growth_budget": budget}, "rows": []}))}  # noqa: E731
+    assert "cpu_growth_tolerance" not in keys(1.2)
+    r = keys(1.5)["cpu_growth_tolerance"]
+    assert "×1.50" in r["title"] and "×1.3→×1.4" in r["detail"] and "OPP 상향 2회" in r["detail"] and r["validity"] == "confirmed"
+
+
 def test_publish_blockers_use_kpi_scenario_scope_and_detect_ambiguous_ids():
     from scenario_db.api.services.arch_exploration import report_blockers
 

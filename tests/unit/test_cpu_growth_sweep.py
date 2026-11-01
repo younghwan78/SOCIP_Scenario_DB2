@@ -31,6 +31,38 @@ def test_largest_opp_step_and_timing_room_set_the_tolerance():
     assert growth_limits([_p(1.0, 1, 1600, 1), _p(1.1, 1.1, 1600, 1)], [])["tolerance"] is None
 
 
+def test_first_significant_opp_step_sets_the_tolerance_not_the_largest():
+    """MID_LF0 400→1000 MHz at ×1.2→1.3 (+38 mW) comes before the larger MID_HF step at ×1.3→1.5: the project pays the
+    first one first. A small step (< 5 mW and < 5 %) is listed but does not bind."""
+    def p(g, mw, lf0, hf, lf1=400):
+        return {"growth": g, "reference": {"total_mw": mw, "mhz": {"MID_LF0": lf0, "MID_HF": hf, "MID_LF1": lf1}},
+                "best": {"total_mw": mw, "mhz": {"MID_LF0": lf0, "MID_HF": hf, "MID_LF1": lf1}}, "stages": []}
+    pts = [p(1.0, 120.0, 400, 600), p(1.1, 123.0, 400, 600, 500), p(1.2, 124.0, 400, 600, 500),
+           p(1.3, 162.0, 1000, 600, 500), p(1.5, 209.7, 1000, 1200, 500)]
+    lim = growth_limits(pts, opp_events(pts, "reference"))
+    assert [(s["cluster"], s["growth_from"], s["significant"]) for s in lim["opp_steps"]] == [
+        ("MID_LF1", 1.0, False), ("MID_LF0", 1.2, True), ("MID_HF", 1.3, True)]
+    assert lim["opp_step"]["cluster"] == "MID_LF0" and lim["tolerance"] == 1.2 and lim["binding"] == "opp"
+    assert lim["largest_step"]["cluster"] == "MID_HF"
+
+
+def test_timing_limit_uses_the_rt_chain_slack():
+    """The RT chain (P − chain) can bind before the SW room: the limit follows chain_slack_ms when recorded,
+    interpolated between swept points, and the first swept growth with a negative slack is reported. The impact
+    ``ok`` of the reference placement is always true (it compares a placement with the reference): not used."""
+    from scenario_db.api.services.review_cpu import sweep_summary
+
+    def st(sw, chain_slack):
+        return [{"stage": "nrt", "sw_ms": sw, "room_ms": 20.0, "slack_ms": 20.0 - sw, "chain_slack_ms": chain_slack, "ok": True}]
+    pts = [_p(1.0, 1, 1600, 1, st(10.0, 2.0)), _p(1.2, 1, 1600, 1, st(12.0, 0.5)), _p(1.4, 1, 1600, 1, st(14.0, -1.0))]
+    lim = growth_limits(pts, [])
+    assert lim["timing_at"] == pytest.approx(1.2 + 0.5 * 0.2 / 1.5, abs=1e-3) and lim["binding"] == "timing"
+    assert lim["timing_fail_at"] == 1.4
+    s = sweep_summary({"points": pts, "limits": lim, "basis": {"rev": service.CPU_SWEEP_REV, "timing_statistic": "max"}})
+    assert [p["timing_ok"] for p in s["points"]] == [True, True, False] and s["points"][2]["min_slack_ms"] == -1.0
+    assert s["timing_fail_at"] == 1.4 and s["basis"]["rev"] == "cpu-sweep/2"
+
+
 def test_scale_coupling_keeps_room_and_scales_sw():
     base = {"runtime_scale": 1.0, "period_ms": 33.3, "stages": [
         {"stage": "nrt", "sw_ms": 11.1, "hw_ms": 10.0, "overhead_ms": 8.46, "room_ms": 14.844, "slack_ms": 3.744, "stretch": 1.337,

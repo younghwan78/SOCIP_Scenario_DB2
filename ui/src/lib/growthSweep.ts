@@ -9,13 +9,17 @@ export interface SweepPoint {
   winner: string | null; big_gain_mw: number | null; cpu_bw_mbs: number | null; feasible_count: number | null
   /** CPU-09: cpu_bw_mbs × BW coefficient (API ≥ 2026-10-18) */
   bw_mw?: number | null
-  stages: { stage: string; sw_ms: number; room_ms: number; slack_ms: number; ok: boolean }[]
+  /** slack_ms = SW room only; chain_slack_ms (API ≥ cpu-sweep/2) = the reference placement's RT-chain-aware slack */
+  stages: { stage: string; sw_ms: number; room_ms: number; slack_ms: number; ok: boolean; chain_ms?: number | null; chain_slack_ms?: number }[]
 }
-export interface OppEvent { which: 'reference' | 'best'; growth_from: number; growth_to: number; cluster: string; mhz: [number, number]; delta_mw: number }
+export interface OppEvent { which: 'reference' | 'best'; growth_from: number; growth_to: number; cluster: string; mhz: [number, number]; delta_mw: number; significant?: boolean }
 export interface GrowthSweep {
   profile_ref: string | null; power_params_ref: string; fps: number
   points: SweepPoint[]; events: OppEvent[]
-  limits: { opp_step: OppEvent | null; opp_step_best_mw: number | null; timing_at: number | null; tolerance: number | null; binding: 'opp' | 'timing' | null }
+  /** opp_step = the first significant OPP step-up (cpu-sweep/2; before: the largest) — every step-up in opp_steps */
+  limits: { opp_step: OppEvent | null; opp_step_best_mw: number | null; timing_at: number | null; tolerance: number | null; binding: 'opp' | 'timing' | null
+    opp_steps?: OppEvent[]; largest_step?: OppEvent | null; timing_fail_at?: number | null }
+  basis?: { rev: string; timing_statistic: string; timing_coupling: string; rt_placement: string | null }
   elapsed_ms: number
   /** worker processes used (API ≥ 2026-10-18) */
   workers?: number

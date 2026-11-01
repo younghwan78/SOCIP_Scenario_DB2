@@ -122,7 +122,7 @@ export function GrowthCompare({ a, b, aName, bName, busy, error }: { a: GrowthSw
             <td className="mono">{at(a, 0) !== null && at(b, 0) !== null ? `${sg(at(b, 0)! - at(a, 0)!)} mW` : ''}</td></tr>
           <tr><td className="faint">현재 배치 · 끝 배율</td><td className="mono">{fmt(at(a, (a?.points.length ?? 1) - 1), 1)} mW</td><td className="mono">{fmt(at(b, (b?.points.length ?? 1) - 1), 1)} mW</td><td /></tr>
           <tr><td className="faint">SW 증가 허용치</td><td className="mono">{tol(a)}</td><td className="mono">{busy && !b ? '계산 중…' : tol(b)}</td><td /></tr>
-          <tr><td className="faint">가장 큰 OPP 계단</td><td className="mono">{a?.limits.opp_step ? `${a.limits.opp_step.cluster} ${gx(a.limits.opp_step.growth_to)} ${sg(a.limits.opp_step.delta_mw)} mW` : '—'}</td>
+          <tr><td className="faint" title="허용치를 정한 계단 — 비용이 5 mW 또는 5% 이상인 첫 상향">첫 OPP 계단</td><td className="mono">{a?.limits.opp_step ? `${a.limits.opp_step.cluster} ${gx(a.limits.opp_step.growth_to)} ${sg(a.limits.opp_step.delta_mw)} mW` : '—'}</td>
             <td className="mono">{b?.limits.opp_step ? `${b.limits.opp_step.cluster} ${gx(b.limits.opp_step.growth_to)} ${sg(b.limits.opp_step.delta_mw)} mW` : '—'}</td><td /></tr>
         </tbody>
       </table>

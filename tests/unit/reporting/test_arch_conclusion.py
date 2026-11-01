@@ -43,6 +43,14 @@ def test_model_limits_follow_the_run_lineage():
         assert not any("read/write 분리 반영" in x for x in limits)
 
 
+def test_model_limits_name_the_formula_version_and_the_cpu_basis():
+    lim = model_limits({"power_model": "v2-vf", "power_model_version": "1.2", "bw_power_model": "mif-linear"}, cpu={"flat": 40, "profile": 2})
+    assert any("v2-vf 1.2" in x and "work clock" in x for x in lim)
+    assert any("flat 항" in x and "40/42" in x and "실측 profile 2건" in x for x in lim)
+    assert any("v2-vf 1.1" in x for x in model_limits({"power_model": "v2-vf"}))   # unrecorded version = before 1.2
+    assert any("실측 CPU profile 기반" in x for x in model_limits({}, cpu={"profile": 3}))
+
+
 def test_calibration_row_flags_offsetting_categories():
     row = calibration_row("cam-rec-r1-uhd30-vdis", "uc", _detail(PRED, MEAS, 520.2, 519.9), "PRED-1")
     assert row["fit"]["offsetting"] is True and row["fit"]["worst_category"] == "bw"

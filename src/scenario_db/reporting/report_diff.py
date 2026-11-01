@@ -34,7 +34,16 @@ def _criteria(snap: dict[str, Any]) -> dict[str, Any]:
 
 
 _BASIS_KEYS = (("throughput_model", "판정 기준"), ("register_baseline", "등록 기준"), ("dvfs_table_ref", "DVFS table"),
-               ("engine_rev", "engine"), ("policy_declared", "review policy"))
+               ("engine_rev", "engine"), ("engines", "예측 engine"), ("model_lineages", "계산 모델"),
+               ("policy_declared", "review policy"))
+
+
+def _models(snap: dict[str, Any], labels: dict[tuple[str, str], str]) -> dict[str, tuple[Any, ...] | None]:
+    """Model lineage key per variant label (None = not frozen: a report from before lineages were kept)."""
+    from scenario_db.sim.model_lineage import lineage_key
+
+    return {labels[(str(r.get("scenario_id") or ""), str(r["variant_id"]))]: lineage_key(r.get("model_lineage"))
+            for r in snap.get("scenarios") or [] if "model_lineage" in r}
 
 
 def report_diff(prev: dict[str, Any], cur: dict[str, Any], prev_meta: dict[str, Any]) -> dict[str, Any]:
@@ -53,8 +62,17 @@ def report_diff(prev: dict[str, Any], cur: dict[str, Any], prev_meta: dict[str, 
     labels = {(sid, vid): f"{sid}/{vid}" if sum(v == vid for _, v in identities) > 1 else vid
               for sid, vid in identities}
     pa, pb = _totals(prev, labels), _totals(cur, labels)
+    ma, mb = _models(prev, labels), _models(cur, labels)
+
+    def model(v: str) -> bool | None:
+        """True: the calculation model differs between the two reports (the delta is not a design change);
+        None: not known (the previous report did not freeze the lineage)."""
+        if v not in ma or v not in mb:
+            return None
+        return ma[v] != mb[v]
+
     changed = sorted(({"variant_id": v, "prev_mw": round(pa[v], 1), "cur_mw": round(pb[v], 1), "delta_mw": round(pb[v] - pa[v], 1),
-                       "delta_pct": round(100 * (pb[v] - pa[v]) / pa[v], 1) if pa[v] else None}
+                       "delta_pct": round(100 * (pb[v] - pa[v]) / pa[v], 1) if pa[v] else None, "model_changed": model(v)}
                       for v in pa.keys() & pb.keys() if abs(pb[v] - pa[v]) >= POWER_DELTA_MIN_MW),
                      key=lambda r: -abs(r["delta_mw"]))
     ca, cb = _criteria(prev), _criteria(cur)
@@ -75,5 +93,7 @@ def report_diff(prev: dict[str, Any], cur: dict[str, Any], prev_meta: dict[str, 
     cpu = [{"variant_id": v, "prev": cpu_a.get(v), "cur": cpu_b.get(v)} for v in sorted(cpu_a.keys() | cpu_b.keys())
            if cpu_a.get(v) != cpu_b.get(v)]
     return {"report": prev_meta, "risks": risks, "power": {"changed": changed[:10], "changed_count": len(changed),
+                                                            "model_changed": sum(1 for r in changed if r["model_changed"]),
+                                                            "model_unknown": sum(1 for r in changed if r["model_changed"] is None),
                                                             "added": sorted(pb.keys() - pa.keys()), "removed": sorted(pa.keys() - pb.keys())},
             "criteria": criteria, "basis": basis, "cpu": cpu}

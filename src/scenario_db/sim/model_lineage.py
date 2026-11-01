@@ -87,6 +87,25 @@ def lineage_differences(old: dict[str, Any] | None, new: dict[str, Any] | None) 
     ]
 
 
+def normalized(lineage: dict[str, Any] | None) -> dict[str, Any]:
+    """Lineage with the legacy defaults filled in (what an unrecorded field was computed with)."""
+    return _with_version({**_LEGACY, **(lineage or {})})
+
+
+def lineage_key(lineage: dict[str, Any] | None) -> tuple[Any, ...]:
+    """Comparison key: two predictions with the same key came from the same physics."""
+    n = normalized(lineage)
+    return tuple(n.get(f) for f in LINEAGE_FIELDS)
+
+
+def lineage_label(lineage: dict[str, Any] | None) -> str:
+    """Short reader label: power model + version · BW model · power params · clock basis."""
+    n = normalized(lineage)
+    version = f" {n['power_model_version']}" if n.get("power_model_version") else ""
+    params = n.get("power_params_ref") or ("params " + str(n["power_params_hash"])[:8] if n.get("power_params_hash") else "코드 기본 계수")
+    return f"{n.get('power_model')}{version} · BW {n.get('bw_power_model')} · {params} · clock {n.get('clock_basis')}"
+
+
 def _with_version(lineage: dict[str, Any]) -> dict[str, Any]:
     """An unrecorded formula version is the one its power model had before versions were recorded."""
     if lineage.get("power_model_version") is None:

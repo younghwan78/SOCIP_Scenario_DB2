@@ -120,10 +120,12 @@ def _verdict_cell(v: dict[str, Any] | None) -> str:
     return " · ".join(parts) + f"<div class=meta>기준 {_mw(v['ref_mw'])} mW ({escape(str(v.get('ref_source') or ''))})</div>"
 
 
-def kpi_table(board: list[dict[str, Any]], budget: float | None = None) -> str:
+def kpi_table(board: list[dict[str, Any]], budget: float | None = None, statistic: str | None = None) -> str:
     if not board:
         return "<p class=meta>KPI scenario 없음 — review_policy.kpi 또는 thermal_watch · power_reference를 설정하세요</p>"
-    h = ("<table><tr><th>KPI</th><th>fps</th><th>전력 예측 mW (탐색 범위)</th><th>전과제 대비</th><th>SW 여유 (증가 허용)</th><th>화질 (IQ)</th><th>종합</th></tr>")
+    stat = ("<div class=meta>SW " + escape(statistic) + " 기준</div>") if statistic else ""
+    h = ("<table><tr><th>KPI</th><th>fps</th><th>전력 예측 mW (탐색 범위)</th><th>전과제 대비</th>"
+         f"<th>SW 여유 (증가 허용){stat}</th><th>화질 (IQ)</th><th>종합</th></tr>")
     for k in board:
         fps = k["fps"]
         pw = k.get("power") or {}
@@ -182,7 +184,8 @@ def tier0(snap: dict[str, Any]) -> str:
           + (f" ({escape('; '.join(conf.get('reasons') or []))})" if conf.get("reasons") else "") + "</p>")
     h += conditions_strip(snap.get("project_conditions")) + coverage_strip(snap.get("coverage"))
     budget = (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))
-    h += ("<h3 style='margin:10px 0 4px'>KPI scenario</h3>" + kpi_table(board, budget)
+    stat = (((snap.get("overview") or {}).get("objective") or {}).get("statistic")) or "max"
+    h += ("<h3 style='margin:10px 0 4px'>KPI scenario</h3>" + kpi_table(board, budget, str(stat))
           + (f"<p class=meta>SW 증가 예산 ×{float(budget):.1f} — 증가 허용이 예산보다 작으면 빨간색 (DVFS 재선택 포함 timing 유지 한계)</p>" if budget else ""))
     blk = [d for d in data_quality(snap) if d["level"] == "block"]
     if blk:
@@ -295,8 +298,14 @@ def sw_table(snap: dict[str, Any]) -> str:
         return ""
     rows.sort(key=lambda r: (r["variant_id"] not in kpi, r.get("sw_margin_pct") if r.get("sw_margin_pct") is not None else 999))
     scales = sorted({g["scale"] for r in rows for g in r["sw"].get("growth") or [] if g["scale"] != 1.0})
-    h = ("<h3 style='margin:12px 0 4px'>SW timing — stage 시간 · 병렬 처리 · SW 증가</h3><p class=meta>stage 시간 = HW + SW (최소 여유 stage). "
-         "frame 주기를 넘으면 그 수만큼 frame이 동시에 처리되어야 fps 유지(pipelined). 증가 허용 = DVFS 재선택 포함 timing 유지 한계 (≥ = 탐색한 최대 배율까지 유지). "
+    stat = next((r["sw"].get("statistic") for r in rows if r["sw"].get("statistic")), None) or "max"
+    pipelined = any(r.get("sw_margin_basis") == "pipelined" for r in rows)
+    h = (f"<h3 style='margin:12px 0 4px'>SW timing — stage 시간 · 병렬 처리 · SW 증가 (SW {escape(str(stat))} 기준)</h3>"
+         "<p class=meta>stage 시간 = HW + SW (최소 여유 stage). "
+         "frame 주기를 넘으면 그 수만큼 frame이 동시에 처리되어야 fps 유지(pipelined). "
+         + ("여유 = (주기 − 최장 SW task 또는 같은 CPU의 SW 합) / 주기 — pipelined 판정의 한계. " if pipelined else "")
+         + f"SW 시간은 탐색 목적 통계({escape(str(stat))}) — Timing Budget 화면 기본(mean)과 다를 수 있음. "
+         "증가 허용 = DVFS 재선택 포함 timing 유지 한계 (≥ = 탐색한 최대 배율까지 유지). "
          "ΔmW = SW 증가 slice의 전력 증가분 (×1.0 slice 대비 — ×1.0 미탐색·전력 미산출 시 —). "
          "등록 예측 절대값과 조합이 다를 수 있어 증가분만 표시"
          + (f", 예산 ×{float(budget):.1f}" if budget else "") + ". 증가별 전력은 목적 통계 기준.</p>"

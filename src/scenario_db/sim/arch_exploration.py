@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog, compression_typical
 
-ENGINE_REV = "arch-exploration/14"  # 14: profile CPU model (cpu_sched): opt-in RT cpupri placement, a task's threads on one CPU run in sequence; 13: v2-vf clock term uses the work clock (busy share no longer follows the SW margin); 12: SBWC mean ratio = typical (engine baseline), eligible-only lever path + exact optimum; 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
+ENGINE_REV = "arch-exploration/15"  # 15: SW margin follows the throughput model (pipelined: longest task / shared-CPU load; the stage chain gives the frames in flight); 14: profile CPU model (cpu_sched): opt-in RT cpupri placement, a task's threads on one CPU run in sequence; 13: v2-vf clock term uses the work clock (busy share no longer follows the SW margin); 12: SBWC mean ratio = typical (engine baseline), eligible-only lever path + exact optimum; 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -610,6 +610,10 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "stages": {
             k: {f: st[k][f] for f in ("sw_ms", "budget_ms", "hw_ms", "overhead_ms", "feasible", "fill_pct")}
             | {f: st[k][f] for f in ("throughput", "longest_sw_ms", "chain_ms") if f in st[k]}
+            # pipelined: SW tasks sharing one CPU (thread / core) run in sequence each frame -> the busiest such load
+            | ({"cpu_load_ms": max(float(g["load_ms"]) for g in st[k]["cpu_groups"]),
+                "cpu_load_resource": max(st[k]["cpu_groups"], key=lambda g: float(g["load_ms"]))["resource"]}
+               if st[k].get("cpu_groups") else {})
             | {"sw_items": [i for i in st[k]["sw_items"] if i.get("critical") is not False]}
             for k in st
         },
@@ -1168,10 +1172,21 @@ def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------- SW margin
+SW_MARGIN_DEFINITION = {
+    "stage": "(P - SW including overhead - HW@set clock)/P for NRT and Post-NRT, objective statistic",
+    "pipelined": "(P - max(longest SW task, SW load of one shared CPU))/P for NRT and Post-NRT, objective statistic; "
+                 "the stage chain (SW + HW) only sets the frames in flight",
+}
+
+
 def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
     """SW timing margin of SW-gated stages (NRT, Post-NRT) at the objective point.
 
-    margin = (P - SW(runtime+latency) - IP overhead - HW at the set clock) / P
+    The margin follows the throughput rule the verdict uses:
+      stage      margin = (P - SW(runtime+latency) - IP overhead - HW at the set clock) / P
+      pipelined  margin = (P - max(longest SW task, SW load of one shared CPU)) / P — each task is its own
+                 thread and frame N+1 starts while N is downstream, so the stage chain (SW + HW) beyond one
+                 period adds frames in flight (latency), not an fps loss (``chain_*`` / ``in_flight``).
     """
     P = obj_slice["period_ms"]
     rows = []
@@ -1179,19 +1194,37 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
         st = obj_slice["stages"].get(sid)
         if not st or (st["sw_ms"] <= 0 and sid == "post"):
             continue
-        # sw_ms already includes the serialized per-IP overhead.
-        slack = P - st["sw_ms"] - st["hw_ms"]
         items = [i for i in st["sw_items"] if i.get("kind") == "sw"]
-        top = max(items, key=lambda i: i["runtime_ms"] + i["latency_ms"], default=None)
         lat = sum(i["latency_ms"] for i in items)
+        # sw_ms already includes the serialized per-IP overhead.
+        chain = st["sw_ms"] + st["hw_ms"]
+        pipelined = st.get("throughput") == "pipelined"
+        if pipelined:
+            longest = max(items, key=lambda i: i["runtime_ms"], default=None)
+            task_ms = float(st.get("longest_sw_ms") if st.get("longest_sw_ms") is not None
+                            else (longest["runtime_ms"] if longest else 0.0))
+            load_ms = float(st.get("cpu_load_ms") or 0.0)
+            shared = load_ms > task_ms
+            binding_ms = load_ms if shared else task_ms
+            slack = P - binding_ms
+            bottleneck = st.get("cpu_load_resource") if shared else (longest["task"] if longest else None)
+            row = {"basis": "pipelined", "binding": "cpu_group" if shared else "task", "binding_ms": round(binding_ms, 3),
+                   "bottleneck": bottleneck, "bottleneck_ms": round(binding_ms, 3),
+                   "bottleneck_share_pct": round(100 * binding_ms / st["sw_ms"], 1) if st["sw_ms"] else 0.0}
+        else:
+            top = max(items, key=lambda i: i["runtime_ms"] + i["latency_ms"], default=None)
+            slack = P - chain
+            row = {"basis": "stage", "bottleneck": top["task"] if top else None,
+                   "bottleneck_ms": round(top["runtime_ms"] + top["latency_ms"], 3) if top else 0.0,
+                   "bottleneck_share_pct": round(100 * (top["runtime_ms"] + top["latency_ms"]) / st["sw_ms"], 1)
+                   if top and st["sw_ms"] else 0.0}
         rows.append({
             "stage": sid, "slack_ms": round(slack, 3), "margin_pct": round(100 * slack / P, 2),
             "sw_ms": st["sw_ms"], "hw_ms": st["hw_ms"], "sw_share_pct": round(100 * st["sw_ms"] / P, 1),
             "latency_share_pct": round(100 * lat / st["sw_ms"], 1) if st["sw_ms"] else 0.0,
-            "bottleneck": top["task"] if top else None,
-            "bottleneck_ms": round(top["runtime_ms"] + top["latency_ms"], 3) if top else 0.0,
-            "bottleneck_share_pct": round(100 * (top["runtime_ms"] + top["latency_ms"]) / st["sw_ms"], 1)
-            if top and st["sw_ms"] else 0.0,
+            "chain_ms": round(chain, 3), "chain_margin_pct": round(100 * (P - chain) / P, 2),
+            "in_flight": max(1, math.ceil(chain / P - 1e-9)) if P > 0 and chain > 0 else 1,
+            **row,
         })
     worst = min(rows, key=lambda r: r["margin_pct"], default=None)
     passing = [s["runtime_scale"] for s in slices if s["statistic"] == obj.statistic and s["verdict"]["status"] != "fail"]
@@ -1199,8 +1232,11 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
     by_stat = {s["statistic"]: s["stages"].get(worst["stage"], {}).get("sw_ms", 0.0)
                for s in slices if worst and s["runtime_scale"] == obj.runtime_scale}
     spread = (max(by_stat.values()) - min(by_stat.values())) if by_stat else 0.0
+    basis = "pipelined" if any(r["basis"] == "pipelined" for r in rows) else "stage"
     out = {
-        "definition": "(P - SW including overhead - HW@set clock)/P for NRT and Post-NRT, objective statistic",
+        "basis": basis,
+        "definition": SW_MARGIN_DEFINITION[basis],
+        "statistic": obj.statistic,
         "stages": rows,
         "worst": worst,
         "growth_tolerance": (max(passing) if passing else None),
@@ -1218,7 +1254,15 @@ def recommendations(m: dict[str, Any], s: dict[str, Any]) -> list[str]:
         return []
     recs = []
     P = s["period_ms"]
-    if s["verdict"]["status"] == "fail" or w["margin_pct"] < 0:
+    pipelined = w.get("basis") == "pipelined"
+    if pipelined and (s["verdict"]["status"] == "fail" or w["margin_pct"] < 0):
+        what = "같은 CPU의 SW 합" if w.get("binding") == "cpu_group" else "최장 SW task"
+        recs.append(
+            f"spec 미달: {w['stage'].upper()} {what} {w['bottleneck']} {w['binding_ms']:.1f} ms / period {P:.2f} ms — "
+            f"≥{max(0.0, -w['slack_ms']):.1f} ms 단축, task 분할(thread 병렬) 또는 "
+            + ("다른 core로 분산" if w.get("binding") == "cpu_group" else "batch")
+        )
+    elif s["verdict"]["status"] == "fail" or w["margin_pct"] < 0:
         need = max(0.0, -(w["slack_ms"]))
         if w["sw_ms"] >= P:
             need = w["sw_ms"] - 0.5 * P
@@ -1226,12 +1270,15 @@ def recommendations(m: dict[str, Any], s: dict[str, Any]) -> list[str]:
             f"spec 미달: {w['stage'].upper()} SW {w['sw_ms']:.1f} ms / period {P:.2f} ms — "
             f"SW 경로 단축 필요 (≥{need:.1f} ms), 병목 {w['bottleneck']} {w['bottleneck_ms']:.1f} ms"
         )
-    if w["bottleneck_share_pct"] > 50:
+    if pipelined and (w.get("in_flight") or 1) > 1:
+        recs.append(f"{w['stage'].upper()} stage chain {w['chain_ms']:.1f} ms = {w['in_flight']} frame 동시 처리 "
+                    "(pipelined 전제 — buffer 수 · latency 확인)")
+    if w["bottleneck_share_pct"] > 50 and not pipelined:
         recs.append(
             f"{w['bottleneck']}가 {w['stage'].upper()} SW의 {w['bottleneck_share_pct']:.0f}% — "
             "task 최적화 / HW offload / big core affinity 검토"
         )
-    if w["latency_share_pct"] > 30:
+    if w["latency_share_pct"] > 30 and not pipelined:
         recs.append(
             f"SW latency(대기)가 SW 경로의 {w['latency_share_pct']:.0f}% — 동기화 지점 축소, "
             "frame N+1 준비 병행(pipelining), queue depth 증가"

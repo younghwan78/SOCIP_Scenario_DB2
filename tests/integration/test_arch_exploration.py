@@ -49,7 +49,7 @@ def stored_run(engine):
         db.add(ArchExplorationRun(id=rid, title="Review", scenario_type="review", project_ref=project,
                                  spec={"objective": {}, "axes": {}, "constraints": {}},
                                  variants=[summary(ids[0], 10), summary(ids[1], 20)], errors=[],
-                                 summary={"variants": 2}, engine_rev="test", input_hash="test"))
+                                 summary={"variants": 2}, engine_rev=svc.ENGINE_REV, input_hash="test"))
         db.commit()
     try:
         yield rid, ids
@@ -344,12 +344,21 @@ def test_power_options_ride_with_the_prediction_and_follow_iq_review(engine, sto
 def test_model_status_counts_predictions_from_older_engine(engine, stored_run):
     rid, ids = stored_run
     with Session(engine) as db:
+        db.query(ArchExplorationRun).filter_by(id=rid).update({"engine_rev": "test"})   # a run of an older engine
+        db.commit()
         svc.promote(db, PromoteRequest(run_id=rid))
         project = db.query(Scenario.project_ref).filter(Scenario.id == ids[0]).scalar()
         status = svc.model_status(db, project_ref=project)
         assert status["engine_rev"] == svc.ENGINE_REV
-        assert status["predictions"]["engines"].get("test", 0) >= 2  # stored_run uses engine_rev="test"
+        assert status["predictions"]["engines"].get("test", 0) >= 2
         assert status["predictions"]["stale_engine"] >= 2
+        # a report over them: published only with an acknowledgement; /stale names them apart from `stale`
+        report = svc.create_report(db, ArchReportRequest(run_id=rid))
+        assert [b["key"] for b in svc.report_blockers(report["snapshot"])] == ["stale_engine"]
+        st = svc.report_stale(db, report["id"])
+        assert st["stale"] is False and {o["engine_rev"] for o in st["old_engine"]} == {"test"} and len(st["old_engine"]) == 2
+        with pytest.raises(UnprocessableError, match="이전 engine"):
+            svc.set_report_status(db, report["id"], "published", reviewer="r", note="n")
         assert set(status["measurements"]) == {"real", "synthetic", "empty", "unknown"}
         assert status["dvfs_unrecorded"] >= 0
         assert all(set(d) == {"ref", "sample", "predictions"} for d in status["dvfs"])
@@ -431,11 +440,11 @@ def test_project_report_merges_current_predictions_and_syncs_risk_register(engin
         failing = summary(sb, 30) | {"spec_ok": False, "spec_reasons": ["nrt: sw 11.1 ms > period 8.33 ms"]}
         db.add(ArchExplorationRun(id=f"EXP-old-{token}", title="old", scenario_type="review", project_ref=pid,
                                   spec={"objective": {}, "axes": {}, "constraints": {}}, variants=[summary(sa, 10), failing],
-                                  errors=[], summary={}, engine_rev="test", input_hash="test"))
+                                  errors=[], summary={}, engine_rev=svc.ENGINE_REV, input_hash="test"))
         db.commit()  # the newer run gets a later created_at (now() is per transaction)
         db.add(ArchExplorationRun(id=f"EXP-new-{token}", title="new", scenario_type="review", project_ref=pid,
                                   spec={"objective": {}, "axes": {}, "constraints": {}}, variants=[summary(sa, 12)],
-                                  errors=[], summary={}, engine_rev="test", input_hash="test"))
+                                  errors=[], summary={}, engine_rev=svc.ENGINE_REV, input_hash="test"))
         db.commit()
         svc.promote(db, PromoteRequest(run_id=f"EXP-old-{token}", scenario_id=sa))
         with pytest.raises(ValueError):

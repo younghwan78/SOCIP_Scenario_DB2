@@ -30,9 +30,10 @@ export function SweepTiles({ s, synthetic }: { s: Sweep; synthetic: boolean }) {
       {tile(`현재 배치 · SW ${gx(p0.growth)}`, `${fmt(p0.reference?.total_mw, 1)} mW`, `CPU + DSU · ${mhz(p0)} MHz`)}
       {tile('최적 재배치 이득', gain === null ? '—' : `${sg(gain)} mW`, gain !== null && p0.reference ? `${sg((gain / p0.reference.total_mw) * 100)}% · 이동 ${p0.best?.moved.length ?? 0} task` : '조건 만족 배치 없음', (gain ?? 0) < -0.05 ? 'pm-down' : '')}
       {tile('SW 증가 허용치', lim.tolerance === null ? `> ${gx(pN.growth)}` : gx(lim.tolerance),
-        [lim.timing_at !== null ? `timing 여유 소진 ${gx(lim.timing_at)}` : 'Timing Budget 연동 없음', step ? `OPP 계단 ${gx(step.growth_to)}` : '범위 안 OPP 계단 없음'].join(' · '),
+        [lim.timing_at !== null ? `timing 여유(RT chain 포함) 소진 ${gx(lim.timing_at)}` : 'Timing Budget 연동 없음', step ? `첫 OPP 계단 ${gx(step.growth_to)}` : '범위 안 OPP 계단 없음',
+          ...((lim.opp_steps ?? []).length > 1 ? [`계단 ${(lim.opp_steps ?? []).length}개`] : [])].join(' · '),
         lim.tolerance !== null && lim.tolerance < pN.growth ? 'cal-t-warn' : '')}
-      {tile(step ? `OPP 계단 (${gx(step.growth_from)} → ${gx(step.growth_to)})` : 'OPP 계단', step ? `${sg(step.delta_mw)} mW` : '—',
+      {tile(step ? `첫 OPP 계단 (${gx(step.growth_from)} → ${gx(step.growth_to)})` : 'OPP 계단', step ? `${sg(step.delta_mw)} mW` : '—',
         step ? `${step.cluster} ${fmt(step.mhz[0], 0)} → ${fmt(step.mhz[1], 0)} MHz · 최적 배치 ${sg(lim.opp_step_best_mw)} mW` : '범위 안에서 cluster OPP 상향 없음', step ? 'cal-t-fail' : '')}
       {tile(`분산 vs 집중 · ${gx(p0.growth)}`, svc.spread && svc.concentrate ? `${sg(svc.spread.total_mw - svc.concentrate.total_mw)} mW` : '—',
         svc.spread && svc.concentrate ? `분산 ${svc.spread.clusters.join('+')} ${fmt(svc.spread.total_mw, 1)} vs 집중 ${svc.concentrate.clusters.join('+')} ${fmt(svc.concentrate.total_mw, 1)}` : 'budget 만족 전략 부족',

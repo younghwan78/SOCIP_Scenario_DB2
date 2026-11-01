@@ -30,12 +30,23 @@ def sweep_summary(sweep: dict[str, Any]) -> dict[str, Any]:
     rows = []
     for p in pts:
         ref, best = p.get("reference") or {}, p.get("best") or {}
+        stages = [st for st in p.get("stages") or [] if st.get("sw_ms", 0) > 0]
+        slack = min((st.get("chain_slack_ms", st.get("slack_ms")) for st in stages
+                     if st.get("chain_slack_ms", st.get("slack_ms")) is not None), default=None)
         rows.append({"growth": p["growth"], "ref_mw": ref.get("total_mw"), "best_mw": best.get("total_mw"),
                      "ref_feasible": ref.get("feasible"), "bw_mw": p.get("bw_mw"), "cpu_bw_mbs": p.get("cpu_bw_mbs"),
-                     "ref_mhz": ref.get("mhz"), "best_mhz": best.get("mhz"), "winner": p.get("winner")})
+                     "ref_mhz": ref.get("mhz"), "best_mhz": best.get("mhz"), "winner": p.get("winner"),
+                     # Timing Budget stages at this growth: the RT chain verdict of the reference placement
+                     "timing_ok": (slack >= -1e-6) if slack is not None else None,
+                     "min_slack_ms": slack,
+                     "stages": [{k: st.get(k) for k in ("stage", "sw_ms", "chain_ms", "chain_slack_ms", "ok")} for st in stages]})
     return {
+        # what the numbers rest on: sweep revision, SW statistic of the Timing Budget, RT placement rule
+        "basis": sweep.get("basis") or {},
         "tolerance": lim.get("tolerance"), "binding": lim.get("binding"), "timing_at": lim.get("timing_at"),
+        "timing_fail_at": lim.get("timing_fail_at"),
         "opp_step": lim.get("opp_step"), "opp_step_best_mw": lim.get("opp_step_best_mw"),
+        "opp_steps": lim.get("opp_steps") or [], "largest_step": lim.get("largest_step"), "rule": lim.get("rule"),
         "growth_range": [pts[0]["growth"], pts[-1]["growth"]] if pts else None,
         "points": rows,
         "best_at_start": {"total_mw": best0.get("total_mw"), "moved": best0.get("moved") or [],
@@ -47,11 +58,16 @@ def sweep_summary(sweep: dict[str, Any]) -> dict[str, Any]:
 
 
 def snapshot_view(row: ReviewCpuSnapshot) -> dict[str, Any]:
+    from scenario_db.api.services.cpu import CPU_SWEEP_REV
+
+    rev = ((row.summary or {}).get("basis") or {}).get("rev")
     return {"id": row.id, "project_ref": row.project_ref, "scenario_id": row.scenario_ref, "variant_id": row.variant_ref,
             "profile_ref": row.profile_ref, "power_params_ref": row.power_params_ref,
             "base_power_params_ref": row.base_power_params_ref, "status": row.status, "note": row.note,
             "created_by": row.created_by, "created_at": row.created_at.isoformat() if row.created_at else None,
-            "summary": row.summary, "request": row.request}
+            "summary": row.summary, "request": row.request,
+            # recorded with today's sweep calculation? (an older one keeps its numbers but is flagged in reports)
+            "calc_rev": rev, "calc_current": rev == CPU_SWEEP_REV}
 
 
 def record_cpu_snapshot(db: Session, *, project_ref: str, request: CpuRebalanceSweepRequest, note: str | None,

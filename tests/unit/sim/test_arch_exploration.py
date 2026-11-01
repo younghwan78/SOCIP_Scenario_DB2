@@ -311,6 +311,44 @@ def test_sw_overhead_is_subtracted_once(uhd30):
     assert row["slack_ms"] == pytest.approx(obj["period_ms"] - row["sw_ms"] - row["hw_ms"], abs=0.001)
 
 
+def test_pipelined_sw_margin_is_per_thread_and_the_chain_gives_frames_in_flight(uhd30):
+    """Under pipelined throughput the limit is one thread (longest SW task) or one shared CPU (SW sum of its tasks),
+    not the stage chain: a chain over the period is frames in flight, and the margin stays positive."""
+    from copy import deepcopy
+    obj = deepcopy(uhd30["objective_slice"])
+    P = obj["period_ms"]
+    nrt = obj["stages"]["nrt"]
+    nrt.update({"throughput": "pipelined", "sw_ms": 0.9 * P, "hw_ms": 0.6 * P, "longest_sw_ms": 0.4 * P})
+    row = next(s for s in ax.sw_margin([obj], obj, ax.ExplorationObjective())["stages"] if s["stage"] == "nrt")
+    assert row["basis"] == "pipelined" and row["binding"] == "task"
+    assert row["margin_pct"] == pytest.approx(60.0, abs=0.01)
+    assert row["chain_margin_pct"] == pytest.approx(-50.0, abs=0.01) and row["in_flight"] == 2
+    # two tasks pinned to one CPU: their per-frame sum binds
+    nrt.update({"cpu_load_ms": 0.7 * P, "cpu_load_resource": "CPU (shared_cpu)"})
+    m = ax.sw_margin([obj], obj, ax.ExplorationObjective())
+    row = next(s for s in m["stages"] if s["stage"] == "nrt")
+    assert row["binding"] == "cpu_group" and row["bottleneck"] == "CPU (shared_cpu)"
+    assert row["margin_pct"] == pytest.approx(30.0, abs=0.01)
+    assert m["basis"] == "pipelined" and "longest SW task" in m["definition"] and m["statistic"] == "max"
+    # the stage rule is unchanged: the whole chain must fit
+    nrt.pop("throughput")
+    row = next(s for s in ax.sw_margin([obj], obj, ax.ExplorationObjective())["stages"] if s["stage"] == "nrt")
+    assert row["basis"] == "stage" and row["margin_pct"] == pytest.approx(-50.0, abs=0.01)
+
+
+def test_pipelined_slice_keeps_the_shared_cpu_load():
+    report = {"ips": [], "fps": 30.0, "period_ms": 33.3, "eis": {"on": False}, "verdict": {"status": "ok"},
+              "intervals": {"ok": True, "preview": {"max_ms": 33.3}, "video": {"max_ms": 33.3}}, "latency": {},
+              "power": {"total_mw": 1, "cpu_mw": 0, "hw_mw": 1, "bw_mw": 0, "bw_hw_mw": 0, "bw_sw_mw": 0, "cpu_by_task": {}},
+              "bw": {"total_mbs": 0, "hw_mbs": 0, "sw_mbs": 0},
+              "stages": [{"id": "nrt", "sw_ms": 20.0, "budget_ms": 25.0, "hw_ms": 5.0, "overhead_ms": 0.0, "feasible": True,
+                          "fill_pct": 75.0, "throughput": "pipelined", "longest_sw_ms": 12.0, "chain_ms": 25.0, "sw_items": [],
+                          "cpu_groups": [{"resource": "CPU_A", "tasks": ["a", "b"], "load_ms": 18.0},
+                                         {"resource": "CPU_B", "tasks": ["c", "d"], "load_ms": 9.0}]}]}
+    s = ax._slice(report, "max", 1.0)
+    assert s["stages"]["nrt"]["cpu_load_ms"] == 18.0 and s["stages"]["nrt"]["cpu_load_resource"] == "CPU_A"
+
+
 def test_failed_resimulation_cannot_report_spec_ok(graph_factory, dvfs, monkeypatch):
     monkeypatch.setattr(ax, "_verify", lambda *args: {"ok": False})
     spec = ax.ArchExplorationSpec(axes={"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}})

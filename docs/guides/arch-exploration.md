@@ -31,8 +31,12 @@ v3 제안(2026-09-24)의 구현 내용이다. Stage timing budget([timing-budget
   - 1% 이내 동률이면 BW 낮은 쪽 → compression buffer 수 적은 쪽 → level 상향 수 적은 쪽.
 - **검증**: 추천 조합을 `buffer_overrides` + `dvfs_overrides`로 다시 시뮬레이션해 analytic 값과 비교한다.
   - `|Δ| < 0.5%`이고 fail이 아니면 `verified.ok`. 검증 실패는 spec OK로 표시하거나 예측으로 등록할 수 없다.
-- **SW timing margin** = (P − SW(runtime+latency) − IP overhead − HW@set clock) / P. NRT와 Post-NRT 중 최솟값이다.
-  - 권고 규칙: spec 미달, 단일 task > 50%, latency > 30%, clock_up, max–mean 편차, SW 증가 허용치.
+- **SW timing margin**: 판정 기준(`throughput_model`)과 같은 규칙으로 계산한다 (engine rev 15). NRT와 Post-NRT 중 최솟값이다.
+  - `stage`: (P − SW(runtime+latency) − IP overhead − HW@set clock) / P — stage 전체가 1 frame 안에 끝나야 한다.
+  - `pipelined`: (P − max(최장 SW task, 같은 CPU에서 순차 실행되는 SW 합)) / P — task마다 thread이고 frame N+1이 N의 후단과 겹친다.
+    stage chain(SW + HW)이 P를 넘으면 그만큼 frame이 동시에 처리된다(`in_flight`, latency만 증가). `chain_ms` · `chain_margin_pct`로 따로 기록한다.
+  - margin 행은 `basis`(stage / pipelined)를 남긴다. rev 14 이전 예측에는 없고 stage 식으로 계산된 값이다.
+  - 권고 규칙: spec 미달, 단일 task > 50%(stage), latency > 30%(stage), 동시 frame(pipelined), clock_up, max–mean 편차, SW 증가 허용치.
 
 - **Power 구성** (engine rev 3): CPU(SW) + CPU BW(SW task DMA, 예: mpeg_writer/storage_write) + IP core + IP BW.
   - 분포(`distribution`)와 case에 `bw_ip_mw`/`bw_cpu_mw`/`bw_ip_mbs`/`bw_cpu_mbs`를 추가했습니다. compression Δ도 port 소유 node 기준으로 IP/CPU로 나눕니다.
@@ -59,27 +63,33 @@ v3 제안(2026-09-24)의 구현 내용이다. Stage timing budget([timing-budget
 
 항목 합 = 총 Δ이고 잔차는 반올림 수준(< 0.01 mW)이다. 입력 변경(fps, SW 통계·증가, compression set, DVFS level, run)도 함께 표시한다.
 
+분해는 같은 계산 모델을 전제로 한다. 두 예측의 model lineage(power model · version · BW model · 계수 · clock 기준)나
+engine이 다르면 Δ의 일부가 모델 차이이므로, 예측 현황 비교(`lineage_warning`)와 보고서 "변경 이력"은 그 행을
+"모델 · engine 변경 포함"으로 표시하고 분해를 참고로만 보여준다.
+
 ## 4. Architecture 검토 보고서 (`reporting/arch_report.py`)
 
 - `POST /arch/reports {run_id}`: 그 run에서 등록된 current 예측으로 snapshot(JSON)을 고정하고, self-contained HTML(inline SVG)을 생성해 `arch_reports`에 저장한다.
-  - `/stale`은 현재 예측이 snapshot과 다르면 알려준다. 같은 run에서 재등록한 경우 보고서를 재생성한다. 다른 run의 예측으로 변경한 경우 해당 새 run에서 보고서를 생성한다.
+- `POST /arch/reports {project_ref}`: 과제 보고서. 과제의 current 예측 전체(여러 run)를 한 snapshot으로 묶고 risk register를 갱신한다.
+  직전 과제 보고서와의 비교(`previous`)를 함께 고정한다.
+  - 행마다 계산한 engine(`engine_rev`)과 model lineage를 고정한다. 생성 시점 engine(`overview.engine_current`)과 다른 행,
+    서로 다른 lineage가 섞인 경우는 "게시 전 확인 필요"(`stale_engine` · `mixed_lineage`, 게시 시 확인 체크 필요)로,
+    power params 미지정(코드 기본 계수)은 경고(`default_params`)로 표시한다.
+  - `/stale`은 현재 예측이 snapshot과 다르면(`changed`, 재생성으로 해소) `stale`로 알려준다. 이전 engine으로 계산된 행은
+    `old_engine`으로 따로 알려준다 — 재생성으로는 해소되지 않고 재탐색 · 재등록이 필요하다.
   - 실제 등록한 비압축 조합과 검증 여부를 보존한다. 추천 조합의 설정/검증 결과로 대체하지 않는다.
-- 구성:
-  1. 개요
-  2. spec 만족 수와 미달 원인
-  3. 분류별 검토 의견 (`reporting/arch_opinions.py`)
-     - 분류: 30 fps(해상도 × EIS on/off × HEVC/APV) · 60 fps(FHD/UHD) · 고속(≥100 fps: FHD120/240, UHD120 …) · Heavy(Pro/Portrait/Dual·PIP·RCV/Triple). 우선순위 고속 → Heavy → fps.
-     - 분류 입력: run에 저장된 resolved `design_conditions`와 `severity`. 현재 DB 조건을 다시 읽지 않는다. 과거 run의 누락 severity는 미정이고, 해상도가 없으면 variant id에서 추출한다. 비녹화 scenario는 기타로 분류한다.
-     - 의견: spec 만족 수, power/BW 범위, 평균 CPU·IP core·BW 비중, 해상도별 EIS off/on 평균, 같은 fps·해상도·codec 또는 EIS 그룹의 평균 차이, 미달 원인, 최소 SW margin·DVFS headroom. 센서·HDR·clock 등은 통제되지 않았으므로 EIS·codec 단독 영향으로 해석하지 않는다. 수치는 등록 예측 또는 run의 추천이며 실측 근거가 아니다.
-     - 이전 형식 snapshot에는 이 절이 비어 있다 → 보고서 재생성.
-  4. scenario 요약
-  5. DVFS domain level (scenario별) + IP 상세
-  6. Power·BW box plot
-  7. CPU/HW/BW 분리
-  8. Compression 절감
-  9. SW margin Top 5 + 권고, spec 미달 목록
-  10. 변경 이력 (attribution)
-  11. 부록
+- 구성 (과제 보고서, `reporting/review_sections.py`):
+  - Tier 0 — 요약: 근거 등급, 과제 조건, KPI scenario 표(SW 여유는 탐색 목적 통계 기준 — Timing Budget 화면 기본 mean과 다를 수 있음),
+    게시 전 확인 항목, 핵심 메시지, Top risk, 결정 요청.
+  - Tier 1 — 결론 · Risk register · 이전 보고서 대비 (Power 변화마다 계산 모델 변경 여부 표시).
+  - Tier 2 — 성능 · Timing / Power 구성 / Lever · 발열 / CPU · SW / 예측 ↔ 실측.
+    - CPU · SW: CPU what-if "검토서에 포함" snapshot. 허용치 = min(비용 ≥ 5 mW 또는 5%인 첫 OPP 상향 직전 배율,
+      Timing Budget 여유(RT chain 포함) 소진 배율), 판정 기준 = review_policy `sw_growth_budget`. 범위 안 OPP 상향을 모두 나열하고,
+      이전 계산 방식으로 기록된 snapshot은 "이전 계산"으로 표시한다.
+  - Tier 3 — 분류별 의견 (`reporting/arch_opinions.py`), 검토 범위 · 모델(모델 한계: power model · version, BW model, CPU flat/profile 비중),
+    dossier, 요약 표, SW margin(판정 기준별 정의), 변경 이력(모델 · engine 변경 행 분리), 부록.
+  - 분류: 30 fps(해상도 × EIS on/off × HEVC/APV) · 60 fps(FHD/UHD) · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual·PIP·RCV/Triple).
+    분류 입력은 run에 저장된 resolved `design_conditions`와 `severity`다.
 
 ## 5. DB
 
@@ -87,8 +97,9 @@ Alembic `0020_arch_exploration`: `arch_exploration_runs`, `predictions`, `arch_r
 
 ## 6. 한계
 
-- MIF DVFS는 BW 전력에 반영되지 않는다.
-- CPU 전력은 단일 cluster 가정이다.
+- BW 전력의 MIF DVFS 반영은 BW model에 따른다: `builtin` · 계수 모델은 미반영, `mif-linear`는 MIF level · read/write 분리 반영.
+- 탐색 예측의 CPU 전력은 기본 `cpu_model = flat`(fps 비례 항)이다. task 배치 · cluster OPP는 `profile`(실측 CPU profile)이거나
+  CPU what-if 결과에서만 반영된다. 보고서 모델 한계에 flat / profile 건수가 표시된다.
 - Compression은 BW만 감소시킨다 (codec 전력과 화질은 미반영).
 - sample DVFS는 CAM/INTCAM/INT/APV가 synthetic이다.
 - 고 fps batch는 모델링하지 않았다.

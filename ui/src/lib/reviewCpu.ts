@@ -9,11 +9,16 @@ export interface CpuSnapshotSummary {
   points: { growth: number; ref_mw: number | null; best_mw: number | null; ref_feasible: boolean | null; bw_mw: number | null }[]
   best_at_start: { total_mw: number | null; moved: string[]; delta_mw: number | null }
   profile_origin?: string
+  /** cpu-sweep/2: sweep revision · Timing Budget SW statistic · RT placement the numbers rest on */
+  basis?: { rev?: string; timing_statistic?: string; timing_coupling?: string; rt_placement?: string | null }
+  opp_steps?: OppEvent[]; timing_fail_at?: number | null
 }
 export interface CpuSnapshot {
   id: string; project_ref: string; scenario_id: string; variant_id: string; profile_ref: string; power_params_ref: string
   base_power_params_ref: string | null; status: 'active' | 'superseded' | 'withdrawn'; note: string | null
   created_by: string | null; created_at: string | null; summary: CpuSnapshotSummary
+  /** false = recorded by an older sweep calculation: re-record (갱신) before the next report */
+  calc_rev?: string | null; calc_current?: boolean
 }
 
 export const cpuSnapshotApi = {

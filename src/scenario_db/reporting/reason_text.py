@@ -11,6 +11,9 @@ import re
 from typing import Any
 
 _SW = re.compile(r"^(?P<stage>.+?): SW (?P<sw>[\d.]+) ms leaves no HW budget$")
+# pipelined throughput: one SW thread longer than a frame, or SW tasks on one CPU (thread / core) summing above it
+_SW_TASK = re.compile(r"^(?P<stage>.+?): SW task (?P<sw>[\d.]+) ms > frame period")
+_SW_CPU = re.compile(r"^(?P<stage>.+?): CPU (?P<res>.+?)의 SW 합 (?P<sw>[\d.]+) ms > frame period(?: \(같은 thread/core: (?P<tasks>[^)]*)\))?")
 _RT = re.compile(r"^RT HW (?P<hw>[\d.]+) ms > (?P<pct>\d+)% budget (?P<budget>[\d.]+) ms"
                  r"(?: — sensor readout (?P<readout>[\d.]+) ms(?: \(frame period (?P<period>[\d.]+) ms)?.*)?$")
 _IV = re.compile(r"^(?P<which>preview|video) interval (?P<got>[\d.]+) ms != (?P<target>[\d.]+) ms$")
@@ -33,6 +36,24 @@ def explain(reason: str, period_ms: float | None = None) -> dict[str, str]:
                                if need >= 0 else "SW 단축 또는 batch / 병렬화")}
         return {"code": "sw_budget", "raw": reason, "text": f"{stage} SW {sw:.1f} ms가 frame 예산을 모두 사용",
                 "action": "SW 단축 또는 batch / 병렬화"}
+    m = _SW_TASK.match(reason)
+    if m:
+        sw, stage = float(m["sw"]), m["stage"].strip()
+        period = f" > frame 주기 {period_ms:.2f} ms" if period_ms else " > frame 주기"
+        need = f"{sw - period_ms:.1f} ms 이상 단축, 또는 " if period_ms and sw > period_ms else ""
+        n = max(2, int(sw // period_ms) + 1) if period_ms else 2
+        return {"code": "sw_budget", "raw": reason,
+                "text": f"{stage} 최장 SW task {sw:.1f} ms{period} → 한 thread가 1 frame 안에 끝나지 않음 (pipelined 판정)",
+                "action": f"해당 task {need}task 분할(thread 병렬 {n}개) 또는 {n}-frame batch"}
+    m = _SW_CPU.match(reason)
+    if m:
+        sw, stage = float(m["sw"]), m["stage"].strip()
+        tasks = f" ({m['tasks']})" if m["tasks"] else ""
+        period = f" > frame 주기 {period_ms:.2f} ms" if period_ms else " > frame 주기"
+        return {"code": "sw_budget", "raw": reason,
+                "text": f"{stage} 같은 CPU {m['res']}의 SW 합 {sw:.1f} ms{period}{tasks} → 순차 실행 task가 1 frame 안에 끝나지 않음",
+                "action": "task를 다른 core · thread로 분산 (timeline_resource_id · affinity), 또는 합 "
+                          + (f"{sw - period_ms:.1f} ms 이상 단축" if period_ms and sw > period_ms else "단축")}
     m = _RT.match(reason)
     if m:
         hw, budget = float(m["hw"]), float(m["budget"])
@@ -168,15 +189,23 @@ def diagnose(explained: list[dict[str, str]], fps: float | None) -> dict[str, An
     high_fps = bool(fps and fps >= 100)
     actions: list[str] = []
     if code == "sw_budget":
-        m = re.search(r"SW ([\d.]+) ms", p["text"])
+        m = re.search(r"SW(?: task| 합)? ([\d.]+) ms", p["text"])
         sw = float(m.group(1)) if m else None
         frames = int(sw // period) + 1 if sw and period else None
+        thread = bool(re.search(r"최장 SW task|같은 CPU", p["text"]))   # pipelined: one thread / one CPU is the limit
         sev = f"SW {sw:.1f} ms = 주기 {period:.2f} ms의 {sw / period:.1f}배" if sw and period else "SW > 주기"
-        focus = ("NRT 경로 SW(RTA·EIS 등 runtime + latency)가 한 frame 주기 안에 끝나는 구조인지 — "
-                 + ("고속 recording은 1 frame = 1 period 가정 밖이므로 batch 처리 설계가 먼저" if high_fps else "SW 순차 실행 구간과 latency 비중"))
-        actions = [f"{frames}-frame batch (NRT를 {frames} frame 단위로 묶어 처리) 또는 SW pipeline 병렬화" if frames else "SW batch / 병렬화",
-                   "SW 병목 task(EIS·RTA)의 HW offload 또는 처리 축소 (예: 고속 모드에서 RTA 간헐 실행)",
-                   "CPU what-if로 병목 task를 상위 cluster에 고정했을 때 runtime 단축량 확인"]
+        if thread:
+            focus = ("pipelined 판정 — stage 전체가 아니라 한 thread(또는 같은 CPU의 순차 task)가 1 frame 안에 끝나는지가 한계. "
+                     + ("고속 recording은 batch 동작 정의가 먼저" if high_fps else "병목 task의 분할 · core 분산 여지"))
+            actions = [p.get("action") or "task 분할 / batch",
+                       "병목 task의 HW offload 또는 처리 축소 (예: 고속 모드에서 간헐 실행)",
+                       "CPU what-if로 병목 task를 상위 cluster에 고정했을 때 runtime 단축량 확인"]
+        else:
+            focus = ("NRT 경로 SW(RTA·EIS 등 runtime + latency)가 한 frame 주기 안에 끝나는 구조인지 — "
+                     + ("고속 recording은 1 frame = 1 period 가정 밖이므로 batch 처리 설계가 먼저" if high_fps else "SW 순차 실행 구간과 latency 비중"))
+            actions = [f"{frames}-frame batch (NRT를 {frames} frame 단위로 묶어 처리) 또는 SW pipeline 병렬화" if frames else "SW batch / 병렬화",
+                       "SW 병목 task(EIS·RTA)의 HW offload 또는 처리 축소 (예: 고속 모드에서 RTA 간헐 실행)",
+                       "CPU what-if로 병목 task를 상위 cluster에 고정했을 때 runtime 단축량 확인"]
         if worst_clock:
             actions.append(f"SW 해소 후에도 IP 처리량 ×{worst_clock:.2f} 부족 — 아래 IP 처리량 조치 병행")
     elif code == "rt_budget":

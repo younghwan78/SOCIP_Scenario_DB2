@@ -38,7 +38,10 @@ GLOSSARY = [
     ("최저 전력 조합 (min_power)", "화질 영향 항목 포함 최저 power — IQ 평가 전제"),
     ("탐색 범위", "조합 탐색 분포 min~max (SW 통계 mean/max × SW 증가 × DVFS +1 level)"),
     ("보정 예측", "예측 ÷ (1 + 실측 대조 total median 오차) — 오차가 체계적(같은 부호 다수)이고 대조 5건 이상일 때만"),
-    ("SW margin", "stage 예산에서 SW 처리 시간을 뺀 여유 % — 음수면 해당 SW task가 1 frame을 넘음 (병렬 처리 전제)"),
+    ("SW margin", "frame 주기 대비 SW 여유 % — stage 기준은 (주기 − stage SW − HW), pipelined는 (주기 − 최장 SW task 또는 같은 CPU의 SW 합). "
+                  "pipelined에서 stage chain이 주기를 넘는 것은 '동시 frame' 수(latency)로 따로 표시"),
+    ("동시 frame", "stage chain(HW + SW)이 frame 주기 몇 개에 걸치는지 — pipelined에서 fps는 유지되고 buffer · latency만 늘어남"),
+    ("모델 lineage", "예측을 만든 계산 모델 (power model · version · BW model · 계수 · clock 기준) — 다르면 숫자 차이가 설계 차이가 아님"),
     ("post_irta", "NRT 후단 SW task (IRTA 후처리) — 현재 SW 여유 부족의 공통 병목"),
     ("SAMPLE", "사외 검증용 가상 값 — 사내 table · 실측으로 교체 대상"),
     ("부하 등급", "variant 정의의 severity (light · medium · heavy · critical) — risk 심각도와 별개"),
@@ -259,8 +262,11 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
                             "overall": {"cls": "fail", "label": "미커버"}})
             continue
         if r["spec_ok"]:
-            par = throughput == "pipelined" and r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < 0
             n = (r.get("sw") or {}).get("in_flight")
+            # engine ≥ 15 records the margin basis (pipelined margin = per thread, frames in flight from the chain);
+            # older rows only have the stage chain margin, negative when more than one frame is in flight
+            par = throughput == "pipelined" and ((n or 0) > 1 if r.get("sw_margin_basis") else
+                                                 r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < 0)
             fps = {"state": "ok", "label": (f"충족 · {n} frame 병렬" if n and n > 1 else "충족 · 병렬 전제") if par else "충족",
                    "cls": "warn" if par else "ok"}
         else:
@@ -507,12 +513,57 @@ def data_quality(snap: dict[str, Any]) -> list[dict[str, Any]]:
     if unknown:
         out.append({"key": "unknown_provenance", "level": "warn", "variants": [c["variant_id"] for c in unknown],
                     "text": f"출처 미기록 실측 {len(unknown)}건 — 판정 근거로 쓰지 않음", "check": "measurement provenance 기록"})
+    out += _computation_quality(snap)
     gap = sorted(k["variant_ref"] for k in scoreboard(snap) if not k["covered"]) \
         if ((snap.get("review_context") or {}).get("policy") or {}).get("kpi") else []
     if gap:
         out.append({"key": "kpi_uncovered", "level": "block", "variants": gap,
                     "text": f"KPI scenario 미탐색 {len(gap)}건: {', '.join(short(v) for v in gap)}",
                     "check": "조합 탐색 · 등록 후 재생성, 또는 미포함 사유를 게시 기록에 남김"})
+    return out
+
+
+def _computation_quality(snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """Whether the rows were computed alike and with today's code: engine revision, model lineage, power params,
+    and CPU what-if snapshots of an older sweep calculation. Only snapshots that record these (engine ≥ 15) are judged."""
+    from scenario_db.sim.model_lineage import lineage_key, lineage_label
+
+    rows = snap.get("scenarios") or []
+    ov = snap.get("overview") or {}
+    out: list[dict[str, Any]] = []
+    current = ov.get("engine_current")
+    if current:
+        old = [r for r in rows if r.get("engine_rev") and r["engine_rev"] != current]
+        if old:
+            revs = sorted({str(r["engine_rev"]) for r in old})
+            out.append({"key": "stale_engine", "level": "block", "variants": [r["variant_id"] for r in old],
+                        "text": f"이전 engine으로 계산된 행 {len(old)}/{len(rows)}건 ({', '.join(revs)} → {current}) — 현재 계산 방식과 다름",
+                        "check": "현재 engine으로 조합 탐색 · 재등록 후 보고서 재생성 (예측 현황의 '재계산 필요' 확인)"})
+    # model lineage: only registered rows count (a fps miss has no registered power)
+    lin_rows = [r for r in rows if "model_lineage" in r and r.get("prediction_id")]
+    if lin_rows:
+        groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+        for r in lin_rows:
+            groups.setdefault(lineage_key(r.get("model_lineage")), []).append(r)
+        if len(groups) > 1:
+            ranked = sorted(groups.values(), key=len, reverse=True)
+            minority = [r for g in ranked[1:] for r in g]
+            out.append({"key": "mixed_lineage", "level": "block", "variants": [r["variant_id"] for r in minority],
+                        "text": f"계산 모델이 다른 예측 혼재 — 다수 {len(ranked[0])}건 {lineage_label(ranked[0][0].get('model_lineage'))}, "
+                                f"다른 모델 {len(minority)}건 ({', '.join(short(r['variant_id']) for r in minority[:4])}"
+                                f"{' 외' if len(minority) > 4 else ''}: {lineage_label(minority[0].get('model_lineage'))})",
+                        "check": "같은 config profile(power model · params · BW model)로 재탐색 · 재등록 — variant 간 비교가 모델 차이를 포함함"})
+        default = [r for r in lin_rows if not (r.get("model_lineage") or {}).get("power_params_ref")
+                   and not (r.get("model_lineage") or {}).get("power_params_hash")]
+        if default:
+            out.append({"key": "default_params", "level": "warn", "variants": [r["variant_id"] for r in default],
+                        "text": f"power params 미지정(코드 기본 계수) 예측 {len(default)}건 — 과제 계수 아님",
+                        "check": "과제 config profile(power_params_ref 지정)로 탐색했는지 확인"})
+    old_cpu = [c for c in snap.get("cpu") or [] if c.get("calc_current") is False]
+    if old_cpu:
+        out.append({"key": "cpu_snapshot_stale", "level": "warn", "variants": [c["variant_id"] for c in old_cpu],
+                    "text": f"이전 계산 방식의 CPU what-if 결과 {len(old_cpu)}건 (RT chain timing · OPP 계단 기준 변경 전)",
+                    "check": "CPU what-if에서 같은 조건으로 계산 후 '갱신'"})
     return out
 
 
