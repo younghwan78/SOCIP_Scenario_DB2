@@ -226,11 +226,14 @@ the same Linux EM formula the timing budget uses:
 `v2-vf` = v1 x `[(1 - a) + a x f_set / f_ref]`.
 
 - `f_ref` (`dvfs_breakdown[].clock_ref_mhz`): the clock the IP physically needs —
-  max(throughput, `mipi_ingress`, `vvalid_stream`, `stage_budget`). The sensor v-valid
-  exception is a need, not waste.
-- Clock above `f_ref` — OTF / DVFS-group alignment, DVFS level quantisation, manual /
-  configured / measured overrides — is charged: `dvfs_breakdown[].clock_overhead_mw`,
-  `power_breakdown.ip.clock_overhead_mw`.
+  max(work clock, `mipi_ingress`, `vvalid_stream`, `stage_budget`). Work clock =
+  `pixels x fps / ppc` (busy the whole period, no SW-margin reserve), so `busy = f_ref / f_set`
+  is the IP's real activity (HW time / period). The sensor v-valid exception is a need, not waste.
+- Clock above `f_ref` — the SW-margin reserve, OTF / DVFS-group alignment, DVFS level
+  quantisation, manual / configured / measured overrides — is charged:
+  `dvfs_breakdown[].clock_overhead_mw`, `power_breakdown.ip.clock_overhead_mw`. The SW margin
+  changes IP power only through the set clock and voltage it selects (v2-vf 1.2; before, `f_ref`
+  carried the margin, so a larger margin read as more busy and lowered power at the same clock).
 - `a`: per IP/mode `capabilities.sim[.modes.<mode>].clock_power_fraction`, else
   `power_model_params.ip_clock_power_fraction`, else 0. With `a = 0` v2 equals v1 exactly.
   `dvfs_breakdown[].clock_power_fraction` is the value applied (None under v1).
@@ -240,7 +243,7 @@ the same Linux EM formula the timing budget uses:
 
 ### Gating-aware IP power and DVFS policy
 
-- v2-vf (1.1): `P = P_v1 x [(1 - a) + a x r x (busy + idle x (1 - cg))] + leak(V) x (1 - pg x idle)`,
+- v2-vf (1.2): `P = P_v1 x [(1 - a) + a x r x (busy + idle x (1 - cg))] + leak(V) x (1 - pg x idle)`,
   `r = f_set / f_ref`, `busy = min(1, 1/r)`. Per IP/mode catalog sim keys:
   `clock_gating_eff` (cg), `power_gating_eff` (pg), `leakage_mw` (static at ref_V,
   x (V/ref_V)^2.5). Unset = 0 (previous v2; v1 ignores them). This compares "run fast and

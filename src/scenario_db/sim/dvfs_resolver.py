@@ -291,7 +291,7 @@ class DvfsResolver:
             clock_gating_eff=params.clock_gating_eff,
             power_gating_eff=params.power_gating_eff,
             leakage_mw=params.leakage_mw,
-            clock_ref_mhz=_physical_required_mhz(workload, base_required_clock),
+            clock_ref_mhz=_physical_required_mhz(workload, _work_clock_mhz(workload)),
             ppc=params.ppc,
             input_resolution_mp=workload.pixels / 1e6,
             fps=workload.fps,
@@ -501,6 +501,21 @@ PHYSICAL_CLOCK_CONSTRAINTS = frozenset({"mipi_ingress", "vvalid_stream", "stage_
 def _physical_required_mhz(workload: IPWorkload, throughput_mhz: float) -> float:
     physical = [c.mhz for c in workload.clock_constraints if c.kind in PHYSICAL_CLOCK_CONSTRAINTS]
     return max([throughput_mhz, *physical])
+
+
+def _work_clock_mhz(workload: IPWorkload) -> float:
+    """Clock that keeps the IP busy the whole frame period (pixels · fps / ppc): the power model's f_ref.
+
+    No SW-margin reserve: the margin decides the set clock (``_base_required_mhz``), not the work, so with the
+    set clock unchanged a different margin must not change the busy share or the power. A stream sharing its IP
+    with k-1 equal streams uses the IP's whole work clock (x k), so the k streams together pay one IP's clock cost.
+    """
+    if workload.readout_clocked:
+        return 0.0
+    params = workload.sim_params
+    if workload.pixels > 0 and workload.fps > 0 and params.ppc > 0:
+        return workload.pixels * workload.fps * (workload.time_shared_streams or 1) / params.ppc / 1e6
+    return 0.0
 
 
 def _base_required_mhz(workload: IPWorkload) -> float:

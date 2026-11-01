@@ -28,6 +28,10 @@ describe('verdictIssues (U4)', () => {
     expect(verdictIssues(reasons)[0].label).toBe('NRT SW 11.1 ms')
     expect(verdictIssues(['something odd happened here today'])[0].code).toBe('other')
   })
+  it('keeps a read-out-bound RT miss in the RT budget class', () => {
+    const [i] = verdictIssues(['RT HW 23.35 ms > 65% budget 21.67 ms — sensor readout 23.35 ms (frame period 33.333 ms의 70%)가 정하는 시간이라 clock으로 줄일 수 없음 (sensor mode · blanking 또는 margin 조정)'])
+    expect(i).toMatchObject({ code: 'rt_budget', label: 'RT 23.4>21.7 ms · readout' })
+  })
   it('counts rows once per code', () => {
     expect(issueCounts([reasons, [reasons[2]], []])).toEqual({ sw_budget: 1, rt_budget: 1, interval: 2, ip_clock: 1, other: 0 })
   })

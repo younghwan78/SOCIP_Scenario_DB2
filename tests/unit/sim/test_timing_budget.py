@@ -75,6 +75,24 @@ def test_rt_keeps_25_percent_rule(graph_factory):
     assert rt["margin"] == 0.25
 
 
+def test_rt_over_budget_from_the_sensor_readout_names_the_readout(graph_factory):
+    # 8K30: the RT stream lasts the sensor read-out whatever the clock, so a 35% margin cannot be met by a clock raise
+    r = tb.analyze_timing_budget(graph_factory("cam-rec-r1-8k30-sdr"), tb.TimingBudgetOptions(rt_margin=0.35, output_margin=0.35))
+    rt = _stage(r, "rt")
+    assert rt["hw_ms"] > rt["budget_ms"]
+    [reason] = [x for x in r["verdict"]["reasons"] if x.startswith("RT HW")]
+    assert "— sensor readout" in reason and "clock으로 줄일 수 없음" in reason
+    assert "frame period 33.333 ms" in reason and "margin 조정" in reason
+    # at 60 fps the 8K read-out is longer than the period: no margin advice
+    from scenario_db.sim.models import SimulationRunConfig
+
+    fast = tb.analyze_timing_budget(graph_factory("cam-rec-r1-8k30-sdr"), config=SimulationRunConfig(fps=60))
+    [reason] = [x for x in fast["verdict"]["reasons"] if x.startswith("RT HW")]
+    assert "fps 하향" in reason and "margin 조정" not in reason
+    # within the budget there is no RT reason at all
+    assert not [x for x in tb.analyze_timing_budget(graph_factory("cam-rec-r1-8k30-sdr"))["verdict"]["reasons"] if x.startswith("RT HW")]
+
+
 def test_mean_statistic_lowers_nrt_clock(graph_factory):
     g = graph_factory("cam-rec-r1-uhd30-vdis")
     mx = tb.summarize(g, tb.TimingBudgetOptions(statistic="max"))
@@ -121,6 +139,12 @@ def test_parallel_sw_chains_do_not_add(graph_factory):
     assert nrt["sw_ms"] < total  # front/rear chains run in parallel
     assert any(ip["shared_streams"] == 2 for ip in r["ips"])  # streams time-multiplexed on one IP
     assert r["intervals"]["ok"] is True
+    # the v2-vf clock term sees the IP's whole work clock (x streams), so the pair is not charged twice
+    plan = tb._plan(graph_factory("cam-rec-pip-uhd30"), tb.TimingBudgetOptions(), tb.SimulationRunConfig())
+    inputs = tb._budget_inputs(graph_factory("cam-rec-pip-uhd30"), tb.TimingBudgetOptions(), tb.SimulationRunConfig(), plan, plan["margins"])
+    shared = {w.node_id: w.time_shared_streams for w in inputs.workloads if w.node_id in plan["shared"]}
+    assert shared and set(shared.values()) == {2}
+    assert all(w.time_shared_streams is None for w in inputs.workloads if w.node_id not in plan["shared"])
 
 
 def test_mfc_dual_core_halves_clock_keeps_time(graph_factory):

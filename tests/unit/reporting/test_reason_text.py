@@ -34,6 +34,29 @@ def test_rt_budget_and_passthrough():
     assert first_text([], 30) == "원인 미기록"
 
 
+def _readout(pct: int, budget: float, period: float | None) -> str:
+    share = f" (frame period {period:.3f} ms의 70%)" if period else ""
+    return (f"RT HW 23.35 ms > {pct}% budget {budget:.2f} ms — sensor readout 23.35 ms{share}가 정하는 시간이라 "
+            "clock으로 줄일 수 없음 (sensor mode · blanking 또는 margin 조정)")
+
+
+def test_read_out_bound_rt_points_at_the_sensor_not_the_clock():
+    e = explain(_readout(65, 21.67, 33.333))
+    assert e["code"] == "rt_budget" and "sensor readout 23.35 ms가 정함" in e["text"]
+    assert "clock으로는 줄지 않음" in e["action"] and "SW margin 29% 이하" in e["action"]  # 1 - 23.355 / 33.333 = 29.9 %
+    assert "RT clock ×" not in e["action"]
+    # margin 35.5 % shows a rounded "64%" budget; the limit still comes from the exact period, not 30 %
+    assert "SW margin 29% 이하" in explain(_readout(64, 21.50, 33.333))["action"]
+    # a 0 % budget (margin ~100 %) does not divide by it
+    assert "SW margin 29% 이하" in explain(_readout(0, 0.03, 33.333))["action"]
+    # no period in the line: the caller's frame period, else no margin advice
+    assert "SW margin 29% 이하" in explain(_readout(65, 21.67, None), 1000 / 30)["action"]
+    assert "SW margin" not in explain(_readout(65, 21.67, None))["action"]
+    # read-out longer than the period (8K read-out at 60 fps): no margin fixes it
+    long = explain(_readout(75, 12.50, 16.667))["action"]
+    assert "SW margin" not in long and "margin으로는 불가, fps 하향" in long
+
+
 def test_off_target_summary_kept_when_no_stream_detail():
     assert [e["code"] for e in explain_all(["preview/video interval off target"], 30)] == ["interval"]
 

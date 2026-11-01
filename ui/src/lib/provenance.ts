@@ -63,7 +63,8 @@ export const ISSUE_LABEL: Record<IssueCode, string> = {
 export const ISSUE_ORDER: IssueCode[] = ['sw_budget', 'rt_budget', 'interval', 'ip_clock', 'other']
 
 const RE_SW = /^(.+?): SW ([\d.]+) ms leaves no HW budget$/
-const RE_RT = /^RT HW ([\d.]+) ms > \d+% budget ([\d.]+) ms$/
+// optional suffix: "— sensor readout N ms …" when the read-out stream, not the clock, sets the RT time
+const RE_RT = /^RT HW ([\d.]+) ms > \d+% budget ([\d.]+) ms( — sensor readout [\d.]+ ms.*)?$/
 const RE_IV = /^(preview|video) interval ([\d.]+) ms != ([\d.]+) ms$/
 const RE_IP = /^([A-Za-z0-9_.-]+): (.+)$/
 
@@ -76,7 +77,7 @@ export function verdictIssues(reasons: string[]): Issue[] {
   for (const r of reasons) {
     let m: RegExpExecArray | null
     if ((m = RE_SW.exec(r))) push({ code: 'sw_budget', label: `${m[1]} SW ${Number(m[2]).toFixed(1)} ms`, detail: r })
-    else if ((m = RE_RT.exec(r))) push({ code: 'rt_budget', label: `RT ${Number(m[1]).toFixed(1)}>${Number(m[2]).toFixed(1)} ms`, detail: r })
+    else if ((m = RE_RT.exec(r))) push({ code: 'rt_budget', label: `RT ${Number(m[1]).toFixed(1)}>${Number(m[2]).toFixed(1)} ms${m[3] ? ' · readout' : ''}`, detail: r })
     else if ((m = RE_IV.exec(r))) push({ code: 'interval', label: `${m[1]} ${Number(m[2]).toFixed(2)}≠${Number(m[3]).toFixed(2)} ms`, detail: r })
     else if ((m = RE_IP.exec(r))) { const k = ipKind(m[2]); (ip[k] ??= []).push({ node: m[1], detail: r }) }
     else push({ code: 'other', label: r.length > 24 ? `${r.slice(0, 24)}…` : r, detail: r })

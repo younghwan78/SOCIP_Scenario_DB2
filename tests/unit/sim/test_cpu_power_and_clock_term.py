@@ -125,14 +125,49 @@ def test_v2_equals_v1_without_a_clock_fraction():
     assert v2.total_power_mw == pytest.approx(v1.total_power_mw) and v2.clock_overhead_mw == 0.0
 
 
-def test_v2_charges_the_clock_set_above_the_throughput_need():
+def test_v2_charges_the_clock_set_above_the_work_clock():
     v1 = DvfsResolver(TABLE).resolve([_wl()])["isp"]
     cfg = DvfsResolver(TABLE, power_model=resolve_power_model("v2-vf")).resolve([_wl(clock_power_fraction=0.3)])["isp"]
-    ratio = cfg.set_clock_mhz / cfg.base_required_clock_mhz
+    # f_ref = pixels x fps / ppc: busy the whole period, without the SW-margin reserve of the set-clock rule
+    assert cfg.clock_ref_mhz == pytest.approx(3840 * 2160 * 30 / 2 / 1e6)
+    assert cfg.clock_ref_mhz == pytest.approx(cfg.base_required_clock_mhz * (1 - _wl().sw_margin))
+    ratio = cfg.set_clock_mhz / cfg.clock_ref_mhz
     assert ratio > 1
     assert cfg.total_power_mw == pytest.approx(v1.total_power_mw * (0.7 + 0.3 * ratio))
     assert cfg.clock_overhead_mw == pytest.approx(cfg.total_power_mw - v1.total_power_mw)
     assert cfg.clock_power_fraction == 0.3
+
+
+def test_v2_power_follows_the_sw_margin_only_through_the_set_clock():
+    model = resolve_power_model("v2-vf")
+    gated = {"clock_power_fraction": 0.3, "clock_gating_eff": 0.5, "power_gating_eff": 0.5, "leakage_mw": 5.0}
+    at = {m: DvfsResolver(TABLE, power_model=model).resolve([_wl(**gated).model_copy(update={"sw_margin": m})])["isp"]
+          for m in (0.05, 0.25, 0.45)}
+    # one 600 MHz level: every margin lands on the same clock and voltage, so the IP does the same work
+    assert {c.set_clock_mhz for c in at.values()} == {600.0}
+    assert at[0.05].base_required_clock_mhz < at[0.45].base_required_clock_mhz  # the rule still follows the margin
+    assert at[0.05].total_power_mw == pytest.approx(at[0.25].total_power_mw) == pytest.approx(at[0.45].total_power_mw)
+    # busy share = HW time / period
+    hw_ms = 3840 * 2160 / 2 / 600e6 * 1e3
+    assert at[0.25].clock_ref_mhz / at[0.25].set_clock_mhz == pytest.approx(hw_ms / (1000 / 30))
+
+
+def test_v2_streams_sharing_one_ip_pay_one_clock_cost():
+    """Two 2 MP streams time-multiplexed on one IP cost what one 4 MP stream does (no double clock charge)."""
+    model = resolve_power_model("v2-vf")
+    table = {"CAM": DVFSTable(domain="CAM", levels=[DVFSLevel(level=0, speed_mhz=160.0, voltages={4: 710.0})])}
+
+    def wl(node: str, height: int, **kw) -> IPWorkload:
+        return IPWorkload(node_id=node, ip_ref="ip-isp", hw_name="ISP", width=2000, height=height, fps=30.0,
+                          sim_params=IPSimParams(hw_name="ISP", ppc=1, unit_power_mw_mp=10, dvfs_group="CAM",
+                                                 clock_power_fraction=0.3), **kw)
+
+    alone = DvfsResolver(table, power_model=model).resolve([wl("isp", 2000)])["isp"]
+    pair = DvfsResolver(table, power_model=model).resolve([wl("a", 1000, time_shared_streams=2),
+                                                           wl("b", 1000, time_shared_streams=2)])
+    assert alone.total_power_mw == pytest.approx(44.0, rel=1e-3)        # 40 x (0.7 + 0.3 x 160 / 120)
+    assert pair["a"].total_power_mw + pair["b"].total_power_mw == pytest.approx(alone.total_power_mw)
+    assert pair["a"].clock_ref_mhz == pytest.approx(alone.clock_ref_mhz)  # the IP's whole work clock
 
 
 def test_v2_default_fraction_comes_from_power_params():
@@ -159,7 +194,7 @@ def test_clock_reference_counts_physical_needs_but_not_alignment():
 
     model = resolve_power_model("v2-vf")
     need = _wl(clock_power_fraction=0.3)
-    throughput = DvfsResolver({}, power_model=model).resolve([need])["isp"].base_required_clock_mhz
+    throughput = DvfsResolver({}, power_model=model).resolve([need])["isp"].clock_ref_mhz  # work clock
     vvalid = need.model_copy(update={"clock_constraints": [ClockConstraint(kind="vvalid_stream", mhz=throughput * 2)],
                                      "clock_correction_mhz": throughput * 2})
     cfg = DvfsResolver({}, power_model=model).resolve([vvalid])["isp"]
@@ -179,6 +214,20 @@ def test_power_hash_covers_cpu_statistic_and_physical_constraints(graph):
     before = params_hash(inputs)
     inputs.workloads[0].clock_constraints.append(ClockConstraint(kind="vvalid_stream", mhz=900))
     assert params_hash(inputs) != before
+
+
+def test_power_hash_follows_the_v2_formula_revision(graph, monkeypatch):
+    """A cached v2-vf result (request / Timing Budget condition / saved evidence id) is not reused after a formula change."""
+    from dataclasses import replace
+
+    from scenario_db.sim import power_model as pm
+
+    v2 = build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"), SimulationRunConfig(power_model="v2-vf"))
+    v1 = build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"))
+    before_v2, before_v1 = params_hash(v2), params_hash(v1)
+    monkeypatch.setitem(pm.POWER_MODELS, "v2-vf", replace(pm.POWER_MODELS["v2-vf"], version="9.9"))
+    assert params_hash(v2) != before_v2
+    assert params_hash(v1) == before_v1  # v1 caches are untouched
 
 
 def test_prediction_attribution_explains_clock_only_power_change():

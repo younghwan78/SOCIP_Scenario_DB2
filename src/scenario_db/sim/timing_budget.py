@@ -776,6 +776,9 @@ def _budget_inputs(graph, options, config, plan, margins) -> SimulationInputs:
         cores = plan["dual"].get(workload.node_id)
         if cores:
             workload.width = max(1, workload.width // cores)
+        shared = plan["shared"].get(workload.node_id, 1)
+        if shared > 1:
+            workload.time_shared_streams = shared  # the margin above carries the share for timing; power needs it too
     _apply_sw(inputs, plan, options)
     return inputs
 
@@ -1140,7 +1143,15 @@ def _verdict(stages, intervals, ips, domains=None, period: float | None = None) 
     rt = next(s for s in stages if s["id"] == "rt")
     if rt["hw_ms"] > rt["budget_ms"] * 1.0001:
         pct = round(100 * (1.0 - float(rt.get("margin", 0.25))))
-        reasons.append(f"RT HW {rt['hw_ms']:.2f} ms > {pct}% budget {rt['budget_ms']:.2f} ms")
+        msg = f"RT HW {rt['hw_ms']:.2f} ms > {pct}% budget {rt['budget_ms']:.2f} ms"
+        # read-out-clocked RT streams at the sensor rate: a faster clock cannot shorten it
+        readout = max((float(i.get("sensor_readout_ms") or 0.0) for i in ips if i.get("stage") == "rt"), default=0.0)
+        if readout > 0 and rt["hw_ms"] <= readout * 1.0001:
+            # the exact period lets readers derive the largest margin that fits (the budget % above is rounded)
+            share = f" (frame period {period:.3f} ms의 {100 * readout / period:.0f}%)" if period else ""
+            fix = "sensor mode · fps 하향" if period and readout >= period else "sensor mode · blanking 또는 margin 조정"
+            msg += f" — sensor readout {readout:.2f} ms{share}가 정하는 시간이라 clock으로 줄일 수 없음 ({fix})"
+        reasons.append(msg)
     for key in ("preview", "video"):
         s = intervals[key]
         if s["ok"] is False:
