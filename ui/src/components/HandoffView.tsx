@@ -136,7 +136,32 @@ function describe(r: CallRow) {
   const kind = s.handoff && HANDOFF[s.handoff] ? s.handoff : 'data'
   const last = r.folded?.[r.folded.length - 1]
   const name = last ? `${stepName(s)} → ${stepName(last)}` : stepName(s)
-  return { s, kind, last, name }
+  const detail = last ? `${r.folded!.length} 단계` : s.call && s.call !== name ? s.call : ''
+  return { s, kind, last, name, detail }
+}
+type Place = { tx: number; anchor: 'start' | 'middle' | 'end'; lo: number; hi: number }
+/** Where a call row's label goes and the x range it covers; `right` is the lanes' right edge. */
+function placeLabel(r: CallRow, x: (c: number) => number, colW: number, right: number): Place {
+  const { name, detail } = describe(r)
+  const w = chars(`★ ${name} ${detail} 00.00`) * 0.95
+  const x2 = x(r.to)
+  const at = (tx: number, anchor: Place['anchor']): Place =>
+    ({ tx, anchor, lo: anchor === 'start' ? tx : anchor === 'end' ? tx - w : tx - w / 2, hi: anchor === 'start' ? tx + w : anchor === 'end' ? tx : tx + w / 2 })
+  if (r.from === null || r.from === r.to) {
+    // labels next to the last column go left of its lifeline, clear of the start marker (·→) when the row starts the unit
+    if (right - x2 - 34 > w) return at(x2 + (r.from === null ? 9 : 30), 'start')
+    return at(x2 - (r.from === null ? 44 : 10), 'end')
+  }
+  const x1 = x(r.from)
+  return Math.abs(x2 - x1) < colW * 1.2 ? at(Math.min(x1, x2) + 6, 'start') : at((x1 + x2) / 2, 'middle')
+}
+const noteW = (x1: number, x2: number, text: string) => Math.max(x2 - x1, chars(text) + 20)
+/** Right end of a loop / par / sub-loop title, from the frame's left edge. */
+function frameTitleW(f: Frame, doc: HandoffDoc) {
+  const tabW = (f.kind === 'par' ? 3 : 4) * 7 + 14
+  const text = f.kind === 'par' ? Math.max(0, ...(f.segments ?? []).map((s) => chars(`[${s.label}]`)))
+    : chars(`[${f.label}] ${f.tag ?? loopKind(doc, f.cadence)}${f.note ? `  ${f.note}` : ''}`) * (f.kind === 'loop' ? 1.05 : 1)
+  return DEPTH[f.kind] * 6 + tabW + 14 + text + 8
 }
 function rowTitle(r: CallRow, open: boolean) {
   const { s, kind, last, name } = describe(r)
@@ -147,8 +172,25 @@ function rowTitle(r: CallRow, open: boolean) {
 
 function Sequence({ doc, lay, canOpen, onOpen, onLayer }: { doc: HandoffDoc; lay: FlowLayout; canOpen?: (slice: string) => boolean; onOpen?: (slice: string) => void; onLayer: (layer: string) => void }) {
   const colW = lay.columns.length <= 6 ? 176 : 136
-  const x = (c: number) => c * colW + colW / 2
-  const W = lay.columns.length * colW + PAD
+  // Labels, notes and loop titles may reach past the lanes (one-column flows, long notes): the lanes widen on
+  // both sides so nothing ends up under the sticky gutters.
+  const laneW = lay.columns.length * colW + PAD
+  const base = (c: number) => c * colW + colW / 2
+  let lo = 0, hi = laneW
+  for (const r of lay.rows) {
+    if (r.kind === 'note') {
+      const m = (base(r.from) + base(r.to)) / 2, w = noteW(base(r.from) - colW * 0.42, base(r.to) + colW * 0.42, r.step.note ?? '')
+      lo = Math.min(lo, m - w / 2 - 4); hi = Math.max(hi, m + w / 2 + 4)
+    } else {
+      const p = placeLabel(r, base, colW, laneW)
+      lo = Math.min(lo, p.lo - 6, base(r.to) - 40); hi = Math.max(hi, p.hi + 8)
+    }
+  }
+  for (const f of lay.frames) hi = Math.max(hi, 4 + frameTitleW(f, doc))
+  const OX = Math.ceil(-lo)
+  const x = (c: number) => OX + base(c)
+  const right = OX + laneW
+  const W = Math.ceil(OX + hi)
   const RW = Math.max(132, T_W + Math.max(0, ...lay.rows.map((r) => (r.kind === 'call' ? r.badges.reduce((a, b) => a + badgeW(b.text) + 4, 0) : 0))) + 8)
   // vertical positions: every frame start (and par branch change) takes a header band above its first row
   const bands = new Map<number, number>()
@@ -174,7 +216,7 @@ function Sequence({ doc, lay, canOpen, onOpen, onLayer }: { doc: HandoffDoc; lay
     const nBand = bands.get(f.start) ?? 0, inset = DEPTH[f.kind] * 6
     const top = tops[f.start] - (nBand - slotOf(f)) * BAND
     const bottom = ys[f.end] + rowH(f.end) / 2 + 3 + (lay.frames.filter((g) => g.end === f.end && DEPTH[g.kind] > DEPTH[f.kind]).length) * 6
-    return { x1: 4 + inset, x2: lay.columns.length * colW - 4 - inset, top, bottom }
+    return { x1: OX + 4 + inset, x2: OX + lay.columns.length * colW - 4 - inset, top, bottom }
   }
   const openOf = (r: CallRow) => (r.step.slice && canOpen?.(r.step.slice) ? () => onOpen?.(r.step.slice!) : undefined)
   const zebra = (w: number) => lay.rows.map((r, i) => r.kind === 'call' && (i % 2 || r.offRate)
@@ -200,8 +242,8 @@ function Sequence({ doc, lay, canOpen, onOpen, onLayer }: { doc: HandoffDoc; lay
             return <g key={b.i} className={can ? 'handoff-layer' : undefined} role={can ? 'button' : undefined} tabIndex={can ? 0 : undefined} aria-expanded={can ? span.expanded : undefined}
               onClick={toggle} onKeyDown={toggle && ((e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } })}>
               {can && <title>{span.expanded ? `${name}: 한 열로 접기` : `${name}: process ${span.parts}개로 펼치기`}</title>}
-              <rect x={b.i * colW + 3} y={3} width={(b.j - b.i + 1) * colW - 6} height={16} rx={3} fill={layerColor(b.layer) ?? '#ccc'} opacity={0.2} />
-              <text x={((b.i + b.j + 1) / 2) * colW} y={15} fontSize={10.5} fontWeight={600} textAnchor="middle" fill="#3B3F4A">{label}</text></g>
+              <rect x={OX + b.i * colW + 3} y={3} width={(b.j - b.i + 1) * colW - 6} height={16} rx={3} fill={layerColor(b.layer) ?? '#ccc'} opacity={0.2} />
+              <text x={OX + ((b.i + b.j + 1) / 2) * colW} y={15} fontSize={10.5} fontWeight={600} textAnchor="middle" fill="#3B3F4A">{label}</text></g>
           })}
           {lay.columns.map((c, i) => <g key={i}>
             <rect x={x(i) - colW / 2 + 6} y={23} width={colW - 12} height={32} rx={5} fill="#fff" stroke={layerColor(c.layer) ?? '#bbb'} />
@@ -224,7 +266,7 @@ function Sequence({ doc, lay, canOpen, onOpen, onLayer }: { doc: HandoffDoc; lay
           {[...lay.frames].sort((a, b) => DEPTH[a.kind] - DEPTH[b.kind]).map((f, k) => <FrameG key={k} f={f} r={frameRect(f)} doc={doc} slotTop={(i) => tops[i] - BAND} />)}
           {lay.columns.map((_, i) => <line key={i} x1={x(i)} x2={x(i)} y1={0} y2={H} stroke="#D6CFC4" strokeDasharray="3 4" />)}
           {lay.rows.map((r, i) => r.kind === 'note' ? <NoteRow key={i} y={ys[i]} x1={x(r.from) - colW * 0.42} x2={x(r.to) + colW * 0.42} text={r.step.note ?? ''} />
-            : <CallRowG key={i} r={r} y={ys[i]} x={x} W={W} h={ROW} colW={colW} bar={layerColor(lay.columns[r.to].layer) ?? '#8C8574'} open={openOf(r)} />)}
+            : <CallRowG key={i} r={r} y={ys[i]} x={x} W={W} right={right} h={ROW} colW={colW} bar={layerColor(lay.columns[r.to].layer) ?? '#8C8574'} open={openOf(r)} />)}
         </svg>
         <svg className="handoff-rate" width={RW} height={H} role="presentation">
           {zebra(RW)}
@@ -268,19 +310,18 @@ function layerBands(lay: FlowLayout) {
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(1, Math.floor(n) - 1))}…` : s)
 
 function NoteRow({ y, x1, x2, text }: { y: number; x1: number; x2: number; text: string }) {
-  const w = Math.max(x2 - x1, chars(text) + 20)
-  // a wide note over the first column stays inside the lanes, clear of the sticky # · Δ gutter
-  const cx = Math.max((x1 + x2) / 2, 8 + w / 2)
+  // Sequence widens the lanes to fit a note wider than its columns, so the note stays centred on them
+  const w = noteW(x1, x2, text)
+  const cx = (x1 + x2) / 2
   return <g><rect x={cx - w / 2} y={y - 10} width={w} height={20} rx={3} fill="#FFF6D6" stroke="#E2CC7E" />
     <text x={cx} y={y + 4} fontSize={11} textAnchor="middle" fill="#5B4A12">{text}</text></g>
 }
 
-function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: CallRow; y: number; x: (c: number) => number; W: number; h: number; open?: () => void; colW: number; bar: string }) {
-  const { s, kind, last, name } = describe(r)
+function CallRowG({ r, y, x, W, right, h, open, colW, bar }: { r: CallRow; y: number; x: (c: number) => number; W: number; right: number; h: number; open?: () => void; colW: number; bar: string }) {
+  const { s, kind, last, name, detail } = describe(r)
   const color = HANDOFF[kind].color, dash = DASHED.has(kind) ? '5 3' : undefined
   const x2 = x(r.to)
   // name as on the timelines (SENSOR_REAR, HAL_REQUEST); the call the trace recorded follows it, faint
-  const detail = last ? `${r.folded!.length} 단계` : s.call && s.call !== name ? s.call : ''
   const dur = last && s.t_ms !== undefined && last.t_ms !== undefined ? last.t_ms + (last.dur_ms ?? 0) - s.t_ms : s.dur_ms
   const label = <>
     {s.node && <tspan fill="#B7791F">★ </tspan>}{name}
@@ -288,22 +329,17 @@ function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: CallRow; y: number; x
     {dur !== undefined && <tspan fontFamily="var(--mono)" fontSize={10} fill="#6B6558"> {dur.toFixed(2)}</tspan>}
   </>
   const halo = { paintOrder: 'stroke' as const, stroke: '#fff', strokeWidth: 3 }
-  const labelW = chars(`★ ${name} ${detail} 00.00`) * 0.95
-  // labels next to the last column go left of its lifeline instead of under the sticky rate gutter,
-  // clear of the start marker (·→) when the row starts the unit
-  const roomRight = W - x2 - 34 > labelW
-  const side = (dx: number, yy: number) => roomRight ? <text x={x2 + dx} y={yy} fontSize={11.5} fill="#1F2430" style={halo}>{label}</text>
-    : <text x={x2 - (r.from === null ? 44 : 10)} y={yy} fontSize={11.5} textAnchor="end" fill="#1F2430" style={halo}>{label}</text>
+  const p = placeLabel(r, x, colW, right)
+  const text = (yy: number) => <text x={p.tx} y={yy} fontSize={11.5} textAnchor={p.anchor} fill="#1F2430" style={halo}>{label}</text>
   let arrow
   if (r.from === null) arrow = <g><circle cx={x2 - 34} cy={y} r={3.5} fill={color} /><line x1={x2 - 30} y1={y} x2={x2 - 7} y2={y} stroke={color} strokeWidth={1.5} markerEnd={`url(#ho-${kind})`} />
-    {side(9, y - 5)}</g>
+    {text(y - 5)}</g>
   else if (r.from === r.to) arrow = <g><path d={`M${x2 + 5},${y - 8} h20 v13 h-15`} fill="none" stroke={color} strokeWidth={1.4} strokeDasharray={dash} markerEnd={`url(#ho-${kind})`} />
-    {side(30, y + 1)}</g>
+    {text(y + 1)}</g>
   else {
     const x1 = x(r.from), dir = x2 > x1 ? 1 : -1
-    const mid = (x1 + x2) / 2, span = Math.abs(x2 - x1)
     arrow = <g><line x1={x1 + dir * 4} y1={y + 3} x2={x2 - dir * 6} y2={y + 3} stroke={color} strokeWidth={1.5} strokeDasharray={dash} markerEnd={`url(#ho-${kind})`} />
-      <text x={span < colW * 1.2 ? Math.min(x1, x2) + 6 : mid} y={y - 4} fontSize={11.5} textAnchor={span < colW * 1.2 ? 'start' : 'middle'} fill="#1F2430" style={halo}>{label}</text></g>
+      {text(y - 4)}</g>
   }
   return (
     <g style={open ? { cursor: 'pointer' } : undefined} onClick={open}>

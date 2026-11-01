@@ -110,6 +110,29 @@ describe('HandoffView', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it('labels and notes wider than the lanes widen them instead of going under the sticky gutters', () => {
+    const one: HandoffDoc = { ...doc, participants: [{ id: 'hal.cam', layer: 'hal', name: 'camera.provider' }],
+      flows: [{ id: 'one', name: 'one', cadence: 'frame', steps: [
+        { to: 'hal.cam', task: 'hal.request_with_a_very_long_common_name', call: 'processCaptureRequest_long_call', t_ms: 0, dur_ms: 2 },
+        { note: 'DB는 storage를 frame마다(30 Hz) 모델링 · 실제는 chunk 단위로 몰아서 씀 — 아주 긴 메모', over: ['hal.cam'] },
+      ] }] }
+    render('one', one)
+    const lanes = host.querySelector('.handoff-body svg[role=img]')!
+    const W = Number(lanes.getAttribute('width'))
+    // the one-column label is placed left of its lifeline: the lanes start far enough left to hold it
+    const label = [...lanes.querySelectorAll('text')].find((t) => /HAL_REQUEST_WITH_A_VERY_LONG/.test(t.textContent ?? ''))!
+    expect(label.getAttribute('text-anchor')).toBe('end')
+    const est = [...(label.textContent ?? '')].reduce((a, c) => a + (c.charCodeAt(0) > 0x2e80 ? 11 : 6.3), 0) * 0.9
+    expect(Number(label.getAttribute('x')) - est).toBeGreaterThanOrEqual(0)
+    // the note box fits inside the lanes on both sides
+    const note = [...lanes.querySelectorAll('rect')].find((r) => r.getAttribute('fill') === '#FFF6D6')!
+    const nx = Number(note.getAttribute('x')), nw = Number(note.getAttribute('width'))
+    expect(nx).toBeGreaterThanOrEqual(0)
+    expect(nx + nw).toBeLessThanOrEqual(W)
+    // header lanes have the same width, so columns stay aligned with the body
+    expect(Number(host.querySelector('.handoff-head svg:not(.handoff-gut):not(.handoff-rate)')!.getAttribute('width'))).toBe(W)
+  })
+
   it('a layer band with several processes spreads or folds that layer alone', () => {
     const two: HandoffDoc = { ...doc, participants: [...doc.participants, { id: 'hw.dpu', layer: 'hw', name: 'DPU' }],
       flows: [{ ...doc.flows[0], steps: [...doc.flows[0].steps, { from: 'hw.gpu', to: 'hw.dpu', call: 'scanout', t_ms: 14, dur_ms: 2 }] }] }
