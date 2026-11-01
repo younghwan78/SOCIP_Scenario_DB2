@@ -173,12 +173,19 @@ class StageOrder:
     period_ms: float
     latency_ms: tuple[tuple[str, float], ...] = ()   # (task, fixed release latency ms) — on the path, does not scale
 
-    def holds(self, task_ms: dict[str, float], anchor: dict[str, float]) -> bool:
+    def chain_ms(self, task_ms: dict[str, float], anchor: dict[str, float]) -> float:
+        """Stage chain of a candidate. The SW part is the longest ordered path of the items (the order follows the
+        task graph through HW, which the Timing Budget's direct-SW critical path can miss) plus whatever the
+        Timing Budget SW holds beyond it (other SW on the critical path); each item's runtime scales with
+        candidate / measured-placement CPU time, its release latency stays."""
         base = dict(self.items)
         cand = {t: ms * (task_ms[t] / anchor[t]) if anchor.get(t) and t in task_ms else ms for t, ms in self.items}
         lat = dict(self.latency_ms)
-        sw = self.sw_ms + longest_path(cand, self.pairs, lat) - longest_path(base, self.pairs, lat)
-        return self.fixed_ms + sw <= self.period_ms + 1e-6
+        path0 = longest_path(base, self.pairs, lat)
+        return self.fixed_ms + max(0.0, self.sw_ms - path0) + longest_path(cand, self.pairs, lat)
+
+    def holds(self, task_ms: dict[str, float], anchor: dict[str, float]) -> bool:
+        return self.chain_ms(task_ms, anchor) <= self.period_ms + 1e-6
 
 
 def longest_path(ms: dict[str, float], pairs: tuple[tuple[str, str], ...] | list[tuple[str, str]],
@@ -807,6 +814,21 @@ def _options(task: str, clusters: list[str], spec: SweepSpec, caps: dict[str, fl
     return opts
 
 
+def measured_task_ms(profile: Any, *, model: CpuPowerModel, fps: float, spec: SweepSpec) -> dict[str, float]:
+    """Unrounded task times of the measured placement on the SoC the profile was measured on (``model``): the
+    anchor of the RT chain check. The variant's Timing Budget SW belongs to that device, so a slower target SoC
+    shows up as a longer chain instead of cancelling out against a target-side anchor."""
+    prep = _prepare(profile, target=model, fps=fps, spec=replace(spec, serial_stages=(), serial_pairs=(), stretch_budgets={}),
+                    base=None)
+    names = {c.name for c in model.clusters}
+    policies = dict(prep.base_policies)
+    for task, ds in prep.need.items():
+        where = tuple(sorted({d.base_cluster for d in ds if d.base_cluster in names}))
+        if where:
+            policies[task] = replace(policies.get(task, TaskPolicy()), allowed=where)
+    return dict(_place_and_time(prep.threads, prep.ctx, policies, None)[4])
+
+
 def packed_ms(times: list[float], cores: int) -> float:
     """Lower bound of a task's time alone on a cluster: its longest thread, or its threads spread evenly over the
     cores (a CPU runs its share in sequence, as ``evaluate`` sums a task's threads on one CPU). A bound, not a
@@ -941,10 +963,11 @@ def cpu_sweep(
         measured_policies[task] = replace(measured_policies.get(task, TaskPolicy()), allowed=tuple(where))
     budgets = dict(spec.budgets_ms)
     budget_source = {t: "user" for t in budgets}
-    if spec.stretch_budgets or spec.serial_stages:
+    if spec.serial_stages:
+        ctx.anchor_ms = measured_task_ms(profile, model=base or target, fps=fps, spec=spec)
+    if spec.stretch_budgets:
         anchor = evaluate(threads, ctx, measured_policies, budgets_ms={}, dsu_residency=dsu_res, bw_mbs=bw_mbs,
                           dsu_policy=dsu_policy)["task_ms"]
-        ctx.anchor_ms = dict(anchor)
         for task, factor in spec.stretch_budgets.items():
             ms = anchor.get(task)
             if ms:

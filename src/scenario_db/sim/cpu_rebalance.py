@@ -35,6 +35,7 @@ from scenario_db.sim.cpu_sched import (
     _prepare,
     eas_place,
     evaluate,
+    measured_task_ms,
     resolve_allowed,
 )
 
@@ -197,9 +198,8 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
 
     verification_budgets = dict(budgets)
     if spec.serial_stages:
-        # RT chain orders are re-checked per split against the measured placement's task times
-        ctx.anchor_ms = evaluate(threads, ctx, ref_pol, budgets_ms={}, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
-                                 dsu_policy=prep.dsu_policy, pinned_threads=thread_pol)["task_ms"]
+        # RT chain orders are re-checked per split against the measured placement on the measured SoC (unrounded)
+        ctx.anchor_ms = measured_task_ms(profile, model=base or target, fps=fps, spec=spec)
     if spec.stretch_budgets:
         # anchor = the measured placement's task time; the larger of the per-cluster estimate used by the search and
         # the full evaluation, so the measured placement stays feasible in both

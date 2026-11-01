@@ -16,7 +16,7 @@ from scenario_db.sim import cpu_sched
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance
 from scenario_db.sim.cpu_sched import (SchedConfig, StageOrder, SweepSpec, Thread, TaskPolicy, _Ctx, beam_starts, capacities,
-                                       cpu_sweep, eas_place, evaluate, longest_path, packed_ms)
+                                       cpu_sweep, eas_place, evaluate, longest_path, measured_task_ms, packed_ms)
 from scenario_db.sim.models import CpuClusterProfile, CpuProfile, CpuTaskProfile
 from scenario_db.sim.timing_budget import _sw_order
 
@@ -343,3 +343,31 @@ def test_sw_task_lookup_errors_are_domain_errors(monkeypatch):
         monkeypatch.setattr("scenario_db.api.services.analysis_inputs.resolve_analysis_selection", lambda db, req, e=exc: Broken(e))
         with pytest.raises(mapped):
             svc._sw_tasks(None, "uc", "v")
+
+
+def test_a_chain_through_hw_counts_both_sw_items_even_if_the_timing_budget_sw_misses_one():
+    """a (8 ms) -> HW (20 ms) -> b (8 ms): the Timing Budget direct-SW path says 8 ms, the ordered chain is 36 ms."""
+    st = StageOrder(stage="nrt", pairs=(("a", "b"),), sw_ms=8.0, fixed_ms=20.0, items=(("a", 8.0), ("b", 8.0)), period_ms=33.3)
+    assert st.chain_ms({}, {}) == pytest.approx(36.0) and not st.holds({}, {})
+    # when the Timing Budget SW holds more than the ordered items (other SW on its path), that part stays
+    more = StageOrder(stage="nrt", pairs=(("a", "b"),), sw_ms=12.0, fixed_ms=10.0, items=(("a", 4.0), ("b", 4.0)), period_ms=33.3)
+    assert more.chain_ms({}, {}) == pytest.approx(22.0)
+
+
+def _mid(ipc: float) -> CpuPowerModel:
+    return CpuPowerModel.from_params(PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x", "cpu": {"clusters": [
+            {"name": "MID", "core_type": "M", "cores": 2, "ipc_rel": ipc, "opps": [{"mhz": 2000, "mv": 850, "mw_per_core": 300}]}],
+            "default_cluster": 0}}))
+
+
+def test_chain_anchor_is_unrounded_and_on_the_measured_soc():
+    profile = CpuProfile(tasks=[CpuTaskProfile(task=t, cluster="MID", cycles=6666667.0) for t in ("a", "b")],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    raw = measured_task_ms(profile, model=_mid(1.0), fps=30, spec=SweepSpec())
+    assert raw["a"] == pytest.approx(6666667.0 / 2e6, rel=1e-12) and raw["a"] != round(raw["a"], 4)
+    # measured on a fast SoC, applied to one 4x slower: the chain grows 4x and overruns the period
+    st = StageOrder(stage="nrt", pairs=(("a", "b"),), sw_ms=10.0, fixed_ms=15.0, items=(("a", 5.0), ("b", 5.0)), period_ms=1000 / 30)
+    same = cpu_sweep(profile, target=_mid(1.0), fps=30, spec=SweepSpec(serial_stages=(st,)))["reference"]
+    slow = cpu_sweep(profile, target=_mid(0.25), base=_mid(1.0), fps=30, spec=SweepSpec(serial_stages=(st,)))["reference"]
+    assert same["chain_serial"] == ["nrt"] and slow["chain_serial"] == []

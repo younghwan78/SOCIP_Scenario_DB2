@@ -154,8 +154,10 @@ def _mark_serial(coupling: dict[str, Any]) -> dict[str, Any]:
     chain (SW + HW + overhead) fits one period; a longer chain overlaps the next frame's members, so they count
     as concurrent (conservative)."""
     pairs: list[list[str]] = []
+    orders = {o.stage: o for o in coupling_stages(coupling)}
     for st in coupling["stages"]:
-        st["serial"] = bool(st.get("order")) and st["sw_ms"] + st["hw_ms"] + st["overhead_ms"] <= coupling["period_ms"] + 1e-6
+        # the same chain rule as the per-candidate check (StageOrder), at the measured placement
+        st["serial"] = st["stage"] in orders and orders[st["stage"]].holds({}, {})
         if st["serial"]:
             pairs += st["order"]
     coupling["serial_pairs"] = pairs
