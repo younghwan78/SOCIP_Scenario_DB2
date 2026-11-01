@@ -156,6 +156,27 @@ def priority_response(ths: list[Thread], own: list[float], policies: dict[str, T
     return out
 
 
+@dataclass(frozen=True)
+class StageOrder:
+    """The in-frame SW order (RT chain) of one Timing Budget stage, with what decides whether it holds.
+
+    The order means "never at the same time" only while the stage chain (SW + HW + overhead) ends within one
+    period; a longer chain overlaps the next frame's members. The SW part follows the placement: each item's
+    Timing Budget time scales with its CPU task time against the measured placement (``anchor``), as in the
+    timing impact, so a candidate that slows the chain past the period loses the order.
+    """
+    stage: str
+    pairs: tuple[tuple[str, str], ...]
+    sw_ms: float                          # stage SW of the Timing Budget (critical path) at the measured placement
+    fixed_ms: float                       # stage HW + overhead
+    items: tuple[tuple[str, float], ...]  # (task, Timing Budget SW ms)
+    period_ms: float
+
+    def holds(self, task_ms: dict[str, float], anchor: dict[str, float]) -> bool:
+        add = sum(ms * (task_ms[t] / anchor[t] - 1.0) for t, ms in self.items if anchor.get(t) and t in task_ms)
+        return self.fixed_ms + self.sw_ms + add <= self.period_ms + 1e-6
+
+
 def concurrent(a: str, b: str, serial: frozenset[frozenset[str]]) -> bool:
     """Can tasks a and b run at the same time in one frame? Not when the pipeline orders them (``serial``: an
     RT chain of a Timing Budget stage, see ``SweepSpec.serial_pairs``). Threads of one task always can."""
@@ -340,13 +361,26 @@ class _Ctx:
     caps: dict[str, float]
     by_name: dict[str, ClusterModel]
     budgets_ms: dict[str, float] = field(default_factory=dict)
-    # task pairs ordered within a frame (Timing Budget stage chain): no mutual wait, no RT push between them
+    # task pairs ordered within a frame (Timing Budget stage chain): no mutual wait, no RT push between them.
+    # ``serial`` = fixed pairs + the stages whose order holds at the measured placement (placement uses it);
+    # a candidate's waits re-check each stage with its own task times (``serial_for``) against ``anchor_ms``
     serial: frozenset[frozenset[str]] = frozenset()
+    fixed_serial: frozenset[frozenset[str]] = frozenset()
+    stages: tuple[StageOrder, ...] = ()
+    anchor_ms: dict[str, float] = field(default_factory=dict)
     # Pure-function memos for one sweep (model / scheduler / period / budgets are fixed per context).
     # The sweep evaluates thousands of placements that share most per-cluster states.
     _fmax_memo: dict[str, float] = field(default_factory=dict, repr=False, compare=False)
     _util_memo: dict[tuple[Thread, str, float], float] = field(default_factory=dict, repr=False, compare=False)
     _energy_memo: dict[Any, float] = field(default_factory=dict, repr=False, compare=False)
+
+    def serial_for(self, task_ms: dict[str, float]) -> tuple[frozenset[frozenset[str]], list[str]]:
+        """Ordered pairs of a candidate (its task times) and the stages whose order holds for it."""
+        if not self.stages:
+            return self.serial, []
+        held = [st for st in self.stages if st.holds(task_ms, self.anchor_ms)]
+        pairs = set(self.fixed_serial) | {frozenset(p) for st in held for p in st.pairs if len(set(p)) == 2}
+        return frozenset(pairs), [st.stage for st in held]
 
     def fmax(self, name: str) -> float:
         value = self._fmax_memo.get(name)
@@ -576,6 +610,7 @@ def evaluate(
     prio_model = any(p.sched_class for p in policies.values())
     response_prio: dict[str, float] = {}
     overloaded = False
+    per_cpu: list[tuple[list[Thread], list[float]]] = []
     for c in ctx.model.clusters:
         row = _cluster_eval(ctx, c.name, slots[c.name], policies)
         row.pop("energy_mw")
@@ -584,19 +619,24 @@ def evaluate(
             if len({t.task for t in ths}) > 1:
                 shared.update(t.task for t in ths)
             own = [th.ms(c, row["mhz"]) for th in ths]
-            prio = priority_response(ths, own, policies, ctx.serial) if prio_model else own
+            per_cpu.append((ths, own))
             # own time of a task on this CPU: its threads here run one after another
             mine: dict[str, float] = {}
             for th, ms in zip(ths, own):
                 mine[th.task] = mine.get(th.task, 0.0) + ms
-            for th, rp in zip(ths, prio):
+            for th in ths:
                 task_ms[th.task] = max(task_ms.get(th.task, 0.0), mine[th.task])
-                bound = sum(o for other, o in zip(ths, own) if concurrent(th.task, other.task, ctx.serial))
-                response_ms[th.task] = max(response_ms.get(th.task, 0.0), bound)
-                response_prio[th.task] = max(response_prio.get(th.task, 0.0), rp)
                 where.setdefault(th.task, set()).add(c.name)
                 signature.append((th.label, c.name, index))
         overloaded = overloaded or any(r["overloaded"] for r in row["cpus"])
+    # the waits: an RT chain's order holds only if this candidate's chain still fits one period
+    serial, chain_held = ctx.serial_for(task_ms)
+    for ths, own in per_cpu:
+        prio = priority_response(ths, own, policies, serial) if prio_model else own
+        for th, rp in zip(ths, prio):
+            bound = sum(o for other, o in zip(ths, own) if concurrent(th.task, other.task, serial))
+            response_ms[th.task] = max(response_ms.get(th.task, 0.0), bound)
+            response_prio[th.task] = max(response_prio.get(th.task, 0.0), rp)
     # every CPU of a task counts (an unshared long thread can dominate); reported for shared tasks only
     response_ms = {t: v for t, v in response_ms.items() if t in shared}
     response_prio = {t: v for t, v in response_prio.items() if t in shared} if prio_model else {}
@@ -647,6 +687,8 @@ def evaluate(
                                     "over_period": late, "shared_cpu": sorted(shared),
                                     "overloaded_cpu": overloaded}.items() if v},
         "cpu_bw_mbs": round(bw_mbs, 3),
+        # Timing Budget stages whose SW order (RT chain) held for this candidate (only with stage orders)
+        **({"chain_serial": chain_held} if ctx.stages else {}),
         "_signature": (tuple(sorted(signature)), freqs),
     }
 
@@ -687,6 +729,8 @@ class SweepSpec:
     # task pairs the variant's pipeline orders within one frame (same stage, chain within one period):
     # they never wait for each other on a shared CPU, and an RT push (cpupri) does not avoid one for the other
     serial_pairs: tuple[tuple[str, str], ...] = ()
+    # the same per Timing Budget stage, re-checked for every candidate (StageOrder.holds); from the coupling
+    serial_stages: tuple[StageOrder, ...] = ()
 
 
 def _apply(policy: TaskPolicy, option: dict[str, Any]) -> TaskPolicy:
@@ -721,6 +765,15 @@ def _options(task: str, clusters: list[str], spec: SweepSpec, caps: dict[str, fl
     if "uclamp_min" in spec.knobs:
         opts += [{"kind": "uclamp_min", "value": int(v)} for v in spec.uclamp_min_levels]
     return opts
+
+
+def packed_ms(times: list[float], cores: int) -> float:
+    """Task time of threads alone on a cluster: longest first onto the least-loaded CPU; a CPU runs its share in
+    sequence (as ``evaluate`` sums a task's threads on one CPU)."""
+    load = [0.0] * max(1, cores)
+    for t in sorted(times, reverse=True):
+        load[load.index(min(load))] += t
+    return max(load)
 
 
 def beam_starts(swept: list[str], options: dict[str, list[dict[str, Any]]],
@@ -797,14 +850,16 @@ def _prepare(profile: Any, *, target: CpuPowerModel, fps: float, spec: SweepSpec
         raise ValueError("the CPU profile has no task cycles")
     period = 1000.0 / fps
     caps = capacities(target, sched)
+    fixed = frozenset(frozenset(p) for p in spec.serial_pairs if len(set(p)) == 2)
+    at_ref = {frozenset(p) for st in spec.serial_stages if st.holds({}, {}) for p in st.pairs if len(set(p)) == 2}
     ctx = _Ctx(target, sched, period, caps, {c.name: c for c in target.clusters}, dict(spec.budgets_ms),
-               frozenset(frozenset(p) for p in spec.serial_pairs if len(set(p)) == 2))
+               frozenset(fixed | at_ref), fixed, tuple(spec.serial_stages))
     every = [c.name for c in target.clusters]
     base_policies = dict(sched.task_policy)
     for task, raw in spec.task_policy.items():
         base_policies[task] = policy_from(raw)
     # RT chain check: a task the pipeline orders next to an RT task usually belongs to the same RT chain
-    for a, b in spec.serial_pairs:
+    for a, b in [*spec.serial_pairs, *(p for st in spec.serial_stages for p in st.pairs)]:
         pa, pb = base_policies.get(a, _DEFAULT_POLICY), base_policies.get(b, _DEFAULT_POLICY)
         for rt, other, p_other in ((a, b, pb), (b, a, pa)):
             if base_policies.get(rt, _DEFAULT_POLICY).is_rt and not p_other.sched_class and other in need:
@@ -848,9 +903,10 @@ def cpu_sweep(
         measured_policies[task] = replace(measured_policies.get(task, TaskPolicy()), allowed=tuple(where))
     budgets = dict(spec.budgets_ms)
     budget_source = {t: "user" for t in budgets}
-    if spec.stretch_budgets:
+    if spec.stretch_budgets or spec.serial_stages:
         anchor = evaluate(threads, ctx, measured_policies, budgets_ms={}, dsu_residency=dsu_res, bw_mbs=bw_mbs,
                           dsu_policy=dsu_policy)["task_ms"]
+        ctx.anchor_ms = dict(anchor)
         for task, factor in spec.stretch_budgets.items():
             ms = anchor.get(task)
             if ms:
@@ -867,7 +923,7 @@ def cpu_sweep(
         cells: dict[str, dict[str, Any]] = {}
         for name in every:
             c = ctx.by_name[name]
-            t_max = max(th.ms(c, ctx.fmax(name)) for th in ths)
+            t_max = packed_ms([th.ms(c, ctx.fmax(name)) for th in ths], c.cores)
             u_max = max(ctx.util(th, name) for th in ths)
             limit = min(period, budgets.get(task, period))
             cells[name] = {"t_fmax_ms": round(t_max, 4), "util_fmax": round(u_max, 1),

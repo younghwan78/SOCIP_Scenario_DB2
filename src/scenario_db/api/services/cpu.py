@@ -16,7 +16,7 @@ from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_profile import cpu_profile_from_evidence
 from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance
-from scenario_db.sim.cpu_sched import SweepSpec, cpu_sweep
+from scenario_db.sim.cpu_sched import StageOrder, SweepSpec, cpu_sweep
 from scenario_db.sim.cpu_whatif import WhatIfSpec, cpu_whatif
 from scenario_db.sim.power_params import power_params_from_row
 
@@ -67,20 +67,21 @@ def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
     # the same Timing Budget coupling as the rebalance: stage budgets (stage_slack) and the stage SW order
     coupling, enforce = _timing_coupling(db, request, data)
     spec = SweepSpec(**_sweep_fields(request), stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {},
-                     serial_pairs=coupling_pairs(coupling))
+                     serial_stages=coupling_stages(coupling))
     release_read_connection(db)
     try:
         result = cpu_sweep(data.profile, target=data.target, base=data.base, fps=request.fps, spec=spec)
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
     if coupling:
-        ref = result["reference"]
+        # the coupling's SW times belong to the measured placement: impacts scale from it, also with reference=eas
+        measured = result["measured_placement"]
         coupling["enforced"] = enforce
-        matched = sorted(t for t in coupling["stretch"] if t in (ref.get("task_ms") or {}))
+        matched = sorted(t for t in coupling["stretch"] if t in (measured.get("task_ms") or {}))
         coupling["matched_tasks"], coupling["unmatched_tasks"] = matched, sorted(set(coupling["stretch"]) - set(matched))
         best = (result.get("cases") or [None])[0]
-        coupling["impact"] = {"reference": timing_impact(coupling, ref, ref),
-                              "best": timing_impact(coupling, ref, best) if best else None}
+        coupling["impact"] = {"reference": timing_impact(coupling, measured, result["reference"]),
+                              "best": timing_impact(coupling, measured, best) if best else None}
         result["timing_coupling"] = coupling
     result["timing_mode"] = request.timing_coupling
     return CpuWhatIfResponse(profile_ref=data.profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
@@ -99,6 +100,9 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
     from scenario_db.sim.timing_budget import SwTaskAdjustment, TimingBudgetOptions
 
     opts = TimingBudgetOptions(statistic=statistic, runtime_scale=runtime_scale, include_whatif=False)
+    if growth:
+        # CPU-only tasks ((other), HAL threads) have no Timing Budget item: their growth only scales CPU demand
+        growth = {t: g for t, g in growth.items() if t in _sw_tasks(db, scenario_id, variant_id)}
     if growth:
         if runtime_scale <= 0:
             raise UnprocessableError("task-specific growth needs positive default_growth for timing coupling")
@@ -128,6 +132,16 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
                          "stretch": {k: round(v, 4) for k, v in stretch.items()}})
 
 
+def _sw_tasks(db: Session, scenario_id: str, variant_id: str) -> set[str]:
+    """SW task ids of the variant's timeline (what TimingBudgetOptions.task_adjustments accepts)."""
+    from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
+    from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
+    from scenario_db.sim.timeline_adapter import timeline_tasks
+
+    graph = resolve_analysis_selection(db, TimingBudgetRequest(scenario_id=scenario_id, variant_id=variant_id)).load(db).graph
+    return {str(t["id"]) for t in timeline_tasks(graph) if t.get("task_type") == "sw"}
+
+
 def _mark_serial(coupling: dict[str, Any]) -> dict[str, Any]:
     """``serial`` per stage and ``serial_pairs``: a stage's SW order holds within one frame only while the stage
     chain (SW + HW + overhead) fits one period; a longer chain overlaps the next frame's members, so they count
@@ -141,9 +155,16 @@ def _mark_serial(coupling: dict[str, Any]) -> dict[str, Any]:
     return coupling
 
 
-def coupling_pairs(coupling: dict[str, Any] | None) -> tuple[tuple[str, str], ...]:
-    """``SweepSpec.serial_pairs`` of a coupling (also when it is only reported: ordering is not a budget)."""
-    return tuple((str(a), str(b)) for a, b in (coupling or {}).get("serial_pairs") or [])
+def coupling_stages(coupling: dict[str, Any] | None) -> tuple[StageOrder, ...]:
+    """``SweepSpec.serial_stages`` of a coupling (also when it is only reported: ordering is not a budget). Every
+    stage with an order goes in; whether it holds is decided per candidate from its task times (StageOrder.holds)."""
+    if not coupling:
+        return ()
+    return tuple(StageOrder(stage=str(st["stage"]), pairs=tuple((str(a), str(b)) for a, b in st["order"]),
+                            sw_ms=float(st["sw_ms"]), fixed_ms=float(st["hw_ms"]) + float(st["overhead_ms"]),
+                            items=tuple((str(t["task"]), float(t["ms"])) for t in st["tasks"]),
+                            period_ms=float(coupling["period_ms"]))
+                 for st in coupling["stages"] if st.get("order"))
 
 
 def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dict[str, Any]) -> list[dict[str, Any]]:
@@ -228,7 +249,7 @@ def _rebalance_inputs(db: Session, request: CpuRebalanceRequest, *, coupling_bas
                          locks=dict(request.locks), co_move=tuple(tuple(g) for g in request.co_move),
                          verify_k=request.verify_k, max_exhaustive=request.max_exhaustive,
                          stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {},
-                         serial_pairs=coupling_pairs(coupling))
+                         serial_stages=coupling_stages(coupling))
     return data.profile, data.target, data.base, spec, coupling, enforce
 
 

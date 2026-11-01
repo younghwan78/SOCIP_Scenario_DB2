@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import pytest
 
-from scenario_db.api.services.cpu import _mark_serial, coupling_pairs, scale_coupling
+from scenario_db.api import schemas as _schemas  # noqa: F401  (package import for the service module)
+from scenario_db.api.schemas.cpu import CpuSweepRequest
+from scenario_db.api.services import cpu as svc
+from scenario_db.api.services.cpu import _mark_serial, coupling_stages, scale_coupling
 from scenario_db.models.capability.power_model import CpuSchedulerParams, PowerModelParams
 from scenario_db.sim import cpu_sched
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance
-from scenario_db.sim.cpu_sched import SchedConfig, SweepSpec, Thread, TaskPolicy, _Ctx, beam_starts, capacities, cpu_sweep, eas_place
+from scenario_db.sim.cpu_sched import (SchedConfig, StageOrder, SweepSpec, Thread, TaskPolicy, _Ctx, beam_starts, capacities,
+                                       cpu_sweep, eas_place, packed_ms)
 from scenario_db.sim.models import CpuClusterProfile, CpuProfile, CpuTaskProfile
 from scenario_db.sim.timing_budget import _sw_order
 
@@ -57,9 +61,31 @@ def test_stage_order_is_serial_only_while_the_stage_chain_fits_one_period():
         {"stage": "post", "sw_ms": 6.0, "hw_ms": 30.0, "overhead_ms": 0.0, "room_ms": 3.3, "tasks": [], "order": [["c", "d"]]}]}
     out = _mark_serial(coupling)
     assert [s["serial"] for s in out["stages"]] == [True, False]       # post: 36 ms > 33.3 ms overlaps the next frame
-    assert coupling_pairs(out) == (("a", "b"),)
+    stages = coupling_stages(out)
+    assert [(st.stage, st.holds({}, {})) for st in stages] == [("nrt", True), ("post", False)]
     # more SW at a higher growth can push a stage over the period: its order no longer counts
-    assert coupling_pairs(scale_coupling(out, 1.6)) == ()
+    assert not any(st.holds({}, {}) for st in coupling_stages(scale_coupling(out, 1.6)))
+
+
+def test_a_candidate_that_slows_the_chain_past_the_period_loses_the_order():
+    """Measured: chain 10 + 20 ms in a 33.3 ms frame -> ordered. Twice the SW time on a slower placement: 40 ms."""
+    st = StageOrder(stage="nrt", pairs=(("a", "b"),), sw_ms=10.0, fixed_ms=20.0, items=(("a", 4.0), ("b", 6.0)), period_ms=33.3)
+    anchor = {"a": 1.0, "b": 1.5}
+    assert st.holds({"a": 1.0, "b": 1.5}, anchor)
+    assert not st.holds({"a": 2.0, "b": 3.0}, anchor)
+    one = _model(cores=1)
+    profile = CpuProfile(tasks=[CpuTaskProfile(task=t, cluster="MID", cycles=4e6) for t in ("a", "b")],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    tight = StageOrder(stage="nrt", pairs=(("a", "b"),), sw_ms=10.0, fixed_ms=20.0, items=(("a", 5.0), ("b", 5.0)), period_ms=33.3)
+    ref = cpu_sweep(profile, target=one, fps=30, spec=SweepSpec(serial_stages=(tight,)))["reference"]
+    assert ref["chain_serial"] == ["nrt"] and ref["response_ms"]["a"] == pytest.approx(ref["task_ms"]["a"], abs=1e-3)
+    # a candidate is judged on its own task times against the measured placement (the anchor)
+    ctx = _ctx(one)
+    ctx.stages, ctx.anchor_ms = (tight,), {"a": 1.0, "b": 1.0}
+    held, names = ctx.serial_for({"a": 1.0, "b": 1.0})
+    assert frozenset(("a", "b")) in held and names == ["nrt"]
+    slower, names = ctx.serial_for({"a": 1.5, "b": 1.5})       # 20 + 10 + 5 x 0.5 x 2 = 35 ms > 33.3 ms
+    assert frozenset(("a", "b")) not in slower and names == []
 
 
 # ---------------------------------------------------------------- wait (response) model
@@ -159,6 +185,59 @@ def test_rebalance_uses_the_chain_order_for_the_wait_and_keeps_feasibility():
                                                                              serial_pairs=(("crta", "me"),)))
     assert free["reference"]["min_slack_prio_ms"] < 0 <= chained["reference"]["min_slack_prio_ms"]
     assert [c["assign"] for c in free["cases"]] == [c["assign"] for c in chained["cases"]]     # ranking unchanged
+
+
+def test_range_packs_a_tasks_threads_on_the_cluster_cores():
+    assert packed_ms([2.0, 2.0], 1) == pytest.approx(4.0)
+    assert packed_ms([2.0, 2.0], 2) == pytest.approx(2.0)
+    assert packed_ms([3.0, 2.0, 2.0], 2) == pytest.approx(4.0)
+    one = _model(cores=1)
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="MID", cycles=8e6, threads={"1": 4e6, "2": 4e6})],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    cell = cpu_sweep(profile, target=one, fps=30, spec=SweepSpec(budgets_ms={"a": 3.0}))["range"]["tasks"][0]["cells"]["MID"]
+    assert cell["t_fmax_ms"] == pytest.approx(4.0, abs=1e-3) and not cell["meets"]      # 2 x 2 ms on one core > 3 ms
+
+
+def test_growth_of_a_cpu_only_task_does_not_reach_the_timing_budget(monkeypatch):
+    seen = {}
+
+    def fake_tb(db, req):
+        seen["adjust"] = sorted(req.options.task_adjustments)
+        return type("R", (), {"report": {"period_ms": 33.3, "stages": []}})()
+
+    monkeypatch.setattr("scenario_db.api.services.timing_budget.analyze_timing_budget_request", fake_tb)
+    monkeypatch.setattr(svc, "_sw_tasks", lambda db, s, v: {"eis"})
+    svc.timing_stretch(None, "uc", "v", growth={"eis": 1.2, "(other)": 1.5})
+    assert seen["adjust"] == ["eis"]
+
+
+def test_sweep_timing_impact_stays_on_the_measured_placement_with_an_eas_reference(monkeypatch):
+    two = CpuPowerModel.from_params(PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x", "cpu": {"clusters": [
+            {"name": "LITTLE", "core_type": "L", "cores": 2, "ipc_rel": 0.5, "opps": [
+                {"mhz": 500, "mv": 600, "mw_per_core": 20}, {"mhz": 1000, "mv": 700, "mw_per_core": 50}]},
+            {"name": "BIG", "core_type": "B", "cores": 2, "ipc_rel": 1.0, "opps": [
+                {"mhz": 1000, "mv": 700, "mw_per_core": 150}, {"mhz": 2000, "mv": 850, "mw_per_core": 450}]}],
+            "default_cluster": 0}}))
+    # measured on BIG; EAS alone puts the light task on LITTLE (slower), so the EAS reference stretches its SW time
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="BIG", cycles=1e6)],
+                         clusters={"BIG": CpuClusterProfile(freq_residency={2000: 1})})
+    data = svc._RebalanceData(profile, two, None, ("uc", "v"))
+    coupling = {"mode": "stage_slack", "period_ms": 1000 / 30, "runtime_scale": 1.0, "stretch": {"a": 2.0}, "serial_pairs": [],
+                "stages": [{"stage": "nrt", "sw_ms": 5.0, "hw_ms": 10.0, "overhead_ms": 0.0, "room_ms": 23.3, "slack_ms": 18.3,
+                            "stretch": 4.6, "tasks": [{"task": "a", "ms": 5.0}], "order": []}]}
+    monkeypatch.setattr(svc, "_rebalance_data", lambda db, req: data)
+    monkeypatch.setattr(svc, "_timing_coupling", lambda db, req, d, base=None: (coupling, True))
+    monkeypatch.setattr(svc, "release_read_connection", lambda db: None)
+    out = svc.run_cpu_sweep(None, CpuSweepRequest(power_params_ref="p", cpu_profile_ref="x", reference="eas",
+                                                  timing_coupling="stage_slack")).result
+    m, eas = out["measured_placement"], out["eas_default"]
+    assert eas["placement"]["a"] != m["placement"]["a"]
+    impact = out["timing_coupling"]["impact"]["reference"][0]
+    # the EAS reference's stage SW change, scaled from the measured placement (it read 0 when anchored on itself)
+    assert impact["delta_sw_ms"] == pytest.approx(5.0 * (eas["task_ms"]["a"] / m["task_ms"]["a"] - 1.0), abs=2e-3)
+    assert impact["delta_sw_ms"] > 0
+    assert out["timing_coupling"]["matched_tasks"] == ["a"]
 
 
 def test_beam_also_starts_from_the_measured_placement():

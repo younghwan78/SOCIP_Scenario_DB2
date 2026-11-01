@@ -50,7 +50,7 @@ class RebalanceSpec(SweepSpec):
     verify_k: int = 30
     max_exhaustive: int = 300_000
     top: int = 20
-    # stretch_budgets / serial_pairs: the Timing Budget coupling (SweepSpec); the stretch is anchored on the
+    # stretch_budgets / serial_stages: the Timing Budget coupling (SweepSpec); the stretch is anchored on the
     # measured placement's task time
     ratio_curves: bool = True                     # CPU-07 per-target distribution-ratio curves (sweeps skip them)
 
@@ -196,6 +196,10 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         return out
 
     verification_budgets = dict(budgets)
+    if spec.serial_stages:
+        # RT chain orders are re-checked per split against the measured placement's task times
+        ctx.anchor_ms = evaluate(threads, ctx, ref_pol, budgets_ms={}, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
+                                 dsu_policy=prep.dsu_policy, pinned_threads=thread_pol)["task_ms"]
     if spec.stretch_budgets:
         # anchor = the measured placement's task time; the larger of the per-cluster estimate used by the search and
         # the full evaluation, so the measured placement stays feasible in both
