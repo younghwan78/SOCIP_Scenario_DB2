@@ -70,9 +70,10 @@ def previous_block(p: dict[str, Any] | None) -> str:
         lines.append("risk 변화 없음")
     h += "<ul>" + "".join(f"<li>{x}</li>" for x in lines) + "</ul>"
     if pw.get("changed"):
-        mc = {True: "<b class=warn>계산 모델 변경</b>", False: "같은 모델", None: "<span class=meta>확인 불가</span>"}
+        mc = {True: "<b class=warn>계산 모델 · engine 변경</b>", False: "같은 모델", None: "<span class=meta>확인 불가</span>"}
         h += (f"<h3 style='margin:10px 0 4px'>Power 변화 상위 (|Δ| ≥ 1 mW · {pw.get('changed_count')}건)</h3>"
-              + (f"<p class=warn>{pw['model_changed']}건은 계산 모델(power model · 계수 · BW model · clock 기준)이 달라진 변화 — "
+              + (f"<p class=warn>{pw['model_changed']}건은 계산 모델(power model · 계수 · BW model · clock 기준 · CPU flat/profile) "
+                 "또는 engine이 달라진 변화 — "
                  "설계 변화로 읽지 말 것</p>" if pw.get("model_changed") else "")
               + ("<table><tr><th>Variant</th><th>직전 mW</th><th>현재 mW</th><th>Δ mW</th><th>Δ%</th>"
                  + ("<th>모델</th>" if "model_changed" in pw else "") + "</tr>")

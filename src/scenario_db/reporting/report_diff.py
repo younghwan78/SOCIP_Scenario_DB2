@@ -39,11 +39,12 @@ _BASIS_KEYS = (("throughput_model", "판정 기준"), ("register_baseline", "등
 
 
 def _models(snap: dict[str, Any], labels: dict[tuple[str, str], str]) -> dict[str, tuple[Any, ...]]:
-    """Calculation-model key per variant label: model lineage + CPU power basis (flat / profile). Absent = not frozen
-    (a report from before lineages were kept)."""
+    """Calculation-model key per variant label: model lineage + CPU power basis (flat / profile) + engine revision.
+    Absent = not frozen (a report from before lineages were kept)."""
     from scenario_db.sim.model_lineage import lineage_key
 
-    return {labels[(str(r.get("scenario_id") or ""), str(r["variant_id"]))]: (*lineage_key(r.get("model_lineage")), r.get("cpu_basis"))
+    return {labels[(str(r.get("scenario_id") or ""), str(r["variant_id"]))]:
+            (*lineage_key(r.get("model_lineage")), r.get("cpu_basis"), r.get("engine_rev"))
             for r in snap.get("scenarios") or [] if "model_lineage" in r}
 
 

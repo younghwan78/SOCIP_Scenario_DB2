@@ -313,6 +313,7 @@ def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:
             # frames in flight over every stage (engine ≥ 15), else the worst-margin stage's chain
             "period_ms": period, "in_flight": m.get("in_flight") or w.get("in_flight") or (int(-(-chain // period)) if chain and period else None),
             "in_flight_stage": m.get("in_flight_stage"),
+            "in_flight_chain_ms": next((s.get("chain_ms") for s in m.get("stages") or [] if s.get("stage") == m.get("in_flight_stage")), None),
             "growth_tolerance": m.get("growth_tolerance"), "growth_tolerance_fixed": m.get("growth_tolerance_fixed"),
             "growth_tested_max": m.get("growth_tested_max"), "growth": growth}
 

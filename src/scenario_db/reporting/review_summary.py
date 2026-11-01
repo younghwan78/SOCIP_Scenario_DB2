@@ -328,7 +328,7 @@ def sw_table(snap: dict[str, Any]) -> str:
         row_stat = f" <span class=meta>SW {escape(str(sw['statistic']))}</span>" if mixed and sw.get("statistic") else ""
         h += (f"<tr><td>{escape(kpi.get(r['variant_id']) or short(r['variant_id']))}</td><td>{escape(str(sw.get('stage') or '').upper())}{row_stat}</td>"
               f"<td class=n>{float(sw.get('hw_ms') or 0):.1f} + {float(sw.get('sw_ms') or 0):.1f}</td><td class=n>{float(sw.get('period_ms') or 0):.2f}</td>"
-              f"<td class=n>{sw.get('in_flight') or '—'}</td><td class=n>{bn}"
+              f"<td class=n>{sw.get('in_flight') or '—'}{_in_flight_note(sw)}</td><td class=n>{bn}"
               f" <span class=meta>{escape(str(r.get('sw_bottleneck') or ''))}</span></td>"
               f"<td class='n {'fail' if (r.get('sw_margin_pct') or 0) < 0 else ''}'>{float(r.get('sw_margin_pct') or 0):+.0f}%</td>"
               f"<td class='n {'fail' if state == 'short' else 'warn' if state == 'unverified' else ''}'>{gt}"
@@ -337,6 +337,17 @@ def sw_table(snap: dict[str, Any]) -> str:
                         for s in scales)
               + "</tr>")
     return h + "</table>" + (f"<p class=meta>외 {len(rows) - 25}건 생략</p>" if len(rows) > 25 else "")
+
+
+def _in_flight_note(sw: dict[str, Any]) -> str:
+    """The frames in flight come from the stage with the longest chain, which can differ from the row's
+    (least-margin) stage: name it with its chain so the row does not mix stages."""
+    st = sw.get("in_flight_stage")
+    if not st or st == sw.get("stage"):
+        return ""
+    chain = sw.get("in_flight_chain_ms")
+    return (f"<div class=meta>{escape(str(st).upper())}"
+            + (f" chain {float(chain):.1f} ms" if chain is not None else "") + "</div>")
 
 
 def _delta(g: dict[str, Any] | None, base: dict[str, Any] | None) -> str:

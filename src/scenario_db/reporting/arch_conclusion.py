@@ -226,21 +226,33 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
 def _growth_outlook(low: list[dict[str, Any]], snap: dict[str, Any]) -> str:
     """What a low margin means for the next SW: judged by the SW growth the timing absorbs (DVFS re-selected),
     against the project's SW growth budget — not by the margin sign alone."""
+    from scenario_db.reporting.review_verdict import growth_budget_state
+
     budget = (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))
     tols = [m for m in low if m.get("tolerance") is not None]
     if not tols:
         return "SW 증가 허용 미산출 — SW 증가 slice로 확인 필요"
-    t0 = min(tols, key=lambda m: float(m["tolerance"]))
-    tol = float(t0["tolerance"])
-    capped = t0.get("tested") is not None and tol >= float(t0["tested"]) - 1e-6
-    txt = f"증가 허용 최소 {'≥' if capped else ''}×{tol:.2f} ({t0['variant_id']})"
+
+    def label(m: dict[str, Any]) -> str:
+        tol = float(m["tolerance"])
+        capped = m.get("tested") is not None and tol >= float(m["tested"]) - 1e-6
+        return f"{'≥' if capped else ''}×{tol:.2f} ({m['variant_id']})"
+
     if budget is None:
-        return txt + " — SW 증가 예산(review_policy.sw_growth_budget) 미지정"
-    if tol >= float(budget) - 1e-6:
-        return txt + f" ≥ 예산 ×{float(budget):.2f} — 예산 안의 SW 증가는 흡수 (DVFS 재선택 포함)"
-    if capped:
-        return txt + f" — 예산 ×{float(budget):.2f}까지 미검증"
-    return txt + f" < 예산 ×{float(budget):.2f} — 차기 SW 증가 시 clock 상향 또는 SW 최적화 필요"
+        return f"증가 허용 최소 {label(min(tols, key=lambda m: float(m['tolerance'])))} — SW 증가 예산(review_policy.sw_growth_budget) 미지정"
+    # each row first (a lower bound of a short sweep must not hide another row's proven shortfall), then the summary
+    state = {id(m): growth_budget_state({"growth_tolerance": m["tolerance"], "growth_tested_max": m.get("tested")}, budget)
+             for m in tols}
+    short = [m for m in tols if state[id(m)] == "short"]
+    unverified = [m for m in tols if state[id(m)] == "unverified"]
+    b = f"예산 ×{float(budget):.2f}"
+    if short:
+        m0 = min(short, key=lambda m: float(m["tolerance"]))
+        return (f"증가 허용 {label(m0)} < {b} 등 {len(short)}건 — 차기 SW 증가 시 clock 상향 또는 SW 최적화 필요"
+                + (f" · 예산까지 미검증 {len(unverified)}건" if unverified else ""))
+    if unverified:
+        return f"{b}까지 미검증 {len(unverified)}건 (탐색 최대 배율에서 유지, 예: {label(unverified[0])}) — 예산까지 탐색 범위 확장"
+    return f"증가 허용 최소 {label(min(tols, key=lambda m: float(m['tolerance'])))} ≥ {b} — 예산 안의 SW 증가는 흡수 (DVFS 재선택 포함)"
 
 
 def _s(v: str) -> str:

@@ -252,6 +252,23 @@ def test_conclusion_reads_low_margin_against_the_growth_budget():
     low[1]["tolerance"] = 1.1
     assert "< 예산 ×1.20" in _growth_outlook(low, pol) and "clock 상향" in _growth_outlook(low, pol)
     assert "미지정" in _growth_outlook(low, {})
+    # rows judged one by one: a short sweep's lower bound (A) must not hide B's proven shortfall
+    mixed = [{"variant_id": "A", "tolerance": 1.1, "tested": 1.1}, {"variant_id": "B", "tolerance": 1.2, "tested": 1.5}]
+    out = _growth_outlook(mixed, {"review_context": {"policy": {"sw_growth_budget": 1.3}}})
+    assert "×1.20 (B) < 예산 ×1.30" in out and "clock 상향" in out and "미검증 1건" in out
+    only_short_sweep = _growth_outlook(mixed[:1], {"review_context": {"policy": {"sw_growth_budget": 1.3}}})
+    assert "미검증 1건" in only_short_sweep and "clock 상향" not in only_short_sweep
+
+
+def test_sw_table_names_the_stage_behind_frames_in_flight():
+    from scenario_db.reporting.review_summary import sw_table
+
+    r = row("v", sw_margin_pct=4.0, sw={"stage": "post", "hw_ms": 1.0, "sw_ms": 6.0, "period_ms": 10.0, "in_flight": 2,
+                                        "in_flight_stage": "nrt", "in_flight_chain_ms": 15.0})
+    t = sw_table(snap(scenarios=[r]))
+    assert "NRT chain 15.0 ms" in t
+    r["sw"]["in_flight_stage"] = "post"
+    assert "chain 15.0" not in sw_table(snap(scenarios=[r]))
 
 
 def test_cpu_section_escapes_cluster_names_of_old_and_new_snapshots():
