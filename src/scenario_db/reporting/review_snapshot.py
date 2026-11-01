@@ -57,6 +57,9 @@ def _assemble_review(snapshot: dict[str, Any], predictions: dict[tuple[str, str]
         "register_baseline": policy.get("register_baseline"),
         "dvfs_table_ref": o.get("dvfs_table_ref"), "sample_dvfs": o.get("sample_dvfs"),
         "engine_rev": o.get("engine_rev"),
+        # every engine and model lineage the rows came from (a previous-report diff names model changes)
+        "engines": sorted((o.get("engines") or {}).keys()) or None,
+        "model_lineages": _lineage_labels(snapshot.get("scenarios") or []),
     }
     pred_vids = {vid for _, vid in predictions}
     ref_vids = sorted(refs["references"])
@@ -98,6 +101,8 @@ def _assemble_review(snapshot: dict[str, Any], predictions: dict[tuple[str, str]
         }
         snapshot["cpu"] = [{k: c[k] for k in ("id", "scenario_id", "variant_id", "profile_ref", "power_params_ref",
                                              "base_power_params_ref", "note", "created_by", "created_at", "summary")}
+                           # calc_current False = recorded by an older sweep calculation (flagged, numbers kept)
+                           | {k: c.get(k) for k in ("calc_rev", "calc_current")}
                            for c in project.cpu]
         snapshot["project_conditions"] = _project_conditions(snapshot, refs, project)
         snapshot["coverage"] = _coverage(snapshot, predictions, refs, project)
@@ -114,6 +119,18 @@ def _assemble_review(snapshot: dict[str, Any], predictions: dict[tuple[str, str]
         }
     snapshot["risks"] = build_risks(snapshot)
     return snapshot
+
+
+def _lineage_labels(rows: list[dict[str, Any]]) -> list[str] | None:
+    """Model lineages of the registered rows, most used first (None: rows from before lineages were frozen)."""
+    from scenario_db.sim.model_lineage import lineage_label
+
+    counts: dict[str, int] = {}
+    for r in rows:
+        if "model_lineage" in r and r.get("prediction_id"):
+            label = lineage_label(r.get("model_lineage"))
+            counts[label] = counts.get(label, 0) + 1
+    return [k for k, _ in sorted(counts.items(), key=lambda kv: -kv[1])] or None
 
 
 def _thermal(thermal: dict[str, Any]) -> dict[str, Any]:

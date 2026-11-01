@@ -120,10 +120,12 @@ def _verdict_cell(v: dict[str, Any] | None) -> str:
     return " · ".join(parts) + f"<div class=meta>기준 {_mw(v['ref_mw'])} mW ({escape(str(v.get('ref_source') or ''))})</div>"
 
 
-def kpi_table(board: list[dict[str, Any]], budget: float | None = None) -> str:
+def kpi_table(board: list[dict[str, Any]], budget: float | None = None, statistic: str | None = None) -> str:
     if not board:
         return "<p class=meta>KPI scenario 없음 — review_policy.kpi 또는 thermal_watch · power_reference를 설정하세요</p>"
-    h = ("<table><tr><th>KPI</th><th>fps</th><th>전력 예측 mW (탐색 범위)</th><th>전과제 대비</th><th>SW 여유 (증가 허용)</th><th>화질 (IQ)</th><th>종합</th></tr>")
+    stat = ("<div class=meta>SW " + escape(statistic) + " 기준</div>") if statistic else ""
+    h = ("<table><tr><th>KPI</th><th>fps</th><th>전력 예측 mW (탐색 범위)</th><th>전과제 대비</th>"
+         f"<th>SW 여유 (증가 허용){stat}</th><th>화질 (IQ)</th><th>종합</th></tr>")
     for k in board:
         fps = k["fps"]
         pw = k.get("power") or {}
@@ -132,6 +134,8 @@ def kpi_table(board: list[dict[str, Any]], budget: float | None = None) -> str:
                   + ("" if k.get("registered", True) else " <span class=meta>미등록</span>")) if pw.get("mw") is not None else "—"
         sw = k.get("sw_margin_pct")
         sw_txt = (f"<span class='{'fail' if sw < 0 else 'warn' if sw < 10 else ''}'>{sw:+.0f}%</span>" if sw is not None else "—")
+        if sw is not None and statistic and "혼재" in statistic and k.get("sw_statistic"):
+            sw_txt += f" <span class=meta>({escape(str(k['sw_statistic']))})</span>"
         g = k.get("sw_growth_tolerance")
         if g is not None:
             state = growth_budget_state({"growth_tolerance": g, "growth_tested_max": k.get("sw_growth_tested_max")}, budget)
@@ -182,7 +186,10 @@ def tier0(snap: dict[str, Any]) -> str:
           + (f" ({escape('; '.join(conf.get('reasons') or []))})" if conf.get("reasons") else "") + "</p>")
     h += conditions_strip(snap.get("project_conditions")) + coverage_strip(snap.get("coverage"))
     budget = (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))
-    h += ("<h3 style='margin:10px 0 4px'>KPI scenario</h3>" + kpi_table(board, budget)
+    stats = sorted({str((r.get("sw") or {}).get("statistic")) for r in snap.get("scenarios") or [] if (r.get("sw") or {}).get("statistic")})
+    stat = (" · ".join(stats) + " 혼재") if len(stats) > 1 else (stats[0] if stats else
+                                                               str((((snap.get("overview") or {}).get("objective") or {}).get("statistic")) or "max"))
+    h += ("<h3 style='margin:10px 0 4px'>KPI scenario</h3>" + kpi_table(board, budget, stat)
           + (f"<p class=meta>SW 증가 예산 ×{float(budget):.1f} — 증가 허용이 예산보다 작으면 빨간색 (DVFS 재선택 포함 timing 유지 한계)</p>" if budget else ""))
     blk = [d for d in data_quality(snap) if d["level"] == "block"]
     if blk:
@@ -295,8 +302,16 @@ def sw_table(snap: dict[str, Any]) -> str:
         return ""
     rows.sort(key=lambda r: (r["variant_id"] not in kpi, r.get("sw_margin_pct") if r.get("sw_margin_pct") is not None else 999))
     scales = sorted({g["scale"] for r in rows for g in r["sw"].get("growth") or [] if g["scale"] != 1.0})
-    h = ("<h3 style='margin:12px 0 4px'>SW timing — stage 시간 · 병렬 처리 · SW 증가</h3><p class=meta>stage 시간 = HW + SW (최소 여유 stage). "
-         "frame 주기를 넘으면 그 수만큼 frame이 동시에 처리되어야 fps 유지(pipelined). 증가 허용 = DVFS 재선택 포함 timing 유지 한계 (≥ = 탐색한 최대 배율까지 유지). "
+    stats = sorted({str(r["sw"]["statistic"]) for r in rows if r["sw"].get("statistic")})
+    mixed = len(stats) > 1
+    stat = " · ".join(stats) + " 혼재 — 행별 표시" if mixed else (stats[0] if stats else "max")
+    pipelined = any(r.get("sw_margin_basis") == "pipelined" for r in rows)
+    h = (f"<h3 style='margin:12px 0 4px'>SW timing — stage 시간 · 병렬 처리 · SW 증가 (SW {escape(stat)}{'' if mixed else ' 기준'})</h3>"
+         "<p class=meta>stage 시간 = HW + SW (최소 여유 stage). "
+         "frame 주기를 넘으면 그 수만큼 frame이 동시에 처리되어야 fps 유지(pipelined). "
+         + ("여유 = (주기 − 최장 SW task 또는 같은 CPU의 SW 합) / 주기 — pipelined 판정의 한계. " if pipelined else "")
+         + f"SW 시간은 탐색 목적 통계({escape(str(stat))}) — Timing Budget 화면 기본(mean)과 다를 수 있음. "
+         "증가 허용 = DVFS 재선택 포함 timing 유지 한계 (≥ = 탐색한 최대 배율까지 유지). "
          "ΔmW = SW 증가 slice의 전력 증가분 (×1.0 slice 대비 — ×1.0 미탐색·전력 미산출 시 —). "
          "등록 예측 절대값과 조합이 다를 수 있어 증가분만 표시"
          + (f", 예산 ×{float(budget):.1f}" if budget else "") + ". 증가별 전력은 목적 통계 기준.</p>"
@@ -310,9 +325,10 @@ def sw_table(snap: dict[str, Any]) -> str:
         bn = "—" if sw.get("bottleneck_ms") is None else f"{float(sw['bottleneck_ms']):.1f}"
         capped = g is not None and sw.get("growth_tested_max") is not None and float(g) >= float(sw["growth_tested_max"]) - 1e-6
         gt = "—" if g is None else f"{'≥' if capped else ''}×{float(g):.2f}"
-        h += (f"<tr><td>{escape(kpi.get(r['variant_id']) or short(r['variant_id']))}</td><td>{escape(str(sw.get('stage') or '').upper())}</td>"
+        row_stat = f" <span class=meta>SW {escape(str(sw['statistic']))}</span>" if mixed and sw.get("statistic") else ""
+        h += (f"<tr><td>{escape(kpi.get(r['variant_id']) or short(r['variant_id']))}</td><td>{escape(str(sw.get('stage') or '').upper())}{row_stat}</td>"
               f"<td class=n>{float(sw.get('hw_ms') or 0):.1f} + {float(sw.get('sw_ms') or 0):.1f}</td><td class=n>{float(sw.get('period_ms') or 0):.2f}</td>"
-              f"<td class=n>{sw.get('in_flight') or '—'}</td><td class=n>{bn}"
+              f"<td class=n>{sw.get('in_flight') or '—'}{_in_flight_note(sw)}</td><td class=n>{bn}"
               f" <span class=meta>{escape(str(r.get('sw_bottleneck') or ''))}</span></td>"
               f"<td class='n {'fail' if (r.get('sw_margin_pct') or 0) < 0 else ''}'>{float(r.get('sw_margin_pct') or 0):+.0f}%</td>"
               f"<td class='n {'fail' if state == 'short' else 'warn' if state == 'unverified' else ''}'>{gt}"
@@ -321,6 +337,17 @@ def sw_table(snap: dict[str, Any]) -> str:
                         for s in scales)
               + "</tr>")
     return h + "</table>" + (f"<p class=meta>외 {len(rows) - 25}건 생략</p>" if len(rows) > 25 else "")
+
+
+def _in_flight_note(sw: dict[str, Any]) -> str:
+    """The frames in flight come from the stage with the longest chain, which can differ from the row's
+    (least-margin) stage: name it with its chain so the row does not mix stages."""
+    st = sw.get("in_flight_stage")
+    if not st or st == sw.get("stage"):
+        return ""
+    chain = sw.get("in_flight_chain_ms")
+    return (f"<div class=meta>{escape(str(st).upper())}"
+            + (f" chain {float(chain):.1f} ms" if chain is not None else "") + "</div>")
 
 
 def _delta(g: dict[str, Any] | None, base: dict[str, Any] | None) -> str:

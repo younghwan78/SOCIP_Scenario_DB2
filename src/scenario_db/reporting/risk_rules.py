@@ -38,6 +38,12 @@ LOW_MARGIN_PCT = 10.0
 CPU_TOLERANCE_MIN = 1.2   # SW growth the CPU placement must absorb without an OPP step / timing loss
 
 
+def cpu_tolerance_min(snap: dict[str, Any]) -> float:
+    """The SW growth a CPU placement must absorb: the project's SW growth budget, else CPU_TOLERANCE_MIN."""
+    budget = (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))
+    return float(budget) if budget else CPU_TOLERANCE_MIN
+
+
 def _short(v: str) -> str:
     return str(v).replace("cam-rec-", "")
 
@@ -233,21 +239,26 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                       "checks": ["전과제 semantic Perfetto runtime · latency 분포", "SW 증가 예산 적용 시 CPU OPP 상향 여부",
                                  "병렬 instance 수 (pipelined 전제)"]})
 
+    cpu_min = cpu_tolerance_min(snap)
     low_cpu = [c for c in snap.get("cpu") or [] if (c.get("summary") or {}).get("tolerance") is not None
-               and c["summary"]["tolerance"] < CPU_TOLERANCE_MIN]
+               and c["summary"]["tolerance"] < cpu_min - 1e-9]
     if low_cpu:
         c0 = min(low_cpu, key=lambda c: c["summary"]["tolerance"])
         sm = c0["summary"]
         step = sm.get("opp_step") or {}
+        steps = [s for s in sm.get("opp_steps") or [] if s.get("growth_from") is not None]
+        more = f" · 범위 안 OPP 상향 {len(steps)}회" if len(steps) > 1 else ""
+        synthetic = all((c.get("summary") or {}).get("profile_origin") == "synthetic" for c in low_cpu)
         risks.append({"key": "cpu_growth_tolerance", "rule": "cpu_growth_tolerance", "severity": "medium", "category": "CPU",
-                      "title": f"SW 증가 허용치 < ×{CPU_TOLERANCE_MIN:.1f} · {len(low_cpu)}건",
+                      "title": f"CPU SW 증가 허용치 < ×{cpu_min:.2f} (SW 증가 예산) · {len(low_cpu)}건",
                       "detail": f"최소 ×{sm['tolerance']:.2f} ({_short(c0['variant_id'])}, "
-                                + ("timing 여유 소진" if sm.get("binding") == "timing" else
-                                   f"{step.get('cluster')} OPP {step.get('mhz', ['?', '?'])[0]}→{step.get('mhz', ['?', '?'])[1]} MHz {step.get('delta_mw', 0):+.0f} mW")
-                                + ")",
-                      "affected": [c["variant_id"] for c in low_cpu], "validity": "confirmed",
+                                + ("timing 여유(RT chain 포함) 소진" if sm.get("binding") == "timing" else
+                                   f"{step.get('cluster')} OPP {step.get('mhz', ['?', '?'])[0]}→{step.get('mhz', ['?', '?'])[1]} MHz "
+                                   f"×{step.get('growth_from')}→×{step.get('growth_to')} {step.get('delta_mw', 0):+.0f} mW")
+                                + ")" + more + (" · 합성 profile" if synthetic else ""),
+                      "affected": [c["variant_id"] for c in low_cpu], "validity": "input_unverified" if synthetic else "confirmed",
                       "mitigation": "SW 증가 예산 합의 · task offload / 전용 core · cluster 재배분 (CPU what-if)",
-                      "checks": ["SW 증가 예산", "cluster 재배분 결과"]})
+                      "checks": ["SW 증가 예산", "OPP 상향 배율 · 비용", "cluster 재배분 결과"]})
 
     # the remaining power saving needs IQ evaluation: clock · compression · SW first (lever ladder)
     opts = snap.get("power_options") or []

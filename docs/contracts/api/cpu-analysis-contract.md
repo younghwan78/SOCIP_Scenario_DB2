@@ -78,6 +78,15 @@ only `default_growth` is swept. Zero or negative stage room yields zero SW growt
 tolerance. The UI preserves both requested range endpoints when limiting the grid
 to 13 points and discards results from a previously selected profile/topology.
 
+Tolerance (`basis.rev = cpu-sweep/2`) = min(growth before the first significant OPP
+step-up of the reference placement, growth at which a stage's slack reaches zero).
+A step-up is significant when it costs ≥ 5 mW or ≥ 5 % of the CPU power before it;
+`limits.opp_steps` lists every reference step-up (`significant` flag) and
+`largest_step` the largest. The stage slack is the reference placement's verdict
+slack `chain_slack_ms` = min(room − SW, P − RT chain) per point, interpolated between
+points; `timing_fail_at` is the first swept growth with a negative stage slack. `basis` also
+records `timing_statistic`, `timing_coupling` and `rt_placement`.
+
 Sweep points are computed in worker processes (`SCENARIO_DB_CPU_SWEEP_WORKERS`,
 0 = min(cpu_count, 8), 1 = in-process); any pool failure falls back to the
 in-process path. Responses report `workers`.
@@ -103,7 +112,9 @@ growth, BW power). One `active` snapshot per (project, scenario, variant); a new
 supersedes it. `GET /review/cpu-snapshots?project_ref` lists active snapshots;
 `POST /review/cpu-snapshots/{id}/withdraw` withdraws one. Project reports freeze the
 active snapshots into `snapshot.cpu` and the `cpu_growth_tolerance` risk rule
-(tolerance < ×1.2, medium).
+(tolerance < the review policy `sw_growth_budget`, else ×1.2; medium). A snapshot
+view carries `calc_rev` / `calc_current`; one recorded by another sweep revision
+keeps its numbers and is flagged (`cpu_snapshot_stale` data-quality warning).
 
 The UI associates a completed growth result with the request that calculated it.
 Editing inputs does not rewrite that request. Replacing/cancelling an analysis

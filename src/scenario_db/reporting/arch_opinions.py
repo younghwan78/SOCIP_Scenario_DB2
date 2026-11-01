@@ -194,9 +194,13 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
         margins = [r for r in ok if r.get("sw_margin_pct") is not None]
         if margins:
             w = min(margins, key=lambda r: r["sw_margin_pct"])
+            tol = (w.get("sw") or {}).get("growth_tolerance")
             add(f"SW timing margin 최소 {w['sw_margin_pct']:.1f}% ({w['variant_id'].replace('cam-rec-', '')}, {str(w.get('sw_stage') or '').upper()}"
+                       + (", pipelined 최장 task 기준" if w.get("sw_margin_basis") == "pipelined" else "")
                        + (f", 병목 {w['sw_bottleneck']}" if w.get("sw_bottleneck") else "") + ")"
-                       + (" → SW 증가 여유 부족, 차기 SW 성장 시 clock 상향 필요." if w["sw_margin_pct"] < 10 else "."), "가정 · SW timing")
+                       + ((f" → SW 증가 허용 ×{float(tol):.2f} (DVFS 재선택 포함) — 차기 SW 증가 예산과 비교." if tol is not None
+                           else " → SW 증가 여유 작음 — SW 증가 slice로 clock 상향 필요 여부 확인.") if w["sw_margin_pct"] < 10 else "."),
+                "가정 · SW timing")
         ids = {(r["scenario_id"], r["variant_id"]) for r in ok}
         dom = [d for d in domains if (d.get("scenario_id"), d["variant_id"]) in ids and d.get("headroom_pct") is not None]
         if dom:

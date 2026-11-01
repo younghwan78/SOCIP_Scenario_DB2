@@ -422,12 +422,13 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       </div>
     </Card>}
     <Card id="ax-spread" title="Power range 원인 (축별)" note="SW · compression · DVFS"><AxisSpread spread={v.axis_spread} /></Card>
-    <Card id="ax-sw" title="SW timing margin · 권고" note="(P − SW − overhead − HW@set clock)/P">
+    <Card id="ax-sw" title="SW timing margin · 권고" note={`${m.basis === 'pipelined' ? '(P − max(최장 SW task, 같은 CPU의 SW 합))/P · stage chain = 동시 frame' : '(P − SW − overhead − HW@set clock)/P'}${m.statistic ? ` · SW ${m.statistic} 기준` : ''}`}>
       <table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th>stage</th><th>margin</th><th>SW / P</th><th>병목</th><th>latency 비중</th></tr></thead>
+        <thead><tr><th>stage</th><th>margin</th><th>SW / P</th><th>병목</th>{m.basis === 'pipelined' ? <th>chain (동시 frame)</th> : <th>latency 비중</th>}</tr></thead>
         <tbody>{m.stages.map((s) => <tr key={s.stage}><td>{s.stage.toUpperCase()}</td>
           <td className="mono" style={{ color: s.margin_pct < 0 ? 'var(--del-text)' : undefined }}>{fmt(s.margin_pct, 1)}% · {fmt(s.slack_ms, 2)} ms</td>
-          <td className="mono">{fmt(s.sw_share_pct, 0)}%</td><td className="mono">{s.bottleneck} {fmt(s.bottleneck_ms, 1)} ms</td><td className="mono">{fmt(s.latency_share_pct, 0)}%</td></tr>)}</tbody>
+          <td className="mono">{fmt(s.sw_share_pct, 0)}%</td><td className="mono">{s.bottleneck} {fmt(s.bottleneck_ms, 1)} ms{s.binding === 'cpu_group' ? ' (같은 CPU 합)' : ''}</td>
+          {s.basis === 'pipelined' ? <td className="mono">{fmt(s.chain_ms, 1)} ms ({s.in_flight ?? 1})</td> : <td className="mono">{fmt(s.latency_share_pct, 0)}%</td>}</tr>)}</tbody>
       </table>
       <div className="faint" style={{ fontSize: 12, margin: '6px 0' }}>
         SW 증가 허용 — DVFS 재선택 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} · <b>추천 DVFS 고정 {m.growth_tolerance_fixed ? `×${fmt(m.growth_tolerance_fixed, 1)}` : '—'}</b> (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms

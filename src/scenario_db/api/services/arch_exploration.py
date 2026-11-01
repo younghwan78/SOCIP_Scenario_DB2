@@ -295,7 +295,7 @@ SUMMARY_KEYS = ("scenario_id", "variant_id", "design_conditions", "severity", "f
                 "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "keep_total_mw", "throughput_model",
                 "power_budget")
 SW_MARGIN_SUMMARY_KEYS = ("worst", "growth_tolerance", "growth_tolerance_fixed", "growth_tested_max", "recommendations",
-                          "verdict", "stat_spread_ms")
+                          "verdict", "stat_spread_ms", "basis", "statistic", "in_flight", "in_flight_stage")
 
 
 def variant_summary(v: dict[str, Any]) -> dict[str, Any]:
@@ -772,13 +772,43 @@ def _project_run(db: Session, project_ref: str, scenario_type: str | None) -> tu
                 sources.add(r.id)
     latest = runs[0]
     project = db.get(Project, project_ref)
+    # each variant keeps the engine of the run that computed it (a project report mixes runs)
+    engine_of: dict[str, str] = {}
+    for r in runs:
+        for v in r.variants or []:
+            key = (v.get("scenario_id"), v.get("variant_id"))
+            if variants.get(key) is v:
+                engine_of[f"{key[0]}/{key[1]}"] = r.engine_rev
     run = run_detail(latest) | {
         "id": f"project:{project_ref}", "title": f"{project_ref} 과제 현재 예측",
         "variants": sorted(variants.values(), key=lambda v: (v["scenario_id"], v["variant_id"])),
+        "engine_by_variant": engine_of,
         "errors": errors, "created_at": latest.created_at, "source_run_ids": sorted(sources),
         "soc_ref": latest.soc_ref or ((project.globals_ or {}).get("soc_ref") if project is not None else None),
     }
     return run, currents, runs
+
+
+def _attributions(db: Session, currents: list[Prediction], olds: dict[str, Prediction]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Power attribution of each current prediction vs the one it superseded, with what the attribution cannot see:
+    a model lineage change (power model / version / BW model / coefficients / clock basis) and an engine change move
+    the numbers without any design change, so the report must not read them as design causes."""
+    run_ids = {p.exploration_run_ref for p in currents} | {p.exploration_run_ref for p in olds.values()}
+    engines = {rid: rev for rid, rev in db.query(ArchExplorationRun.id, ArchExplorationRun.engine_rev)
+               .filter(ArchExplorationRun.id.in_(run_ids)).all()} if run_ids else {}
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for cur in currents:
+        old = olds.get(cur.supersedes_ref) if cur.supersedes_ref else None
+        if old is None:
+            continue
+        lin = lineage_differences(old.metrics.get("model_lineage"), cur.metrics.get("model_lineage"))
+        c0, c1 = old.metrics.get("cpu_basis"), cur.metrics.get("cpu_basis")
+        if c0 and c1 and c0 != c1:   # recorded from engine 15; before that the engine change already flags the row
+            lin = [*lin, {"field": "cpu_basis", "old": c0, "new": c1}]
+        e0, e1 = engines.get(old.exploration_run_ref), engines.get(cur.exploration_run_ref)
+        out[(cur.scenario_ref, cur.variant_ref)] = attribute(old.metrics, cur.metrics) | {
+            "lineage_changes": lin, "engine_change": [e0, e1] if e0 != e1 else None}
+    return out
 
 
 def _report_evidence(db: Session, run: dict[str, Any], preds: dict[tuple[str, str], dict[str, Any]],
@@ -857,11 +887,8 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
         Prediction.id.in_([c.supersedes_ref for c in currents if c.supersedes_ref])).all()} if currents else {}
     order = {k: i for i, k in enumerate(vids)}
     for cur in sorted(currents, key=lambda p: order[(p.scenario_ref, p.variant_ref)]):  # this run's predictions only
-        key = (cur.scenario_ref, cur.variant_ref)
-        preds[key] = _pred_dict(cur)
-        old = olds.get(cur.supersedes_ref) if cur.supersedes_ref else None
-        if old is not None:
-            changes[key] = attribute(old.metrics, cur.metrics)
+        preds[(cur.scenario_ref, cur.variant_ref)] = _pred_dict(cur)
+    changes = _attributions(db, sorted(currents, key=lambda p: order[(p.scenario_ref, p.variant_ref)]), olds)
     run_dict = run_detail(run) | {"created_at": run.created_at}
     scope = {"kind": "run", "project_ref": run.project_ref,
              "runs": [{"id": run.id, "title": run.title, "created_at": _iso_dt(run.created_at), "current": len(preds),
@@ -898,12 +925,10 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
     changes: dict[tuple[str, str], dict[str, Any]] = {}
     olds = {p.id: p for p in db.query(Prediction).filter(
         Prediction.id.in_([c.supersedes_ref for c in currents if c.supersedes_ref])).all()} if currents else {}
-    for cur in sorted(currents, key=lambda p: (p.scenario_ref, p.variant_ref)):
-        key = (cur.scenario_ref, cur.variant_ref)
-        preds[key] = _pred_dict(cur)
-        old = olds.get(cur.supersedes_ref) if cur.supersedes_ref else None
-        if old is not None:
-            changes[key] = attribute(old.metrics, cur.metrics)
+    ordered = sorted(currents, key=lambda p: (p.scenario_ref, p.variant_ref))
+    for cur in ordered:
+        preds[(cur.scenario_ref, cur.variant_ref)] = _pred_dict(cur)
+    changes = _attributions(db, ordered, olds)
     latest = runs[0]
     used = {}
     for p in currents:
@@ -1117,7 +1142,12 @@ def report_stale(db: Session, report_id: str) -> dict[str, Any]:
                 Prediction.status == "current", Prediction.project_ref == scope["project_ref"]).all():
             if (sid, vid) not in keys:
                 changed.append({"variant_id": vid, "snapshot": None, "current": pid})
-    return {"report_id": r.id, "stale": bool(changed), "changed": changed}
+    # rows computed by an older exploration engine: the same predictions, but not what today's code produces.
+    # Regenerating does not fix these (re-exploration + registration does), so they are not ``stale``.
+    old_engine = [{"variant_id": row["variant_id"], "engine_rev": row["engine_rev"]} for row in snap_rows
+                  if row.get("prediction_id") and row.get("engine_rev") and row["engine_rev"] != ENGINE_REV]
+    return {"report_id": r.id, "stale": bool(changed), "changed": changed,
+            "engine_rev": ENGINE_REV, "old_engine": old_engine}
 
 
 # ------------------------------------------------------------------- power options

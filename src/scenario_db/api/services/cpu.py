@@ -518,31 +518,73 @@ def opp_events(points: list[dict[str, Any]], which: str) -> list[dict[str, Any]]
     return out
 
 
-def growth_limits(points: list[dict[str, Any]], events: list[dict[str, Any]]) -> dict[str, Any]:
-    """SW-growth tolerance = min(growth before the largest OPP step-up of the reference placement,
-    growth at which a Timing Budget stage runs out of SW room)."""
-    ups = [e for e in events if e["which"] == "reference" and e["mhz"][1] > e["mhz"][0]]
-    step = max(ups, key=lambda e: e["delta_mw"], default=None)
-    timing_at = None
-    seen_stages: set[str] = set()
+# What the growth sweep computes; a review snapshot from another revision is flagged in the report.
+# 2: timing limit from the RT-chain-aware slack (min(room − SW, P − chain)), tolerance = first significant OPP step-up;
+# 1 (unrecorded): SW room only, largest OPP step-up.
+CPU_SWEEP_REV = "cpu-sweep/2"
+# An OPP step-up counts when it costs this much: either absolute or relative to the CPU power before it.
+OPP_STEP_MIN_MW = 5.0
+OPP_STEP_MIN_PCT = 5.0
+
+
+def _significant(e: dict[str, Any], points: list[dict[str, Any]]) -> bool:
+    before = next((p for p in points if p["growth"] == e["growth_from"]), None)
+    base = float(((before or {}).get("reference") or {}).get("total_mw") or 0.0)
+    return e["delta_mw"] >= OPP_STEP_MIN_MW or (base > 0 and 100.0 * e["delta_mw"] / base >= OPP_STEP_MIN_PCT)
+
+
+def _stage_slack(st: dict[str, Any]) -> float:
+    """Verdict slack of a sweep stage: RT-chain-aware when recorded, else the SW room left."""
+    return float(st.get("chain_slack_ms", st.get("slack_ms", float(st["room_ms"]) - float(st["sw_ms"]))))
+
+
+def _timing_at(points: list[dict[str, Any]]) -> float | None:
+    """Growth at which a stage's slack reaches zero. The slack is the RT-chain-aware one when the sweep has it
+    (``chain_slack_ms`` = min(room − SW, P − chain)), else the SW room alone. Between swept points the slack is
+    interpolated; outside them it follows the observed (affine) response."""
+    by_stage: dict[str, list[tuple[float, float, float]]] = {}
     for p in points:
         for st in p.get("stages") or []:
-            if st["stage"] in seen_stages or st["sw_ms"] <= 0:
+            if st["sw_ms"] <= 0:
                 continue
-            seen_stages.add(st["stage"])
-            # Per-task growth overrides stay fixed while default_growth is swept. Use the
-            # observed affine SW response rather than scaling the fixed share with growth.
-            other = next(((q, t) for q in points if q["growth"] > p["growth"]
-                          for t in q.get("stages") or [] if t["stage"] == st["stage"]), None)
-            slope = ((other[1]["sw_ms"] - st["sw_ms"]) / (other[0]["growth"] - p["growth"])
-                     if other else st["sw_ms"] / p["growth"])
-            if st["room_ms"] <= 0 or slope <= 0 and st["sw_ms"] > st["room_ms"]:
-                g = 0.0
-            elif slope > 0:
-                g = max(0.0, p["growth"] + (st["room_ms"] - st["sw_ms"]) / slope)
-            else:
-                continue  # a fixed SW share within budget imposes no growth limit
-            timing_at = g if timing_at is None else min(timing_at, g)
+            by_stage.setdefault(st["stage"], []).append((float(p["growth"]), _stage_slack(st), float(st["sw_ms"])))
+    at: float | None = None
+    for series in by_stage.values():
+        series.sort()
+        g: float | None = None
+        first_bad = next((i for i, (_, s, _) in enumerate(series) if s < -1e-6), None)
+        if first_bad is not None and first_bad > 0:
+            (g0, s0, _), (g1, s1, _) = series[first_bad - 1], series[first_bad]
+            g = g0 + s0 * (g1 - g0) / (s0 - s1)
+        else:
+            if len(series) >= 2:
+                (g0, s0, _), (g1, s1, _) = (series[0], series[1]) if first_bad == 0 else (series[-2], series[-1])
+                slope = (s1 - s0) / (g1 - g0)
+            else:   # one point: the slack falls with the SW share of the stage
+                g0, s0, sw0 = series[0]
+                slope = -sw0 / g0 if g0 > 0 else 0.0
+            if slope < 0:
+                g = max(0.0, g0 + s0 / -slope)
+            elif first_bad == 0:
+                g = 0.0      # short already and not improving with less SW
+        if g is not None:
+            at = g if at is None else min(at, g)
+    return at
+
+
+def growth_limits(points: list[dict[str, Any]], events: list[dict[str, Any]]) -> dict[str, Any]:
+    """SW-growth tolerance = min(growth before the first significant OPP step-up of the reference placement,
+    growth at which a Timing Budget stage (RT chain included) runs out of slack).
+
+    Every reference step-up is listed (``opp_steps``); ``opp_step`` is the one that binds — the first that costs
+    ≥ OPP_STEP_MIN_MW or ≥ OPP_STEP_MIN_PCT of the CPU power before it (an earlier, larger step is what a project
+    pays first, whatever comes later)."""
+    ups = sorted((e for e in events if e["which"] == "reference" and e["mhz"][1] > e["mhz"][0]),
+                 key=lambda e: (e["growth_from"], -e["delta_mw"]))
+    steps = [e | {"significant": _significant(e, points)} for e in ups]
+    step = next((e for e in steps if e["significant"]), None)
+    largest = max(ups, key=lambda e: e["delta_mw"], default=None)
+    timing_at = _timing_at(points)
     cands = [x for x in (step["growth_from"] if step else None, timing_at) if x is not None]
     best_step = None
     if step:
@@ -550,9 +592,15 @@ def growth_limits(points: list[dict[str, Any]], events: list[dict[str, Any]]) ->
         pb = next(p for p in points if p["growth"] == step["growth_to"])
         if pa.get("best") and pb.get("best"):
             best_step = round(pb["best"]["total_mw"] - pa["best"]["total_mw"], 2)
-    return {"opp_step": step, "opp_step_best_mw": best_step, "timing_at": round(timing_at, 3) if timing_at is not None else None,
+    # first swept growth whose reference placement runs out of stage slack (the impact ``ok`` of the reference itself
+    # is always true: it compares a placement with the reference)
+    fail_at = next((p["growth"] for p in points if any(_stage_slack(st) < -1e-6 for st in p.get("stages") or []
+                                                       if st["sw_ms"] > 0)), None)
+    return {"opp_step": step, "opp_step_best_mw": best_step, "opp_steps": steps, "largest_step": largest,
+            "timing_at": round(timing_at, 3) if timing_at is not None else None, "timing_fail_at": fail_at,
             "tolerance": round(min(cands), 3) if cands else None,
-            "binding": None if not cands else ("timing" if timing_at is not None and timing_at == min(cands) else "opp")}
+            "binding": None if not cands else ("timing" if timing_at is not None and timing_at == min(cands) else "opp"),
+            "rule": {"opp_step_min_mw": OPP_STEP_MIN_MW, "opp_step_min_pct": OPP_STEP_MIN_PCT, "timing": "chain_slack"}}
 
 
 def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
@@ -582,6 +630,7 @@ def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
     release_read_connection(db)
     computed, workers = _compute_points([(i[0], i[1], i[2], request.fps, _replace(i[3], ratio_curves=False)) for i in inputs])
     coeff = bw_coefficient(db, request.cpu_profile_ref if request.cpu_profile is None else None)
+    rt_placement = None
     for g, inp, raw in zip(growths, inputs, computed, strict=True):
         res = _rebalance_finish(raw, inp[4], inp[5])
         strat = res.get("strategies") or {}
@@ -595,12 +644,20 @@ def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
             "cpu_bw_mbs": res.get("cpu_bw_mbs"),
             "bw_mw": round(float(res["cpu_bw_mbs"]) * coeff["mw_per_mbs"], 2) if res.get("cpu_bw_mbs") is not None else None,
             "feasible_count": res.get("feasible_count"),
+            # slack_ms = SW room only; chain_slack_ms = the reference placement's verdict slack (RT chain included)
             "stages": [{"stage": s["stage"], "sw_ms": s["sw_ms"], "room_ms": s["room_ms"], "slack_ms": s["slack_ms"],
+                        "chain_ms": (impact.get(s["stage"]) or {}).get("chain_ms", s.get("chain_ms")),
+                        "chain_slack_ms": (impact.get(s["stage"]) or {}).get("slack_ms", s["slack_ms"]),
                         "ok": (impact.get(s["stage"]) or {}).get("ok", s["slack_ms"] >= 0)} for s in coupling.get("stages") or []],
         })
+        if rt_placement is None:
+            rt_placement = res.get("rt_placement")
     events = opp_events(points, "reference") + opp_events(points, "best")
     return {"profile_ref": request.cpu_profile_ref, "power_params_ref": request.power_params_ref, "fps": request.fps,
             "points": points, "events": events, "limits": growth_limits(points, events),
+            # what the numbers rest on (frozen with a review snapshot)
+            "basis": {"rev": CPU_SWEEP_REV, "timing_statistic": request.timing_statistic,
+                      "timing_coupling": request.timing_coupling, "rt_placement": rt_placement},
             "elapsed_ms": round(1000 * (time.perf_counter() - t0)), "workers": workers, "bw_power": coeff}
 
 

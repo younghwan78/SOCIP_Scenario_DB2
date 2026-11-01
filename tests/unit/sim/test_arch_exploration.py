@@ -311,6 +311,84 @@ def test_sw_overhead_is_subtracted_once(uhd30):
     assert row["slack_ms"] == pytest.approx(obj["period_ms"] - row["sw_ms"] - row["hw_ms"], abs=0.001)
 
 
+def test_pipelined_sw_margin_is_per_thread_and_the_chain_gives_frames_in_flight(uhd30):
+    """Under pipelined throughput the limit is one thread (longest SW task) or one shared CPU (SW sum of its tasks),
+    not the stage chain: a chain over the period is frames in flight, and the margin stays positive."""
+    from copy import deepcopy
+    obj = deepcopy(uhd30["objective_slice"])
+    P = obj["period_ms"]
+    nrt = obj["stages"]["nrt"]
+    nrt.update({"throughput": "pipelined", "sw_ms": 0.9 * P, "hw_ms": 0.6 * P, "longest_sw_ms": 0.4 * P})
+    row = next(s for s in ax.sw_margin([obj], obj, ax.ExplorationObjective())["stages"] if s["stage"] == "nrt")
+    assert row["basis"] == "pipelined" and row["binding"] == "task"
+    assert row["margin_pct"] == pytest.approx(60.0, abs=0.01)
+    assert row["chain_margin_pct"] == pytest.approx(-50.0, abs=0.01) and row["in_flight"] == 2
+    # two tasks pinned to one CPU: their per-frame sum binds
+    nrt.update({"cpu_load_ms": 0.7 * P, "cpu_load_resource": "CPU (shared_cpu)"})
+    m = ax.sw_margin([obj], obj, ax.ExplorationObjective())
+    row = next(s for s in m["stages"] if s["stage"] == "nrt")
+    assert row["binding"] == "cpu_group" and row["bottleneck"] == "CPU (shared_cpu)"
+    assert row["margin_pct"] == pytest.approx(30.0, abs=0.01)
+    assert m["basis"] == "pipelined" and "longest SW task" in m["definition"] and m["statistic"] == "max"
+    # the stage rule is unchanged: the whole chain must fit
+    nrt.pop("throughput")
+    row = next(s for s in ax.sw_margin([obj], obj, ax.ExplorationObjective())["stages"] if s["stage"] == "nrt")
+    assert row["basis"] == "stage" and row["margin_pct"] == pytest.approx(-50.0, abs=0.01)
+
+
+def test_frames_in_flight_cover_every_stage_not_only_the_worst_margin(uhd30):
+    """P 10: NRT chain 15 ms with a 3 ms longest task, Post chain 7 ms with a 6 ms task. The worst margin is Post,
+    but NRT needs two frames in flight."""
+    from copy import deepcopy
+    obj = deepcopy(uhd30["objective_slice"])
+    obj["period_ms"] = 10.0
+    obj["stages"]["nrt"].update({"throughput": "pipelined", "sw_ms": 9.0, "hw_ms": 6.0, "longest_sw_ms": 3.0})
+    obj["stages"]["post"].update({"throughput": "pipelined", "sw_ms": 6.0, "hw_ms": 1.0, "longest_sw_ms": 6.0})
+    m = ax.sw_margin([obj], obj, ax.ExplorationObjective())
+    assert m["worst"]["stage"] == "post" and m["worst"]["in_flight"] == 1
+    assert m["in_flight"] == 2 and m["in_flight_stage"] == "nrt"
+    assert any(r.startswith("NRT stage chain 15.0 ms = 2 frame") for r in m["recommendations"])
+    from scenario_db.reporting.arch_report import _sw_detail
+    assert _sw_detail({"sw_margin": m, "period_ms": 10.0, "fps": 100}, "max")["in_flight"] == 2
+
+
+def test_pipelined_slice_keeps_the_shared_cpu_load():
+    report = {"ips": [], "fps": 30.0, "period_ms": 33.3, "eis": {"on": False}, "verdict": {"status": "ok"},
+              "intervals": {"ok": True, "preview": {"max_ms": 33.3}, "video": {"max_ms": 33.3}}, "latency": {},
+              "power": {"total_mw": 1, "cpu_mw": 0, "hw_mw": 1, "bw_mw": 0, "bw_hw_mw": 0, "bw_sw_mw": 0, "cpu_by_task": {}},
+              "bw": {"total_mbs": 0, "hw_mbs": 0, "sw_mbs": 0},
+              "stages": [{"id": "nrt", "sw_ms": 20.0, "budget_ms": 25.0, "hw_ms": 5.0, "overhead_ms": 0.0, "feasible": True,
+                          "fill_pct": 75.0, "throughput": "pipelined", "longest_sw_ms": 12.0, "chain_ms": 25.0, "sw_items": [],
+                          "cpu_groups": [{"resource": "CPU_A", "tasks": ["a", "b"], "load_ms": 18.0},
+                                         {"resource": "CPU_B", "tasks": ["c", "d"], "load_ms": 9.0}]}]}
+    s = ax._slice(report, "max", 1.0)
+    assert s["stages"]["nrt"]["cpu_load_ms"] == 18.0 and s["stages"]["nrt"]["cpu_load_resource"] == "CPU_A"
+
+
+def test_pipelined_bottleneck_names_the_longest_task_even_off_the_critical_path(uhd30):
+    """a(6)→b(6) is the SW critical path; an independent c(10) is the longest thread. The slice keeps only the
+    critical items, so the longest task is named from every item before that filter."""
+    from copy import deepcopy
+    obj = deepcopy(uhd30["objective_slice"])
+    items = [{"task": "a", "kind": "sw", "runtime_ms": 6.0, "latency_ms": 0.0, "critical": True},
+             {"task": "b", "kind": "sw", "runtime_ms": 6.0, "latency_ms": 0.0, "critical": True},
+             {"task": "c", "kind": "sw", "runtime_ms": 10.0, "latency_ms": 0.0, "critical": False}]
+    report = {"ips": [], "fps": 125.0, "period_ms": 8.0, "eis": {"on": False}, "verdict": {"status": "fail"},
+              "intervals": {"ok": True, "preview": {"max_ms": 8.0}, "video": {"max_ms": 8.0}}, "latency": {},
+              "power": {"total_mw": 1, "cpu_mw": 0, "hw_mw": 1, "bw_mw": 0, "bw_hw_mw": 0, "bw_sw_mw": 0, "cpu_by_task": {}},
+              "bw": {"total_mbs": 0, "hw_mbs": 0, "sw_mbs": 0},
+              "stages": [{"id": "nrt", "sw_ms": 12.0, "budget_ms": 6.0, "hw_ms": 1.0, "overhead_ms": 0.0, "feasible": False,
+                          "fill_pct": 160.0, "throughput": "pipelined", "longest_sw_ms": 10.0, "chain_ms": 13.0, "sw_items": items,
+                          "cpu_groups": []}]}
+    s = ax._slice(report, "max", 1.0)
+    assert [i["task"] for i in s["stages"]["nrt"]["sw_items"]] == ["a", "b"] and s["stages"]["nrt"]["longest_sw_task"] == "c"
+    obj["period_ms"], obj["stages"] = 8.0, {"nrt": s["stages"]["nrt"]}
+    m = ax.sw_margin([obj], obj, ax.ExplorationObjective())
+    w = m["worst"]
+    assert w["bottleneck"] == "c" and w["binding_ms"] == 10.0 and w["margin_pct"] == pytest.approx(-25.0)
+    assert any("c 10.0 ms" in r for r in m["recommendations"])
+
+
 def test_failed_resimulation_cannot_report_spec_ok(graph_factory, dvfs, monkeypatch):
     monkeypatch.setattr(ax, "_verify", lambda *args: {"ok": False})
     spec = ax.ArchExplorationSpec(axes={"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}})

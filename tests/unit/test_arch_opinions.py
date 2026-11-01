@@ -75,6 +75,10 @@ def test_heavy_highspeed_and_missing_power_keep_explicit_limits():
     rows[1]['power'] = {}
     blocks = {b['category']: b for b in build_opinions(rows, [])}
     heavy = ' '.join(blocks['heavy']['opinions'])
-    assert 'contention' in heavy and '과소 추정' in heavy and 'SW 증가 여유 부족' in heavy
+    # a low margin points at the SW growth check (the growth tolerance decides whether a clock step is needed)
+    assert 'contention' in heavy and '과소 추정' in heavy and 'SW 증가 여유 작음' in heavy
+    rows[0]['sw'] = {'growth_tolerance': 1.25}
+    heavy = ' '.join({b['category']: b for b in build_opinions(rows, [])}['heavy']['opinions'])
+    assert 'SW 증가 허용 ×1.25' in heavy and 'clock 상향 필요' not in heavy
     assert any('batch' in text for text in blocks['highspeed']['opinions'])
     assert any('UHD60 vs FHD60' in text for text in blocks['fps60']['opinions'])

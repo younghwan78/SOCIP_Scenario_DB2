@@ -43,9 +43,13 @@ export interface DomainRow { domain: string; base_level: number; nodes: string[]
 export interface MarginStage {
   stage: string; slack_ms: number; margin_pct: number; sw_ms: number; hw_ms: number; sw_share_pct: number
   latency_share_pct: number; bottleneck: string | null; bottleneck_ms: number; bottleneck_share_pct: number
+  /** engine rev ≥ 15: the throughput rule of the margin; pipelined = longest task / shared-CPU load, the stage chain gives frames in flight */
+  basis?: 'stage' | 'pipelined'; binding?: 'task' | 'cpu_group'; binding_ms?: number
+  chain_ms?: number; chain_margin_pct?: number; in_flight?: number
 }
 export interface SwMargin {
   stages: MarginStage[]; worst: MarginStage | null; growth_tolerance: number | null; growth_tested_max: number | null; stat_spread_ms: number; verdict: string; recommendations: string[]
+  basis?: 'stage' | 'pipelined'; statistic?: string; definition?: string
   /** engine rev ≥ 7: growth absorbed with the recommended DVFS levels held (robustness), vs re-selected (growth_tolerance) */
   growth_tolerance_fixed?: number | null; growth_fixed_rows?: { runtime_scale: number; ok: boolean; short_domains: string[] }[]
 }
@@ -428,7 +432,10 @@ export const archApi = {
     send<ReportMeta>('PATCH', `/arch/reports/${encodeURIComponent(id)}`, { status, ...review }),
   reportXlsxUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/xlsx`,
   reportPackageUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/package`,
-  reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string; snapshot?: string | null; current?: string | null }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
+  reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string; snapshot?: string | null; current?: string | null }[]
+    /** rows computed by an older exploration engine (API ≥ arch-exploration/15) — not part of ``stale``: regenerating
+     *  does not fix them, re-exploration + registration does */
+    engine_rev?: string; old_engine?: { variant_id: string; engine_rev: string }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
   reportHtmlUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/html`,
 }
 

@@ -9,17 +9,37 @@ export interface SweepPoint {
   winner: string | null; big_gain_mw: number | null; cpu_bw_mbs: number | null; feasible_count: number | null
   /** CPU-09: cpu_bw_mbs × BW coefficient (API ≥ 2026-10-18) */
   bw_mw?: number | null
-  stages: { stage: string; sw_ms: number; room_ms: number; slack_ms: number; ok: boolean }[]
+  /** slack_ms = SW room only; chain_slack_ms (API ≥ cpu-sweep/2) = the reference placement's RT-chain-aware slack */
+  stages: { stage: string; sw_ms: number; room_ms: number; slack_ms: number; ok: boolean; chain_ms?: number | null; chain_slack_ms?: number }[]
 }
-export interface OppEvent { which: 'reference' | 'best'; growth_from: number; growth_to: number; cluster: string; mhz: [number, number]; delta_mw: number }
+export interface OppEvent { which: 'reference' | 'best'; growth_from: number; growth_to: number; cluster: string; mhz: [number, number]; delta_mw: number; significant?: boolean }
 export interface GrowthSweep {
   profile_ref: string | null; power_params_ref: string; fps: number
   points: SweepPoint[]; events: OppEvent[]
-  limits: { opp_step: OppEvent | null; opp_step_best_mw: number | null; timing_at: number | null; tolerance: number | null; binding: 'opp' | 'timing' | null }
+  /** opp_step = the first significant OPP step-up (cpu-sweep/2; before: the largest) — every step-up in opp_steps */
+  limits: { opp_step: OppEvent | null; opp_step_best_mw: number | null; timing_at: number | null; tolerance: number | null; binding: 'opp' | 'timing' | null
+    opp_steps?: OppEvent[]; largest_step?: OppEvent | null; timing_fail_at?: number | null }
+  basis?: { rev: string; timing_statistic: string; timing_coupling: string; rt_placement: string | null }
   elapsed_ms: number
   /** worker processes used (API ≥ 2026-10-18) */
   workers?: number
   bw_power?: BwCoefficient
+}
+
+type SweepStage = SweepPoint['stages'][number]
+
+/** The stage slack the verdict uses: RT-chain-aware (cpu-sweep/2), else the SW room of older responses. */
+export const verdictSlack = (st: SweepStage): number => st.chain_slack_ms ?? st.slack_ms
+
+/** Tooltip row of one stage at a growth point: the verdict slack, with the SW room when the RT chain binds first. */
+export function sweepStageTip(st: SweepStage): { k: string; v: string; tone: 'bad' | undefined } {
+  const s = verdictSlack(st)
+  const chainBinds = st.chain_slack_ms !== undefined && st.chain_slack_ms < st.slack_ms - 1e-6
+  return {
+    k: `${st.stage.toUpperCase()} 여유`,
+    v: `${s.toFixed(2)} ms${chainBinds ? ` (RT chain · SW room ${st.slack_ms.toFixed(2)})` : ''}`,
+    tone: s < 0 ? 'bad' : undefined,
+  }
 }
 
 /** First growth at which ``cluster`` steps up on the reference placement (CPU-08). */
