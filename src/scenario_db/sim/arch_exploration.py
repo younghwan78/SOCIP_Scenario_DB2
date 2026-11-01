@@ -1236,8 +1236,12 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
                for s in slices if worst and s["runtime_scale"] == obj.runtime_scale}
     spread = (max(by_stat.values()) - min(by_stat.values())) if by_stat else 0.0
     basis = "pipelined" if any(r["basis"] == "pipelined" for r in rows) else "stage"
+    # frames in flight over every stage: the stage with the least margin need not hold the longest chain
+    deepest = max(rows, key=lambda r: (r["in_flight"], r["chain_ms"]), default=None)
     out = {
         "basis": basis,
+        "in_flight": deepest["in_flight"] if deepest else None,
+        "in_flight_stage": deepest["stage"] if deepest else None,
         "definition": SW_MARGIN_DEFINITION[basis],
         "statistic": obj.statistic,
         "stages": rows,
@@ -1273,8 +1277,9 @@ def recommendations(m: dict[str, Any], s: dict[str, Any]) -> list[str]:
             f"spec 미달: {w['stage'].upper()} SW {w['sw_ms']:.1f} ms / period {P:.2f} ms — "
             f"SW 경로 단축 필요 (≥{need:.1f} ms), 병목 {w['bottleneck']} {w['bottleneck_ms']:.1f} ms"
         )
-    if pipelined and (w.get("in_flight") or 1) > 1:
-        recs.append(f"{w['stage'].upper()} stage chain {w['chain_ms']:.1f} ms = {w['in_flight']} frame 동시 처리 "
+    deep = next((r for r in m.get("stages") or [] if r["stage"] == m.get("in_flight_stage")), w)
+    if pipelined and (deep.get("in_flight") or 1) > 1:
+        recs.append(f"{deep['stage'].upper()} stage chain {deep['chain_ms']:.1f} ms = {deep['in_flight']} frame 동시 처리 "
                     "(pipelined 전제 — buffer 수 · latency 확인)")
     if w["bottleneck_share_pct"] > 50 and not pipelined:
         recs.append(
@@ -1439,6 +1444,8 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
     return {
         "fps": s["fps"], "period_ms": s["period_ms"], "statistic": case["statistic"],
         "runtime_scale": case["runtime_scale"], "eis_on": s["eis_on"],
+        # CPU power basis (flat fps term / measured profile): a switch moves CPU power with no design change
+        "cpu_basis": s.get("cpu_basis"),
         "power": {k: round(case[k], 3) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
         "bw_mbs": round(case["bw_mbs"], 2), "bw_ip_mbs": round(case["bw_ip_mbs"], 2), "bw_cpu_mbs": round(case["bw_cpu_mbs"], 2),
         "base_bw_mbs": s["bw"]["total_mbs"], "base_bw_mw": s["power"]["bw_mw"],

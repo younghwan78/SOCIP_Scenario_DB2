@@ -41,7 +41,8 @@ def explain(reason: str, period_ms: float | None = None) -> dict[str, str]:
         sw, stage = float(m["sw"]), m["stage"].strip()
         period = f" > frame 주기 {period_ms:.2f} ms" if period_ms else " > frame 주기"
         need = f"{sw - period_ms:.1f} ms 이상 단축, 또는 " if period_ms and sw > period_ms else ""
-        n = max(2, int(sw // period_ms) + 1) if period_ms else 2
+        # a task as long as the period still fits one thread: ceil, not floor + 1
+        n = max(2, math.ceil(sw / period_ms - 1e-9)) if period_ms else 2
         return {"code": "sw_budget", "raw": reason,
                 "text": f"{stage} 최장 SW task {sw:.1f} ms{period} → 한 thread가 1 frame 안에 끝나지 않음 (pipelined 판정)",
                 "action": f"해당 task {need}task 분할(thread 병렬 {n}개) 또는 {n}-frame batch"}

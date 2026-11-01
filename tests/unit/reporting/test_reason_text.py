@@ -72,6 +72,8 @@ def test_pipelined_failures_are_sw_budget_with_a_thread_action():
     g = explain("Post-NRT: CPU CPU (shared_cpu)의 SW 합 12.00 ms > frame period (같은 thread/core: eis, post_irta)", 1000 / 120)
     assert g["code"] == "sw_budget" and "CPU (shared_cpu)" in g["text"] and "(eis, post_irta)" in g["text"]
     assert "다른 core" in g["action"] and "3.7 ms 이상 단축" in g["action"]
+    # a task exactly two periods long needs two threads, not three
+    assert "2-frame batch" in explain("NRT: SW task 20.00 ms > frame period (한 thread가 1 frame 안에 못 끝남)", 10.0)["action"]
     d = diagnose([e], 240)
     assert d["code"] == "sw_budget" and "pipelined 판정" in d["focus"] and d["actions"][0] == e["action"]
     assert d["severity"].startswith("SW 9.1 ms")

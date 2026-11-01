@@ -295,7 +295,7 @@ SUMMARY_KEYS = ("scenario_id", "variant_id", "design_conditions", "severity", "f
                 "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "keep_total_mw", "throughput_model",
                 "power_budget")
 SW_MARGIN_SUMMARY_KEYS = ("worst", "growth_tolerance", "growth_tolerance_fixed", "growth_tested_max", "recommendations",
-                          "verdict", "stat_spread_ms", "basis", "statistic")
+                          "verdict", "stat_spread_ms", "basis", "statistic", "in_flight", "in_flight_stage")
 
 
 def variant_summary(v: dict[str, Any]) -> dict[str, Any]:
@@ -802,6 +802,9 @@ def _attributions(db: Session, currents: list[Prediction], olds: dict[str, Predi
         if old is None:
             continue
         lin = lineage_differences(old.metrics.get("model_lineage"), cur.metrics.get("model_lineage"))
+        c0, c1 = old.metrics.get("cpu_basis"), cur.metrics.get("cpu_basis")
+        if c0 and c1 and c0 != c1:   # recorded from engine 15; before that the engine change already flags the row
+            lin = [*lin, {"field": "cpu_basis", "old": c0, "new": c1}]
         e0, e1 = engines.get(old.exploration_run_ref), engines.get(cur.exploration_run_ref)
         out[(cur.scenario_ref, cur.variant_ref)] = attribute(old.metrics, cur.metrics) | {
             "lineage_changes": lin, "engine_change": [e0, e1] if e0 != e1 else None}

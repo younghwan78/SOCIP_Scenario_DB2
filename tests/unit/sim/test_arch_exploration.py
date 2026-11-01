@@ -336,6 +336,22 @@ def test_pipelined_sw_margin_is_per_thread_and_the_chain_gives_frames_in_flight(
     assert row["basis"] == "stage" and row["margin_pct"] == pytest.approx(-50.0, abs=0.01)
 
 
+def test_frames_in_flight_cover_every_stage_not_only_the_worst_margin(uhd30):
+    """P 10: NRT chain 15 ms with a 3 ms longest task, Post chain 7 ms with a 6 ms task. The worst margin is Post,
+    but NRT needs two frames in flight."""
+    from copy import deepcopy
+    obj = deepcopy(uhd30["objective_slice"])
+    obj["period_ms"] = 10.0
+    obj["stages"]["nrt"].update({"throughput": "pipelined", "sw_ms": 9.0, "hw_ms": 6.0, "longest_sw_ms": 3.0})
+    obj["stages"]["post"].update({"throughput": "pipelined", "sw_ms": 6.0, "hw_ms": 1.0, "longest_sw_ms": 6.0})
+    m = ax.sw_margin([obj], obj, ax.ExplorationObjective())
+    assert m["worst"]["stage"] == "post" and m["worst"]["in_flight"] == 1
+    assert m["in_flight"] == 2 and m["in_flight_stage"] == "nrt"
+    assert any(r.startswith("NRT stage chain 15.0 ms = 2 frame") for r in m["recommendations"])
+    from scenario_db.reporting.arch_report import _sw_detail
+    assert _sw_detail({"sw_margin": m, "period_ms": 10.0, "fps": 100}, "max")["in_flight"] == 2
+
+
 def test_pipelined_slice_keeps_the_shared_cpu_load():
     report = {"ips": [], "fps": 30.0, "period_ms": 33.3, "eis": {"on": False}, "verdict": {"status": "ok"},
               "intervals": {"ok": True, "preview": {"max_ms": 33.3}, "video": {"max_ms": 33.3}}, "latency": {},

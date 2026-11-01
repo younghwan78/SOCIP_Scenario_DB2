@@ -51,6 +51,9 @@ def test_diff_names_a_model_only_change():
     assert {"item": "계산 모델", "prev": ["v1"], "cur": ["v2"]} in d["basis"]
     html = previous_block(d)
     assert "계산 모델 변경" in html and "설계 변화로 읽지 말 것" in html and "['v1']" not in html
+    # same lineage, CPU power switched from the flat term to a measured profile: still a model change
+    prev["scenarios"][1]["cpu_basis"], cur["scenarios"][1]["cpu_basis"] = "flat", "profile"
+    assert {r["variant_id"]: r["model_changed"] for r in report_diff(prev, cur, {})["power"]["changed"]}["b"] is True
 
 
 def test_dumbbell_shows_reference_source_and_ma():
