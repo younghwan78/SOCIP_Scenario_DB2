@@ -212,9 +212,13 @@ pipeline task graph(HW node 경유 포함, `frame_offset`이 있는 다음 frame
 (`timing_budget` stage의 `sw_order`). 예: E2600 uhd30 NRT = `post_crta → pre_me_rta → post_irta`.
 
 - 순서가 정해진 두 task는 한 frame 안에서 동시에 돌지 않으므로 같은 CPU에 있어도 **서로의 대기에 넣지 않는다**
-  (`priority_response`, 대기 상한 모두). cpupri 배치에서도 서로를 피하지 않는다.
+  (`priority_response`, 대기 상한 모두). 배치(cpupri)는 이 순서를 쓰지 않고 RT thread를 모두 동시 실행으로 본다
+  (깨어나는 순간 실행 중인 task만 보는 cpupri에서 순서가 정해진 member는 같은 CPU · 다른 CPU 모두 가능 — 배치가 후보의
+  판정에 따라 바뀌지 않게 함).
 - 순서는 stage chain(SW + HW + overhead)이 frame 주기 안에 끝날 때만 쓴다. chain이 주기보다 길면 다음 frame의
   같은 stage와 겹칠 수 있으므로 모두 대기에 넣는다 (보수적; SW 증가 배율이 커져 넘어가는 경우 포함).
+  후보마다 다시 판정한다: stage SW = Timing Budget critical path에서 각 task의 runtime을 후보의 CPU 시간 ÷ 측정 배치
+  시간만큼 늘리고(release latency는 고정) 최장 경로를 다시 구한다 — 병렬 분기(PIP front / rear)는 더하지 않는다.
 - stage가 다른 task, pipeline에 없는 task(HAL thread 등), 순서 없는 병렬 분기는 동시에 돌 수 있는 것으로 본다.
 - 순서는 variant의 pipeline에서 읽으므로 **다음 과제에서 RT chain 구성(member · 순서 · 분기 · stage)이 바뀌어도
   코드 수정 없이 반영**된다. 스케줄링 클래스는 그 과제 power model의 `task_policy`가 정한다. chain에서 RT task와

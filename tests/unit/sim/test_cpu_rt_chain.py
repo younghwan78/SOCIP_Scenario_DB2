@@ -113,7 +113,7 @@ def test_task_time_on_a_cpu_sums_its_threads_there_and_the_bound_skips_ordered_c
 
 
 # ---------------------------------------------------------------- RT placement
-def test_cpupri_spreads_concurrent_rt_threads_and_lets_chain_members_share():
+def test_cpupri_spreads_rt_threads_chain_members_included():
     model = _model(cores=2, rt_placement="cpupri", task_policy={"x": RT, "y": RT, "cfs": {}})
     eas = _model(cores=2, task_policy={"x": RT, "y": RT})
     big = [Thread("cfs", "cfs", 9e6, 0.0)]
@@ -128,8 +128,8 @@ def test_cpupri_spreads_concurrent_rt_threads_and_lets_chain_members_share():
     assert sorted(cpus(eas)) == [["cfs"], ["x", "y"]]
     # cpupri: the second RT thread avoids the CPU that runs the first one (CFS does not block an RT thread)
     assert sorted(cpus(model)) == [["cfs", "y"], ["x"]]
-    # members of an ordered RT chain do not run at once, so they stay on the CPU with the most spare capacity
-    assert sorted(cpus(model, serial=[("x", "y")])) == [["cfs"], ["x", "y"]]
+    # ordered RT chain members count too: the placement never depends on a candidate's chain verdict
+    assert sorted(cpus(model, serial=[("x", "y")])) == [["cfs", "y"], ["x"]]
     with pytest.raises(ValueError):
         CpuSchedulerParams(rt_placement="push")
 
@@ -269,22 +269,52 @@ def test_parallel_branches_use_the_critical_path_not_the_sum():
     assert row["delta_sw_ms"] == pytest.approx(6.0)
 
 
-def test_cpupri_places_again_when_the_candidate_loses_the_chain_order():
+def test_placement_is_the_same_whether_or_not_the_candidate_keeps_the_chain_order():
     model = _model(cores=2, rt_placement="cpupri", task_policy={"x": RT, "y": RT})
     ths = [Thread("cfs", "cfs", 9e6, 0.0), Thread("x", "x", 1e6, 0.0), Thread("y", "y", 1e6, 0.0)]
     pol = {t: cpu_sched.policy_from(RT) for t in ("x", "y")}
     st = StageOrder(stage="nrt", pairs=(("x", "y"),), sw_ms=2.0, fixed_ms=30.0, items=(("x", 1.0), ("y", 1.0)), period_ms=33.3)
 
-    def where(anchor):
+    def run(anchor):
         sched = SchedConfig.from_model(model)
         ctx = _Ctx(model, sched, 1000 / 30, capacities(model, sched), {c.name: c for c in model.clusters}, {},
                    frozenset({frozenset(("x", "y"))}), frozenset(), (st,), anchor)
         case = evaluate(ths, ctx, pol, budgets_ms={}, bw_mbs=0.0)
-        return [sorted(t for t in cpu["threads"]) for cpu in case["clusters"]["MID"]["cpus"]], case["chain_serial"]
+        return [sorted(cpu["threads"]) for cpu in case["clusters"]["MID"]["cpus"]], case
 
-    # order holds (task times as measured): the chain members may share a CPU
-    shared, held = where({"x": 10.0, "y": 10.0})
-    assert held == ["nrt"] and sorted(shared) == [["cfs"], ["x", "y"]]
-    # the candidate is much slower than measured: the chain overruns the period, so the RT threads spread
-    spread, held = where({"x": 0.1, "y": 0.1})
-    assert held == [] and sorted(len(c) for c in spread) == [1, 2] and ["x", "y"] not in spread
+    kept, a = run({"x": 10.0, "y": 10.0})          # chain fits: x and y never wait for each other
+    lost, b = run({"x": 0.1, "y": 0.1})            # far slower than measured: the chain overruns, they may overlap
+    assert kept == lost and a["chain_serial"] == ["nrt"] and b["chain_serial"] == []
+
+
+def test_an_overloaded_cpu_is_infeasible_even_when_each_task_fits_the_period():
+    one = _model(cores=1)
+    profile = CpuProfile(tasks=[CpuTaskProfile(task=t, cluster="MID", cycles=40e6) for t in ("a", "b")],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    ref = cpu_sweep(profile, target=one, fps=30, spec=SweepSpec())["reference"]
+    assert all(ms < 1000 / 30 for ms in ref["task_ms"].values())     # 20 ms each at 2 GHz
+    assert ref["clusters"]["MID"]["cpus"][0]["overloaded"]
+    assert ref["flags"].get("overloaded_cpu") and not ref["feasible"]
+
+
+def test_release_latency_stays_on_the_critical_path():
+    """runtime 3 + latency 10 next to runtime 8 (parallel): SW 13 ms; the first twice as slow -> 16 ms."""
+    st = StageOrder(stage="nrt", pairs=(), sw_ms=13.0, fixed_ms=18.0, items=(("a", 3.0), ("b", 8.0)), period_ms=33.3,
+                    latency_ms=(("a", 10.0),))
+    assert st.holds({"a": 1.0, "b": 1.0}, {"a": 1.0, "b": 1.0})                  # 18 + 13 = 31
+    assert not st.holds({"a": 2.0, "b": 1.0}, {"a": 1.0, "b": 1.0})              # 18 + 16 = 34 > 33.3 (runtime only: 31)
+    assert longest_path({"a": 6.0, "b": 8.0}, (), {"a": 10.0}) == pytest.approx(16.0)
+    coupling = {"period_ms": 33.3, "stages": [{"stage": "nrt", "sw_ms": 13.0, "hw_ms": 17.0, "overhead_ms": 0.0, "room_ms": 16.3,
+                                              "tasks": [{"task": "a", "ms": 3.0, "latency_ms": 10.0}, {"task": "b", "ms": 8.0}],
+                                              "order": []}]}
+    row = svc.timing_impact(coupling, {"task_ms": {"a": 1.0, "b": 1.0}}, {"task_ms": {"a": 2.0, "b": 1.0}})[0]
+    assert row["delta_sw_ms"] == pytest.approx(3.0)
+
+
+def test_the_variant_sw_tasks_load_once_for_any_number_of_growths(monkeypatch):
+    calls = []
+    monkeypatch.setattr("scenario_db.api.services.timing_budget.analyze_timing_budget_request",
+                        lambda db, req: type("R", (), {"report": {"period_ms": 33.3, "stages": []}})())
+    monkeypatch.setattr(svc, "_sw_tasks", lambda db, s, v: calls.append(1) or {"t0"})
+    svc.timing_stretch(None, "uc", "v", growth={f"t{i}": 1.1 for i in range(20)})
+    assert len(calls) == 1

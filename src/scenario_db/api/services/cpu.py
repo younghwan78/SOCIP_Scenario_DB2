@@ -102,7 +102,8 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
     opts = TimingBudgetOptions(statistic=statistic, runtime_scale=runtime_scale, include_whatif=False)
     if growth:
         # CPU-only tasks ((other), HAL threads) have no Timing Budget item: their growth only scales CPU demand
-        growth = {t: g for t, g in growth.items() if t in _sw_tasks(db, scenario_id, variant_id)}
+        sw_tasks = _sw_tasks(db, scenario_id, variant_id)
+        growth = {t: g for t, g in growth.items() if t in sw_tasks}
     if growth:
         if runtime_scale <= 0:
             raise UnprocessableError("task-specific growth needs positive default_growth for timing coupling")
@@ -124,7 +125,8 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
         stages.append({"stage": st["id"], "sw_ms": round(sw, 3), "hw_ms": round(float(st.get("hw_ms") or 0.0), 3),
                        "overhead_ms": round(float(st.get("overhead_ms") or 0.0), 3), "room_ms": round(room, 3),
                        "slack_ms": round(room - sw, 3), "stretch": round(factor, 3),
-                       "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0)} for i in items],
+                       "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0),
+                                  "latency_ms": float(i.get("latency_ms") or 0.0)} for i in items],
                        # SW pairs the pipeline orders within one frame (RT chain), from the variant's task graph
                        "order": [list(pair) for pair in st.get("sw_order") or []]})
     return _mark_serial({"mode": "stage_slack", "scenario_id": scenario_id, "variant_id": variant_id, "statistic": statistic,
@@ -163,7 +165,8 @@ def coupling_stages(coupling: dict[str, Any] | None) -> tuple[StageOrder, ...]:
     return tuple(StageOrder(stage=str(st["stage"]), pairs=tuple((str(a), str(b)) for a, b in st["order"]),
                             sw_ms=float(st["sw_ms"]), fixed_ms=float(st["hw_ms"]) + float(st["overhead_ms"]),
                             items=tuple((str(t["task"]), float(t["ms"])) for t in st["tasks"]),
-                            period_ms=float(coupling["period_ms"]))
+                            period_ms=float(coupling["period_ms"]),
+                            latency_ms=tuple((str(t["task"]), float(t.get("latency_ms") or 0.0)) for t in st["tasks"]))
                  for st in coupling["stages"] if st.get("order"))
 
 
@@ -176,7 +179,8 @@ def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dic
                   if ref_ms.get(it["task"]) and new_ms.get(it["task"]) else it["ms"] for it in st["tasks"]}
         if "order" in st:     # the stage SW is its critical path: parallel branches do not add up
             pairs = [(a, b) for a, b in st["order"]]
-            add = longest_path(scaled, pairs) - longest_path({it["task"]: it["ms"] for it in st["tasks"]}, pairs)
+            lat = {it["task"]: float(it.get("latency_ms") or 0.0) for it in st["tasks"]}
+            add = longest_path(scaled, pairs, lat) - longest_path({it["task"]: it["ms"] for it in st["tasks"]}, pairs, lat)
         else:                 # an older coupling without the order: every item in sequence
             add = sum(scaled[it["task"]] - it["ms"] for it in st["tasks"])
         sw = st["sw_ms"] + add
@@ -212,7 +216,7 @@ def scale_coupling(coupling: dict[str, Any], runtime_scale: float) -> dict[str, 
     for st in coupling["stages"]:
         sw = st["sw_ms"] * k
         factor = max(1.0, st["room_ms"] / sw) if sw > 0 else 1.0
-        tasks = [{"task": t["task"], "ms": t["ms"] * k} for t in st["tasks"]]
+        tasks = [t | {"ms": t["ms"] * k} for t in st["tasks"]]   # runtime scales, latency stays
         for t in tasks:
             stretch[t["task"]] = min(stretch.get(t["task"], math.inf), factor)
         stages.append(st | {"sw_ms": round(sw, 3), "slack_ms": round(st["room_ms"] - sw, 3), "stretch": round(factor, 3), "tasks": tasks})

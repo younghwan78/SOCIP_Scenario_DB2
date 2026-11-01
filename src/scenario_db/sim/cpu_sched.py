@@ -169,19 +169,24 @@ class StageOrder:
     pairs: tuple[tuple[str, str], ...]
     sw_ms: float                          # stage SW of the Timing Budget (critical path) at the measured placement
     fixed_ms: float                       # stage HW + overhead
-    items: tuple[tuple[str, float], ...]  # (task, Timing Budget SW ms)
+    items: tuple[tuple[str, float], ...]  # (task, Timing Budget SW runtime ms) — scales with the CPU task time
     period_ms: float
+    latency_ms: tuple[tuple[str, float], ...] = ()   # (task, fixed release latency ms) — on the path, does not scale
 
     def holds(self, task_ms: dict[str, float], anchor: dict[str, float]) -> bool:
         base = dict(self.items)
         cand = {t: ms * (task_ms[t] / anchor[t]) if anchor.get(t) and t in task_ms else ms for t, ms in self.items}
-        sw = self.sw_ms + longest_path(cand, self.pairs) - longest_path(base, self.pairs)
+        lat = dict(self.latency_ms)
+        sw = self.sw_ms + longest_path(cand, self.pairs, lat) - longest_path(base, self.pairs, lat)
         return self.fixed_ms + sw <= self.period_ms + 1e-6
 
 
-def longest_path(ms: dict[str, float], pairs: tuple[tuple[str, str], ...] | list[tuple[str, str]]) -> float:
+def longest_path(ms: dict[str, float], pairs: tuple[tuple[str, str], ...] | list[tuple[str, str]],
+                 fixed: dict[str, float] | None = None) -> float:
     """Longest ordered path of SW items (``pairs`` = [a, b]: b after a, acyclic): a stage's SW critical path, where
-    parallel branches (front / rear of PIP) do not add up. Items in no pair are paths of their own."""
+    parallel branches (front / rear of PIP) do not add up. Items in no pair are paths of their own. ``fixed``: per-item
+    time on the path that does not scale (release latency), as in the Timing Budget's critical SW."""
+    fixed = fixed or {}
     preds: dict[str, list[str]] = {}
     for a, b in pairs:
         if a in ms and b in ms:
@@ -190,7 +195,7 @@ def longest_path(ms: dict[str, float], pairs: tuple[tuple[str, str], ...] | list
 
     def end(t: str, depth: int = 0) -> float:
         if t not in done:
-            done[t] = ms[t] + max((end(p, depth + 1) for p in preds.get(t, ()) if depth < len(ms)), default=0.0)
+            done[t] = ms[t] + fixed.get(t, 0.0) + max((end(p, depth + 1) for p in preds.get(t, ()) if depth < len(ms)), default=0.0)
         return done[t]
     return max((end(t) for t in ms), default=0.0)
 
@@ -379,7 +384,7 @@ class _Ctx:
     caps: dict[str, float]
     by_name: dict[str, ClusterModel]
     budgets_ms: dict[str, float] = field(default_factory=dict)
-    # task pairs ordered within a frame (Timing Budget stage chain): no mutual wait, no RT push between them.
+    # task pairs ordered within a frame (Timing Budget stage chain): no mutual wait (the placement ignores it).
     # ``serial`` = fixed pairs + the stages whose order holds at the measured placement (placement uses it);
     # a candidate's waits re-check each stage with its own task times (``serial_for``) against ``anchor_ms``
     serial: frozenset[frozenset[str]] = frozenset()
@@ -532,11 +537,8 @@ def _cluster_eval(ctx: _Ctx, name: str, cpus: list[list[Thread]], policies: dict
 
 # ------------------------------------------------------------------ EAS placement
 def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy],
-              thread_allowed: dict[Thread, str] | None = None,
-              serial: frozenset[frozenset[str]] | None = None) -> tuple[dict[str, list[list[Thread]]], list[str]]:
-    """``thread_allowed`` pins single threads to one cluster (rebalance: threads frozen where EAS put them).
-    ``serial``: the in-frame order cpupri may ignore (default ``ctx.serial``, the measured placement's)."""
-    chain_order = ctx.serial if serial is None else serial
+              thread_allowed: dict[Thread, str] | None = None) -> tuple[dict[str, list[list[Thread]]], list[str]]:
+    """``thread_allowed`` pins single threads to one cluster (rebalance: threads frozen where EAS put them)."""
     slots: dict[str, list[list[Thread]]] = {c.name: [[] for _ in range(c.cores)] for c in ctx.model.clusters}
     # running util sum per CPU at fmax (same accumulation order as summing the CPU's thread list)
     loads: dict[str, list[float]] = {c.name: [0.0] * c.cores for c in ctx.model.clusters}
@@ -549,10 +551,12 @@ def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy],
 
     cpupri = ctx.sched.rt_placement == "cpupri"
 
-    def rt_level(name: str, index: int, th: Thread) -> int:
-        """Highest priority (lowest kernel prio) among the RT threads on the CPU that can run with ``th``; 1000 = none."""
+    def rt_level(name: str, index: int) -> int:
+        """Highest priority (lowest kernel prio) among the RT threads already on the CPU; 1000 = none. Every RT thread
+        counts, RT chain members included: at a wakeup cpupri only sees what runs, and for ordered members sharing
+        and spreading are both possible — so the placement does not depend on a candidate's chain verdict."""
         return min((policies.get(t.task, _DEFAULT_POLICY).kernel_prio for t in slots[name][index]
-                    if policies.get(t.task, _DEFAULT_POLICY).is_rt and concurrent(t.task, th.task, chain_order)), default=1000)
+                    if policies.get(t.task, _DEFAULT_POLICY).is_rt), default=1000)
 
     overutilized: list[str] = []
     biggest = max(ctx.caps, key=lambda n: (ctx.caps[n], n))
@@ -573,7 +577,7 @@ def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy],
                 if (cur + u) * ctx.sched.fits_margin > cap + 1e-9:
                     continue
                 # cpupri: the CPU running the lowest-priority concurrent RT work first, then the most spare capacity
-                cpu_key: tuple[float, float] = (rt_level(name, index, th) if push else 0, cap - cur)
+                cpu_key: tuple[float, float] = (rt_level(name, index) if push else 0, cap - cur)
                 if cpu_key > best_key:
                     best, best_key = index, cpu_key
             if best is not None:
@@ -607,9 +611,9 @@ def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy],
 
 
 def _place_and_time(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy],
-                    pinned_threads: dict[Thread, str] | None, order: frozenset[frozenset[str]]) -> tuple[Any, ...]:
+                    pinned_threads: dict[Thread, str] | None) -> tuple[Any, ...]:
     """Placement, cluster clocks and each task's own time on its CPUs (a task's threads on one CPU in sequence)."""
-    slots, overutilized = eas_place(threads, ctx, policies, pinned_threads, order)
+    slots, overutilized = eas_place(threads, ctx, policies, pinned_threads)
     clusters_out: dict[str, Any] = {}
     task_ms: dict[str, float] = {}
     where: dict[str, set[str]] = {}
@@ -634,6 +638,7 @@ def _place_and_time(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPo
                 task_ms[th.task] = max(task_ms.get(th.task, 0.0), mine[th.task])
                 where.setdefault(th.task, set()).add(c.name)
                 signature.append((th.label, c.name, index))
+        overloaded = overloaded or any(r["overloaded"] for r in row["cpus"])
     return slots, overutilized, clusters_out, per_cpu, task_ms, where, signature, shared, overloaded
 
 
@@ -648,16 +653,9 @@ def evaluate(
     dsu_policy: cpu_dsu.DsuPolicy | None = None,
     pinned_threads: dict[Thread, str] | None = None,
 ) -> dict[str, Any]:
-    # cpupri lets RT chain members share a CPU only while their order holds; a candidate whose chain no longer fits
-    # the period is placed again without it (a few rounds: the order follows the task times of the placement)
-    placement_order = ctx.serial
-    for _ in range(3):
-        placed = _place_and_time(threads, ctx, policies, pinned_threads, placement_order)
-        serial, chain_held = ctx.serial_for(placed[4])
-        if serial == placement_order or ctx.sched.rt_placement != "cpupri" or not ctx.stages:
-            break
-        placement_order = serial
-    slots, overutilized, clusters_out, per_cpu, task_ms, where, signature, shared, overloaded = placed
+    slots, overutilized, clusters_out, per_cpu, task_ms, where, signature, shared, overloaded = \
+        _place_and_time(threads, ctx, policies, pinned_threads)
+    serial, chain_held = ctx.serial_for(task_ms)
     # upper bound with every concurrent co-runner of the same CPU ahead of the thread (no priority model): task_ms
     # stays the own-time value used for feasibility; this bound shows how optimistic it is on a shared CPU.
     # Co-runners the pipeline orders before / after the task in the frame (serial) never overlap it.
@@ -762,7 +760,7 @@ class SweepSpec:
     # budgets_ms[task] = measured ms x factor unless budgets_ms names the task with a tighter value
     stretch_budgets: dict[str, float] = field(default_factory=dict)
     # task pairs the variant's pipeline orders within one frame (same stage, chain within one period):
-    # they never wait for each other on a shared CPU, and an RT push (cpupri) does not avoid one for the other
+    # they never wait for each other on a shared CPU (waits only; the cpupri placement counts every RT thread)
     serial_pairs: tuple[tuple[str, str], ...] = ()
     # the same per Timing Budget stage, re-checked for every candidate (StageOrder.holds); from the coupling
     serial_stages: tuple[StageOrder, ...] = ()
