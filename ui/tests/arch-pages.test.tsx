@@ -33,7 +33,7 @@ it('defers expensive what-if until requested, without repeating it on each stati
   const extra = [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.parentElement?.textContent?.includes('보조 탐색 계산'))!
   await act(async () => extra.click())
   expect(send.mock.calls.filter((c) => c[2].include_whatif)).toHaveLength(1)
-  await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { stat: 'mean' } }} />))
+  await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { stat: 'max' } }} />))
   expect(send.mock.calls.filter((c) => c[2].include_whatif)).toHaveLength(1)
   expect(send).toHaveBeenCalledTimes(3)
 })

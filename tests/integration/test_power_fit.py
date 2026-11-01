@@ -41,7 +41,7 @@ def test_fit_publish_and_recompute(api_client, engine, demo_cleanup):
         return rep.json()["report"]["power"]["hw_mw"]
     assert hw(new["params_ref"]) == pytest.approx(hw(base_ref) * k_ip, rel=1e-3)
     listed = api_client.get("/api/v1/calibration/power-params", params={"soc_ref": "soc-exynos2500"}).json()
-    assert any(p["ref"] == new["params_ref"] and p["calibrated"] for p in listed)
+    assert any(p["ref"] == new["params_ref"] and p["calibrated"] and p["ip_model"] == "v1-vfps" for p in listed)
 
     reg = api_client.post("/api/v1/timing-budget/register", json={"scenario_id": S, "variant_id": "FHD30-recording", "options": {"statistic": "mean", "runtime_scale": 0.1},
                                                                    "config": {"power_params_ref": base_ref}, "reason": "base"})
