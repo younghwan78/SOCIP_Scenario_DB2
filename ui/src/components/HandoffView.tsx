@@ -2,9 +2,9 @@
 // numbered sequence diagram of the original hand-off mockup. Data: sdb.handoff/1 (lib/handoff.ts).
 // "All loops" stacks every unit in its own loop frame so it is visible what repeats with the frame and
 // what runs independently (audio, UI, chunk write …) and where those loops hand work to each other.
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import type { HandoffDoc, HandoffStep } from '../lib/api'
-import { cadenceLinks, cadenceLabel, cadencePeriod, fmtHz, layerColor, layoutFlows, loopKind, LAYER_LABEL, stepName, type ColumnMode, type FlowLayout, type Frame } from '../lib/handoff'
+import { cadenceLinks, cadenceLabel, cadencePeriod, fmtHz, layerColor, layoutFlows, loopKind, LAYERS, LAYER_LABEL, stepName, type ColumnSpec, type FlowLayout, type Frame } from '../lib/handoff'
 import { HANDOFF } from './TimelineView'
 
 export const ALL_LOOPS = 'all'
@@ -14,8 +14,9 @@ interface Props {
   /** a flow id, or ALL_LOOPS (default) */
   flowId: string | null
   onFlow: (id: string) => void
-  mode: ColumnMode
-  onMode: (m: ColumnMode) => void
+  /** columns: every layer folded, every layer per process, or the listed layers per process */
+  columns: ColumnSpec
+  onColumns: (c: ColumnSpec) => void
   source: string
   /** a step whose slice exists in the full-stack trace can be opened there */
   canOpen?: (slice: string) => boolean
@@ -28,11 +29,20 @@ const FRAME_TONE: Record<string, { stroke: string; tab: string; dash?: string }>
   period: { stroke: '#B7791F', tab: '#F6E3BF', dash: '6 3' }, chunk: { stroke: '#8A6D3B', tab: '#EFE5D2', dash: '6 3' }, event: { stroke: '#6B6558', tab: '#ECE8E1', dash: '2 3' },
 }
 
-export function HandoffView({ doc, flowId, onFlow, mode, onMode, source, canOpen, onOpen }: Props) {
+export function HandoffView({ doc, flowId, onFlow, columns, onColumns, source, canOpen, onOpen }: Props) {
   const flow = doc.flows.find((f) => f.id === flowId)
   const all = !flow && doc.flows.length > 1
   const shown = all ? doc.flows : [flow ?? doc.flows[0]]
-  const lay = useMemo(() => layoutFlows(doc, shown, mode), [doc, shown, mode])
+  const lay = useMemo(() => layoutFlows(doc, shown, columns), [doc, shown, columns])
+  // Layer / Process: fold or spread every layer; a layer band in the header toggles that layer alone
+  const multi = lay.layers.filter((l) => l.parts > 1)
+  const allFolded = columns === 'layer' || (columns !== 'participant' && multi.every((l) => !l.expanded))
+  const allSpread = columns === 'participant' || (columns !== 'layer' && multi.length > 0 && multi.every((l) => l.expanded))
+  const toggleLayer = (layer: string) => {
+    const open = new Set<string>(columns === 'participant' ? [...LAYERS, ...lay.layers.map((l) => l.layer)] : columns === 'layer' ? [] : columns)
+    if (open.has(layer)) open.delete(layer); else open.add(layer)
+    onColumns(open.size ? [...open] : 'layer')
+  }
   const active = all ? null : shown[0].cadence
   return (
     <div className="handoff">
@@ -46,8 +56,8 @@ export function HandoffView({ doc, flowId, onFlow, mode, onMode, source, canOpen
             </button>))}
         </div>
         <div className="seg sm" role="group" aria-label="Columns">
-          <button className={mode === 'layer' ? 'on' : ''} onClick={() => onMode('layer')} title="App · Framework · HAL · Kernel · FW · HW 6열">Layer</button>
-          <button className={mode === 'participant' ? 'on' : ''} onClick={() => onMode('participant')} title="process 단위로 펼침">Process</button>
+          <button className={allFolded ? 'on' : ''} onClick={() => onColumns('layer')} title="App · Framework · HAL · Kernel · FW · HW 6열 (머리글의 layer 띠를 누르면 그 layer만 process로 펼침)">Layer</button>
+          <button className={allSpread ? 'on' : ''} onClick={() => onColumns('participant')} title="모든 layer를 process 단위로 펼침">Process</button>
         </div>
         <span className="grow" />
         <span className="legend-mini">
@@ -57,7 +67,7 @@ export function HandoffView({ doc, flowId, onFlow, mode, onMode, source, canOpen
       </div>
       <LoopStrip doc={doc} active={active} onPick={(cad) => { const f = doc.flows.find((x) => x.cadence === cad); if (f) onFlow(f.id) }} />
       <Summary doc={doc} lay={lay} all={all} source={source} />
-      <Sequence doc={doc} lay={lay} canOpen={canOpen} onOpen={onOpen} />
+      <Sequence doc={doc} lay={lay} canOpen={canOpen} onOpen={onOpen} onLayer={toggleLayer} />
     </div>
   )
 }
@@ -111,14 +121,35 @@ function Summary({ doc, lay, all, source }: { doc: HandoffDoc; lay: FlowLayout; 
   )
 }
 
-const ROW = 32, NOTE = 26, BAND = 20, HEAD = 58, GUT = 132, RIGHT = 190
-const chars = (s: string) => [...s].reduce((a, c) => a + (c.charCodeAt(0) > 0x2e80 ? 11 : 6.3), 0)
-const DEPTH: Record<Frame['kind'], number> = { loop: 0, par: 1, sub: 2 }
 
-function Sequence({ doc, lay, canOpen, onOpen }: { doc: HandoffDoc; lay: FlowLayout; canOpen?: (slice: string) => boolean; onOpen?: (slice: string) => void }) {
+const ROW = 32, NOTE = 26, BAND = 20, HEAD = 58, PAD = 24
+// The # · Δ gutter (left) and the t · rate gutter (right) stay in view while the lanes scroll sideways.
+const LEFT = 84, T_W = 58
+const chars = (s: string) => [...s].reduce((a, c) => a + (c.charCodeAt(0) > 0x2e80 ? 11 : 6.3), 0)
+const badgeW = (text: string) => chars(text) + 14
+const DEPTH: Record<Frame['kind'], number> = { loop: 0, par: 1, sub: 2 }
+type CallRow = Extract<FlowLayout['rows'][number], { kind: 'call' }>
+
+/** What a call row is called, as on the timelines (SENSOR_REAR, HAL_REQUEST), and its hand-off kind. */
+function describe(r: CallRow) {
+  const s: HandoffStep = r.step
+  const kind = s.handoff && HANDOFF[s.handoff] ? s.handoff : 'data'
+  const last = r.folded?.[r.folded.length - 1]
+  const name = last ? `${stepName(s)} → ${stepName(last)}` : stepName(s)
+  return { s, kind, last, name }
+}
+function rowTitle(r: CallRow, open: boolean) {
+  const { s, kind, last, name } = describe(r)
+  return [`#${r.n} ${name}`, ...(r.folded ?? []).map((f) => `  · ${stepName(f)}${f.call ? ` (${f.call})` : ''} ${(f.dur_ms ?? 0).toFixed(2)} ms`),
+    !last && s.call && `call ${s.call}`, s.task && `trace 이름 ${s.task}`, s.slice && `slice ${s.slice}`, s.node && 'Pipeline timing에도 같은 이름', `hand-off ${kind}`,
+    s.t_ms !== undefined && `t ${s.t_ms.toFixed(3)} ms · 실행 ${(s.dur_ms ?? 0).toFixed(3)} ms`, open && '클릭: Full-stack timing에서 열기'].filter(Boolean).join('\n')
+}
+
+function Sequence({ doc, lay, canOpen, onOpen, onLayer }: { doc: HandoffDoc; lay: FlowLayout; canOpen?: (slice: string) => boolean; onOpen?: (slice: string) => void; onLayer: (layer: string) => void }) {
   const colW = lay.columns.length <= 6 ? 176 : 136
-  const x = (c: number) => GUT + c * colW + colW / 2
-  const W = GUT + lay.columns.length * colW + RIGHT
+  const x = (c: number) => c * colW + colW / 2
+  const W = lay.columns.length * colW + PAD
+  const RW = Math.max(132, T_W + Math.max(0, ...lay.rows.map((r) => (r.kind === 'call' ? r.badges.reduce((a, b) => a + badgeW(b.text) + 4, 0) : 0))) + 8)
   // vertical positions: every frame start (and par branch change) takes a header band above its first row
   const bands = new Map<number, number>()
   const addBand = (i: number) => bands.set(i, (bands.get(i) ?? 0) + 1)
@@ -143,32 +174,69 @@ function Sequence({ doc, lay, canOpen, onOpen }: { doc: HandoffDoc; lay: FlowLay
     const nBand = bands.get(f.start) ?? 0, inset = DEPTH[f.kind] * 6
     const top = tops[f.start] - (nBand - slotOf(f)) * BAND
     const bottom = ys[f.end] + rowH(f.end) / 2 + 3 + (lay.frames.filter((g) => g.end === f.end && DEPTH[g.kind] > DEPTH[f.kind]).length) * 6
-    return { x1: GUT + 4 + inset, x2: GUT + lay.columns.length * colW - 4 - inset, top, bottom }
+    return { x1: 4 + inset, x2: lay.columns.length * colW - 4 - inset, top, bottom }
   }
+  const openOf = (r: CallRow) => (r.step.slice && canOpen?.(r.step.slice) ? () => onOpen?.(r.step.slice!) : undefined)
+  const zebra = (w: number) => lay.rows.map((r, i) => r.kind === 'call' && (i % 2 || r.offRate)
+    ? <rect key={`bg${i}`} x={0} y={ys[i] - rowH(i) / 2} width={w} height={rowH(i)} fill={r.offRate ? '#FBF3E4' : '#F8F5F0'} /> : null)
+  // a gutter cell answers to the same hover title and click as its row in the lanes
+  const gutter = (w: number, cell: (r: CallRow, y: number) => ReactNode) => lay.rows.map((r, i) => {
+    if (r.kind !== 'call') return null
+    const open = openOf(r)
+    return <g key={i} style={open ? { cursor: 'pointer' } : undefined} onClick={open}><title>{rowTitle(r, !!open)}</title>
+      <rect x={0} y={ys[i] - ROW / 2} width={w} height={ROW} fill="transparent" />{cell(r, ys[i])}</g>
+  })
   return (
     <div className="handoff-seq">
       <div className="handoff-head">
+        <svg className="handoff-gut" width={LEFT} height={HEAD} role="presentation"><text x={10} y={50} fontSize={10} fill="#6B6558"># · 대기 Δ</text></svg>
         <svg width={W} height={HEAD} role="presentation">
-          {layerBands(lay).map((b) => <g key={b.i}><rect x={GUT + b.i * colW + 3} y={3} width={(b.j - b.i + 1) * colW - 6} height={16} rx={3} fill={layerColor(b.layer) ?? '#ccc'} opacity={0.2} />
-            <text x={GUT + ((b.i + b.j + 1) / 2) * colW} y={15} fontSize={10.5} fontWeight={600} textAnchor="middle" fill="#3B3F4A">{LAYER_LABEL[b.layer] ?? b.layer}</text></g>)}
-          {lay.columns.map((c, i) => <g key={c.id}>
+          {layerBands(lay).map((b) => {
+            const span = lay.layers.find((l) => l.layer === b.layer)
+            const can = !!span && span.parts > 1
+            const name = LAYER_LABEL[b.layer] ?? b.layer
+            const label = !can ? name : span.expanded ? `▾ ${name}` : `▸ ${name} · ${span.parts}`
+            const toggle = can ? () => onLayer(b.layer) : undefined
+            return <g key={b.i} className={can ? 'handoff-layer' : undefined} role={can ? 'button' : undefined} tabIndex={can ? 0 : undefined} aria-expanded={can ? span.expanded : undefined}
+              onClick={toggle} onKeyDown={toggle && ((e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } })}>
+              {can && <title>{span.expanded ? `${name}: 한 열로 접기` : `${name}: process ${span.parts}개로 펼치기`}</title>}
+              <rect x={b.i * colW + 3} y={3} width={(b.j - b.i + 1) * colW - 6} height={16} rx={3} fill={layerColor(b.layer) ?? '#ccc'} opacity={0.2} />
+              <text x={((b.i + b.j + 1) / 2) * colW} y={15} fontSize={10.5} fontWeight={600} textAnchor="middle" fill="#3B3F4A">{label}</text></g>
+          })}
+          {lay.columns.map((c, i) => <g key={i}>
             <rect x={x(i) - colW / 2 + 6} y={23} width={colW - 12} height={32} rx={5} fill="#fff" stroke={layerColor(c.layer) ?? '#bbb'} />
             <text x={x(i)} y={37} fontSize={11.5} fontWeight={600} textAnchor="middle" fill="#1F2430"><title>{c.title}</title>{clip(c.title, colW / 7.2)}</text>
             <text x={x(i)} y={50} fontSize={9.5} textAnchor="middle" fill="#6B6558"><title>{c.sub}</title>{clip(c.sub, colW / 5.6)}</text></g>)}
-          <text x={10} y={50} fontSize={10} fill="#6B6558"># · t ms · 대기 Δ</text>
-          <text x={W - RIGHT + 12} y={50} fontSize={10} fill="#6B6558">rate · unit</text>
+        </svg>
+        <svg className="handoff-rate" width={RW} height={HEAD} role="presentation">
+          <text x={10} y={50} fontSize={10} fill="#6B6558">t ms</text><text x={T_W} y={50} fontSize={10} fill="#6B6558">rate · unit</text></svg>
+      </div>
+      <div className="handoff-body">
+        <svg className="handoff-gut" width={LEFT} height={H} role="presentation">
+          {zebra(LEFT)}
+          {gutter(LEFT, (r, yy) => <>
+            <circle cx={16} cy={yy} r={9} fill="#3B3F4A" /><text x={16} y={yy + 3.5} fontSize={9.5} fontWeight={700} textAnchor="middle" fill="#fff">{r.n}</text>
+            {r.wait !== null && <text x={32} y={yy + 4} fontSize={10.5} fontFamily="var(--mono)" fill={r.wait > 2 ? '#9A5B13' : '#8A8274'}>Δ{r.wait.toFixed(2)}</text>}</>)}
+        </svg>
+        <svg width={W} height={H} role="img" aria-label="Processing flow sequence" overflow="visible">
+          <defs>{Object.entries(HANDOFF).map(([k, v]) => <marker key={k} id={`ho-${k}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill={v.color} /></marker>)}</defs>
+          {zebra(W)}
+          {[...lay.frames].sort((a, b) => DEPTH[a.kind] - DEPTH[b.kind]).map((f, k) => <FrameG key={k} f={f} r={frameRect(f)} doc={doc} slotTop={(i) => tops[i] - BAND} />)}
+          {lay.columns.map((_, i) => <line key={i} x1={x(i)} x2={x(i)} y1={0} y2={H} stroke="#D6CFC4" strokeDasharray="3 4" />)}
+          {lay.rows.map((r, i) => r.kind === 'note' ? <NoteRow key={i} y={ys[i]} x1={x(r.from) - colW * 0.42} x2={x(r.to) + colW * 0.42} text={r.step.note ?? ''} />
+            : <CallRowG key={i} r={r} y={ys[i]} x={x} W={W} h={ROW} colW={colW} bar={layerColor(lay.columns[r.to].layer) ?? '#8C8574'} open={openOf(r)} />)}
+        </svg>
+        <svg className="handoff-rate" width={RW} height={H} role="presentation">
+          {zebra(RW)}
+          {gutter(RW, (r, yy) => {
+            let bx = T_W
+            return <>
+              {r.step.t_ms !== undefined && <text x={10} y={yy + 4} fontSize={10.5} fontFamily="var(--mono)" fill="#3B3F4A">{r.step.t_ms.toFixed(2)}</text>}
+              {r.badges.map((b) => { const w = badgeW(b.text); const g = <g key={b.text}><rect x={bx} y={yy - 9} width={w} height={18} rx={9} fill={b.tone === 'cadence' ? '#F6E3BF' : b.tone === 'every' ? '#E3EEEB' : '#E7ECF5'} />
+                <text x={bx + 7} y={yy + 4} fontSize={10.5} fill="#3B3F4A">{b.text}</text></g>; bx += w + 4; return g })}</>
+          })}
         </svg>
       </div>
-      <svg width={W} height={H} role="img" aria-label="Processing flow sequence">
-        <defs>{Object.entries(HANDOFF).map(([k, v]) => <marker key={k} id={`ho-${k}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill={v.color} /></marker>)}</defs>
-        {lay.rows.map((r, i) => r.kind === 'call' && (i % 2 || r.offRate)
-          ? <rect key={`bg${i}`} x={0} y={ys[i] - rowH(i) / 2} width={W} height={rowH(i)} fill={r.offRate ? '#FBF3E4' : '#F8F5F0'} /> : null)}
-        {[...lay.frames].sort((a, b) => DEPTH[a.kind] - DEPTH[b.kind]).map((f, k) => <FrameG key={k} f={f} r={frameRect(f)} doc={doc} slotTop={(i) => tops[i] - BAND} />)}
-        {lay.columns.map((c, i) => <line key={c.id} x1={x(i)} x2={x(i)} y1={0} y2={H} stroke="#D6CFC4" strokeDasharray="3 4" />)}
-        {lay.rows.map((r, i) => r.kind === 'note' ? <NoteRow key={i} y={ys[i]} x1={x(r.from) - colW * 0.42} x2={x(r.to) + colW * 0.42} text={r.step.note ?? ''} />
-          : <CallRowG key={i} r={r} y={ys[i]} x={x} W={W} h={ROW} colW={colW} bar={layerColor(lay.columns[r.to].layer) ?? '#8C8574'}
-            open={r.step.slice && canOpen?.(r.step.slice) ? () => onOpen?.(r.step.slice!) : undefined} />)}
-      </svg>
     </div>
   )
 }
@@ -201,20 +269,17 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(1,
 
 function NoteRow({ y, x1, x2, text }: { y: number; x1: number; x2: number; text: string }) {
   const w = Math.max(x2 - x1, chars(text) + 20)
-  // a wide note over the first column stays clear of the # · t · Δ gutter
-  const cx = Math.max((x1 + x2) / 2, GUT + 8 + w / 2)
+  // a wide note over the first column stays inside the lanes, clear of the sticky # · Δ gutter
+  const cx = Math.max((x1 + x2) / 2, 8 + w / 2)
   return <g><rect x={cx - w / 2} y={y - 10} width={w} height={20} rx={3} fill="#FFF6D6" stroke="#E2CC7E" />
     <text x={cx} y={y + 4} fontSize={11} textAnchor="middle" fill="#5B4A12">{text}</text></g>
 }
 
-function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: Extract<FlowLayout['rows'][number], { kind: 'call' }>; y: number; x: (c: number) => number; W: number; h: number; open?: () => void; colW: number; bar: string }) {
-  const s: HandoffStep = r.step
-  const kind = s.handoff && HANDOFF[s.handoff] ? s.handoff : 'data'
+function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: CallRow; y: number; x: (c: number) => number; W: number; h: number; open?: () => void; colW: number; bar: string }) {
+  const { s, kind, last, name } = describe(r)
   const color = HANDOFF[kind].color, dash = DASHED.has(kind) ? '5 3' : undefined
   const x2 = x(r.to)
-  const last = r.folded?.[r.folded.length - 1]
   // name as on the timelines (SENSOR_REAR, HAL_REQUEST); the call the trace recorded follows it, faint
-  const name = last ? `${stepName(s)} → ${stepName(last)}` : stepName(s)
   const detail = last ? `${r.folded!.length} 단계` : s.call && s.call !== name ? s.call : ''
   const dur = last && s.t_ms !== undefined && last.t_ms !== undefined ? last.t_ms + (last.dur_ms ?? 0) - s.t_ms : s.dur_ms
   const label = <>
@@ -224,9 +289,9 @@ function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: Extract<FlowLayout['r
   </>
   const halo = { paintOrder: 'stroke' as const, stroke: '#fff', strokeWidth: 3 }
   const labelW = chars(`★ ${name} ${detail} 00.00`) * 0.95
-  // labels next to the last column go left of its lifeline instead of into the badge column,
+  // labels next to the last column go left of its lifeline instead of under the sticky rate gutter,
   // clear of the start marker (·→) when the row starts the unit
-  const roomRight = W - RIGHT - x2 - 34 > labelW
+  const roomRight = W - x2 - 34 > labelW
   const side = (dx: number, yy: number) => roomRight ? <text x={x2 + dx} y={yy} fontSize={11.5} fill="#1F2430" style={halo}>{label}</text>
     : <text x={x2 - (r.from === null ? 44 : 10)} y={yy} fontSize={11.5} textAnchor="end" fill="#1F2430" style={halo}>{label}</text>
   let arrow
@@ -240,20 +305,12 @@ function CallRowG({ r, y, x, W, h, open, colW, bar }: { r: Extract<FlowLayout['r
     arrow = <g><line x1={x1 + dir * 4} y1={y + 3} x2={x2 - dir * 6} y2={y + 3} stroke={color} strokeWidth={1.5} strokeDasharray={dash} markerEnd={`url(#ho-${kind})`} />
       <text x={span < colW * 1.2 ? Math.min(x1, x2) + 6 : mid} y={y - 4} fontSize={11.5} textAnchor={span < colW * 1.2 ? 'start' : 'middle'} fill="#1F2430" style={halo}>{label}</text></g>
   }
-  let bx = W - RIGHT + 10
   return (
     <g style={open ? { cursor: 'pointer' } : undefined} onClick={open}>
-      <title>{[`#${r.n} ${name}`, ...(r.folded ?? []).map((f) => `  · ${stepName(f)}${f.call ? ` (${f.call})` : ''} ${(f.dur_ms ?? 0).toFixed(2)} ms`),
-        !last && s.call && `call ${s.call}`, s.task && `trace 이름 ${s.task}`, s.slice && `slice ${s.slice}`, s.node && 'Pipeline timing에도 같은 이름', `hand-off ${kind}`,
-        s.t_ms !== undefined && `t ${s.t_ms.toFixed(3)} ms · 실행 ${(s.dur_ms ?? 0).toFixed(3)} ms`, open && '클릭: Full-stack timing에서 열기'].filter(Boolean).join('\n')}</title>
+      <title>{rowTitle(r, !!open)}</title>
       <rect x={0} y={y - h / 2} width={W} height={h} fill="transparent" />
-      <circle cx={16} cy={y} r={9} fill="#3B3F4A" /><text x={16} y={y + 3.5} fontSize={9.5} fontWeight={700} textAnchor="middle" fill="#fff">{r.n}</text>
-      {s.t_ms !== undefined && <text x={32} y={y + 4} fontSize={10.5} fontFamily="var(--mono)" fill="#3B3F4A">{s.t_ms.toFixed(2)}</text>}
-      {r.wait !== null && <text x={84} y={y + 4} fontSize={10.5} fontFamily="var(--mono)" fill={r.wait > 2 ? '#9A5B13' : '#8A8274'}>Δ{r.wait.toFixed(2)}</text>}
       {arrow}
       <rect x={x2 - 4} y={y - 8} width={8} height={16} rx={2} fill={bar} />
-      {r.badges.map((b) => { const w = chars(b.text) + 14; const g = <g key={b.text}><rect x={bx} y={y - 9} width={w} height={18} rx={9} fill={b.tone === 'cadence' ? '#F6E3BF' : b.tone === 'every' ? '#E3EEEB' : '#E7ECF5'} />
-        <text x={bx + 7} y={y + 4} fontSize={10.5} fill="#3B3F4A">{b.text}</text></g>; bx += w + 4; return g })}
     </g>
   )
 }

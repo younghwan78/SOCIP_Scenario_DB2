@@ -30,7 +30,12 @@ export const cadenceLabel = (doc: HandoffDoc, id: string | undefined) => {
 }
 
 export type ColumnMode = 'layer' | 'participant'
-export interface Column { id: string; layer: string; title: string; sub: string }
+/** Columns: every layer folded ('layer'), every layer per process ('participant'), or the listed layers per process. */
+export type ColumnSpec = ColumnMode | readonly string[]
+export const layerExpanded = (spec: ColumnSpec, layer: string) => spec === 'participant' || (Array.isArray(spec) && spec.includes(layer))
+export interface Column { id: string; layer: string; title: string; sub: string; /** the process, when its layer is spread per process */ part?: string }
+/** A layer that has columns: how many processes it holds and whether they are spread one per column. */
+export interface LayerSpan { layer: string; parts: number; expanded: boolean }
 export interface CallRow {
   kind: 'call'; n: number; step: HandoffStep; from: number | null; to: number; flow: number
   wait: number | null; badges: { text: string; tone: 'cadence' | 'every' | 'offset' }[]; offRate: boolean
@@ -45,7 +50,7 @@ export interface Frame {
   cadence?: string; segments?: { label: string; start: number }[]
 }
 export interface FlowSummary { e2e: number | null; lead: number | null; period: number | null; inFlight: number | null; hw: number; sw: number }
-export interface FlowLayout extends FlowSummary { columns: Column[]; rows: Row[]; frames: Frame[]; loops: (FlowSummary & { flow: HandoffFlow })[] }
+export interface FlowLayout extends FlowSummary { columns: Column[]; layers: LayerSpan[]; rows: Row[]; frames: Frame[]; loops: (FlowSummary & { flow: HandoffFlow })[] }
 
 /** How a cadence repeats, as shown on loop frames and the loop strip. */
 export function loopKind(doc: HandoffDoc, id: string | undefined): string {
@@ -73,20 +78,24 @@ function summarize(doc: HandoffDoc, flow: HandoffFlow): FlowSummary {
 }
 
 /** Columns, numbered rows, frames (par / loop / sub-loop) and summaries of one or more flows on shared columns. */
-export function layoutFlows(doc: HandoffDoc, flows: HandoffFlow[], mode: ColumnMode, fold = true): FlowLayout {
+export function layoutFlows(doc: HandoffDoc, flows: HandoffFlow[], spec: ColumnSpec, fold = true): FlowLayout {
   const parts = new Map(doc.participants.map((p) => [p.id, p]))
   const used = new Set(flows.flatMap((f) => f.steps.flatMap((s) => [s.from, s.to, ...(s.over ?? [])])).filter((x): x is string => !!x))
   const usedParts = doc.participants.filter((p) => used.has(p.id)).sort((a, b) => layerIx(a.layer) - layerIx(b.layer))
-  const columns: Column[] = mode === 'participant'
-    ? usedParts.map((p) => ({ id: p.id, layer: p.layer, title: p.name, sub: p.detail ?? '' }))
-    : [...new Set(usedParts.map((p) => p.layer))].map((l) => {
-        const names = usedParts.filter((p) => p.layer === l).map((p) => p.name)
-        return { id: l, layer: l, title: names.slice(0, 2).join(' · '), sub: names.length > 2 ? `+ ${names.slice(2).join(' · ')}` : '' }
-      })
+  const layers: LayerSpan[] = [...new Set(usedParts.map((p) => p.layer))]
+    .map((l) => ({ layer: l, parts: usedParts.filter((p) => p.layer === l).length, expanded: layerExpanded(spec, l) }))
+  const columns: Column[] = layers.flatMap(({ layer: l, expanded }) => {
+    const ps = usedParts.filter((p) => p.layer === l)
+    if (expanded) return ps.map((p) => ({ id: p.id, layer: p.layer, title: p.name, sub: p.detail ?? '', part: p.id }))
+    const names = ps.map((p) => p.name)
+    return [{ id: l, layer: l, title: names.slice(0, 2).join(' · '), sub: names.length > 2 ? `+ ${names.slice(2).join(' · ')}` : '' }]
+  })
   const colOf = (pid: string | undefined) => {
     if (!pid) return null
-    const key = mode === 'participant' ? pid : parts.get(pid)?.layer
-    const i = columns.findIndex((c) => c.id === key)
+    const layer = parts.get(pid)?.layer
+    if (layer === undefined) return null
+    // matched on (layer, process) rather than id: a process id may equal another layer's name
+    const i = layerExpanded(spec, layer) ? columns.findIndex((c) => c.part === pid) : columns.findIndex((c) => c.part === undefined && c.layer === layer)
     return i < 0 ? null : i
   }
   let n = 0
@@ -155,11 +164,11 @@ export function layoutFlows(doc: HandoffDoc, flows: HandoffFlow[], mode: ColumnM
     }
   })
   const single = flows.length === 1 ? summarize(doc, flows[0]) : { e2e: null, lead: null, period: null, inFlight: null, hw: 0, sw: 0 }
-  return { columns, rows, frames, ...single, loops: flows.map((flow) => ({ flow, ...summarize(doc, flow) })) }
+  return { columns, layers, rows, frames, ...single, loops: flows.map((flow) => ({ flow, ...summarize(doc, flow) })) }
 }
 
 /** One flow on its own columns. */
-export const layoutFlow = (doc: HandoffDoc, flow: HandoffFlow, mode: ColumnMode, fold = true) => layoutFlows(doc, [flow], mode, fold)
+export const layoutFlow = (doc: HandoffDoc, flow: HandoffFlow, spec: ColumnSpec, fold = true) => layoutFlows(doc, [flow], spec, fold)
 
 /** Where one cadence hands work to another (consecutive calls whose rate changes), counted over all flows. */
 export function cadenceLinks(doc: HandoffDoc): { from: string; to: string; n: number; via: string[] }[] {

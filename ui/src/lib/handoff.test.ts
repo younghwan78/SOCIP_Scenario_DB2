@@ -63,6 +63,31 @@ describe('hand-off flow layout', () => {
     expect(byPart.columns.some((c) => c.id === 'hw.abox')).toBe(false)
   })
 
+  it('a list of layers spreads only those layers per process; the rest stay one column each', () => {
+    const lay = layoutFlow(doc, doc.flows[0], ['hw'])
+    expect(lay.columns.map((c) => c.id)).toEqual(['framework', 'hal', 'hw.isp', 'hw.vps', 'hw.dpu', 'hw.mfc'])
+    expect(lay.layers).toEqual([
+      { layer: 'framework', parts: 2, expanded: false }, { layer: 'hal', parts: 1, expanded: false }, { layer: 'hw', parts: 4, expanded: true }])
+    const calls = lay.rows.filter((r) => r.kind === 'call')
+    const at = (call: string) => calls.find((r) => r.step.call === call)!
+    // folded framework → folded hal → spread hw
+    expect([at('request').from, at('request').to]).toEqual([0, 1])
+    expect([at('SOF').from, at('SOF').to]).toEqual([1, 2])
+    expect([at('OD').from, at('OD').to]).toEqual([2, 3])
+    expect(at('scanout').to).toBe(4)
+    // the empty list is the folded layout
+    expect(layoutFlow(doc, doc.flows[0], []).columns).toEqual(layoutFlow(doc, doc.flows[0], 'layer').columns)
+  })
+
+  it('a process whose id is another layer’s name still lands in its own column', () => {
+    const d: HandoffDoc = { ...doc, participants: [{ id: 'hal', layer: 'hw', name: 'odd' }, { id: 'h.x', layer: 'hal', name: 'x' }],
+      flows: [{ id: 'f', name: 'f', cadence: 'frame', steps: [{ to: 'h.x', call: 'a' }, { from: 'h.x', to: 'hal', call: 'b' }] }] }
+    const lay = layoutFlow(d, d.flows[0], ['hw'])
+    expect(lay.columns.map((c) => [c.id, c.layer])).toEqual([['hal', 'hal'], ['hal', 'hw']])
+    const calls = lay.rows.filter((r) => r.kind === 'call')
+    expect(calls.map((r) => r.to)).toEqual([0, 1])
+  })
+
   it('numbers calls, keeps notes unnumbered and marks off-rate steps', () => {
     const lay = layoutFlow(doc, doc.flows[0], 'participant')
     const calls = lay.rows.filter((r) => r.kind === 'call')

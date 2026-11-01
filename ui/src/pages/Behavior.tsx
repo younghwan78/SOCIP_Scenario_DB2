@@ -10,7 +10,7 @@ import { useAsync } from '../lib/route'
 import { buildTimeline, chainOf, FRAME_HUES, FULLSTACK_GROUPS, INDEPENDENT_STYLE, isFullStack, LAYER_COLORS, type Slice, type Timeline } from '../lib/timeline'
 import { TimelineView, type FlowMode } from '../components/TimelineView'
 import { HandoffView } from '../components/HandoffView'
-import { cadenceLabel, cadencePeriod, deriveHandoff, layerColor, loopKind, type ColumnMode } from '../lib/handoff'
+import { cadenceLabel, cadencePeriod, deriveHandoff, layerColor, loopKind, type ColumnSpec } from '../lib/handoff'
 import { Sec, Shell } from '../components/MeasurePopover'
 import { PageLayout, usePref } from '../components/Layout'
 
@@ -30,7 +30,8 @@ export function BehaviorPage({ ctx }: { ctx: Ctx }) {
   const [traceId, setTraceId] = useState('')
   const trace: Evidence | undefined = traces.find((t) => t.id === traceId) ?? traces[0]
   const timeline = useMemo(() => (trace && isFullStack(trace.timeline_events) ? buildTimeline(trace.timeline_events ?? [], { maxFrames: 64, groupOrder: FULLSTACK_GROUPS }) : null), [trace])
-  const [columnMode, setColumnMode] = usePref<ColumnMode>('behavior.flow.columns', 'layer')
+  // 'layer' | 'participant' (stored by earlier versions) or the layers spread per process
+  const [columns, setColumns] = usePref<ColumnSpec>('behavior.flow.columns', 'layer')
   const [flowMode, setFlowMode] = usePref<FlowMode>('behavior.flow', 'chain')
   const [colorBy, setColorBy] = usePref<'group' | 'frame'>('behavior.color', 'frame')
   const selectedId = ctx.params.slice && timeline?.slices.some((s) => s.id === ctx.params.slice) ? ctx.params.slice : null
@@ -69,7 +70,7 @@ export function BehaviorPage({ ctx }: { ctx: Ctx }) {
     const doc = trace.handoff_flows ?? (timeline ? deriveHandoffOrNull(timeline, selected) : null)
     main = (
       <section className="panel pane behavior-pane"><div className="pane-body" style={{ overflow: 'auto' }}>
-        {doc ? <HandoffView doc={doc} flowId={ctx.params.flow ?? null} onFlow={(id) => ctx.navigate(undefined, { flow: id }, true)} mode={columnMode} onMode={setColumnMode}
+        {doc ? <HandoffView doc={doc} flowId={ctx.params.flow ?? null} onFlow={(id) => ctx.navigate(undefined, { flow: id }, true)} columns={columns} onColumns={setColumns}
           source={trace.handoff_flows ? `hand-off 문서 (${trace.handoff_flows.generator ?? 'sdb.handoff/1'})` : '선택 slice의 chain (trace에서 유도)'}
           canOpen={(id) => !!timeline?.slices.some((s) => s.id === id)} onOpen={(id) => ctx.navigate(undefined, { tab: 'fullstack', slice: id }, true)} />
           : <div className="empty">Processing flow를 볼 slice가 없습니다.</div>}
