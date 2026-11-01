@@ -185,7 +185,7 @@ def _steps_text(s: dict[str, Any]) -> str:
     steps = s.get("opp_steps")
     if steps is None:
         step = s.get("opp_step") or {}
-        return f"{step.get('cluster')} {_gx(step.get('growth_to'))} {float(step.get('delta_mw') or 0):+.0f} mW (가장 큰 계단)" if step else "없음"
+        return escape(f"{step.get('cluster')} {_gx(step.get('growth_to'))} {float(step.get('delta_mw') or 0):+.0f} mW (가장 큰 계단)") if step else "없음"
     if not steps:
         return "없음"
     return "<br>".join(f"{'<b>' if st.get('significant') else ''}{escape(str(st.get('cluster')))} {_gx(st.get('growth_from'))}→{_gx(st.get('growth_to'))} "
@@ -201,7 +201,7 @@ def cpu_section(cpu: list[dict[str, Any]] | None, budget: float | None = None) -
     h = ("<p class=meta>CPU what-if에서 “검토서에 포함”한 결과 (서버가 같은 조건으로 SW 증가 sweep을 다시 계산한 요약). "
          "허용치 = min(현재 배치에서 비용 ≥ 5 mW 또는 5%인 첫 OPP 상향 직전 배율, Timing Budget stage 여유(RT chain 포함) 소진 배율)"
          f" · 판정 기준 ×{need:.2f}{' (SW 증가 예산)' if budget else ''}"
-         + (f" · Timing Budget SW {', '.join(stats)} 기준" if stats else "") + ". 굵게 = 허용치를 정한 계단.</p>"
+         + (f" · Timing Budget SW {escape(', '.join(stats))} 기준" if stats else "") + ". 굵게 = 허용치를 정한 계단.</p>"
          "<table><tr><th>Variant</th><th>profile</th><th>topology</th><th>범위</th><th>허용치</th><th>제약</th><th>OPP 상향 (배율 · MHz · ΔmW)</th>"
          "<th>현재 mW (시작 → 끝)</th><th>최적 배치 이득</th><th>CPU 기인 BW</th><th>의견</th></tr>")
     for c in cpu:

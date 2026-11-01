@@ -614,6 +614,9 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
             | ({"cpu_load_ms": max(float(g["load_ms"]) for g in st[k]["cpu_groups"]),
                 "cpu_load_resource": max(st[k]["cpu_groups"], key=lambda g: float(g["load_ms"]))["resource"]}
                if st[k].get("cpu_groups") else {})
+            # the task behind longest_sw_ms, over every item (a parallel branch off the critical path can be longest)
+            | ({"longest_sw_task": max(st[k]["sw_items"], key=lambda i: float(i["runtime_ms"]))["task"]}
+               if st[k].get("throughput") == "pipelined" and st[k].get("sw_items") else {})
             | {"sw_items": [i for i in st[k]["sw_items"] if i.get("critical") is not False]}
             for k in st
         },
@@ -1207,7 +1210,7 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
             shared = load_ms > task_ms
             binding_ms = load_ms if shared else task_ms
             slack = P - binding_ms
-            bottleneck = st.get("cpu_load_resource") if shared else (longest["task"] if longest else None)
+            bottleneck = st.get("cpu_load_resource") if shared else (st.get("longest_sw_task") or (longest["task"] if longest else None))
             row = {"basis": "pipelined", "binding": "cpu_group" if shared else "task", "binding_ms": round(binding_ms, 3),
                    "bottleneck": bottleneck, "bottleneck_ms": round(binding_ms, 3),
                    "bottleneck_share_pct": round(100 * binding_ms / st["sw_ms"], 1) if st["sw_ms"] else 0.0}

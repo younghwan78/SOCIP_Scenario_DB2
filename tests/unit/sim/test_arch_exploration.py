@@ -349,6 +349,30 @@ def test_pipelined_slice_keeps_the_shared_cpu_load():
     assert s["stages"]["nrt"]["cpu_load_ms"] == 18.0 and s["stages"]["nrt"]["cpu_load_resource"] == "CPU_A"
 
 
+def test_pipelined_bottleneck_names_the_longest_task_even_off_the_critical_path(uhd30):
+    """a(6)→b(6) is the SW critical path; an independent c(10) is the longest thread. The slice keeps only the
+    critical items, so the longest task is named from every item before that filter."""
+    from copy import deepcopy
+    obj = deepcopy(uhd30["objective_slice"])
+    items = [{"task": "a", "kind": "sw", "runtime_ms": 6.0, "latency_ms": 0.0, "critical": True},
+             {"task": "b", "kind": "sw", "runtime_ms": 6.0, "latency_ms": 0.0, "critical": True},
+             {"task": "c", "kind": "sw", "runtime_ms": 10.0, "latency_ms": 0.0, "critical": False}]
+    report = {"ips": [], "fps": 125.0, "period_ms": 8.0, "eis": {"on": False}, "verdict": {"status": "fail"},
+              "intervals": {"ok": True, "preview": {"max_ms": 8.0}, "video": {"max_ms": 8.0}}, "latency": {},
+              "power": {"total_mw": 1, "cpu_mw": 0, "hw_mw": 1, "bw_mw": 0, "bw_hw_mw": 0, "bw_sw_mw": 0, "cpu_by_task": {}},
+              "bw": {"total_mbs": 0, "hw_mbs": 0, "sw_mbs": 0},
+              "stages": [{"id": "nrt", "sw_ms": 12.0, "budget_ms": 6.0, "hw_ms": 1.0, "overhead_ms": 0.0, "feasible": False,
+                          "fill_pct": 160.0, "throughput": "pipelined", "longest_sw_ms": 10.0, "chain_ms": 13.0, "sw_items": items,
+                          "cpu_groups": []}]}
+    s = ax._slice(report, "max", 1.0)
+    assert [i["task"] for i in s["stages"]["nrt"]["sw_items"]] == ["a", "b"] and s["stages"]["nrt"]["longest_sw_task"] == "c"
+    obj["period_ms"], obj["stages"] = 8.0, {"nrt": s["stages"]["nrt"]}
+    m = ax.sw_margin([obj], obj, ax.ExplorationObjective())
+    w = m["worst"]
+    assert w["bottleneck"] == "c" and w["binding_ms"] == 10.0 and w["margin_pct"] == pytest.approx(-25.0)
+    assert any("c 10.0 ms" in r for r in m["recommendations"])
+
+
 def test_failed_resimulation_cannot_report_spec_ok(graph_factory, dvfs, monkeypatch):
     monkeypatch.setattr(ax, "_verify", lambda *args: {"ok": False})
     spec = ax.ArchExplorationSpec(axes={"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}})

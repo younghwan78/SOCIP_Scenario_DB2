@@ -175,7 +175,8 @@ def build_snapshot(
         if not w:
             continue
         margins.append({"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "fps": v["fps"], "verdict": m.get("verdict"), "spec_ok": v["spec_ok"],
-                        **w, "growth_tolerance": m.get("growth_tolerance"),
+                        **w, "statistic": m.get("statistic") or (v.get("objective") or {}).get("statistic"),
+                        "growth_tolerance": m.get("growth_tolerance"),
                         "growth_tolerance_fixed": m.get("growth_tolerance_fixed"),
                         "recommendations": m.get("recommendations", [])})
     margins.sort(key=lambda r: (r["margin_pct"], -r["sw_share_pct"]))
@@ -300,7 +301,8 @@ def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:
     w = m.get("worst") or {}
     period = v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None)
     chain = w.get("chain_ms") or ((w.get("hw_ms") or 0) + (w.get("sw_ms") or 0) if w else None)
-    stat = statistic or m.get("statistic") or "max"
+    # the variant's own objective statistic (a project report mixes runs); the run's only for old summaries
+    stat = m.get("statistic") or (v.get("objective") or {}).get("statistic") or statistic or "max"
     growth = sorted(({"scale": s.get("runtime_scale"), "total_mw": (s.get("power") or {}).get("total_mw"),
                       "ok": (s.get("verdict") or {}).get("status") == "ok",
                       "nrt_fill_pct": ((s.get("stages") or {}).get("nrt") or {}).get("fill_pct")}
@@ -1169,9 +1171,13 @@ MARGIN_TEXT = {
 
 
 def sw_statistic(snap: dict[str, Any]) -> str:
-    """SW timing statistic behind the margins and the growth slices (exploration objective; default max).
-    Timing Budget screens may show another statistic (mean by default)."""
-    return str((((snap.get("overview") or {}).get("objective") or {}).get("statistic")) or "max")
+    """SW timing statistic behind the margins and the growth slices: each row's own exploration objective
+    (default max); several → "mean · max 혼재". Timing Budget screens may show another statistic (mean by default)."""
+    stats = sorted({str((r.get("sw") or {}).get("statistic")) for r in snap.get("scenarios") or []
+                    if (r.get("sw") or {}).get("statistic")})
+    if len(stats) > 1:
+        return " · ".join(stats) + " 혼재 (행별 표시)"
+    return stats[0] if stats else str((((snap.get("overview") or {}).get("objective") or {}).get("statistic")) or "max")
 
 
 def margin_text(rows: list[dict[str, Any]], statistic: str | None = None) -> str:
@@ -1181,15 +1187,18 @@ def margin_text(rows: list[dict[str, Any]], statistic: str | None = None) -> str
     text = " / ".join(MARGIN_TEXT[b] for b in sorted(bases) if b in MARGIN_TEXT) or MARGIN_TEXT["stage"]
     if "pipelined" in bases and any(b is None for b in recorded):
         text += " · 이전 engine 예측(margin 기준 미기록)은 stage 기준 값 — 재등록 시 갱신"
-    return text + f" · NRT·Post-NRT 중 최소 · SW {statistic or 'max'} 기준"
+    stat = statistic or "max"
+    return text + " · NRT·Post-NRT 중 최소 · " + (f"SW 통계 {stat}" if "혼재" in stat else f"SW {stat} 기준")
 
 
 def _margins(rows: list[dict[str, Any]], statistic: str | None = None) -> str:
     h = (f"<p class='meta'>{escape(margin_text(rows, statistic))}</p>"
          "<table><tr><th>#</th><th>Scenario</th><th>fps</th><th>stage</th><th>margin</th><th>SW / P</th><th>병목 task</th><th title='DVFS를 growth마다 다시 고르면 허용되는 SW 증가 (재최적화 가능 범위)'>SW 증가 허용<br><span class=meta>DVFS 재선택</span></th>"
          "<th title='추천 DVFS level을 고정했을 때 흡수 가능한 SW 증가 (robustness)'>SW 증가 허용<br><span class=meta>추천 DVFS 고정</span></th><th>권고</th></tr>")
+    mixed = len({r.get("statistic") for r in rows if r.get("statistic")}) > 1
     for i, r in enumerate(rows, 1):
-        h += (f"<tr><td>{i}</td><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td>{escape(r['stage'].upper())}</td>"
+        stat = f" <span class=meta>SW {escape(str(r['statistic']))}</span>" if mixed and r.get("statistic") else ""
+        h += (f"<tr><td>{i}</td><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td>{escape(r['stage'].upper())}{stat}</td>"
               f"<td class='n {'fail' if r['margin_pct'] < 0 else ''}'><b>{_f(r['margin_pct'],1)}%</b><br><span class=meta>{_f(r['slack_ms'],2)} ms</span></td>"
               f"<td class=n>{_f(r['sw_share_pct'],0)}%</td><td>{escape(str(r['bottleneck']))} {_f(r['bottleneck_ms'],1)} ms ({_f(r['bottleneck_share_pct'],0)}%)</td>"
               f"<td class=n>{'×'+_f(r['growth_tolerance'],1) if r['growth_tolerance'] else '—'}</td>"

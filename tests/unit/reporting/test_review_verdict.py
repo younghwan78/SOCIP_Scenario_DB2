@@ -254,6 +254,36 @@ def test_conclusion_reads_low_margin_against_the_growth_budget():
     assert "미지정" in _growth_outlook(low, {})
 
 
+def test_cpu_section_escapes_cluster_names_of_old_and_new_snapshots():
+    from scenario_db.reporting.review_sections import cpu_section
+
+    bad = "<img src=x onerror=alert(1)>"
+    old = {"variant_id": "v", "profile_ref": "p", "power_params_ref": "t", "summary": {
+        "tolerance": 1.2, "binding": "opp", "points": [], "best_at_start": {},
+        "opp_step": {"cluster": bad, "growth_to": 1.3, "delta_mw": 10}}}
+    new = {"variant_id": "w", "profile_ref": "p", "power_params_ref": "t", "summary": {
+        "tolerance": 1.2, "binding": "opp", "points": [], "best_at_start": {}, "basis": {"rev": "cpu-sweep/2", "timing_statistic": bad},
+        "opp_steps": [{"cluster": bad, "growth_from": 1.2, "growth_to": 1.3, "mhz": [400, 1000], "delta_mw": 38, "significant": True}]}}
+    h = cpu_section([old, new], 1.2)
+    assert "<img" not in h and h.count("&lt;img") == 3
+
+
+def test_mixed_sw_statistics_are_shown_per_row():
+    """A project report can merge runs explored at mean and at max: never label a mean margin as max."""
+    from scenario_db.reporting.review_summary import kpi_table, sw_table
+
+    a = row("a", sw_margin_pct=5.0, sw={"statistic": "mean", "hw_ms": 1, "sw_ms": 2, "stage": "nrt"})
+    b = row("b", sw_margin_pct=6.0, sw={"statistic": "max", "hw_ms": 1, "sw_ms": 2, "stage": "nrt"})
+    s = snap(scenarios=[a, b], overview={"sample_dvfs": False, "objective": {"statistic": "max"}},
+             review_context={"policy": {"kpi": [{"variant_ref": "a", "label": "A"}, {"variant_ref": "b", "label": "B"}]}, "rows": []})
+    t = sw_table(s)
+    assert "SW max · mean 혼재 — 행별 표시" in t and "SW mean</span>" in t and "SW max</span>" in t and "SW max 기준" not in t
+    k = kpi_table(scoreboard(s), None, "max · mean 혼재")
+    assert "(mean)" in k and "(max)" in k
+    one = sw_table(snap(scenarios=[b]))
+    assert "SW max 기준" in one and "SW max</span>" not in one
+
+
 def test_cpu_tolerance_risk_uses_the_growth_budget():
     cpu = [{"variant_id": "uhd30", "summary": {"tolerance": 1.3, "binding": "opp", "profile_origin": "physical_capture",
                                                "opp_step": {"cluster": "MID_LF0", "mhz": [400, 1000], "growth_from": 1.3, "growth_to": 1.4, "delta_mw": 38},

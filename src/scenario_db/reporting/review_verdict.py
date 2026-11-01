@@ -308,6 +308,7 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
             "verdict": v, "sw_margin_pct": r.get("sw_margin_pct"), "sw_bottleneck": r.get("sw_bottleneck"), "iq": iq,
             "sw_growth_tolerance": (r.get("sw") or {}).get("growth_tolerance"),
             "sw_growth_tested_max": (r.get("sw") or {}).get("growth_tested_max"),
+            "sw_statistic": (r.get("sw") or {}).get("statistic"),
             "overall": {"cls": worst if worst != "warn" or label else "warn", "label": label or ("주의" if worst == "warn" else "양호")},
         })
     return out
