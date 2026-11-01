@@ -177,8 +177,12 @@ export function OppStateTable({ s }: { s: Sweep }) {
   )
 }
 
-export function GrowthSweepCards({ s, synthetic, busy, error, range, setRange, onRun, onPickPool }: {
+export function GrowthSweepCards({ s, synthetic, busy, error, range, setRange, onRun, onPickPool, stale = false, locked = false }: {
   s: Sweep | null; synthetic: boolean; busy: boolean; error: string | null
+  /** the curve was computed from other inputs (range or rebalance conditions) than the current ones */
+  stale?: boolean
+  /** another CPU calculation is running: the curve button waits for it */
+  locked?: boolean
   range: { start: number; end: number; step: number }; setRange: (r: { start: number; end: number; step: number }) => void
   onRun: () => void; onPickPool?: (clusters: string[]) => void
 }) {
@@ -191,7 +195,8 @@ export function GrowthSweepCards({ s, synthetic, busy, error, range, setRange, o
       <input aria-label="SW 배율 끝" style={{ width: 52 }} type="number" step={0.05} value={range.end} onChange={(e) => setRange({ ...range, end: num(e.target.value, range.end) })} />
       <span className="faint">간격</span>
       <input aria-label="SW 배율 간격" style={{ width: 52 }} type="number" step={0.05} value={range.step} onChange={(e) => setRange({ ...range, step: num(e.target.value, range.step) })} />
-      <button className="btn tb-mini primary" disabled={busy} onClick={onRun}>{busy ? '계산 중…' : '곡선 계산'}</button>
+      {stale && s && !busy && <span className="badge v-warn" title="범위나 분배 조건을 바꾼 뒤 아직 다시 계산하지 않았습니다">이전 조건</span>}
+      <button className={`btn tb-mini ${stale || !s ? 'primary' : ''}`} disabled={busy || locked} onClick={onRun}>{busy ? '계산 중…' : stale && s ? '변경 반영' : '곡선 계산'}</button>
     </span>)
   return <>
     {error && <div className="err">{error}</div>}

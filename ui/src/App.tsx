@@ -197,7 +197,7 @@ export default function App() {
             {route.page === 'compare'
               ? <span style={{ color: 'var(--text)', fontWeight: 600 }}>{currentItems.length}개 비교 · 과제 {new Set(currentItems.map((i) => catalog.find((c) => c.scenario_id === i.scenario)?.project_id)).size}개</span>
               : <span style={{ color: 'var(--text)', fontWeight: 600 }}>{scenarioItem?.scenario_name ?? scenario}</span>}
-            {(route.page === 'pipeline' || route.page === 'behavior' || route.page === 'timing') && variant && <><span className="sep">›</span>
+            {(route.page === 'pipeline' || route.page === 'behavior' || route.page === 'timing' || route.page === 'cpu') && variant && <><span className="sep">›</span>
               <button className="crumb-variant" onClick={() => setPicker('open')}>{variant}<Icon name="chevron" size={12} /></button></>}
           </div>
           <span className="grow" />

@@ -1023,6 +1023,20 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 
 /* ---- CPU what-if result first (CPU-01..05) */
 .cpu-ctx { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 7px 12px; margin-bottom: 8px; background: var(--surface); border: 1px dashed var(--primary-line); border-radius: var(--radius); font-size: 12.5px; }
+.cpu-head { position: sticky; top: -18px; z-index: 6; background: var(--bg); padding-top: 2px; display: grid; gap: 6px; margin-bottom: 2px; }
+.cpu-head .cpu-ctx { margin-bottom: 0; }
+.cpu-scope { display: inline-flex; gap: 4px; align-items: center; }
+.cpu-scope select { max-width: 320px; font-size: 12px; }
+.cpu-run { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 5px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 12.5px; min-height: 34px; }
+.cpu-run .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--primary, #2F6F68); animation: adm-spin .9s linear infinite; }
+.cpu-run-steps { display: inline-flex; gap: 4px; font-size: 11px; }
+.cpu-run-steps > span { padding: 0 6px; border-radius: 999px; border: 1px solid var(--line-soft); }
+.cpu-run-steps > span.done { color: var(--text); text-decoration: line-through; }
+.cpu-run-steps > span.now { border-color: var(--primary-line); background: var(--primary-soft); color: var(--primary-strong); font-weight: 600; }
+.cpu-results { display: flex; flex-direction: column; gap: 12px; transition: opacity .15s; }
+.cpu-results > * { flex-shrink: 0; }
+.cpu-results.is-busy { opacity: .55; }
+@media (prefers-reduced-motion: reduce) { .cpu-run .spinner { animation: none; } .cpu-results { transition: none; } }
 .cpu-hm { border-collapse: separate; border-spacing: 3px; font-size: 12.5px; }
 .cpu-hm th { font-weight: 600; color: var(--muted); font-size: 11.5px; padding: 3px 6px; text-align: center; white-space: nowrap; }
 .cpu-hm tbody th { text-align: right; color: var(--text-2); }

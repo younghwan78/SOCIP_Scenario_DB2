@@ -25,6 +25,8 @@ import { CpuReviewSnapshotCard } from '../components/CpuReviewSnapshot'
 import { cpuSnapshotApi } from '../lib/reviewCpu'
 import { growthGrid } from '../lib/growthSweep'
 import { useCpuAnalysis } from '../lib/useCpuAnalysis'
+import { CpuRunStatus } from '../components/CpuRunStatus'
+import { CpuScopeSelect } from '../components/CpuScope'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -86,6 +88,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [range, setRange] = usePref<{ start: number; end: number; step: number }>('cpu.sweep.range', { start: 1.0, end: 1.5, step: 0.1 })
   const runSweep = (payload: CpuRebalanceRequest) => analysis.execute({
     mode: 'growth', request: payload, growths: growthGrid(range.start, range.end, range.step), comparison: cmpTarget,
+    key: growthKey(payload),
   })
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
@@ -128,21 +131,34 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const poolNames = rbRaw?.clusters.map((c) => c.name) ?? sortClusters(topo?.clusters ?? [])
   const pool = poolSel ?? rbRaw?.default_pool ?? defaultPool(poolNames)
   const showInputs = mode === 'sweep' || inputsOpen || !rbRaw
-  const rbRequest = (base: CpuSweepRequest): CpuRebalanceRequest => {
+  /**
+   * Rebalance request of the current inputs. `fresh` = the first run on a newly selected profile: default pool, no
+   * locks yet, and only the saved cgroups whose tasks all sit on one measured cluster of this profile (a cgroup over
+   * several home clusters is rejected by the server; a manual run still sends it so the user sees why).
+   */
+  const rbRequest = (base: CpuSweepRequest, fresh = false): CpuRebalanceRequest => {
+    const states = fresh ? {} : taskStates
     const locks: Record<string, string> = {}
-    for (const [t, st] of Object.entries(taskStates)) if (st === 'exclude') locks[t] = 'exclude'; else if (st.startsWith('pin:')) locks[t] = st.slice(4)
+    for (const [t, st] of Object.entries(states)) if (st === 'exclude') locks[t] = 'exclude'; else if (st.startsWith('pin:')) locks[t] = st.slice(4)
+    const homes = new Map<string, Set<string>>()
+    for (const t of prof?.tasks ?? []) if (t.task !== '(other)') homes.set(t.task, (homes.get(t.task) ?? new Set<string>()).add(t.cluster))
     const byGroup = new Map<string, string[]>()
-    const present = new Set(rbRows.map((r) => r.task))
-    for (const [t, g] of Object.entries(groups)) if (g && present.has(t) && (taskStates[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
-    return { ...base, top: rbTop, pool, locks, co_move: [...byGroup.values()].filter((g) => g.length > 1), timing_coupling: timingMode, latency_trade: timingMode === 'stage_slack' }
+    for (const [t, g] of Object.entries(groups)) if (g && homes.has(t) && (states[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
+    const coMove = [...byGroup.values()].filter((g) => g.length > 1 && (!fresh || new Set(g.flatMap((t) => [...homes.get(t)!])).size === 1))
+    return { ...base, top: rbTop, pool: fresh ? [] : pool, locks, co_move: coMove, timing_coupling: timingMode, latency_trade: timingMode === 'stage_slack' }
   }
-  const runRb = (payload: CpuRebalanceRequest) => analysis.execute({
+  // input fingerprints stored with each result: a result whose fingerprint differs from the current inputs is stale.
+  // The default pool is sent as [] on a fresh run and as its cluster list later — the same choice, so it keys as 'default'.
+  const rbKey = (r: CpuRebalanceRequest, chosenPool: string[] | null = poolSel) => JSON.stringify({ ...r, pool: chosenPool ?? 'default', cmp: cmpTarget })
+  const growthKey = (r: CpuRebalanceRequest, chosenPool: string[] | null = poolSel) => JSON.stringify([rbKey(r, chosenPool), range])
+  const runRb = (payload: CpuRebalanceRequest, chosenPool: string[] | null = poolSel) => analysis.execute({
     mode: 'rebalance', request: payload, growths: growthGrid(range.start, range.end, range.step), comparison: cmpTarget,
+    key: rbKey(payload, chosenPool), growthKey: growthKey(payload, chosenPool),
   })
   const run = async (payload = request()) => {
     if (!profile || !target) return
     if (mode === 'rebalance') return runRb(rbRequest(payload))
-    await analysis.execute({ mode: 'sweep', request: payload })
+    await analysis.execute({ mode: 'sweep', request: payload, key: JSON.stringify(payload) })
   }
   // first look: EAS reproduction + automatic range as soon as the inputs are chosen
   useEffect(() => {
@@ -153,7 +169,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     analysis.reset({ keepRebalance: !changed })
     if (profile && target) {
       const req = request(changed ? {} : edits, changed ? null : dsuReq)
-      if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [], timing_coupling: timingMode, latency_trade: timingMode === 'stage_slack' } : rbRequest(req))
+      if (mode === 'rebalance') void (changed ? runRb(rbRequest(req, true), null) : runRb(rbRequest(req)))
       else void run(req)
     }
     return () => analysis.cancel()
@@ -261,6 +277,11 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const tile = (label: string, value: string, note: string, tone = '') =>
     <div key={label} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{label}</div><div className={`mono ${tone}`} style={{ fontSize: 20, fontWeight: 600 }}>{value}</div><div className="faint" style={{ fontSize: 11 }}>{note}</div></div>
   const sched = result?.scheduler
+  // stale = the displayed result was computed from other inputs than the current ones (see rbKey)
+  const hasResult = mode === 'sweep' ? !!rawResult : !!rbRaw
+  const currentRb = mode === 'rebalance' && profile && target ? rbRequest(request()) : null
+  const stale = hasResult && (mode === 'sweep' ? execution.keys.sweep !== JSON.stringify(request()) : !!currentRb && execution.keys.rebalance !== rbKey(currentRb))
+  const growthStale = !!sweep && !!currentRb && execution.keys.growth !== growthKey(currentRb)
 
   return (
     <div className="page tb-page">
@@ -276,14 +297,21 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </div>
         <span className="faint" style={{ fontSize: 12 }}>{mode === 'rebalance' ? '한 MID cluster에 몰린 task를 같은 tier의 cluster로 나눴을 때 CPU + DSU 전력 최저점' : 'task별 knob 조합 자동 탐색 · 현재보다 전력이 낮은 배치'}</span>
       </div>
+      <div className="cpu-head">
       <div className="cpu-ctx" aria-label="입력 요약">
-        <span className="faint">profile</span>
-        {prof?.origin === 'synthetic' ? <span className="badge v-warn">합성</span> : prof?.origin === 'physical_capture' ? <span className="badge cov-meas">실측</span> : prof ? <span className="badge">출처 미상</span> : null}
-        <span className="mono">{prof?.variant_ref ?? prof?.id ?? '—'}{prof?.measured_at ? ` · ${prof.measured_at.slice(0, 10)}` : ''}</span>
+        <CpuScopeSelect profiles={inputs.data?.profiles ?? []} ctx={ctx} />
+        <label className="cpu-scope" title="이 variant에서 측정한 CPU profile이 먼저 나옵니다">
+          <span className="faint">profile</span>
+          {prof?.origin === 'synthetic' ? <span className="badge v-warn">합성</span> : prof?.origin === 'physical_capture' ? <span className="badge cov-meas">실측</span> : prof ? <span className="badge">출처 미상</span> : null}
+          <select aria-label="측정 profile" value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.origin === 'synthetic' ? '[합성] ' : p.origin === 'unknown' ? '[출처 미상] ' : ''}{p.variant_ref ?? p.id} · {p.measured_at?.slice(0, 10) ?? '날짜 없음'}{p.sw_baseline_ref ? ` · ${p.sw_baseline_ref}` : ''}{p.silicon_rev ? ` · ${p.silicon_rev}` : ''} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select>
+        </label>
         <span className="faint">· SoC</span><span>{topo ? `${topo.soc_ref} v${topo.version} · ${sortClusters(topo.clusters).join(' / ')}` : '—'}</span>
         <span className="faint">· 조건</span><span>{fps} fps · SW ×{growth} · EAS + schedutil{dsuReq ? ` · DSU ${dsuReq.mode}` : ''} · timing {timingMode === 'stage_slack' ? 'latency 유지' : 'fps만'}{mode === 'rebalance' ? ` · pool ${pool.join(' + ')}` : ''}</span>
         <span className="grow" />
         {mode === 'rebalance' && <button className="btn tb-mini" onClick={() => setInputsOpen((o) => !o)} aria-expanded={showInputs}>{showInputs ? '조건 접기 ▴' : '조건 편집 ▾'}</button>}
+      </div>
+      <CpuRunStatus progress={execution.progress} done={execution.done} busy={busy || sweepBusy} stale={stale} hasResult={hasResult}
+        canRun={!!profile && !!target && (mode === 'sweep' || pool.length >= 2)} onRun={() => void run()} onStop={analysis.stop} />
       </div>
       {inputs.error && <div className="err">{inputs.error}</div>}
       {inputs.data && (!inputs.data.profiles.length || !inputs.data.topologies.length) && <div className="lib-note warn">
@@ -292,10 +320,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         {!inputs.data.topologies.length && <> cpu topology가 있는 power_model_params를 등록하세요.</>}
       </div>}
       {showInputs && <div className="tb-grid">
-        <Card id="cpu-in" title="① 기준" note="측정 profile · 적용할 SoC · 비교 기준" help={CPU_HELP.input}>
+        <Card id="cpu-in" title="① 기준" note="적용할 SoC · 비교 기준 (scenario · 측정 profile은 위 입력 요약 줄)" help={CPU_HELP.input}>
           <div className="cpu-step" style={{ display: 'grid', gap: 8 }}>
-            <label className="cpu-f"><span className="faint">측정 profile</span>
-              <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.origin === 'synthetic' ? '[합성] ' : p.origin === 'unknown' ? '[출처 미상] ' : ''}{p.variant_ref ?? p.id} · {p.measured_at?.slice(0, 10) ?? '날짜 없음'}{p.sw_baseline_ref ? ` · ${p.sw_baseline_ref}` : ''}{p.silicon_rev ? ` · ${p.silicon_rev}` : ''} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
             {prof?.origin && prof.origin !== 'physical_capture' && <div className="lib-note warn" style={{ fontSize: 11.5, margin: 0 }}>{prof.origin === 'synthetic' ? '합성 profile — 실기기 측정이 아니므로 결과는 모델 동작 확인용이며 실제 절감 근거가 아닙니다.' : '출처 미상 profile — 측정 방법·장비가 기록되지 않았습니다.'}</div>}
             <label className="cpu-f"><span className="faint">적용할 SoC CPU 구성</span>
               <select value={target} onChange={(e) => { targetPicked.current = true; setTarget(e.target.value) }}>{rankTopologies(inputs.data?.topologies ?? [], prof).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}{prof?.tasks?.length && clusterCover(t, prof) < 1 ? ' (측정 cluster 불일치)' : ''}</option>)}</select></label>
@@ -343,7 +369,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
           states={taskStates} setState={(t, st) => setTaskStates((m) => ({ ...m, [t]: st }))}
           groups={groups} setGroup={(t, g) => setGroups((m) => ({ ...m, [t]: g }))}
           budgets={Object.fromEntries(Object.entries(edits).map(([t, e]) => [t, e.budget]))} setBudget={(t, v) => setEdit(t, { budget: v })}
-          space={rbSpace} method={rbRaw?.method} busy={busy} onRun={() => void run()} top={rbTop} setTop={setRbTop} hasResult={!!rbRaw} knob={rbKnob} setKnob={setRbKnob} />}
+          space={rbSpace} method={rbRaw?.method} busy={busy} onRun={() => void run()} top={rbTop} setTop={setRbTop} hasResult={!!rbRaw} stale={stale} knob={rbKnob} setKnob={setRbKnob} />}
         {mode === 'sweep' && <Card id="cpu-range" title="③ Sweep 범위" note="cluster별 · 칸 = fmax에서 task 시간 · ✓ budget 충족 · 체크 = sweep에 포함 · 파란 칸 = 측정 위치" defaultWide help={CPU_HELP.range}>
           <div className="toolbar" style={{ gap: 14, marginBottom: 6, fontSize: 12 }}>
             <span className="faint">knob</span>
@@ -401,11 +427,13 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
             <span className="grow" />
             <label className="faint" style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>결과 상위
               <select value={top} onChange={(e) => setTop(Number(e.target.value))} aria-label="결과 상위 N">{[10, 20, 60, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select>개</label>
-            <button className="btn primary" disabled={busy || !profile || !target} onClick={() => void run()}>{busy ? '계산 중…' : result ? '다시 계산' : 'Sweep 계산'}</button>
+            <button className="btn primary" disabled={busy || !profile || !target} onClick={() => void run()}>{busy ? '계산 중…' : !result ? 'Sweep 계산' : stale ? '변경 반영 계산' : '다시 계산'}</button>
           </div>
         </Card>}
       </div>}
+      <div className={`cpu-results${busy || sweepBusy ? ' is-busy' : ''}`} aria-busy={busy || sweepBusy}>
       {mode === 'rebalance' && <GrowthSweepCards s={sweep} synthetic={prof?.origin === 'synthetic'} busy={sweepBusy} error={sweepErr} range={range} setRange={setRange}
+        stale={growthStale} locked={busy}
         onRun={() => { if (rbRaw) void runSweep(rbRequest(request())) }}
         onPickPool={(c) => { setPoolSel(c); setInputsOpen(true); setPendingRun(true) }} />}
       {mode === 'rebalance' && rb && <div className="tb-grid">
@@ -472,6 +500,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
           </Card>
         </div>
       </>}
+      </div>
     </div>
   )
 }

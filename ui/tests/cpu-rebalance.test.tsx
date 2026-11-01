@@ -89,8 +89,12 @@ it('rebalance mode: setup, run with locks / co-move, curve and top splits', asyn
     expect(JSON.parse(localStorage.getItem('sdb.cpu.rb.cgroup')!)).toEqual({ cam_hal_request: 'camera-daemon', cam_hal_result: 'camera-daemon' })   // kept by task name
     const hf = [...host.querySelectorAll('label')].find((l) => l.textContent === 'MID_HF')!.querySelector('input')!
     await act(async () => hf.click())
-    const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!
+    // edited inputs: the shown result is from the previous inputs until the next run
+    expect(host.querySelector('[aria-label="계산 상태"]')!.textContent).toContain('조건 변경됨')
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === '다시 계산')).toBe(false)
+    const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === '변경 반영 계산')!
     await act(async () => btn.click())
+    expect(host.querySelector('[aria-label="계산 상태"]')!.textContent).not.toContain('조건 변경됨')
     const last = calls.at(-1)!
     expect(last.locks).toEqual({ eis_vdis: 'MID_LF1' })
     expect(last.co_move).toEqual([['cam_hal_request', 'cam_hal_result']])
@@ -118,7 +122,7 @@ it('과제 비교: second rebalance on the other topology, measured SoC as base,
     await act(async () => { cmp.value = 'pmp-e2800'; cmp.dispatchEvent(new Event('change', { bubbles: true })) })
     await pick(host, 'isp_ctrl 상태', 'exclude')
     await pick(host, 'eis_vdis 상태', 'pin:MID_LF1')
-    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!.click())
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '변경 반영 계산')!.click())
     const [main, other] = calls.slice(-2)
     expect(main.power_params_ref).toBe('pmp-e2600')
     expect(other.power_params_ref).toBe('pmp-e2800')
@@ -230,4 +234,29 @@ it('refreshes the comparison sweep on topology changes and records the computed 
     act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore()
     list.mockRestore(); create.mockRestore(); localStorage.clear()
   }
+})
+
+it('first run on a profile applies the saved cgroups whose tasks share one measured cluster, and shows the result as current', async () => {
+  localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
+  // camera-daemon: both on MID_LF0 → applied; media: MID_LF0 + MID_LF1 → left to a manual run (the server rejects it)
+  localStorage.setItem('sdb.cpu.rb.cgroup', JSON.stringify({ cam_hal_request: 'camera-daemon', cam_hal_result: 'camera-daemon', isp_ctrl: 'media', audio_hal: 'media' }))
+  const growth = vi.spyOn(sweepApi, 'run').mockRejectedValue(new Error('growth sweep not under test'))
+  const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
+  const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
+    profiles: [{ id: 'p1', scenario_ref: null, variant_ref: null, project_ref: null, tasks }],
+    topologies: [{ id: 'pmp-e2600', version: 1, soc_ref: 'soc-exynos2600', clusters: ['MID_LF0', 'MID_LF1', 'MID_HF', 'BIG'] }],
+  })
+  const calls: CpuRebalanceRequest[] = []
+  const run = vi.spyOn(rebalanceApi, 'run').mockImplementation(async (req) => { calls.push(req); return E2600 })
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
+    expect(calls[0].co_move).toEqual([['cam_hal_request', 'cam_hal_result']])
+    expect(calls[0].pool).toEqual([])
+    // the media cgroup was not part of the run, so the shown result is not the current inputs' result
+    expect(host.querySelector('[aria-label="계산 상태"]')!.textContent).toContain('조건 변경됨')
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '변경 반영 계산')!.click())
+    expect(calls.at(-1)!.co_move).toEqual([['cam_hal_request', 'cam_hal_result'], ['isp_ctrl', 'audio_hal']])
+    expect(host.querySelector('[aria-label="계산 상태"]')!.textContent).toContain('결과 = 현재 조건')
+  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore(); localStorage.clear() }
 })
