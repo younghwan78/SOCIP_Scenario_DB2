@@ -140,7 +140,12 @@ def _sw_tasks(db: Session, scenario_id: str, variant_id: str) -> set[str]:
     from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
     from scenario_db.sim.timeline_adapter import timeline_tasks
 
-    graph = resolve_analysis_selection(db, TimingBudgetRequest(scenario_id=scenario_id, variant_id=variant_id)).load(db).graph
+    try:
+        graph = resolve_analysis_selection(db, TimingBudgetRequest(scenario_id=scenario_id, variant_id=variant_id)).load(db).graph
+    except LookupError as exc:          # same mapping as the Timing Budget analysis it precedes
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
     return {str(t["id"]) for t in timeline_tasks(graph) if t.get("task_type") == "sw"}
 
 

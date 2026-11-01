@@ -190,7 +190,7 @@ def test_rebalance_uses_the_chain_order_for_the_wait_and_keeps_feasibility():
 def test_range_packs_a_tasks_threads_on_the_cluster_cores():
     assert packed_ms([2.0, 2.0], 1) == pytest.approx(4.0)
     assert packed_ms([2.0, 2.0], 2) == pytest.approx(2.0)
-    assert packed_ms([3.0, 2.0, 2.0], 2) == pytest.approx(4.0)
+    assert packed_ms([3.0, 2.0, 2.0, 3.0, 2.0], 2) == pytest.approx(6.0)     # a bound: a real 6 ms split exists
     one = _model(cores=1)
     profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="MID", cycles=8e6, threads={"1": 4e6, "2": 4e6})],
                          clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
@@ -318,3 +318,28 @@ def test_the_variant_sw_tasks_load_once_for_any_number_of_growths(monkeypatch):
     monkeypatch.setattr(svc, "_sw_tasks", lambda db, s, v: calls.append(1) or {"t0"})
     svc.timing_stretch(None, "uc", "v", growth={f"t{i}": 1.1 for i in range(20)})
     assert len(calls) == 1
+
+
+def test_longest_path_is_iterative_and_order_independent():
+    n = 600
+    names = [f"t{i}" for i in range(n)]
+    pairs = [(names[i], names[i + 1]) for i in range(n - 1)]
+    ms = {t: 1.0 for t in reversed(names)}                 # items not in topological order
+    assert longest_path(ms, pairs) == pytest.approx(float(n))
+    assert longest_path({"a": 1.0, "b": 2.0}, [("a", "b"), ("b", "a")]) == pytest.approx(2.0)   # a cycle does not hang
+
+
+def test_sw_task_lookup_errors_are_domain_errors(monkeypatch):
+    from scenario_db.exceptions import NotFoundError, UnprocessableError
+
+    class Broken:
+        def __init__(self, exc):
+            self.exc = exc
+
+        def load(self, db):
+            raise self.exc
+
+    for exc, mapped in ((ValueError("bad configured clock"), UnprocessableError), (LookupError("no variant"), NotFoundError)):
+        monkeypatch.setattr("scenario_db.api.services.analysis_inputs.resolve_analysis_selection", lambda db, req, e=exc: Broken(e))
+        with pytest.raises(mapped):
+            svc._sw_tasks(None, "uc", "v")

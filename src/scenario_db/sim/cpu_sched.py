@@ -187,17 +187,24 @@ def longest_path(ms: dict[str, float], pairs: tuple[tuple[str, str], ...] | list
     parallel branches (front / rear of PIP) do not add up. Items in no pair are paths of their own. ``fixed``: per-item
     time on the path that does not scale (release latency), as in the Timing Budget's critical SW."""
     fixed = fixed or {}
-    preds: dict[str, list[str]] = {}
+    succ: dict[str, set[str]] = {t: set() for t in ms}
+    indeg = {t: 0 for t in ms}
     for a, b in pairs:
-        if a in ms and b in ms:
-            preds.setdefault(b, []).append(a)
-    done: dict[str, float] = {}
-
-    def end(t: str, depth: int = 0) -> float:
-        if t not in done:
-            done[t] = ms[t] + fixed.get(t, 0.0) + max((end(p, depth + 1) for p in preds.get(t, ()) if depth < len(ms)), default=0.0)
-        return done[t]
-    return max((end(t) for t in ms), default=0.0)
+        if a in ms and b in ms and a != b and b not in succ[a]:
+            succ[a].add(b)
+            indeg[b] += 1
+    # iterative topological pass (Kahn): no recursion, any item order; members of a cycle (not expected: the
+    # order comes from a DAG) keep their own time only
+    end = {t: ms[t] + fixed.get(t, 0.0) for t in ms}
+    queue = [t for t, d in indeg.items() if d == 0]
+    while queue:
+        a = queue.pop()
+        for b in succ[a]:
+            end[b] = max(end[b], end[a] + ms[b] + fixed.get(b, 0.0))
+            indeg[b] -= 1
+            if indeg[b] == 0:
+                queue.append(b)
+    return max(end.values(), default=0.0)
 
 
 def concurrent(a: str, b: str, serial: frozenset[frozenset[str]]) -> bool:
@@ -801,12 +808,10 @@ def _options(task: str, clusters: list[str], spec: SweepSpec, caps: dict[str, fl
 
 
 def packed_ms(times: list[float], cores: int) -> float:
-    """Task time of threads alone on a cluster: longest first onto the least-loaded CPU; a CPU runs its share in
-    sequence (as ``evaluate`` sums a task's threads on one CPU)."""
-    load = [0.0] * max(1, cores)
-    for t in sorted(times, reverse=True):
-        load[load.index(min(load))] += t
-    return max(load)
+    """Lower bound of a task's time alone on a cluster: its longest thread, or its threads spread evenly over the
+    cores (a CPU runs its share in sequence, as ``evaluate`` sums a task's threads on one CPU). A bound, not a
+    placement, so the sweep range never drops a cluster the real EAS placement could meet the budget on."""
+    return max(max(times, default=0.0), sum(times) / max(1, cores))
 
 
 def beam_starts(swept: list[str], options: dict[str, list[dict[str, Any]]],
