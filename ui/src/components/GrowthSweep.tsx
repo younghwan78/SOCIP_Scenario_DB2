@@ -5,7 +5,7 @@ import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { Card } from './TimingCharts'
 import { fmt } from '../lib/timingBudget'
-import { mhzClusters, spreadVsConcentrate, strategyMatrix, type GrowthSweep as Sweep, type SweepPoint } from '../lib/growthSweep'
+import { mhzClusters, spreadVsConcentrate, strategyMatrix, sweepStageTip, type GrowthSweep as Sweep, type SweepPoint } from '../lib/growthSweep'
 
 const sg = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(d)}`)
 const gx = (g: number) => `×${g.toFixed(g * 10 % 1 === 0 ? 1 : 2)}`
@@ -110,7 +110,7 @@ export function GrowthCurve({ s, yMax, withBw = true, height = 300 }: { s: Sweep
                 { k: 'DSU', v: `${fmt(p.reference?.mhz.dsu, 0)} MHz` },
                 { section: 'BW · timing' }, { k: 'CPU → DRAM', v: p.cpu_bw_mbs === null ? '—' : `${fmt(p.cpu_bw_mbs, 0)} MB/s${p.bw_mw !== null && p.bw_mw !== undefined ? ` · ${fmt(p.bw_mw, 1)} mW` : ''}` },
                 ...(p.bw_mw !== null && p.bw_mw !== undefined ? [{ k: '현재 + BW', v: `${fmt(p.reference!.total_mw + p.bw_mw, 1)} mW`, color: '#0072B2' }] : []),
-                ...p.stages.map((st) => ({ k: `${st.stage.toUpperCase()} 여유`, v: `${fmt(st.slack_ms, 2)} ms`, tone: (st.slack_ms < 0 ? 'bad' : undefined) as 'bad' | undefined }))] })} />
+                ...p.stages.map((st) => sweepStageTip(st))] })} />
         })}
       </svg>
       <div className="legend-row">

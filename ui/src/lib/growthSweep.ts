@@ -26,6 +26,22 @@ export interface GrowthSweep {
   bw_power?: BwCoefficient
 }
 
+type SweepStage = SweepPoint['stages'][number]
+
+/** The stage slack the verdict uses: RT-chain-aware (cpu-sweep/2), else the SW room of older responses. */
+export const verdictSlack = (st: SweepStage): number => st.chain_slack_ms ?? st.slack_ms
+
+/** Tooltip row of one stage at a growth point: the verdict slack, with the SW room when the RT chain binds first. */
+export function sweepStageTip(st: SweepStage): { k: string; v: string; tone: 'bad' | undefined } {
+  const s = verdictSlack(st)
+  const chainBinds = st.chain_slack_ms !== undefined && st.chain_slack_ms < st.slack_ms - 1e-6
+  return {
+    k: `${st.stage.toUpperCase()} 여유`,
+    v: `${s.toFixed(2)} ms${chainBinds ? ` (RT chain · SW room ${st.slack_ms.toFixed(2)})` : ''}`,
+    tone: s < 0 ? 'bad' : undefined,
+  }
+}
+
 /** First growth at which ``cluster`` steps up on the reference placement (CPU-08). */
 export function firstStepUp(s: GrowthSweep | null, cluster: string): OppEvent | null {
   return s?.events.find((e) => e.which === 'reference' && e.cluster === cluster && e.mhz[1] > e.mhz[0]) ?? null

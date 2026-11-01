@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { growthGrid, spreadVsConcentrate, strategyMatrix, type SweepPoint } from './growthSweep'
+import { growthGrid, spreadVsConcentrate, strategyMatrix, sweepStageTip, type SweepPoint } from './growthSweep'
 
 const pt = (g: number, strat: [string, string[], number, boolean][]): SweepPoint => ({
   growth: g, reference: { total_mw: 1, feasible: true, mhz: { A: 1, dsu: 1 }, mw: {}, moved: [] }, best: null,
@@ -26,5 +26,17 @@ describe('growth sweep helpers', () => {
     expect(m.cols[m.rows[0].best!].label).toBe('LF0 + LF1')
     expect(m.cols[m.rows[1].best!].label).toBe('LF0 + LF1 + HF') // infeasible 400 is not the minimum
     expect(spreadVsConcentrate(pts[1]).concentrate?.clusters).toEqual(['MID_LF1'])
+  })
+})
+
+describe('sweepStageTip', () => {
+  it('shows the RT-chain-aware verdict slack, falling back to the SW room of older responses', () => {
+    const chain = sweepStageTip({ stage: 'nrt', sw_ms: 14, room_ms: 20, slack_ms: 6, chain_slack_ms: -1, ok: true })
+    expect(chain.v).toBe('-1.00 ms (RT chain · SW room 6.00)')
+    expect(chain.tone).toBe('bad')
+    const old = sweepStageTip({ stage: 'post', sw_ms: 4, room_ms: 6, slack_ms: 2, ok: true })
+    expect(old.k).toBe('POST 여유')
+    expect(old.v).toBe('2.00 ms')
+    expect(old.tone).toBeUndefined()
   })
 })

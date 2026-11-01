@@ -297,6 +297,12 @@ def test_mixed_sw_statistics_are_shown_per_row():
     assert "SW max · mean 혼재 — 행별 표시" in t and "SW mean</span>" in t and "SW max</span>" in t and "SW max 기준" not in t
     k = kpi_table(scoreboard(s), None, "max · mean 혼재")
     assert "(mean)" in k and "(max)" in k
+    # Top5 rows all from mean runs while the report mixes statistics: each row still names its statistic
+    from scenario_db.reporting.arch_report import _margins, sw_statistic
+    top = [{"variant_id": "a", "fps": 30, "stage": "nrt", "margin_pct": 5.0, "slack_ms": 1.0, "sw_share_pct": 50, "bottleneck": "t",
+            "bottleneck_ms": 1.0, "bottleneck_share_pct": 20, "growth_tolerance": 1.2, "recommendations": [], "statistic": "mean"}]
+    assert "혼재" in sw_statistic(s) and "SW mean</span>" in _margins(top, sw_statistic(s))
+    assert "SW mean</span>" not in _margins(top, "mean")
     one = sw_table(snap(scenarios=[b]))
     assert "SW max 기준" in one and "SW max</span>" not in one
 

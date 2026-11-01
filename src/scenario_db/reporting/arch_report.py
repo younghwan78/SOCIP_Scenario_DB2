@@ -1198,7 +1198,8 @@ def _margins(rows: list[dict[str, Any]], statistic: str | None = None) -> str:
     h = (f"<p class='meta'>{escape(margin_text(rows, statistic))}</p>"
          "<table><tr><th>#</th><th>Scenario</th><th>fps</th><th>stage</th><th>margin</th><th>SW / P</th><th>병목 task</th><th title='DVFS를 growth마다 다시 고르면 허용되는 SW 증가 (재최적화 가능 범위)'>SW 증가 허용<br><span class=meta>DVFS 재선택</span></th>"
          "<th title='추천 DVFS level을 고정했을 때 흡수 가능한 SW 증가 (robustness)'>SW 증가 허용<br><span class=meta>추천 DVFS 고정</span></th><th>권고</th></tr>")
-    mixed = len({r.get("statistic") for r in rows if r.get("statistic")}) > 1
+    # the report mixes statistics (header says so) or this table does: every row names its own
+    mixed = len({r.get("statistic") for r in rows if r.get("statistic")}) > 1 or "혼재" in str(statistic or "")
     for i, r in enumerate(rows, 1):
         stat = f" <span class=meta>SW {escape(str(r['statistic']))}</span>" if mixed and r.get("statistic") else ""
         h += (f"<tr><td>{i}</td><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td>{escape(r['stage'].upper())}{stat}</td>"
