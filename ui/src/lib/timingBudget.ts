@@ -9,6 +9,15 @@ export type StageId = 'rt' | 'nrt' | 'post' | 'output'
 export type Statistic = 'min' | 'mean' | 'max'
 export type EisMode = 'auto' | 'on' | 'off'
 
+/** SW statistic when the URL has no `stat`: mean = average power and the same condition as a measurement;
+ * max stays one click away for the conservative deadline check. */
+export const DEFAULT_STATISTIC: Statistic = 'mean'
+export const statisticOf = (v: string | undefined): Statistic => (v === 'max' || v === 'min' || v === 'mean' ? v : DEFAULT_STATISTIC)
+/** URL value for a statistic: the default is left out. */
+export const statParam = (s: string | null | undefined): string | undefined => (s && s !== DEFAULT_STATISTIC ? s : undefined)
+export const STAT_TIP = 'mean (기본) = task별 평균 runtime — 평균 전력 · 실측 비교와 같은 조건\nmax = 정의 SW timing의 최대값 — 최악 frame으로 deadline을 보수 판정\n'
+  + '바뀌는 것: SW ms · SW 여유, CPU 모델 "가정"이면 CPU mW, SW가 frame period를 넘으면 판정 · 출력 간격, 처리량 stage 1 frame이면 NRT · Post 필요 clock도'
+
 export interface SwItem { task: string; kind: 'sw' | 'ip_overhead'; runtime_ms: number; latency_ms: number; source: string; critical?: boolean }
 export interface StageRow {
   id: StageId; name: string; nodes: string[]; sw_items: SwItem[]
@@ -53,6 +62,13 @@ export interface PowerSplit {
   cpu_profile?: CpuProfileTerm
   cpu_mw_flat?: number; bw_sw_mw_model?: number
 }
+/** CPU model the server applied: a requested profile model falls back to flat (no CPU profile for the variant,
+ * no cpu.clusters in the params) and says so in power.cpu_profile; before a result, the request. */
+export function appliedCpuModel(r: Pick<TimingReport, 'power'> | null | undefined, requested: CpuModel): CpuModel {
+  if (!r) return requested
+  return r.power.cpu_profile?.kind === 'profile' ? 'profile' : 'flat'
+}
+
 export interface CpuProfileTerm {
   kind: 'profile' | 'flat'; note?: string; profile_ref?: string | null; growth?: number
   clusters?: Record<string, { mhz: number; total_mw: number; busy_ms: number }>; dsu_mhz?: number | null; dsu_mw?: number
