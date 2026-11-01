@@ -215,17 +215,25 @@ pipeline task graph(HW node 경유 포함, `frame_offset`이 있는 다음 frame
   (`priority_response`, 대기 상한 모두). 배치(cpupri)는 이 순서를 쓰지 않고 RT thread를 모두 동시 실행으로 본다
   (깨어나는 순간 실행 중인 task만 보는 cpupri에서 순서가 정해진 member는 같은 CPU · 다른 CPU 모두 가능 — 배치가 후보의
   판정에 따라 바뀌지 않게 함).
-- 순서는 stage chain(SW + HW + overhead)이 frame 주기 안에 끝날 때만 쓴다. chain이 주기보다 길면 다음 frame의
+- 순서는 stage chain이 frame 주기 안에 끝날 때만 쓴다. chain이 주기보다 길면 다음 frame의
   같은 stage와 겹칠 수 있으므로 모두 대기에 넣는다 (보수적; SW 증가 배율이 커져 넘어가는 경우 포함).
-  후보마다 다시 판정한다: stage SW = Timing Budget critical path에서 각 task의 runtime을 후보의 CPU 시간 ÷ 측정 배치
-  시간만큼 늘리고(release latency는 고정) 최장 경로를 다시 구한다 — 병렬 분기(PIP front / rear)는 더하지 않는다.
+  stage chain = stage의 SW item과 HW node를 같은 frame 순서로 이은 그래프(`timing_budget` stage의 `chain_graph`)의
+  최장 경로 + IP overhead. SW 사이에 직렬로 놓인 HW는 모두 더하고(예: SW 15 + HW 10 + HW 10 = 35 ms), 한 OTF group은
+  group 시간 한 번으로 센다. 가장 바쁜 HW 자원 점유(같은 IP를 나눠 쓰는 stream 합)보다 짧게 잡지 않는다.
+  후보마다 다시 판정한다: 각 SW item의 runtime을 후보의 CPU 시간 ÷ 측정 배치 시간만큼 늘리고(release latency · HW는
+  고정) 최장 경로를 다시 구한다 — 병렬 분기(PIP front / rear)는 더하지 않는다.
+- 기준 시간은 **측정 SoC**의 측정 배치다. `base_power_params_ref`로 다른 SoC에서 잰 profile을 쓰면 순서 판정,
+  stage budget, timing 영향(`timing_coupling.impact`) 모두 측정 SoC의 task 시간(`measured_soc_task_ms`)에서 늘린다 —
+  target이 느리면 그만큼 chain이 길어진다.
 - stage가 다른 task, pipeline에 없는 task(HAL thread 등), 순서 없는 병렬 분기는 동시에 돌 수 있는 것으로 본다.
 - 순서는 variant의 pipeline에서 읽으므로 **다음 과제에서 RT chain 구성(member · 순서 · 분기 · stage)이 바뀌어도
   코드 수정 없이 반영**된다. 스케줄링 클래스는 그 과제 power model의 `task_policy`가 정한다. chain에서 RT task와
   순서로 이어진 task에 `sched_class`가 없으면 결과 `warnings`에 `RT chain: ...`으로 알린다.
 - 화면의 **RT chain · 대기 계산 기준** 카드가 stage별 순서, 각 task의 클래스, 순서 적용 여부(순서 고정 / 대기에 포함)를 보여 준다.
 
-모델에 없는 것: binder 우선순위 상속, non-preemptible 구간, stage 사이의 실제 위상(서로 다른 stage는 겹친다고 가정).
+모델에 없는 것: binder 우선순위 상속, non-preemptible 구간, stage 사이의 실제 위상(서로 다른 stage는 겹친다고 가정),
+stage chain 경로 중간의 다른 stage node 시간(경로는 이어지지만 시간은 그 stage 몫), OTF group에 SW가 끼어 양방향으로
+이어진 경우(그 쌍은 순서 없음으로 봄).
 
 ### Timing Budget 연동 (자동 탐색 · 재분배 공통, `timing_coupling`)
 

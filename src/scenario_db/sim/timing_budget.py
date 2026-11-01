@@ -574,6 +574,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
             if want and "apv" not in (node + str(workload.ip_ref)).lower():
                 dual[node] = 2
     sw_order = _sw_order(sw_items, edges)
+    stage_paths = _stage_paths(sw_items, stage, workloads, edges)
     if any(i["source"] == "assumed" for items in sw_items.values() for i in items):
         warnings.append(
             "SW timing contains 'assumed' values; replace with previous-project measurements."
@@ -592,6 +593,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "tasks": tasks,
         "sw_items": sw_items,
         "sw_order": sw_order,
+        "stage_paths": stage_paths,
         "budgets": budgets,
         "margins": margins,
         "dual": dual,
@@ -694,23 +696,63 @@ def _critical_sw(items: list[dict[str, Any]], edges: list) -> float:
     return (max(best.values()) if best else 0.0) + overhead
 
 
-def _sw_order(sw_items: dict[str, list[dict[str, Any]]], edges: list) -> dict[str, list[list[str]]]:
-    """Ordered SW pairs of each stage: ``[a, b]`` when b depends on a within the same frame, through any
-    timeline node (SW or HW). Edges with a ``frame_offset`` link different frames and do not order. Two SW
-    items of a stage without such a path may run at the same time (parallel branches, e.g. front / rear)."""
+def _in_frame_succ(edges: list) -> dict[str, set[str]]:
+    """Successors over the timeline edges of one frame (an edge with a ``frame_offset`` links two frames)."""
     succ: dict[str, set[str]] = {}
     for edge in edges:
         if edge.get("frame_offset"):
             continue
         a, b = _edge_pair(edge)
         succ.setdefault(a, set()).add(b)
+    return succ
+
+
+def _ordered_pairs(names: list[str], succ: dict[str, set[str]]) -> list[list[str]]:
+    """``[a, b]`` for members where b is reachable from a (through any timeline node); a cycle leaves the pair
+    unordered."""
+    reach = {n: _closure([n], succ) for n in names}
+    return sorted([a, b] for a in names for b in names if a != b and b in reach[a] and a not in reach[b])
+
+
+def _sw_order(sw_items: dict[str, list[dict[str, Any]]], edges: list) -> dict[str, list[list[str]]]:
+    """Ordered SW pairs of each stage: ``[a, b]`` when b depends on a within the same frame, through any
+    timeline node (SW or HW). Edges with a ``frame_offset`` link different frames and do not order. Two SW
+    items of a stage without such a path may run at the same time (parallel branches, e.g. front / rear)."""
+    succ = _in_frame_succ(edges)
+    return {st: _ordered_pairs(list(dict.fromkeys(i["task"] for i in items if i["kind"] == "sw")), succ)
+            for st, items in sw_items.items()}
+
+
+def _stage_paths(sw_items: dict[str, list[dict[str, Any]]], stage: dict[str, str], workloads: dict[str, Any],
+                 edges: list) -> dict[str, list[list[str]]]:
+    """In-frame order of each stage's SW items and HW nodes together (same rule as ``_sw_order``): the stage
+    chain is the longest path over them, so serial HW between SW items adds up (``chain_graph``)."""
+    succ = _in_frame_succ(edges)
     out: dict[str, list[list[str]]] = {}
     for st, items in sw_items.items():
-        names = list(dict.fromkeys(i["task"] for i in items if i["kind"] == "sw"))
-        reach = {n: _closure([n], succ) for n in names}
-        # a cycle (both ways) leaves the pair unordered
-        out[st] = sorted([a, b] for a in names for b in names if a != b and b in reach[a] and a not in reach[b])
+        names = [*dict.fromkeys(i["task"] for i in items if i["kind"] == "sw"),
+                 *(n for n in workloads if stage.get(n) == st)]
+        out[st] = _ordered_pairs(list(dict.fromkeys(names)), succ)
     return out
+
+
+def _chain_graph(st: str, plan: dict[str, Any], ips: list[dict[str, Any]]) -> dict[str, Any]:
+    """The stage's SW items and HW nodes with the in-frame order between them. HW of one OTF group streams
+    together: one node with the group's time. ``hw_ms`` per HW node, edges ``[a, b]`` (b after a)."""
+    key = {ip["node"]: str(ip["otf_group"] or ip["node"]) for ip in ips if ip["hw_ms"] is not None}
+    hw: dict[str, float] = {}
+    for ip in ips:
+        if ip["stage"] == st and ip["hw_ms"] is not None:
+            hw[key[ip["node"]]] = max(hw.get(key[ip["node"]], 0.0), float(ip["hw_ms"]))
+    sw = {i["task"] for i in plan["sw_items"][st] if i["kind"] == "sw"}
+    pairs: set[tuple[str, str]] = set()
+    for a, b in plan["stage_paths"].get(st, []):
+        ka, kb = (a if a in sw else key.get(a)), (b if b in sw else key.get(b))
+        if ka is not None and kb is not None and ka != kb:
+            pairs.add((ka, kb))
+    # a group entered and left by one SW item (both ways) leaves the pair unordered, as a cycle does
+    return {"hw_ms": {k: round(v, 3) for k, v in sorted(hw.items())},
+            "edges": sorted([a, b] for a, b in pairs if (b, a) not in pairs)}
 
 
 def _closure(start, adjacency) -> set[str]:
@@ -935,6 +977,8 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "longest_sw_ms": round(b["longest_sw_ms"], 3),
                 "cpu_groups": b.get("cpu_groups", []),
                 "sw_order": plan["sw_order"].get(st, []),
+                # SW + HW nodes of the stage in their in-frame order: the chain through serial HW (CPU RT chain)
+                "chain_graph": _chain_graph(st, plan, ips),
                 "chain_ms": round(b["sw_ms"] + stage_hw.get(st, 0.0), 3),
                 "fill_pct": round(100 * (b["sw_ms"] + stage_hw.get(st, 0.0)) / period, 1)
                 if st in ("nrt", "post")

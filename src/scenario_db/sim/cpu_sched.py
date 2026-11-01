@@ -168,20 +168,29 @@ class StageOrder:
     stage: str
     pairs: tuple[tuple[str, str], ...]
     sw_ms: float                          # stage SW of the Timing Budget (critical path) at the measured placement
-    fixed_ms: float                       # stage HW + overhead
+    fixed_ms: float                       # stage HW (busiest resource) + overhead
     items: tuple[tuple[str, float], ...]  # (task, Timing Budget SW runtime ms) — scales with the CPU task time
     period_ms: float
     latency_ms: tuple[tuple[str, float], ...] = ()   # (task, fixed release latency ms) — on the path, does not scale
+    # the stage graph (Timing Budget ``chain_graph``): HW nodes with their fixed time (an OTF group = one node) and the
+    # in-frame order over SW items and HW nodes; ``overhead_ms`` = the IP-overhead part of ``fixed_ms``
+    hw: tuple[tuple[str, float], ...] = ()
+    path: tuple[tuple[str, str], ...] = ()
+    overhead_ms: float = 0.0
 
     def chain_ms(self, task_ms: dict[str, float], anchor: dict[str, float]) -> float:
-        """Stage chain of a candidate. The SW part is the longest ordered path of the items (the order follows the
-        task graph through HW, which the Timing Budget's direct-SW critical path can miss) plus whatever the
-        Timing Budget SW holds beyond it (other SW on the critical path); each item's runtime scales with
-        candidate / measured-placement CPU time, its release latency stays."""
-        base = dict(self.items)
+        """Stage chain of a candidate; each SW item's runtime scales with candidate / measured-placement CPU time,
+        its release latency stays.
+
+        With the stage graph: the longest path over SW items and HW nodes, so serial HW between SW items adds up
+        (never shorter than the busiest HW resource, whose streams share one IP). Without it (an older coupling):
+        stage HW + the longest ordered SW path + whatever the Timing Budget SW holds beyond it."""
         cand = {t: ms * (task_ms[t] / anchor[t]) if anchor.get(t) and t in task_ms else ms for t, ms in self.items}
         lat = dict(self.latency_ms)
-        path0 = longest_path(base, self.pairs, lat)
+        if self.hw or self.path:
+            on_path = longest_path({**dict(self.hw), **cand}, self.path, lat)
+            return self.overhead_ms + max(on_path, self.fixed_ms - self.overhead_ms)
+        path0 = longest_path(dict(self.items), self.pairs, lat)
         return self.fixed_ms + max(0.0, self.sw_ms - path0) + longest_path(cand, self.pairs, lat)
 
     def holds(self, task_ms: dict[str, float], anchor: dict[str, float]) -> bool:
@@ -190,7 +199,7 @@ class StageOrder:
 
 def longest_path(ms: dict[str, float], pairs: tuple[tuple[str, str], ...] | list[tuple[str, str]],
                  fixed: dict[str, float] | None = None) -> float:
-    """Longest ordered path of SW items (``pairs`` = [a, b]: b after a, acyclic): a stage's SW critical path, where
+    """Longest ordered path of items (``pairs`` = [a, b]: b after a, acyclic): a stage's critical path, where
     parallel branches (front / rear of PIP) do not add up. Items in no pair are paths of their own. ``fixed``: per-item
     time on the path that does not scale (release latency), as in the Timing Budget's critical SW."""
     fixed = fixed or {}
@@ -966,8 +975,9 @@ def cpu_sweep(
     budgets = dict(spec.budgets_ms)
     budget_source = {t: "user" for t in budgets}
     cross_soc = base is not None and base is not target
+    # also on every cross-SoC run: the timing impact scales the Timing Budget SW from the measured SoC's times
     on_measured = measured_task_ms(profile, model=base or target, fps=fps, spec=spec) \
-        if spec.serial_stages or (spec.stretch_budgets and cross_soc) else {}
+        if spec.serial_stages or cross_soc else {}
     if spec.serial_stages:
         ctx.anchor_ms = on_measured
     if spec.stretch_budgets:
@@ -1154,6 +1164,8 @@ def cpu_sweep(
         "reference": reference,
         "eas_default": eas_default,
         "measured_placement": measured_case,
+        # task times of the measured placement on the measured SoC (cross-SoC only): the timing impact's base
+        **({"measured_soc_task_ms": on_measured} if cross_soc else {}),
         "cases": better[: spec.top],
         "better_count": len(better),
         "equal_mw": spec.equal_mw,

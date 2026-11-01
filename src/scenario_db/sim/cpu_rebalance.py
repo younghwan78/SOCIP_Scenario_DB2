@@ -198,8 +198,9 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
 
     verification_budgets = dict(budgets)
     cross_soc = base is not None and base is not target
+    # also on every cross-SoC run: the timing impact scales the Timing Budget SW from the measured SoC's times
     on_measured = measured_task_ms(profile, model=base or target, fps=fps, spec=spec) \
-        if spec.serial_stages or (spec.stretch_budgets and cross_soc) else {}
+        if spec.serial_stages or cross_soc else {}
     if spec.serial_stages:
         # RT chain orders are re-checked per split against the measured placement on the measured SoC (unrounded)
         ctx.anchor_ms = on_measured
@@ -629,6 +630,8 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "cpu_bw_mbs": round(prep.bw_mbs, 3),
         "budgets_ms": {t: round(v, 4) for t, v in verification_budgets.items()},
         "budget_source": budget_source,
+        # task times of the measured placement on the measured SoC (cross-SoC only): the timing impact's base
+        **({"measured_soc_task_ms": on_measured} if cross_soc else {}),
         "rt_placement": prep.sched.rt_placement,
         "warnings": warnings,
     }

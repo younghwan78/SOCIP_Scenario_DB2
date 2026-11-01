@@ -385,3 +385,91 @@ def test_cross_soc_stage_budgets_stay_on_the_measured_time_and_the_anchor_ignore
     assert same["budgets_ms"]["a"] == pytest.approx(measured * 1.2, rel=1e-4) and same["measured_placement"]["feasible"]
     # a DSU rule of the target never reaches the measured-SoC anchor (that SoC has no DSU / vote table here)
     assert measured_task_ms(profile, model=fast, fps=30, spec=SweepSpec(dsu_mode="vote"))["a"] == pytest.approx(measured)
+
+
+# ---------------------------------------------------------------- the stage chain through serial HW
+def test_stage_graph_keeps_serial_hw_between_sw_items_and_one_node_per_otf_group():
+    from scenario_db.sim.timing_budget import _chain_graph, _stage_paths
+
+    sw = {"nrt": [{"task": "a", "kind": "sw"}, {"task": "b", "kind": "sw"}]}
+    stage = {"H1": "nrt", "H2": "nrt", "O1": "nrt", "O2": "nrt", "X": "post"}
+    workloads = dict.fromkeys(stage)
+    edges = [{"from": "a", "to": "H1"}, {"from": "H1", "to": "H2"}, {"from": "H2", "to": "b"},
+             {"from": "b", "to": "O1"}, {"from": "O1", "to": "O2"},           # O1 -> O2 stream as one OTF group
+             {"from": "O2", "to": "a", "frame_offset": 1}, {"from": "b", "to": "X"}]
+    plan = {"sw_items": sw, "stage_paths": _stage_paths(sw, stage, workloads, edges)}
+    ips = [{"node": n, "stage": stage[n], "hw_ms": ms, "otf_group": g}
+           for n, ms, g in (("H1", 10.0, None), ("H2", 10.0, None), ("O1", 6.0, "otf-1"), ("O2", 6.0, "otf-1"), ("X", 30.0, None))]
+    graph = _chain_graph("nrt", plan, ips)
+    assert graph["hw_ms"] == {"H1": 10.0, "H2": 10.0, "otf-1": 6.0}            # X belongs to another stage
+    assert ["H1", "H2"] in graph["edges"] and ["a", "b"] in graph["edges"] and ["b", "otf-1"] in graph["edges"]
+    assert not any("otf-1" == p[0] for p in graph["edges"])                    # the cross-frame edge does not order
+    st = svc._stage_order({"stage": "nrt", "sw_ms": 15.0, "hw_ms": 10.0, "overhead_ms": 0.0, "order": [["a", "b"]],
+                           "tasks": [{"task": "a", "ms": 5.0}, {"task": "b", "ms": 10.0}], "chain_graph": graph}, 1000 / 30)
+    # SW 15 + serial HW 10 + 10 + the OTF group 6 once: 41 ms, not SW + busiest HW = 25 ms
+    assert st.chain_ms({}, {}) == pytest.approx(41.0) and not st.holds({}, {})
+
+
+def test_serial_hw_lengthens_the_chain_and_the_busiest_resource_is_a_floor():
+    """Codex case: SW 15 ms with two serial HW of 10 ms -> a 35 ms chain over a 33.3 ms period (not 25 ms)."""
+    items = (("a", 5.0), ("b", 10.0))
+    serial = StageOrder(stage="nrt", pairs=(("a", "b"),), sw_ms=15.0, fixed_ms=10.0, items=items, period_ms=1000 / 30,
+                        hw=(("H1", 10.0), ("H2", 10.0)), path=(("a", "H1"), ("H1", "H2"), ("H2", "b"), ("a", "b")))
+    assert serial.chain_ms({}, {}) == pytest.approx(35.0) and not serial.holds({}, {})
+    # the same HW beside the SW (parallel): the chain is the longer branch, never below the busiest resource (18 ms)
+    side = StageOrder(stage="nrt", pairs=(("a", "b"),), sw_ms=15.0, fixed_ms=18.0, items=items, period_ms=1000 / 30,
+                      hw=(("H1", 10.0), ("H2", 10.0)), path=(("a", "b"), ("H1", "H2")))
+    assert side.chain_ms({}, {}) == pytest.approx(20.0) and side.holds({}, {})
+    assert StageOrder(stage="nrt", pairs=(), sw_ms=1.0, fixed_ms=18.5, items=(("a", 1.0),), period_ms=33.3, overhead_ms=0.5,
+                      hw=(("H", 9.0),), path=()).chain_ms({}, {}) == pytest.approx(18.5)          # 0.5 + max(9, 18)
+    # a candidate scales only the SW part: a twice-slower SW on the serial chain adds 15 ms
+    assert serial.chain_ms({"a": 2.0, "b": 2.0}, {"a": 1.0, "b": 1.0}) == pytest.approx(50.0)
+    # the timing impact reads the same chain
+    coupling = {"period_ms": 1000 / 30, "stages": [{"stage": "nrt", "sw_ms": 15.0, "hw_ms": 10.0, "overhead_ms": 0.0, "room_ms": 23.3,
+                                                    "tasks": [{"task": "a", "ms": 5.0}, {"task": "b", "ms": 10.0}], "order": [["a", "b"]],
+                                                    "chain_graph": {"hw_ms": {"H1": 10.0, "H2": 10.0},
+                                                                    "edges": [["a", "H1"], ["H1", "H2"], ["H2", "b"], ["a", "b"]]}}]}
+    row = svc.timing_impact(coupling, {"task_ms": {"a": 1.0, "b": 1.0}}, {"task_ms": {"a": 1.0, "b": 1.0}})[0]
+    assert row["chain_ms"] == pytest.approx(35.0)
+    assert _mark_serial(coupling)["stages"][0]["serial"] is False and coupling["serial_pairs"] == []
+
+
+def _cross_soc_coupling():
+    return {"mode": "stage_slack", "period_ms": 1000 / 30, "runtime_scale": 1.0, "stretch": {"a": 2.0}, "serial_pairs": [],
+            "stages": [{"stage": "nrt", "sw_ms": 10.0, "hw_ms": 15.0, "overhead_ms": 0.0, "room_ms": 18.3, "slack_ms": 8.3,
+                        "stretch": 1.8, "tasks": [{"task": "a", "ms": 10.0}], "order": [],
+                        "chain_graph": {"hw_ms": {"H": 15.0}, "edges": [["a", "H"]]}}]}
+
+
+def test_cross_soc_timing_impact_scales_from_the_measured_soc(monkeypatch):
+    """Measured SW 10 ms + HW 15 ms; the target CPU is 4x slower: the chain reads 55 ms, not the measured 25 ms."""
+    profile = CpuProfile(tasks=[CpuTaskProfile(task="a", cluster="MID", cycles=6e6)],
+                         clusters={"MID": CpuClusterProfile(freq_residency={2000: 1})})
+    fast, slow = _mid(1.0), _mid(0.25)
+    monkeypatch.setattr(svc, "release_read_connection", lambda db: None)
+    for base in (None, fast):
+        coupling = _cross_soc_coupling()
+        monkeypatch.setattr(svc, "_rebalance_data", lambda db, req, b=base: svc._RebalanceData(profile, slow, b, ("uc", "v")))
+        monkeypatch.setattr(svc, "_timing_coupling", lambda db, req, d, cb=None, c=coupling: (c, False))
+        out = svc.run_cpu_sweep(None, CpuSweepRequest(power_params_ref="p", cpu_profile_ref="x", timing_coupling="off")).result
+        row = out["timing_coupling"]["impact"]["reference"][0]
+        if base is None:      # one SoC: the measured placement is the base, nothing changes
+            assert "measured_soc_task_ms" not in out and row["chain_ms"] == pytest.approx(25.0)
+        else:
+            assert out["measured_soc_task_ms"]["a"] == pytest.approx(3.0, rel=1e-6)
+            assert row["delta_sw_ms"] == pytest.approx(30.0, abs=1e-3) and row["chain_ms"] == pytest.approx(55.0, abs=1e-3)
+            assert not row["ok"] and row["extra_latency_frames"] == 1
+    # the rebalance reads the same base (two clusters: a rebalance needs a pool)
+    def ab(ipc: float) -> CpuPowerModel:
+        return CpuPowerModel.from_params(PowerModelParams.model_validate({
+            "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x", "cpu": {"clusters": [
+                {"name": n, "core_type": "M", "cores": 1, "ipc_rel": ipc, "opps": [{"mhz": 2000, "mv": 850, "mw_per_core": 300}]}
+                for n in ("MID", "B")], "default_cluster": 0}}))
+
+    coupling = _cross_soc_coupling()
+    res = svc._rebalance_finish(cpu_rebalance(profile, target=ab(0.25), base=ab(1.0), fps=30, spec=RebalanceSpec(pool=("MID", "B"))),
+                                coupling, False)
+    assert res["measured_soc_task_ms"]["a"] == pytest.approx(3.0, rel=1e-6)
+    row = res["timing_coupling"]["impact"]["reference"][0]
+    assert row["chain_ms"] == pytest.approx(55.0, abs=1e-3) and not row["ok"]
+    assert svc.latency_trade(coupling, res, res["reference"])["impact"][0]["chain_ms"] == pytest.approx(55.0, abs=1e-3)

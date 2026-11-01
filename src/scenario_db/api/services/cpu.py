@@ -75,13 +75,15 @@ def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
         raise UnprocessableError(str(exc)) from exc
     if coupling:
         # the coupling's SW times belong to the measured placement: impacts scale from it, also with reference=eas
+        # (on the measured SoC when it differs from the target)
         measured = result["measured_placement"]
         coupling["enforced"] = enforce
         matched = sorted(t for t in coupling["stretch"] if t in (measured.get("task_ms") or {}))
         coupling["matched_tasks"], coupling["unmatched_tasks"] = matched, sorted(set(coupling["stretch"]) - set(matched))
         best = (result.get("cases") or [None])[0]
-        coupling["impact"] = {"reference": timing_impact(coupling, measured, result["reference"]),
-                              "best": timing_impact(coupling, measured, best) if best else None}
+        base = impact_base(result, measured)
+        coupling["impact"] = {"reference": timing_impact(coupling, base, result["reference"]),
+                              "best": timing_impact(coupling, base, best) if best else None}
         result["timing_coupling"] = coupling
     result["timing_mode"] = request.timing_coupling
     return CpuWhatIfResponse(profile_ref=data.profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
@@ -128,7 +130,9 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
                        "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0),
                                   "latency_ms": float(i.get("latency_ms") or 0.0)} for i in items],
                        # SW pairs the pipeline orders within one frame (RT chain), from the variant's task graph
-                       "order": [list(pair) for pair in st.get("sw_order") or []]})
+                       "order": [list(pair) for pair in st.get("sw_order") or []],
+                       # SW + HW nodes in their in-frame order: the stage chain through serial HW
+                       "chain_graph": st.get("chain_graph") or {"hw_ms": {}, "edges": []}})
     return _mark_serial({"mode": "stage_slack", "scenario_id": scenario_id, "variant_id": variant_id, "statistic": statistic,
                          "runtime_scale": runtime_scale, "period_ms": period, "stages": stages,
                          "stretch": {k: round(v, 4) for k, v in stretch.items()}})
@@ -169,31 +173,48 @@ def coupling_stages(coupling: dict[str, Any] | None) -> tuple[StageOrder, ...]:
     stage with an order goes in; whether it holds is decided per candidate from its task times (StageOrder.holds)."""
     if not coupling:
         return ()
-    return tuple(StageOrder(stage=str(st["stage"]), pairs=tuple((str(a), str(b)) for a, b in st["order"]),
-                            sw_ms=float(st["sw_ms"]), fixed_ms=float(st["hw_ms"]) + float(st["overhead_ms"]),
-                            items=tuple((str(t["task"]), float(t["ms"])) for t in st["tasks"]),
-                            period_ms=float(coupling["period_ms"]),
-                            latency_ms=tuple((str(t["task"]), float(t.get("latency_ms") or 0.0)) for t in st["tasks"]))
-                 for st in coupling["stages"] if st.get("order"))
+    return tuple(_stage_order(st, float(coupling["period_ms"])) for st in coupling["stages"] if st.get("order"))
+
+
+def _stage_order(st: dict[str, Any], period_ms: float) -> StageOrder:
+    graph = st.get("chain_graph") or {}
+    return StageOrder(stage=str(st["stage"]), pairs=tuple((str(a), str(b)) for a, b in st.get("order") or []),
+                      sw_ms=float(st["sw_ms"]), fixed_ms=float(st["hw_ms"]) + float(st["overhead_ms"]),
+                      items=tuple((str(t["task"]), float(t["ms"])) for t in st["tasks"]),
+                      period_ms=period_ms,
+                      latency_ms=tuple((str(t["task"]), float(t.get("latency_ms") or 0.0)) for t in st["tasks"]),
+                      hw=tuple((str(k), float(v)) for k, v in (graph.get("hw_ms") or {}).items()),
+                      path=tuple((str(a), str(b)) for a, b in graph.get("edges") or []),
+                      overhead_ms=float(st["overhead_ms"]))
+
+
+def impact_base(result: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+    """What the timing impact scales from: the coupling's SW times belong to the measured device, so on a cross-SoC
+    run the measured placement's task times on the measured SoC (``measured_soc_task_ms``), else ``fallback``."""
+    soc = result.get("measured_soc_task_ms")
+    return {"task_ms": soc} if soc else fallback
 
 
 def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dict[str, Any]) -> list[dict[str, Any]]:
     """Stage SW after a placement: each Timing Budget SW item scales with its CPU task time (case / reference)."""
     out = []
     ref_ms, new_ms = reference.get("task_ms") or {}, case.get("task_ms") or {}
+    period = coupling["period_ms"]
     for st in coupling["stages"]:
         scaled = {it["task"]: it["ms"] * (new_ms[it["task"]] / ref_ms[it["task"]])
                   if ref_ms.get(it["task"]) and new_ms.get(it["task"]) else it["ms"] for it in st["tasks"]}
+        chain0 = st["sw_ms"] + st["hw_ms"] + st["overhead_ms"]
         if "order" in st:     # the stage SW is its critical path: parallel branches do not add up
             pairs = [(a, b) for a, b in st["order"]]
             lat = {it["task"]: float(it.get("latency_ms") or 0.0) for it in st["tasks"]}
             add = longest_path(scaled, pairs, lat) - longest_path({it["task"]: it["ms"] for it in st["tasks"]}, pairs, lat)
+            # the chain through the stage graph (serial HW adds up), as the RT chain check
+            order = _stage_order(st, period)
+            chain0, chain = order.chain_ms({}, {}), order.chain_ms(new_ms, ref_ms)
         else:                 # an older coupling without the order: every item in sequence
             add = sum(scaled[it["task"]] - it["ms"] for it in st["tasks"])
+            chain = chain0 + add
         sw = st["sw_ms"] + add
-        period = coupling["period_ms"]
-        chain0 = st["sw_ms"] + st["hw_ms"] + st["overhead_ms"]
-        chain = chain0 + add
         # pipelined: fps holds while each task fits a frame; a longer SW+HW chain only adds buffered frames (latency)
         extra = max(0, math.ceil(chain / period - 1e-9) - math.ceil(chain0 / period - 1e-9)) if period > 0 else 0
         out.append({"stage": st["stage"], "sw_ms": round(sw, 3), "delta_sw_ms": round(add, 3),
@@ -207,7 +228,7 @@ def latency_trade(coupling: dict[str, Any], enforced: dict[str, Any], free_best:
     if not free_best:
         return None
     keep = enforced.get("best") or enforced["reference"]
-    rows = timing_impact(coupling, enforced["reference"], free_best)
+    rows = timing_impact(coupling, impact_base(enforced, enforced["reference"]), free_best)
     return {"best_total_mw": free_best["total_mw"], "moved": free_best.get("moved") or [],
             "delta_mw": round(free_best["total_mw"] - keep["total_mw"], 2),
             "delta_vs_reference_mw": round(free_best["total_mw"] - enforced["reference"]["total_mw"], 2),
@@ -306,10 +327,11 @@ def _rebalance_finish(result: dict[str, Any], coupling: dict[str, Any] | None, e
         matched = sorted(t for t in coupling["stretch"] if t in (ref.get("task_ms") or {}))
         coupling["matched_tasks"] = matched
         coupling["unmatched_tasks"] = sorted(set(coupling["stretch"]) - set(matched))
-        coupling["impact"] = {"reference": timing_impact(coupling, ref, ref),
-                              "best": timing_impact(coupling, ref, result["best"]) if result.get("best") else None}
+        base = impact_base(result, ref)     # the measured SoC's times on a cross-SoC run
+        coupling["impact"] = {"reference": timing_impact(coupling, base, ref),
+                              "best": timing_impact(coupling, base, result["best"]) if result.get("best") else None}
         for c in result.get("cases") or []:
-            rows = timing_impact(coupling, ref, c)
+            rows = timing_impact(coupling, base, c)
             c["timing_slack_ms"] = min((r["slack_ms"] for r in rows), default=None)
         result["timing_coupling"] = coupling
     return result
