@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog, compression_typical
 
-ENGINE_REV = "arch-exploration/13"  # 13: v2-vf clock term uses the work clock (busy share no longer follows the SW margin); 12: SBWC mean ratio = typical (engine baseline), eligible-only lever path + exact optimum; 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
+ENGINE_REV = "arch-exploration/14"  # 14: profile CPU model (cpu_sched): opt-in RT cpupri placement, a task's threads on one CPU run in sequence; 13: v2-vf clock term uses the work clock (busy share no longer follows the SW margin); 12: SBWC mean ratio = typical (engine baseline), eligible-only lever path + exact optimum; 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0

@@ -27,6 +27,8 @@ import { growthGrid } from '../lib/growthSweep'
 import { useCpuAnalysis } from '../lib/useCpuAnalysis'
 import { CpuRunStatus } from '../components/CpuRunStatus'
 import { CpuScopeSelect } from '../components/CpuScope'
+import { RtChainCard } from '../components/RtChain'
+import { SLACK_TIER_LABEL, schedText, slackVerdict, slackVerdictNote, type TaskSched } from '../lib/rebalance'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -125,6 +127,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       power_gating_eff: pgEff, cpu_bw_scale: bwScale,
       freq_margin: num(adv.freqMargin), fits_margin: num(adv.fitsMargin), util_model: adv.utilModel || undefined,
       pelt_halflife_ms: num(adv.halflife), deadline_boost: tri(adv.boost), energy_includes_static: tri(adv.emStatic), top,
+      // the sweep uses the same Timing Budget coupling as the rebalance (stage budgets + the RT chain order)
+      timing_coupling: timingMode,
       ...(dsu ? { dsu_mode: dsu.mode, dsu_vote: dsu.mode === 'vote' ? dsu.vote : undefined, dsu_fixed_mhz: dsu.mode === 'fixed' ? dsu.fixed_mhz : undefined } : {}),
     }
   }
@@ -173,7 +177,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       else void run(req)
     }
     return () => analysis.cancel()
-  }, [profile, target, base, reference, mode, cmpTarget]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, target, base, mode === 'sweep' ? reference : '', mode, cmpTarget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCell = (task: string, cl: string) => {
     const auto = result?.range.tasks.find((t) => t.task === task)
@@ -249,7 +253,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const sub = (c: SweepCase) => {
     const f = ref && c !== ref ? freqChanges(c, ref) : []
     const eq = c.equivalents?.length ? ` · 동등 ${c.equivalents.length}` : ''
-    return `${c.feasible ? '만족' : '미충족'} · slack ${c.min_slack_ms === null ? '—' : fmt(c.min_slack_ms, 1)} ms${f.length ? ` · ${f.join(' ')}` : ''}${eq}`
+    return `${SLACK_TIER_LABEL[slackVerdict(c).tier]} · slack ${c.min_slack_ms === null ? '—' : fmt(c.min_slack_ms, 1)} ms${f.length ? ` · ${f.join(' ')}` : ''}${eq}`
   }
   const refName = result?.reference_kind === 'eas' ? 'EAS 기본' : '현재 (측정 배치)'
   const byId = (id: string): SweepCase | undefined => {
@@ -271,12 +275,16 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const otherCols: Column<SweepCase>[] = [
     { key: 'mw', label: 'CPU mW', width: 90, align: 'right', sort: (c) => c.total_mw, render: (c) => <span className="mono">{fmt(c.total_mw, 1)}</span> },
     { key: 'd', label: `${refName} 대비`, width: 110, align: 'right', sort: (c) => c.delta_mw ?? 0, render: (c) => <span className={`mono ${(c.delta_mw ?? 0) < 0 ? 'pm-down' : 'pm-up'}`}>{signed(c.delta_mw ?? 0)}</span> },
-    { key: 'ok', label: '판정', width: 80, sort: (c) => (c.feasible ? 1 : 0), render: (c) => <span className={`badge ${c.feasible ? 'v-ok' : 'v-fail'}`}>{c.feasible ? '만족' : '미충족'}</span> },
+    { key: 'ok', label: '판정', width: 90, sort: (c) => (c.feasible ? 1 : 0), render: (c) => { const v = slackVerdict(c)
+      return <span className={`badge ${v.tier === 'ok' ? 'v-ok' : v.tier === 'miss' ? 'v-fail' : 'v-warn'}`} title={slackVerdictNote(v)}>{SLACK_TIER_LABEL[v.tier]}</span> } },
     { key: 'k', label: 'knob', width: 380, render: (c) => <span className="mono faint">{caseLabel(c)}</span> },
   ]
   const tile = (label: string, value: string, note: string, tone = '') =>
     <div key={label} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{label}</div><div className={`mono ${tone}`} style={{ fontSize: 20, fontWeight: 600 }}>{value}</div><div className="faint" style={{ fontSize: 11 }}>{note}</div></div>
   const sched = result?.scheduler
+  // scheduling class per task from the sweep range (task_policy as the server resolved it)
+  const sweepSched: Record<string, TaskSched | undefined> = Object.fromEntries((result?.range.tasks ?? [])
+    .filter((t) => t.policy.sched_class).map((t) => [t.task, t.policy as unknown as TaskSched]))
   // stale = the displayed result was computed from other inputs than the current ones (see rbKey)
   const hasResult = mode === 'sweep' ? !!rawResult : !!rbRaw
   const currentRb = mode === 'rebalance' && profile && target ? rbRequest(request()) : null
@@ -333,14 +341,22 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                 {(inputs.data?.topologies ?? []).filter((t) => t.id !== target).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}</option>)}</select></label>}
             <label className="cpu-f" title="다른 과제에서 측정한 profile이면 측정한 SoC의 CPU 구성을 고르세요 (core type으로 대응)"><span className="faint">profile을 측정한 SoC</span>
               <select value={base} onChange={(e) => setBase(e.target.value)}><option value="">적용할 SoC와 같음</option>{(inputs.data?.topologies ?? []).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · {t.id}</option>)}</select></label>
-            <div className="cpu-f"><span className="faint">비교 기준 (★)</span>
+            {mode === 'sweep' && <div className="cpu-f"><span className="faint">비교 기준 (★)</span>
               <div className="toolbar" style={{ gap: 12 }}>
                 <label><input type="radio" checked={reference === 'measured'} onChange={() => setReference('measured')} /> 현재 = 측정 배치</label>
                 <label><input type="radio" checked={reference === 'eas'} onChange={() => setReference('eas')} /> EAS 기본</label>
-              </div></div>
+              </div></div>}
           </div>
         </Card>
         <Card id="cpu-cond" title="② 조건 · scheduler" help={CPU_HELP.cond} note={sched ? `${sched.from_params ? 'topology 설정' : '기본값'}: margin ${sched.freq_margin} · ${sched.util_model} · PELT ${sched.pelt_halflife_ms} ms · boost ${sched.deadline_boost ? 'on' : 'off'}` : 'EAS + schedutil'}>
+          <div className="toolbar" style={{ gap: 8, marginBottom: 8, fontSize: 12 }}>
+            <span className="faint">SW timing 제약</span>
+            <div className="seg" role="group" aria-label="SW timing 제약 (조건)">
+              <button className={timingMode === 'stage_slack' ? 'on' : ''} onClick={() => setTimingMode('stage_slack')} title="Timing Budget stage의 SW 여유만큼만 task가 느려질 수 있음 (pipeline latency 유지)">SW 여유 제약</button>
+              <button className={timingMode === 'off' ? 'on' : ''} onClick={() => setTimingMode('off')} title="각 task가 frame 주기 안에만 들어오면 허용">CPU 주기만</button>
+            </div>
+            <span className="faint">· 두 방식 모두 RT chain 순서(pipeline)로 같은 CPU 대기를 계산</span>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
             <label className="cpu-f"><span className="faint">fps</span><input type="number" value={fps} min={1} onChange={(e) => setFps(Number(e.target.value))} /></label>
             <label className="cpu-f" title="차기 과제 SW instruction 증가 배율 (전체)"><span className="faint">SW 증가 배율</span><input type="number" step={0.05} value={growth} onChange={(e) => setGrowth(Number(e.target.value))} /></label>
@@ -419,7 +435,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                       </label></td>
                   })}
                   <td><input style={{ width: 36 }} value={e.threads} placeholder={rt ? String(rt.threads.length) : '1'} title={rt?.thread_source === 'measured' ? `측정 thread (TID): ${rt.threads.map((t) => t.name).join(', ')}` : ''} onChange={(ev) => setEdit(task, { threads: ev.target.value })} /></td>
-                  <td><input style={{ width: 48 }} value={e.budget} placeholder="—" onChange={(ev) => setEdit(task, { budget: ev.target.value })} /></td>
+                  <td><input style={{ width: 48 }} value={e.budget} placeholder={rt?.budget_ms != null ? fmt(rt.budget_ms, 2) : '—'}
+                    title={rt?.budget_source === 'stretch' ? 'Timing Budget stage 여유 (측정 배치 시간 × stage stretch) — 값을 넣으면 더 작은 쪽' : undefined}
+                    onChange={(ev) => setEdit(task, { budget: ev.target.value })} /></td>
                   <td><input style={{ width: 40 }} value={e.growth} placeholder={String(growth)} onChange={(ev) => setEdit(task, { growth: ev.target.value })} /></td>
                   <td className="faint" style={{ textAlign: 'left', fontSize: 11 }}>{Object.entries(rt?.policy ?? {}).map(([k, v]) => `${k}=${String(v)}`).join(' ')}{fixed ? ' 고정 (sweep 제외)' : rt ? ` 후보 ${rt.options.length}` : ''}</td>
                 </tr>)
@@ -459,6 +477,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       {mode === 'rebalance' && rb && <div className="tb-grid">
         {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
         <RebalanceWhy r={rb} mode={timingMode} onMode={(m) => { setTimingMode(m); setPendingRun(true) }} />
+        <RtChainCard coupling={rb.timing_coupling} sched={rb.task_sched ?? {}} rtPlacement={rb.rt_placement} />
         <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} knob={rbKnob}
           onPickStrategy={(assign) => setTaskStates((m) => ({ ...m, ...Object.fromEntries(Object.entries(assign).flatMap(([u, c]) => u.split('+').map((t) => [t, `pin:${c}` as TaskState]))) }))}
           sensitivity={rbRaw && <AssumptionSensitivity base={rb} dsu={dsuExp}
@@ -495,7 +514,10 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               {!showAllBetter && result.cases.length > 5 && <button className="btn" style={{ marginTop: 6 }} onClick={() => setShowAllBetter(true)}>▾ 나머지 {result.cases.length - 5}개 더 보기</button>}
             </> : <div className="empty">{refName}보다 전력이 낮으면서 조건을 만족하는 조합이 없습니다. sweep 범위나 knob을 넓혀 보세요.</div>}
           </Card>
-          {picked && <CaseDetail c={picked} reference={ref} refName={refName} title={rows.find((r) => r.id === sel)?.label ?? ''} clusters={clusterNames} colorOf={colorOf} budgets={Object.fromEntries(Object.entries(edits).map(([t, e]) => [t, num(e.budget)]))} />}
+          {picked && <CaseDetail c={picked} reference={ref} refName={refName} title={rows.find((r) => r.id === sel)?.label ?? ''} clusters={clusterNames} colorOf={colorOf}
+            budgets={result.budgets_ms ?? Object.fromEntries(Object.entries(edits).map(([t, e]) => [t, num(e.budget)]))} budgetSource={result.budget_source ?? {}}
+            sched={sweepSched} />}
+          <RtChainCard coupling={result.timing_coupling} sched={sweepSched} rtPlacement={result.scheduler.rt_placement} />
           <Card id="cpu-others" title="나머지 조합" note="전력 증가 또는 조건 미충족 · 정렬 가능" defaultWide minHeight={120} help={CPU_HELP.others}>
             <details><summary className="faint" style={{ fontSize: 12 }}>{result.other_count}개 중 {result.others.length}개 펼치기</summary>
               <div className="table-x"><DataTable id="cpu.others" columns={otherCols} rows={result.others} rowKey={(c) => caseLabel(c) + c.total_mw}
@@ -508,10 +530,15 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   )
 }
 
-function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets }: {
+function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets, budgetSource = {}, sched = {} }: {
   c: SweepCase; reference: SweepCase; refName: string; title: string; clusters: string[]; colorOf: (c: string) => string
-  budgets: Record<string, number | undefined>
+  budgets: Record<string, number | undefined>; budgetSource?: Record<string, 'user' | 'stretch'>
+  sched?: Record<string, TaskSched | undefined>
 }) {
+  // wait on a shared CPU: with task_policy classes the priority response, else the all-concurrent-co-runners bound
+  const prio = !!c.response_prio_ms
+  const response = c.response_prio_ms ?? c.response_ms ?? {}
+  const verdict = slackVerdict(c)
   const knobs = Object.entries(c.knobs).filter(([, o]) => o.kind !== 'measured')
   const moved = movedLabel(c, reference)
   const tasks = Object.keys({ ...reference.task_ms, ...c.task_ms })
@@ -554,15 +581,22 @@ function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets }
         </div>
       </div>
       <table className="grid pm-table" style={{ marginTop: 8 }}>
-        <thead><tr><th>task</th><th>★ {refName}</th><th>후보</th><th style={{ textAlign: 'right' }}>시간 ms (★→후보)</th><th style={{ textAlign: 'right' }}>budget</th><th style={{ textAlign: 'right' }}>slack</th></tr></thead>
+        <thead><tr><th>task</th><th>★ {refName}</th><th>후보</th><th style={{ textAlign: 'right' }}>시간 ms (★→후보)</th><th style={{ textAlign: 'right' }} title="stretch = Timing Budget stage 여유 (측정 배치 시간 × stage stretch)">budget</th><th style={{ textAlign: 'right' }}>slack</th>
+          <th style={{ textAlign: 'right' }} title={prio ? '같은 CPU 대기를 스케줄링 클래스 · 우선순위(task_policy)로 계산 · RT chain에서 순서가 정해진 task는 제외' : '같은 CPU에서 동시에 돌 수 있는 co-runner를 모두 기다린 상한 · RT chain에서 순서가 정해진 task는 제외'}>{prio ? '대기 포함 (우선순위)' : '대기 포함'}</th><th>class</th></tr></thead>
         <tbody>{tasks.map((t) => {
           const changed = (reference.placement[t] ?? []).join() !== (c.placement[t] ?? []).join()
-          const slack = c.slack_ms[t]
+          const slack = c.slack_ms[t], b = budgets[t], resp = response[t]
+          const waitSlack = b !== undefined && resp !== undefined ? b - resp : undefined
           return <tr key={t} className={changed ? 'selected' : ''}><td className="mono">{t}</td><td className="mono">{at(reference, t)}</td><td className="mono">{at(c, t)}</td>
             <td className="mono" style={{ textAlign: 'right' }}>{fmt(reference.task_ms[t], 2)} → {fmt(c.task_ms[t], 2)}</td>
-            <td className="mono" style={{ textAlign: 'right' }}>{budgets[t] ?? '—'}</td>
-            <td className={`mono ${slack === undefined ? '' : slack < 0.5 ? 'pm-up' : 'pm-down'}`} style={{ textAlign: 'right' }}>{slack === undefined ? '—' : fmt(slack, 2)}</td></tr>
+            <td className="mono" style={{ textAlign: 'right' }}>{b === undefined ? '—' : fmt(b, 2)}{budgetSource[t] === 'stretch' && <span className="faint"> TB</span>}</td>
+            <td className={`mono ${slack === undefined ? '' : slack < 0.5 ? 'pm-up' : 'pm-down'}`} style={{ textAlign: 'right' }}>{slack === undefined ? '—' : fmt(slack, 2)}</td>
+            <td className={`mono ${waitSlack === undefined ? 'faint' : waitSlack < -1e-3 ? 'pm-up' : ''}`} style={{ textAlign: 'right' }}
+              title={resp !== undefined ? `응답 ${fmt(resp, 2)} ms (자체 ${fmt(c.task_ms[t], 2)} + 대기 ${fmt(resp - (c.task_ms[t] ?? 0), 2)})` : '같은 CPU에 다른 task 없음'}>
+              {resp === undefined ? '—' : waitSlack === undefined ? fmt(resp, 2) : `${fmt(waitSlack, 2)}`}</td>
+            <td className="mono faint">{schedText(sched[t]) ?? ''}</td></tr>
         })}</tbody></table>
+      <div className={`faint ${verdict.tier === 'ok' ? '' : 'pm-up'}`} style={{ fontSize: 12, marginTop: 4 }}><b>{SLACK_TIER_LABEL[verdict.tier]}</b> — {slackVerdictNote(verdict)}</div>
     </Card>
   )
 }

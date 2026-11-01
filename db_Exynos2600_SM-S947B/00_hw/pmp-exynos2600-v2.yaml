@@ -166,6 +166,9 @@ cpu:
     fits_margin: 1.25
     capacity: {}
     energy_includes_static: false
+    # RT threads (camera RT chain, surfaceflinger) go to the CPU without concurrent RT work first (Linux cpupri);
+    # (every RT thread counts, RT chain members included; the chain order only affects the wait verdict)
+    rt_placement: cpupri
     task_policy:
       # sched_class / rt_priority / nice: ASSUMED example (AOSP defaults where they exist) - replace with the
       # device's values (ps -eo cls,rtprio,ni,comm or perfetto sched_slice.priority); unset = SCHED_NORMAL nice 0

@@ -225,6 +225,11 @@ class CpuSchedulerParams(BaseScenarioModel):
     capacity: dict[str, float] = Field(default_factory=dict)
     energy_includes_static: bool = False  # Linux EM compares dynamic energy only
     task_policy: dict[str, CpuTaskPolicy] = Field(default_factory=dict)
+    # CPU of an RT (fifo / rr) thread inside its cluster. "eas": like a CFS thread (most spare capacity);
+    # "cpupri": Linux RT push / cpupri — the CPU whose RT threads that can run at the same time have the lowest
+    # priority (an RT-free CPU first). Every RT thread counts, RT chain members included (the chain order only
+    # affects the wait verdict, not the placement).
+    rt_placement: Literal["eas", "cpupri"] = "eas"
     source: str | None = None
 
     @model_validator(mode="after")

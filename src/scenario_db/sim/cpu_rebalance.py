@@ -35,6 +35,7 @@ from scenario_db.sim.cpu_sched import (
     _prepare,
     eas_place,
     evaluate,
+    measured_task_ms,
     resolve_allowed,
 )
 
@@ -50,9 +51,8 @@ class RebalanceSpec(SweepSpec):
     verify_k: int = 30
     max_exhaustive: int = 300_000
     top: int = 20
-    # task -> allowed slow-down vs its measured-placement time (e.g. Timing Budget stage SW slack); becomes
-    # budgets_ms[task] = reference ms x factor unless budgets_ms already names the task
-    stretch_budgets: dict[str, float] = field(default_factory=dict)
+    # stretch_budgets / serial_stages: the Timing Budget coupling (SweepSpec); the stretch is anchored on the
+    # measured placement's task time
     ratio_curves: bool = True                     # CPU-07 per-target distribution-ratio curves (sweeps skip them)
 
 
@@ -179,8 +179,11 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         cl = ctx.by_name[c]
         task_ms: dict[str, float] = {}
         for cpu in sl[c]:
+            mine: dict[str, float] = {}       # a task's threads on one CPU run one after another (as in evaluate)
             for th in cpu:
-                task_ms[th.task] = max(task_ms.get(th.task, 0.0), th.ms(cl, row["mhz"]))
+                mine[th.task] = mine.get(th.task, 0.0) + th.ms(cl, row["mhz"])
+            for task, ms in mine.items():
+                task_ms[task] = max(task_ms.get(task, 0.0), ms)
         idle = 1.0
         for r in row["cpus"]:
             idle *= 1.0 - min(1.0, r["busy_ms"] / period)
@@ -194,16 +197,28 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         return out
 
     verification_budgets = dict(budgets)
+    cross_soc = base is not None and base is not target
+    # also on every cross-SoC run: the timing impact scales the Timing Budget SW from the measured SoC's times
+    on_measured = measured_task_ms(profile, model=base or target, fps=fps, spec=spec) \
+        if spec.serial_stages or cross_soc else {}
+    if spec.serial_stages:
+        # RT chain orders are re-checked per split against the measured placement on the measured SoC (unrounded)
+        ctx.anchor_ms = on_measured
     if spec.stretch_budgets:
-        # anchor = the measured placement's task time; the larger of the per-cluster estimate used by the search and
-        # the full evaluation, so the measured placement stays feasible in both
-        anchor = evaluate(threads, ctx, ref_pol, budgets_ms={}, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
-                          dsu_policy=prep.dsu_policy, pinned_threads=thread_pol)["task_ms"]
-        verified_anchor = dict(anchor)
-        home_mask = {c: sum(1 << i for i, g in enumerate(units) if home[g[0]] == c) for c in every}
-        for c in every:
-            for task, ms in _task_ms(c, home_mask[c]).items():
-                anchor[task] = max(anchor.get(task, 0.0), ms)
+        if cross_soc:
+            # the stage room belongs to the measured device: the budget is its measured time x stretch, so a slower
+            # target SoC overruns it (the measured placement there may be infeasible)
+            anchor, verified_anchor = dict(on_measured), dict(on_measured)
+        else:
+            # anchor = the measured placement's task time; the larger of the per-cluster estimate used by the search
+            # and the full evaluation, so the measured placement stays feasible in both
+            anchor = evaluate(threads, ctx, ref_pol, budgets_ms={}, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
+                              dsu_policy=prep.dsu_policy, pinned_threads=thread_pol)["task_ms"]
+            verified_anchor = dict(anchor)
+            home_mask = {c: sum(1 << i for i, g in enumerate(units) if home[g[0]] == c) for c in every}
+            for c in every:
+                for task, cluster_ms in _task_ms(c, home_mask[c]).items():
+                    anchor[task] = max(anchor.get(task, 0.0), cluster_ms)
         for task, factor in spec.stretch_budgets.items():
             ms = anchor.get(task)
             if ms:
@@ -211,7 +226,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
                 if task not in budgets or limit < budgets[task]:
                     budgets[task] = limit
                     budget_source[task] = "stretch"
-                verified_limit = verified_anchor[task] * max(1.0, float(factor)) * (1 + 1e-6)
+                verified_limit = verified_anchor.get(task, ms) * max(1.0, float(factor)) * (1 + 1e-6)
                 verification_budgets[task] = min(verification_budgets.get(task, math.inf), verified_limit)
 
     fixed_clusters = [c for c in every if c not in pool]
@@ -615,6 +630,9 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "cpu_bw_mbs": round(prep.bw_mbs, 3),
         "budgets_ms": {t: round(v, 4) for t, v in verification_budgets.items()},
         "budget_source": budget_source,
+        # task times of the measured placement on the measured SoC (cross-SoC only): the timing impact's base
+        **({"measured_soc_task_ms": on_measured} if cross_soc else {}),
+        "rt_placement": prep.sched.rt_placement,
         "warnings": warnings,
     }
     # task_policy scheduling class / priority behind response_prio_ms (absent when none is set)
