@@ -169,8 +169,13 @@ def sustained_view(ctx: dict[str, Any], thermal_items: list[dict[str, Any]]) -> 
         approved = (item.get("approved_plans") or [None])[0]
         w = watched.get((r["scenario_id"], r["variant_id"]))
         best = max((-float(p["saving_mw"]) for p in (w or {}).get("plans") or [] if p.get("saving_mw") is not None), default=None)
+        # the watch plans cut from the watch baseline (IQ-keeping optimum): judge the power left after the best one,
+        # plus base_mw, against the limit (not the saving against a need computed from another baseline)
+        after = (float(w["current_mw"]) - best + base) if w and best is not None and w.get("current_mw") is not None else None
         rows.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "total_mw": round(float(r["total_mw"]), 1),
                      "watched": w is not None, "watch_best_mw": round(best, 1) if best is not None else None,
+                     "watch_after_mw": round(after, 1) if after is not None else None,
+                     "watch_reach": (after <= limit * k + 1e-6) if after is not None else None,
                      "ap_mw": round(ap, 1), "ma": round(ma, 1), "status": status,
                      "need_mw": round(max(0.0, ap - limit * k), 1), "need_ma": round(max(0.0, ma - limit), 1),
                      "plan": plan, "approved_plan": approved, "baseline_mw": item.get("current_mw")})

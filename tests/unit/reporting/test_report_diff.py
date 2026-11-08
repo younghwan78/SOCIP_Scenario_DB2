@@ -105,3 +105,12 @@ def test_diff_survives_declaring_and_removing_the_sustained_current_policy():
     declared = report_diff(b, a, {})
     assert {"item": "sustained_over", "prev": None, "cur": 1} in declared["criteria"]
     assert "③ 지속 전류 초과" in previous_block(declared)
+
+
+def test_diff_records_a_changed_sustained_threshold_at_equal_counts():
+    su = {"limit_ma": 1200, "total": 3, "over": ["a"], "watch": []}
+    a = snap({"a": 100.0}, crit(3, 0) | {"sustained": su}, {}, []) | {"sustained": {"limit_ma": 1200, "watch_ratio": 0.85, "base_mw": 0}}
+    b = snap({"a": 100.0}, crit(3, 0) | {"sustained": su}, {}, []) | {"sustained": {"limit_ma": 1500, "watch_ratio": 0.85, "base_mw": 0}}
+    d = report_diff(a, b, {})
+    assert [c["item"] for c in d["criteria"]] == ["sustained_rule"]
+    assert "1500 mA" in d["criteria"][0]["cur"] and "③ 지속 전류 기준" in previous_block(d)

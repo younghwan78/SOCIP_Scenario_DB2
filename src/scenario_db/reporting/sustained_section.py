@@ -20,9 +20,11 @@ def _plan(r: dict[str, Any]) -> str:
         best = r.get("watch_best_mw")
         if best is None:
             return "<td class=meta>발열 감시 항목 — 아래 −10 / −20% 표 참조</td>"
-        cls = "warn" if best >= r["need_mw"] else "fail"
-        return (f"<td class='{cls}'>발열 감시 계획 최대 −{best:.0f} mW ({'한도 도달 가능' if best >= r['need_mw'] else '한도까지 부족'})"
-                "<div class=meta>−10 / −20% 계획 기준 (아래 표) · 화질 유지 최적 기준</div></td>")
+        reach = bool(r.get("watch_reach"))
+        after = r.get("watch_after_mw")
+        return (f"<td class='{'warn' if reach else 'fail'}'>발열 감시 계획 최대 −{best:.0f} mW ({'한도 도달 가능' if reach else '한도까지 부족'})"
+                f"<div class=meta>−10 / −20% 계획 (아래 표, 화질 유지 최적 기준) 적용 후 AP + mem "
+                + (f"{after:,.0f} mW" if after is not None else "—") + "</div></td>")
     if not p:
         return "<td class=meta>절감 조합 미계산 (조합 탐색 결과 없음)</td>"
     if p.get("picked") == ["switch:iq_keep"]:

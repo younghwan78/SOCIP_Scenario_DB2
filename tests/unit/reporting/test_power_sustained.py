@@ -104,6 +104,12 @@ def test_over_limit_variant_on_the_watch_list_points_to_its_watch_plans():
     snap["sustained"] = sv
     html = sustained_block(snap)
     assert "발열 감시 계획 최대 −500 mW (한도 도달 가능)" in html and "조합 탐색 결과 없음" not in html
+    # registered 4500 mW (lossy) but the watch baseline is 5000 mW: −500 mW leaves 4500 mW > 4080 mW
+    lossy = sustained_view(ctx(), [watch | {"current_mw": 5000}])
+    hot2 = next(r for r in lossy["rows"] if r["variant_id"] == "cam-rec-hot")
+    assert hot2["watch_after_mw"] == 4500.0 and hot2["watch_reach"] is False
+    snap["sustained"] = lossy
+    assert "한도까지 부족" in sustained_block(snap)
 
 
 def test_switch_to_the_iq_keeping_case_renders_as_the_plan():

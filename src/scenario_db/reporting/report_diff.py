@@ -32,6 +32,9 @@ def _criteria(snap: dict[str, Any]) -> dict[str, Any]:
             "thermal_reach10": sum(1 for i in items if i.get("reach10")), "thermal_items": len(items),
             # None = no sustained_current policy in that report (declaring or removing it shows as a change)
             "sustained_over": len(cr["sustained"].get("over") or []) if cr.get("sustained") else None,
+            # the rule itself (limit · watch band · AP base): a changed threshold is a criteria change even at equal counts
+            "sustained_rule": (f"{float(su['limit_ma']):g} mA · 주의 ×{float(su.get('watch_ratio') or 0.85):g}"
+                               f" · AP 공통 {float(su.get('base_mw') or 0):g} mW") if (su := snap.get("sustained")) else None,
             "confidence": ((snap.get("conclusion") or {}).get("confidence") or {}).get("grade")}
 
 

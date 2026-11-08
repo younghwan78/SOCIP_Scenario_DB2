@@ -89,7 +89,7 @@ def previous_block(p: dict[str, Any] | None) -> str:
         h += (f"<p class=meta>추가 variant {len(pw.get('added') or [])}: {escape(', '.join(_short(v) for v in (pw.get('added') or [])[:6]))}"
               f" · 제외 {len(pw.get('removed') or [])}: {escape(', '.join(_short(v) for v in (pw.get('removed') or [])[:6]))}</p>")
     label = {"fps_ok": "① fps 만족", "fps_total": "평가 variant", "power_ok": "② 전과제 이하", "power_similar": "② 유사",
-             "power_over": "② 초과", "power_missing": "② 예측 없음", "thermal_reach10": "③ −10% 가능", "thermal_items": "③ 감시 variant", "sustained_over": "③ 지속 전류 초과",
+             "power_over": "② 초과", "power_missing": "② 예측 없음", "thermal_reach10": "③ −10% 가능", "thermal_items": "③ 감시 variant", "sustained_over": "③ 지속 전류 초과", "sustained_rule": "③ 지속 전류 기준",
              "confidence": "모델 신뢰도"}
     changes = [(label.get(c["item"], c["item"]), c["prev"], c["cur"]) for c in p.get("criteria") or []]
     changes += [(f"기준 · {b['item']}", b["prev"], b["cur"]) for b in p.get("basis") or []]
