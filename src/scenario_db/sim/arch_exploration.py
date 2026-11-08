@@ -600,6 +600,9 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "verdict": report["verdict"],
         "intervals_ok": bool(report["intervals"]["ok"]),
         "intervals": {k: report["intervals"][k]["max_ms"] for k in ("preview", "video")},
+        # the cadence verdict per output and its tolerance, so a report shows the same verdict the engine made
+        "intervals_ok_by": {k: report["intervals"][k].get("ok") for k in ("preview", "video")},
+        "interval_tolerance": report["intervals"].get("tolerance"),
         "latency": report["latency"],
         "power": {k: report["power"][k] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_hw_mw", "bw_sw_mw")},
         "cpu_by_task": report["power"]["cpu_by_task"],

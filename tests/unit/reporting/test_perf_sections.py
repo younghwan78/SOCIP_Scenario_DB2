@@ -175,3 +175,32 @@ def test_growth_margins_follow_each_stage_rule():
             "post": {"throughput": "stage", "sw_ms": 5.0, "hw_ms": 4.0}, "rt": {"hw_ms": 3.0}}},
         {"statistic": "mean", "runtime_scale": 1.2, "stages": {"nrt": {"throughput": "pipelined", "longest_sw_ms": 1.0}}}]}
     assert _growth_margins(v, None) == {"1.2": {"nrt": 30.0, "post": 10.0}}
+
+
+def test_stage_cut_beyond_the_task_or_beyond_all_sw_is_not_a_task_request():
+    s = perf_snap()
+    # 30 fps, HW 33.183 ms + three 0.05 ms SW tasks: removing all SW cannot reach a 10 % margin
+    hw_bound = stage("post_crta", 0.05, -0.0, 33.333, st="post") | {"basis": "stage", "sw_ms": 0.15, "hw_ms": 33.183}
+    s["scenarios"] = [row("cam-rec-hw", 30, True, {"preview": 33.333, "video": 33.333}, [hw_bound])]
+    t = sw_requests(s)[0]
+    assert t["need_kind"] == "hw" and "SW만으로 불가" in sw_request_block(s)
+    # HW 4 + SW 6 (task 1 ms) in 10 ms: the 1 ms cut must come from the stage SW together
+    wide = stage("blend", 1.0, 0.0, 10.0, st="post") | {"basis": "stage", "sw_ms": 6.0, "hw_ms": 4.0}
+    s["scenarios"] = [row("cam-rec-w", 100, True, {"preview": 10.0, "video": 10.0}, [wide | {"bottleneck_ms": 0.5}])]
+    assert sw_requests(s)[0]["need_kind"] == "sw" and "SW 합 1.0 ms 이상 단축" in sw_request_block(s)
+
+
+def test_integer_frame_latency_and_engine_tolerance():
+    s = perf_snap()
+    a = s["scenarios"][0]
+    a["period_ms"] = 33.3333
+    a["latency"] = {"video_ms": 100.0, "preview_ms": 50.0, "video_frames": 3.0, "preview_frames": 1.5}
+    s["review_context"]["policy"]["max_latency_frames"] = 3
+    assert next(o for o in buffer_rows(s) if o["variant_id"] == "cam-rec-a30")["alive"] == 3
+    assert not _latency_risks(s) or "cam-rec-a30" not in _latency_risks(s)[0]["affected"]
+    # a 5 % tolerance run: 33.5 ms holds 30 fps, as the engine judged
+    a.update(intervals={"preview": 33.5, "video": 33.5}, interval_tolerance=0.05, intervals_ok=True)
+    o = next(x for x in output_rows(s) if x["variant_id"] == "cam-rec-a30")
+    assert o["preview_ok"] and o["video_ok"] and not o["drop"]
+    a["intervals_ok_by"] = {"preview": True, "video": False}
+    assert next(x for x in output_rows(s) if x["variant_id"] == "cam-rec-a30")["video_ok"] is False

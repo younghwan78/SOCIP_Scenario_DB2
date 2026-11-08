@@ -16,7 +16,8 @@ from typing import Any
 
 TARGET_MARGIN_PCT = 10.0   # same as risk_rules.LOW_MARGIN_PCT: below this an SW stage is a timing risk
 HIGH_FPS = 120.0           # ≥ this the NRT batch behaviour is not modelled (1 frame = 1 period): a cut there is an upper bound
-_TOL = 0.001               # output interval within ±0.1 % of the period = fps held
+_TOL = 0.001               # output interval within ±0.1 % of the period = fps held (the engine default)
+_FRAME_EPS = 1e-4          # frames: below this a latency on an integer frame boundary is rounding
 
 
 def _short(v: str) -> str:
@@ -27,11 +28,26 @@ def _f(v: Any, d: int = 1) -> str:
     return "—" if v is None else f"{float(v):,.{d}f}"
 
 
-def _out_fps(interval_ms: Any, period: Any) -> tuple[float | None, bool | None]:
-    if interval_ms is None or not period:
+def _period(r: dict[str, Any]) -> float | None:
+    """The frame period from the target fps (the stored period_ms is rounded and moves integer frame boundaries)."""
+    if r.get("fps"):
+        return 1000.0 / float(r["fps"])
+    return float(r["period_ms"]) if r.get("period_ms") else None
+
+
+def _stream(r: dict[str, Any], kind: str) -> tuple[float | None, bool | None]:
+    """(output fps, held) of one stream: the engine's own per-output verdict when frozen, else the interval against
+    the run's tolerance (default ±0.1 %)."""
+    interval, period = (r.get("intervals") or {}).get(kind), _period(r)
+    if interval is None or not period:
         return None, None
-    iv = float(interval_ms)
-    return (round(1000.0 / iv, 2) if iv > 0 else None), abs(iv - float(period)) <= float(period) * _TOL
+    iv = float(interval)
+    fps = round(1000.0 / iv, 2) if iv > 0 else None
+    by = (r.get("intervals_ok_by") or {}).get(kind)
+    if by is not None:
+        return fps, bool(by)
+    tol = float(r.get("interval_tolerance") or _TOL)
+    return fps, abs(iv - period) <= period * tol
 
 
 def frame_drop(r: dict[str, Any]) -> bool:
@@ -39,17 +55,15 @@ def frame_drop(r: dict[str, Any]) -> bool:
     without it judge the preview / video intervals, and rows without intervals keep the spec verdict."""
     if r.get("intervals_ok") is not None:
         return not bool(r["intervals_ok"])
-    iv, p = r.get("intervals") or {}, r.get("period_ms")
-    judged = [ok for ok in (_out_fps(iv.get("preview"), p)[1], _out_fps(iv.get("video"), p)[1]) if ok is not None]
+    judged = [ok for ok in (_stream(r, "preview")[1], _stream(r, "video")[1]) if ok is not None]
     return (not all(judged)) if judged else not r.get("spec_ok")
 
 
 def output_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for r in snap.get("scenarios") or []:
-        iv, p = r.get("intervals") or {}, r.get("period_ms")
-        pf, pok = _out_fps(iv.get("preview"), p)
-        vf, vok = _out_fps(iv.get("video"), p)
+        pf, pok = _stream(r, "preview")
+        vf, vok = _stream(r, "video")
         stages = [s for s in r.get("sw_stages") or [] if s.get("margin_pct") is not None]
         worst = min(stages, key=lambda s: s["margin_pct"], default=None)
         drop = frame_drop(r)
@@ -106,13 +120,14 @@ def output_fps_block(snap: dict[str, Any], top: int = 10) -> str:
 def buffer_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for r in snap.get("scenarios") or []:
-        lat, fb, p = r.get("latency") or {}, r.get("frame_buffer"), r.get("period_ms")
+        lat, fb, p = r.get("latency") or {}, r.get("frame_buffer"), _period(r)
         # frames from the unrounded latency (the stored frame counts are rounded to 0.01 and hide a boundary crossing)
         ms = max(float(lat.get("preview_ms") or 0), float(lat.get("video_ms") or 0))
         frames = ms / float(p) if ms and p else max(float(lat.get("preview_frames") or 0), float(lat.get("video_frames") or 0))
         if not frames:
             continue
-        alive = max(1, math.ceil(frames - 1e-9))
+        # latency ms is stored to 0.001 ms: a crossing smaller than that is rounding, not a frame
+        alive = max(1, math.ceil(frames - _FRAME_EPS))
         out.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "fps": r.get("fps"),
                     "video_ms": lat.get("video_ms"), "preview_ms": lat.get("preview_ms"), "frames": frames,
                     "alive": alive, "frame_mb": (fb or {}).get("mb"),
@@ -134,7 +149,7 @@ def latency_buffer_block(snap: dict[str, Any], top: int = 10) -> str:
         h = ("<table><tr><th>Scenario</th><th>fps</th><th>Video latency ms</th><th>Preview latency ms</th><th>latency (frame)</th>"
              "<th>동시 frame</th><th>frame당 buffer MB</th><th>추정 buffer MB</th></tr>")
         for o in rs:
-            over = limit is not None and o["frames"] > float(limit)
+            over = limit is not None and o["frames"] > float(limit) + _FRAME_EPS
             h += (f"<tr><td>{escape(_short(o['variant_id']))}</td><td class=n>{_f(o['fps'], 0)}</td>"
                   f"<td class=n>{_f(o['video_ms'])}</td><td class=n>{_f(o['preview_ms'])}</td>"
                   f"<td class='n {'warn' if over else ''}'>{o['frames']:.2f}</td><td class=n>{o['alive']}</td>"
@@ -201,7 +216,8 @@ def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
             t = tasks.setdefault(str(name), {"task": str(name), "stages": set(), "variants": [], "low": [], "grown_low": [],
                                               "max_ms": 0.0, "min_margin": None, "worst": None, "need_ms": 0.0,
                                               "need_variant": None, "need_fps": None, "share_pct": None, "binding": set(),
-                                              "need_model_fps": None, "basis": set(), "grown_unknown": []})
+                                              "need_model_fps": None, "basis": set(), "grown_unknown": [],
+                                              "need_kind": None, "need_task_ms": None, "need_sw_ms": None})
             t["stages"].add(str(st.get("stage")))
             t["binding"].add(str(st.get("binding") or "task"))
             t["basis"].add(str(st.get("basis") or "pipelined"))
@@ -214,7 +230,11 @@ def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
             if t["min_margin"] is None or float(st["margin_pct"]) < t["min_margin"]:
                 t["min_margin"], t["worst"] = float(st["margin_pct"]), r["variant_id"]
             if need > t["need_ms"]:
+                # what the cut can come from: the task alone, the stage's (or CPU's) SW together, or not SW at all
+                task_ms = float(st.get("bottleneck_ms") or sw)
+                kind = "task" if need <= task_ms + 1e-9 else "sw" if need <= sw + 1e-9 else "hw"
                 t["need_ms"], t["need_variant"], t["need_fps"] = round(need, 2), r["variant_id"], r.get("fps")
+                t["need_kind"], t["need_task_ms"], t["need_sw_ms"] = kind, round(task_ms, 2), round(sw, 2)
             # the largest cut among scenarios the model represents (below the unmodelled high-fps batch range)
             if need > 0 and float(r.get("fps") or 0) < HIGH_FPS and need > (t["need_model_fps"] or 0.0):
                 t["need_model_fps"] = round(need, 2)
@@ -236,7 +256,14 @@ def _advice(t: dict[str, Any]) -> str:
         if hfr:
             note = (f" · {HIGH_FPS:.0f} fps 이상 batch 미모델 — 상한값, batch 동작 정의 후 재판정"
                     + (f" (그 외 최대 {t['need_model_fps']:.1f} ms)" if t.get("need_model_fps") else " (그 외 scenario는 단축 불필요)"))
-        return (f"{t['need_ms']:.1f} ms 이상 단축 필요 ({_short(str(t['need_variant']))}){note} — task 분할(thread 병렬) · HW offload · "
+        who = _short(str(t["need_variant"]))
+        if t.get("need_kind") == "hw":
+            return (f"SW만으로 불가 ({who}): 여유 {TARGET_MARGIN_PCT:.0f}%까지 {t['need_ms']:.1f} ms 초과 > stage SW 합 "
+                    f"{t['need_sw_ms']:.1f} ms{note} — HW clock · stage 분할 · HW 예산 재배분 검토")
+        if t.get("need_kind") == "sw":
+            return (f"stage(또는 같은 CPU) SW 합 {t['need_ms']:.1f} ms 이상 단축 필요 ({who}) — {t['task']} "
+                    f"{t['need_task_ms']:.1f} ms만으로 부족{note} · task 분할 · HW offload · 상위 cluster 배치")
+        return (f"{t['need_ms']:.1f} ms 이상 단축 필요 ({who}){note} — task 분할(thread 병렬) · HW offload · "
                 "상위 cluster 배치 · 고속 mode 간헐 실행")
     if t["grown_low"]:
         return f"현재 여유 있음, SW ×{t['budget']:.1f} 증가 시 {len(t['grown_low'])}개 여유 < {TARGET_MARGIN_PCT:.0f}% — 차기 SW 최적화 목표에 포함"

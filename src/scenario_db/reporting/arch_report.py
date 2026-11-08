@@ -88,6 +88,8 @@ def build_snapshot(
             "intervals": (v.get("objective_slice") or {}).get("intervals"),
             # cadence verdict over every terminal output stream (secondary encoders included), not only preview / video
             "intervals_ok": (v.get("objective_slice") or {}).get("intervals_ok"),
+            "intervals_ok_by": (v.get("objective_slice") or {}).get("intervals_ok_by"),
+            "interval_tolerance": (v.get("objective_slice") or {}).get("interval_tolerance"),
             # SW growth as the simulator computed it (runtime scaled, fixed latency / overhead kept): NRT / Post margin
             # per tested runtime scale at the objective statistic, and the objective's own scale
             "sw_growth": _growth_margins(v, (run["spec"].get("objective") or {}).get("statistic")),
