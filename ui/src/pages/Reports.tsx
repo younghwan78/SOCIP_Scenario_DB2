@@ -59,13 +59,13 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
             const fpsCls = s ? (s.fps.ok < s.fps.total ? 'fail' : 'ok') : ''
             const pwCls = s ? (s.power.over || s.power.flip ? 'fail' : s.power.missing || s.power.similar || s.power.conditional ? 'warn' : 'ok') : ''
             const su = s?.sustained
-            const thCls = s ? (su ? (su.over ? 'fail' : su.watch ? 'warn' : 'ok') : s.thermal.items && s.thermal.reach10 < s.thermal.items ? 'fail' : 'ok') : ''
+            const thCls = s ? (su ? (su.total === 0 || su.over ? (su.over ? 'fail' : 'warn') : su.watch ? 'warn' : 'ok') : s.thermal.items && s.thermal.reach10 < s.thermal.items ? 'fail' : 'ok') : ''
             return <tr key={project.id} className={r && r.id === id ? 'selected' : ''} onClick={() => (r ? ctx.navigate(undefined, { report: r.id, project: project.id }, true) : ctx.setProject(project.id))}>
               <td><b>{project.soc}</b> <span className="faint">{project.board || project.id}</span></td>
               <td className="faint">{r ? `${r.generated_at?.slice(0, 10)} · ${r.status}` : '과제 보고서 없음'}</td>
               <td className={`pf-cell ${fpsCls}`}>{s ? `${s.fps.ok} / ${s.fps.total}` : '—'}</td>
               <td className={`pf-cell ${pwCls}`} title={s?.power.flip ? `예측 ↔ 실측 반대 ${s.power.flip}건` : undefined}>{s ? `${s.power.ok} · ${s.power.similar} · ${s.power.conditional ?? 0} · ${s.power.over} · ${s.power.missing} / ${s.power.total}${s.power.flip ? ` (반대 ${s.power.flip})` : ''}` : '—'}</td>
-              <td className={`pf-cell ${thCls}`} title={su ? `지속 AP + mem 한도 ${su.limit_ma.toFixed(0)} mA` : undefined}>{s ? (su ? `≤${su.limit_ma.toFixed(0)} mA ${su.total - su.over} / ${su.total}${su.over || su.watch ? ` (초과 ${su.over} · 주의 ${su.watch})` : ''}` : s.thermal.items ? `${s.thermal.reach10} / ${s.thermal.items}` : '대상 없음') : '—'}</td>
+              <td className={`pf-cell ${thCls}`} title={su ? `지속 AP + mem 한도 ${su.limit_ma.toFixed(0)} mA` : undefined}>{s ? (su ? su.total === 0 ? `≤${su.limit_ma.toFixed(0)} mA 미평가` : `≤${su.limit_ma.toFixed(0)} mA ${su.total - su.over} / ${su.total}${su.over || su.watch ? ` (초과 ${su.over} · 주의 ${su.watch})` : ''}` : s.thermal.items ? `${s.thermal.reach10} / ${s.thermal.items}` : '대상 없음') : '—'}</td>
               <td>{s ? <><span className="badge v-fail">{s.risks.critical}</span> <span className="badge v-warn">{s.risks.high}</span> <span className="badge sev-med">{s.risks.medium}</span></> : '—'}</td>
               <td>{s?.confidence ? <span className={`badge ${s.confidence === 'A' ? 'v-ok' : s.confidence === 'B' ? 'v-warn' : 'v-fail'}`}>{s.confidence}</span> : '—'}</td>
               <td className="mono">{s?.power_range_mw ? `${s.power_range_mw[0].toFixed(0)}–${s.power_range_mw[1].toFixed(0)}` : '—'}</td>

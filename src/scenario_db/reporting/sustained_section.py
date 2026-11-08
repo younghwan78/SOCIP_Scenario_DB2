@@ -88,5 +88,7 @@ def sustained_lead(snap: dict[str, Any]) -> str | None:
     over = sum(1 for r in sv["rows"] if r["status"] == "over")
     watch = sum(1 for r in sv["rows"] if r["status"] == "watch")
     top = sv["rows"][0] if sv["rows"] else None
+    if top is None:
+        return f"지속 전류 {sv['limit_ma']:.0f} mA <b>미평가</b> (등록 예측 없음)"
     return (f"지속 전류 {sv['limit_ma']:.0f} mA 초과 <b>{over}</b> · 주의 {watch} / {len(sv['rows'])}"
             + (f" · 최대 {escape(_short(top['variant_id']))} {top['ma']:,.0f} mA" if top else ""))

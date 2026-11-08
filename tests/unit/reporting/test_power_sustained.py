@@ -86,6 +86,7 @@ def test_sustained_risks_section_and_scorecard():
     risks = _sustained_risks(snap)
     assert [(r["key"], r["severity"]) for r in risks] == [("sustained_over", "high"), ("sustained_watch", "medium")]
     assert "1200 mA 초과 1건" in risks[0]["title"] and "1324 mA" in risks[0]["detail"]
+    assert risks[0]["affected"] == ["uc/cam-rec-hot"]  # scenario-scoped: a twin variant id elsewhere is not affected
     block = sustained_block(snap)
     assert "AP + mem" in block and "초과 — 절감 검토" in block and "절감 조합 미계산" in block
     html = render_html("Review", snap)
@@ -119,3 +120,22 @@ def test_switch_to_the_iq_keeping_case_renders_as_the_plan():
     snap = snapshot()
     snap["sustained"] = sustained_view(ctx(), [item])
     assert "화질 유지 최적 조합으로 등록 변경 시 한도 이내" in sustained_block(snap)
+
+
+def test_scoped_sustained_risk_reaches_only_its_scenario_and_no_prediction_is_unassessed():
+    from scenario_db.reporting.review_sections import dossier
+    from scenario_db.reporting.review_verdict import risk_priority
+
+    risk = {"label": "R-12", "title": "지속 전류 초과", "severity": "high", "status": "open", "trend": "new",
+            "category": "발열", "key": "sustained_over", "affected": ["uc-a/shared"]}
+    base = {"spec_ok": True, "variant_id": "shared", "fps": 30, "power": {"total_mw": 100.0}, "distribution": {}, "cls": None}
+    snap = {"scenarios": [base | {"scenario_id": "uc-a"}, base | {"scenario_id": "uc-b"}], "risk_register": [risk]}
+    cards = dossier(snap)
+    a, b = cards.split("id='d-uc-a/shared'")[1].split("</article>")[0], cards.split("id='d-uc-b/shared'")[1].split("</article>")[0]
+    assert "R-12" in a and "R-12" not in b
+    assert risk_priority(risk, {"review_context": {"policy": {"kpi": [{"variant_ref": "shared", "tier": "thermal"}]}}}) >         risk_priority(risk | {"affected": ["uc-a/other"]}, {"review_context": {"policy": {"kpi": [{"variant_ref": "shared", "tier": "thermal"}]}}})
+    s = snapshot()
+    s["sustained"] = sustained_view(ctx(rows=()), [])
+    s["criteria"]["sustained"] = {"limit_ma": 1200, "total": 0, "over": [], "watch": []}
+    html = render_html("Review", s)
+    assert "③ 지속 전류 ≤ 1200 mA" in html and "미평가" in html and "0 / 0" not in html

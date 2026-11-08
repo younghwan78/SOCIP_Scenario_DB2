@@ -446,7 +446,8 @@ def dossier(snap: dict[str, Any]) -> str:
                 f"SW timing {'가정값' if inp.get('sw_timing_source') == 'assumed' else escape(str(inp.get('sw_timing_source')))}"
                 + (f" ({escape(str(inp.get('sw_timing_case')))})" if inp.get("sw_timing_case") else "") if inp.get("sw_timing_source") else "",
                 f"sensor {escape(str(inp['sensor_support']))}" if inp.get("sensor_support") else "") if x)))
-        rk = risks.get(v) or []
+        # bare variant ids (most rules) or "scenario/variant" (scoped rules, e.g. sustained current)
+        rk = (risks.get(v) or []) + (risks.get(f"{r['scenario_id']}/{v}") or [])
         if rk:
             rows.append(("Risk", " ".join(f"{ar._sev(x['severity'])} <span class=mono>{escape(x['label'])}</span> {escape(x['title'])}<br>" for x in rk)))
         sev = "fail" if not r["spec_ok"] or any(x["severity"] == "critical" for x in rk) else "warn" if rk else "ok"

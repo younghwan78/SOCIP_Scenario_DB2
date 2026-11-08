@@ -558,6 +558,9 @@ def _tier1(snap: dict[str, Any]) -> str:
 def _sustained_box(su: dict[str, Any], box) -> str:
     """③ when review_policy.sustained_current is declared: sustained AP + mem current against the limit."""
     over, watch, n = su.get("over") or [], su.get("watch") or [], int(su.get("total") or 0)
+    if n == 0:
+        return box(f"③ 지속 전류 ≤ {float(su['limit_ma']):.0f} mA", "미평가", "warn",
+                   "등록 예측이 없어 지속 전류를 판정하지 않음 — 조합 탐색 후 예측 등록")
     detail = (f"초과: {escape(', '.join(_short(v) for v in over[:4]))}" if over else "초과 없음") + (
         f" · 주의 {len(watch)}" if watch else "") + " · 온도 대신 지속 전류로 판정 (방열 성능 의존)"
     return box(f"③ 지속 전류 ≤ {float(su['limit_ma']):.0f} mA", f"{n - len(over)} / {n}",

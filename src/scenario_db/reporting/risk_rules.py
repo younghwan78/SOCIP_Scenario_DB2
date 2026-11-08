@@ -374,6 +374,11 @@ def risk_counts(register: list[dict[str, Any]]) -> dict[str, int]:
     return out
 
 
+def _scoped(r: dict[str, Any]) -> str:
+    """``scenario/variant``: the same variant id can exist in two scenarios and only one of them be affected."""
+    return f"{r['scenario_id']}/{r['variant_id']}" if r.get("scenario_id") else str(r["variant_id"])
+
+
 def _sustained_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
     """THERM-01: sustained AP + mem battery current over / near ``review_policy.sustained_current.limit_ma``."""
     sv = snap.get("sustained")
@@ -393,7 +398,7 @@ def _sustained_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                     "detail": "; ".join(f"{_short(r['variant_id'])} {r['ma']:.0f} mA (필요 −{r['need_mw']:.0f} mW{plan_text(r)})"
                                         for r in over[:3]) + (f" 외 {len(over) - 3}" if len(over) > 3 else "")
                     + (f" · AP 공통 {sv['base_mw']:.0f} mW 포함" if sv.get("base_mw") else ""),
-                    "affected": [r["variant_id"] for r in over], "validity": "confirmed",
+                    "affected": [_scoped(r) for r in over], "validity": "confirmed",
                     "mitigation": LADDER_TEXT + " — 한도까지 못 줄이면 성능 조건(해상도 · fps · EIS) · 사용 시간 제한 협의",
                     "checks": ["가장 큰 요소(CPU · BW · IP 군) 확인", "clock level 하향 여지", "compression 적용 buffer",
                                "SW · CPU 배치 절감", "IQ 평가 대상 option"]})
@@ -403,7 +408,7 @@ def _sustained_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                     "title": f"지속 전류 주의 대역 {len(watch)}건 (≥ {sv['watch_ma']:.0f} mA)",
                     "detail": ", ".join(f"{_short(r['variant_id'])} {r['ma']:.0f} mA" for r in watch[:4])
                     + (f" 외 {len(watch) - 4}" if len(watch) > 4 else ""),
-                    "affected": [r["variant_id"] for r in watch], "validity": "confirmed",
+                    "affected": [_scoped(r) for r in watch], "validity": "confirmed",
                     "mitigation": "SW · 입력 증가(SW 증가 예산 · 가정 부하) 시 한도 초과 여부 재확인 — 여유 확보 lever 미리 확인",
                     "checks": ["SW 증가 예산 적용 시 power", "가정 부하(GPU · NPU) 근거"]})
     return out
