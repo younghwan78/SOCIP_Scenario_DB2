@@ -346,7 +346,8 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None, battery: d
             limit_mw = sc.limit_ma * float(battery["vbat"]) * float(battery["pmic_efficiency"])
             need = float(current) + sc.base_mw - limit_mw
             row["limit_mw"] = round(limit_mw, 1)
-            asks = [round(min(100.0, 100.0 * need / float(current)), 1)] if need > 0 else []
+            # exact ask: a rounded one (e.g. 4081 mW vs a 4080 mW limit → 0.0 %) would mark an empty menu as reaching it
+            asks = [min(100.0, 100.0 * need / float(current))] if need > 0 else []
         if v is None or current is None:
             row["notes"].append("조합 탐색 결과가 없습니다 — 이 variant를 포함해 조합 탐색(power option 켬)을 실행하세요")
         else:

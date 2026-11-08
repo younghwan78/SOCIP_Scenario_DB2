@@ -94,3 +94,14 @@ def test_diff_keeps_scenario_identity_when_a_duplicate_variant_is_added():
     assert diff['cpu'] == [{'variant_id': 'a/shared', 'prev': 1.5, 'cur': 0},
                            {'variant_id': 'b/shared', 'prev': None, 'cur': 1.1}]
     assert '×0.0' in previous_block(diff)
+
+
+def test_diff_survives_declaring_and_removing_the_sustained_current_policy():
+    with_policy = crit(3, 0) | {"sustained": {"limit_ma": 1200, "total": 3, "over": ["a"], "watch": []}}
+    a = snap({"a": 100.0}, with_policy, {}, [])
+    b = snap({"a": 100.0}, crit(3, 0), {}, [])
+    removed = report_diff(a, b, {})
+    assert {"item": "sustained_over", "prev": 1, "cur": None} in removed["criteria"]
+    declared = report_diff(b, a, {})
+    assert {"item": "sustained_over", "prev": None, "cur": 1} in declared["criteria"]
+    assert "③ 지속 전류 초과" in previous_block(declared)

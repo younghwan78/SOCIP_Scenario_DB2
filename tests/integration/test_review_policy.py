@@ -131,8 +131,14 @@ def test_policy_registers_the_iq_keeping_case_and_builds_the_thermal_watch(engin
             assert review.thermal_watch(db, pid)["items"] == []    # no battery conversion = no sustained judgement
             sus = review.thermal_watch(db, pid, battery=bat)["items"]
             assert [(i["variant_id"], i["source"]) for i in sus] == [("shared", "sustained")]
-            assert sus[0]["limit_mw"] == 10.2 and [p["ask_pct"] for p in sus[0]["plans"]] == [15.0]
+            assert sus[0]["limit_mw"] == 10.2 and [p["ask_pct"] for p in sus[0]["plans"]] == [pytest.approx(15.0)]
             assert sus[0]["plans"][0]["achieved"] and sus[0]["plans"][0]["picked"] == ["lossy"]
+            # a hair over the limit still needs a cut: the ask is exact, not rounded to 0.0 % (an empty plan "reaching" it)
+            project.globals_ = {"review_policy": policy | {"thermal_watch": [],
+                                                           "sustained_current": {"limit_ma": 11.999 / 3.4}}}
+            db.commit()
+            tiny = review.thermal_watch(db, pid, battery=bat)["items"][0]["plans"][0]
+            assert 0 < tiny["ask_pct"] < 0.05 and tiny["picked"] == ["lossy"]
             project.globals_ = {"review_policy": policy | {"sustained_current": {"limit_ma": 3.0}}}
             db.commit()   # already on the watch list: listed once, as the customer watch item
             assert [i["source"] for i in review.thermal_watch(db, pid, battery=bat)["items"]] == ["watch"]

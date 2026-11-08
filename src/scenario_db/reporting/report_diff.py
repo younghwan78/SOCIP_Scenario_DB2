@@ -30,7 +30,8 @@ def _criteria(snap: dict[str, Any]) -> dict[str, Any]:
     return {"fps_ok": fps.get("ok"), "fps_total": fps.get("total"), "power_ok": pw.get("ok"), "power_similar": pw.get("similar"),
             "power_over": pw.get("over"), "power_missing": len(pw.get("missing") or []),
             "thermal_reach10": sum(1 for i in items if i.get("reach10")), "thermal_items": len(items),
-            **({"sustained_over": len((cr.get("sustained") or {}).get("over") or [])} if cr.get("sustained") else {}),
+            # None = no sustained_current policy in that report (declaring or removing it shows as a change)
+            "sustained_over": len(cr["sustained"].get("over") or []) if cr.get("sustained") else None,
             "confidence": ((snap.get("conclusion") or {}).get("confidence") or {}).get("grade")}
 
 
@@ -79,7 +80,8 @@ def report_diff(prev: dict[str, Any], cur: dict[str, Any], prev_meta: dict[str, 
                       for v in pa.keys() & pb.keys() if abs(pb[v] - pa[v]) >= POWER_DELTA_MIN_MW),
                      key=lambda r: -abs(r["delta_mw"]))
     ca, cb = _criteria(prev), _criteria(cur)
-    criteria = [{"item": k, "prev": ca[k], "cur": cb[k]} for k in ca if ca[k] != cb[k]]
+    # union of keys: a criterion added in a newer report (or absent from an older one) compares against None
+    criteria = [{"item": k, "prev": ca.get(k), "cur": cb.get(k)} for k in dict.fromkeys([*ca, *cb]) if ca.get(k) != cb.get(k)]
     basis = []
     ba, bb = prev.get("basis") or {}, cur.get("basis") or {}
     for key, label in _BASIS_KEYS:
