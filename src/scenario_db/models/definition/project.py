@@ -93,6 +93,8 @@ class ReviewPolicy(BaseScenarioModel):
     sustained_current: SustainedCurrent | None = None
     # IP node (glob, e.g. "front_*", "mfc*") -> report power group; overrides the built-in node-name rules
     ip_groups: dict[str, IpGroup] = Field(default_factory=dict, max_length=200)
+    # scenario id (glob, e.g. "uc-cam-rec*") -> report category (level 1); overrides the built-in scenario-id rules
+    categories: dict[str, Annotated[str, Field(min_length=1, max_length=60)]] = Field(default_factory=dict, max_length=100)
 
 
 class ProjectGlobals(BaseScenarioModel):

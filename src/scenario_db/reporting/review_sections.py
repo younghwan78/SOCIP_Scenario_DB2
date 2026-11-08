@@ -469,6 +469,59 @@ def dossier(snap: dict[str, Any]) -> str:
             "<div class='dos-grid'>" + "".join(c[2] for c in cards) + "</div>")
 
 
+def category_section(snap: dict[str, Any]) -> str:
+    """CAT-01: the report is organised by scenario category (level 1). Coverage of every category of the project
+    first — a category nobody explored yet is a review gap, not an empty chapter — then each category's review
+    blocks (Camera Recording by its review classes, other categories as one block until they get rules)."""
+    from scenario_db.reporting.arch_opinions import OTHER_GROUP, RECORDING, group_of
+
+    blocks = snap.get("opinions") or []
+    if not blocks and not (snap.get("coverage") or {}).get("rows"):
+        return ar._opinions(blocks)
+    overrides = (((snap.get("review_context") or {}).get("policy") or {}).get("categories")) or {}
+    cov: dict[str, dict[str, Any]] = {}
+    for r in (snap.get("coverage") or {}).get("rows") or []:
+        g = group_of(r["scenario_id"], overrides, r.get("name"))
+        c = cov.setdefault(g, {"scenarios": [], "variants": 0, "explored": 0, "registered": 0})
+        c["scenarios"].append(str(r.get("name") or r["scenario_id"]))
+        for k in ("variants", "explored", "registered"):
+            c[k] += int(r.get(k) or 0)
+    by: dict[str, list[dict[str, Any]]] = {}
+    for b in blocks:
+        by.setdefault(str(b.get("group") or (OTHER_GROUP if b.get("category") == "other" else RECORDING)), []).append(b)
+    order = list(by) + sorted((g for g in cov if g not in by), key=lambda g: -cov[g]["variants"])
+    h = ""
+    if cov:
+        h += ("<h3 style='margin:4px 0'>Category별 검토 범위</h3><p class=meta>보고서는 과제 전체 scenario를 category 기준으로 정리 — "
+              "category = review_policy.categories(scenario id glob) 또는 scenario id 규칙. 탐색 0인 category는 이 보고서의 판정 밖(검토 공백).</p>"
+              "<table><tr><th>Category</th><th>Scenario</th><th>제품 variant</th><th>탐색</th><th>등록 예측</th><th>검토</th></tr>")
+        for g in order:
+            c = cov.get(g)
+            nb = len(by.get(g) or [])
+            if c is None:
+                continue
+            # judged on the product variants explored (coverage excludes derived sub-variants): opinion blocks built
+            # from derived variants alone do not close the product gap
+            state = (f"<span class=ok>검토 · {nb}개 분류</span>" if c["explored"] and nb else
+                     f"<span class=warn>파생 variant만 검토 ({nb}개 분류) — 제품 variant 공백</span>" if nb else
+                     "<span class=warn>미탐색 — 검토 공백</span>")
+            h += (f"<tr><td><b>{escape(g)}</b></td><td class=meta>{escape(', '.join(c['scenarios']))}</td><td class=n>{c['variants']}</td>"
+                  f"<td class='n {'' if c['explored'] else 'warn'}'>{c['explored']}</td><td class=n>{c['registered']}</td><td>{state}</td></tr>")
+        h += "</table>"
+    for i, g in enumerate(g for g in order if g in by):
+        bs = by[g]
+        n = sum(int(b.get("count") or 0) for b in bs)
+        ok = sum(int(b.get("spec_ok") or 0) for b in bs)
+        rng = [b["power_range_mw"] for b in bs if b.get("power_range_mw")]
+        h += (f"<div class='grp'><b>{escape(g)}</b> <span class=meta>· {len(bs)}개 분류 · variant {n} · spec "
+              f"<b class='{'ok' if ok == n else 'fail'}'>{ok}/{n}</b>"
+              + (f" · {min(x[0] for x in rng):,.0f}–{max(x[1] for x in rng):,.0f} mW" if rng else "") + "</span></div>"
+              + ar._opinions(bs, intro=(g == RECORDING)))
+    if not blocks:
+        h += "<p class=meta>평가 완료 variant가 없어 category별 의견 없음 — 계산 실패 · 미탐색 variant를 확인</p>"
+    return h
+
+
 def _coverage_table(cov: dict[str, Any] | None) -> str:
     """COV-02: every scenario of the project, covered or not."""
     if not cov or not cov.get("rows"):
@@ -492,6 +545,7 @@ TIER_CSS = """
 .lead.ok{border-color:#2F6F68}.lead.warn{border-color:#B45309}.lead.fail{border-color:#9B1C1C}
 nav .tier{font-size:11.5px;color:#7A7468;font-weight:700;margin-left:6px}
 .hm td,.hm th{padding:3px 6px;font-size:12.5px}
+.grp{margin:16px 0 4px;padding:6px 10px;border-left:5px solid #23262E;background:#F4F1EA;font-size:16px}
 .dos-q{font:inherit;padding:6px 10px;border:1px solid #E4DED3;border-radius:6px;width:280px;margin:4px 0 10px}
 .dos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:12px}
 .dos{border:1px solid #E4DED3;border-left:5px solid #2F6F68;border-radius:8px;padding:8px 12px;break-inside:avoid}
@@ -560,7 +614,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
         ("Power 구성", power, None, 2),
         ("발열 · 절감", lever, None, 2),
         ("CPU · SW", _lead_cpu(snap) + cpu_section(snap.get("cpu"), (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))), None, 2),
-        ("분류별 검토 의견", ar._opinions(snap.get("opinions") or []), None, 2),
+        ("Category별 검토 의견", category_section(snap), None, 2),
         ("이전 보고서 대비", previous_block(snap.get("previous")),
          None if snap.get("previous") else "같은 과제의 이전 과제 보고서 없음 (첫 보고서)", 3),
         ("예측 ↔ 실측", model, None if measured else "실측 대조 없음 — spec 단계 예측만", 3),

@@ -26,6 +26,7 @@ globals:
       watch_ratio: 0.85
       base_mw: 0                     #   (선택) scenario 모델 밖 AP 공통 power (always-on · idle domain 등)
     ip_groups: {abox: 기타 IP, "vpu*": Codec}   # (선택) node glob → 보고서 IP 군 (ISP · Codec · DPU · GPU · NPU · 기타 IP)
+    categories: {"uc-cam-rec*": Camera Recording}   # (선택) scenario id glob → 보고서 category (1단계, 없으면 scenario id 규칙)
     kpi:                             # (선택) 1쪽 요약 KPI 목록 (없으면 thermal_watch + 전과제 기준 variant)
     - {variant_ref: cam-rec-r1-uhd30-vdis, label: UHD30 VDIS, tier: base}
     - {variant_ref: cam-rec-apv-uhd60-422-sdr, scenario_ref: uc-cam-recording-apv-e2600, label: APV UHD60, tier: thermal}
@@ -86,3 +87,4 @@ E2600 (사외 fixture): `values_mw`는 **SAMPLE 가상 값** — 사내에서는
 | 출력 fps (PERF-01) | frame drop = preview · video 출력 간격이 목표 주기 ±0.1% 밖 (engine이 run의 `interval_tolerance`로 판정한 stream별 결과를 고정해 그대로 표시, 간격이 없는 이전 snapshot은 spec 판정). 출력은 충족하나 전력 · BW 예산 미달이면 따로 표시. 충족 scenario는 NRT · Post 최소 SW 여유 순으로 drop 근접도 표시 |
 | SW 최적화 요청 (PERF-02) | 행마다 stage별 binding SW load(`sw_stages`)를 고정. task별: 병목 scenario 수, 여유 < 10% 수, `sw_growth_budget` 적용 시 < 10% 수(조합 탐색 SW 증가 slice의 stage 여유 — runtime만 배율, 고정 latency · overhead 유지, objective가 이미 그 배율이면 현재 여유, 탐색하지 않은 배율은 미탐색), 최장 ms, 최소 여유, stage chain 중 비중, 10% 여유 필요 단축 = load − 0.9 × 주기 (pipelined: binding SW load, stage: HW + stage SW). 집계 key = (scenario, variant). 필요 단축이 병목 task 시간보다 크면 "stage(또는 같은 CPU) SW 합 단축", stage SW 합보다 크면 "SW만으로 불가 — HW · stage 조치" |
 | Latency → buffer (PERF-03) | 행마다 frame당 DRAM write(`frame_buffer`: 목적 slice의 모든 DMA write port 합 ÷ fps — plane · buffer마다 한 번, 그 slice compression 반영)를 고정. 이전 run은 미산정. 추정 buffer = ⌈max(preview, video) latency ms ÷ 주기⌉ × frame당 buffer (상한 추정, 반올림 전 latency로 올림 · 한도 비교). `max_latency_frames` 초과(fps 충족 scenario만) → `latency_buffer`(Medium) |
+| Category (CAT-01) | 보고서는 과제 전체 scenario를 category 기준으로 정리. 1단계 = `categories` glob → scenario id 규칙 → scenario 이름. 탐색 0인 category는 "검토 공백"으로 표시. 2단계 = category별 분류 규칙 (Camera Recording: 30 fps · 60 fps · 고속 · Heavy), 규칙 없는 category는 한 묶음. `categories`로 recording scenario 이름을 바꾸면 recording 분류는 적용되지 않음 |

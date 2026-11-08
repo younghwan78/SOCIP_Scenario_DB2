@@ -60,6 +60,10 @@ def build_snapshot(
         calibration = review.calibration
     variants = [v for v in run["variants"] if v.get("variant_id")]
     ok = [v for v in variants if v["spec_ok"]]
+    # level-1 review categories: review_policy.categories (scenario glob → name) over the built-in id rules
+    groups = (((review.context or {}).get("policy") or {}).get("categories") or None) if review is not None else None
+    # scenario names: the category fallback when neither a policy glob nor an id rule matches (same as coverage)
+    names = {sid: (md or {}).get("name") or sid for sid, md in review.project.scenarios}         if review is not None and review.project is not None else {}
     sample_dvfs = bool(run.get("dvfs_table_ref") and "sample" in str(run["dvfs_table_ref"]))
     rows = []
     for v in variants:
@@ -68,7 +72,8 @@ def build_snapshot(
         rec = v.get("recommended") or {}
         worst = (v.get("sw_margin") or {}).get("worst") or {}
         rows.append({
-            "cls": classify(v["variant_id"], v["scenario_id"], v["fps"], v["eis_on"], v.get("design_conditions"), v.get("severity")),
+            "cls": classify(v["variant_id"], v["scenario_id"], v["fps"], v["eis_on"], v.get("design_conditions"), v.get("severity"),
+                            groups=groups, name=names.get(v["scenario_id"])),
             "sw_margin_pct": worst.get("margin_pct"), "sw_stage": worst.get("stage"), "sw_bottleneck": worst.get("bottleneck"),
             # throughput rule of the margin (engine ≥ 15; None = stage chain rule of older engines)
             "sw_margin_basis": worst.get("basis"),
@@ -903,13 +908,13 @@ _Q4 = (("review", "q-review", "#4A5160", "① 현재 검토"), ("risk", "q-risk"
        ("mitigation", "q-mit", "#B45309", "③ Risk 감소 방안"), ("optimize", "q-opt", "#2F6F68", "④ 추가 최적화"))
 
 
-def _opinions(blocks: list[dict[str, Any]]) -> str:
+def _opinions(blocks: list[dict[str, Any]], intro: bool = True) -> str:
     if not blocks:
         return "<p class='meta'>분류 정보 없음 (이전 형식 snapshot) — 보고서를 재생성하면 표시됩니다.</p>"
-    h = ("<p class='meta'>분류: 30 fps(해상도 × EIS × codec) · 60 fps · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual/Triple). "
+    h = ("<p class='meta'>Camera Recording 분류: 30 fps(해상도 × EIS × codec) · 60 fps · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual/Triple). "
          "분류마다 ① 현재 검토 ② Risk ③ Risk 감소 방안 ④ 추가 최적화로 정리 — 모두 이 snapshot의 예측 수치에서 규칙으로 생성. 문장 앞 태그 = 근거: "
          + _basis_tag("실측") + "실측 대조 " + _basis_tag("산출") + "예측 계산값 " + _basis_tag("가정") + "가정 입력에 의존 "
-         + _basis_tag("입력") + "catalog · 과제 데이터</p>")
+         + _basis_tag("입력") + "catalog · 과제 데이터</p>") if intro else ""
     for b in blocks:
         rng = b.get("power_range_mw")
         sh = b.get("share_pct") or {}
