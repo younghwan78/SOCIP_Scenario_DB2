@@ -63,7 +63,8 @@ def classify(variant_id: str, scenario_id: str, fps: float | None, eis_on: bool 
     if not res:
         m = _RES_RE.search(variant_id)
         res = m.group(1).upper() if m else "해상도 미정"
-    recording = group == RECORDING or (not groups and variant_id.startswith("cam-rec-"))
+    # one level-1 rule for rows and coverage alike (scenario id / policy / name), never the variant id
+    recording = group == RECORDING
     codec = str(dc.get("codec_mfc") or ("APV" if "apv" in scenario_id.lower() else "HEVC" if recording else "미정")).upper()
     mode = str(dc.get("camera_mode") or "")
     heavy_kind = None
@@ -143,10 +144,12 @@ def _f(v: float | None, d: int = 0) -> str:
 
 
 def _group(r: dict[str, Any]) -> str:
-    """Level-1 group of a row (rows frozen before groups existed: recording when the class says so)."""
+    """Level-1 group of a row."""
     c = r["cls"]
-    return c.get("group") or (RECORDING if c.get("category") != "other" or str(r.get("variant_id", "")).startswith("cam-rec-")
-                              else OTHER_GROUP)
+    if c.get("group"):
+        return str(c["group"])
+    # frozen before groups: a recording class says recording, else the scenario-id rule the coverage table uses
+    return RECORDING if c.get("category") not in (None, "other") else group_of(str(r.get("scenario_id") or ""))
 
 
 def _blocks(rows: list[dict[str, Any]]) -> list[tuple[str, str, str, str, list[dict[str, Any]]]]:

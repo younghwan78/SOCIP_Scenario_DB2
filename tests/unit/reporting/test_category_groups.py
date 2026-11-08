@@ -58,3 +58,8 @@ def test_coverage_shows_without_opinions_and_derived_only_review_is_still_a_prod
 def test_rows_use_the_scenario_name_fallback_like_the_coverage():
     c = classify("xr-a", "uc-xr-passthrough", 30, False, {}, name="XR Passthrough")
     assert c["group"] == "XR Passthrough" == group_of("uc-xr-passthrough", None, "XR Passthrough")
+
+
+def test_variant_id_prefix_does_not_override_the_scenario_category():
+    c = classify("cam-rec-uhd30", "uc-custom-camera", 30, False, {}, name="Custom Camera")
+    assert c["group"] == "Custom Camera" == group_of("uc-custom-camera", None, "Custom Camera") and c["category"] == "other"
