@@ -34,6 +34,16 @@ def _out_fps(interval_ms: Any, period: Any) -> tuple[float | None, bool | None]:
     return (round(1000.0 / iv, 2) if iv > 0 else None), abs(iv - float(period)) <= float(period) * _TOL
 
 
+def frame_drop(r: dict[str, Any]) -> bool:
+    """Frame drop of one report row: the cadence verdict over every output stream (``intervals_ok``); older rows
+    without it judge the preview / video intervals, and rows without intervals keep the spec verdict."""
+    if r.get("intervals_ok") is not None:
+        return not bool(r["intervals_ok"])
+    iv, p = r.get("intervals") or {}, r.get("period_ms")
+    judged = [ok for ok in (_out_fps(iv.get("preview"), p)[1], _out_fps(iv.get("video"), p)[1]) if ok is not None]
+    return (not all(judged)) if judged else not r.get("spec_ok")
+
+
 def output_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for r in snap.get("scenarios") or []:
@@ -42,9 +52,7 @@ def output_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
         vf, vok = _out_fps(iv.get("video"), p)
         stages = [s for s in r.get("sw_stages") or [] if s.get("margin_pct") is not None]
         worst = min(stages, key=lambda s: s["margin_pct"], default=None)
-        judged = [x for x in (pok, vok) if x is not None]
-        # frame drop = an output interval off the target; without intervals (older snapshots) the spec verdict stands
-        drop = (not all(judged)) if judged else not r.get("spec_ok")
+        drop = frame_drop(r)
         out.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "fps": r.get("fps"),
                     "preview_fps": pf, "preview_ok": pok, "video_fps": vf, "video_ok": vok, "spec_ok": r.get("spec_ok"),
                     "drop": drop,
@@ -85,7 +93,7 @@ def output_fps_block(snap: dict[str, Any], top: int = 10) -> str:
         return h + "</table>"
 
     h = ("<h3 style='margin:12px 0 4px'>Frame drop — 최종 출력 fps (preview · video)</h3>"
-         f"<p class=meta>preview · video 출력 간격이 목표 주기 ±0.1% 안이면 fps 충족. frame drop {len(drops)}"
+         f"<p class=meta>모든 출력 stream(preview · video · 보조 encoder) 간격이 목표 주기 ±0.1% 안이면 fps 충족 (표는 preview · video). frame drop {len(drops)}"
          + (f" · 출력은 충족하나 다른 spec(전력 · BW 예산 등) 미달 {len(other)}" if other else "")
          + f" · 충족했지만 SW 여유 &lt; {TARGET_MARGIN_PCT:.0f}% {len(near)} — drop 먼저, 다음은 여유 작은 순 "
          "(여유 = NRT · Post 중 최소, SW 증가 시 먼저 drop).</p>"
@@ -107,7 +115,7 @@ def buffer_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
                     "video_ms": lat.get("video_ms"), "preview_ms": lat.get("preview_ms"), "frames": round(frames, 2),
                     "alive": alive, "frame_mb": (fb or {}).get("mb"),
                     "buffer_mb": round(alive * float(fb["mb"]), 1) if fb and fb.get("mb") is not None else None,
-                    "spec_ok": r.get("spec_ok")})
+                    "spec_ok": r.get("spec_ok"), "drop": frame_drop(r)})
     out.sort(key=lambda o: (-(o["buffer_mb"] or 0), -o["frames"]))
     return out
 
@@ -148,7 +156,8 @@ def latency_buffer_block(snap: dict[str, Any], top: int = 10) -> str:
 def _stage_load(st: dict[str, Any]) -> tuple[float, float, float] | None:
     """(SW the cut applies to, time that must fit the period, fixed HW part) under the stage's own throughput rule:
     pipelined = the binding SW load (longest task or one CPU's sequential SW) alone; stage = HW + all the stage's SW."""
-    if st.get("basis") == "stage":
+    # no basis = a run from before engine 15, whose margins were the stage chain (HW + all SW)
+    if st.get("basis") in (None, "stage"):
         sw, hw = st.get("sw_ms"), st.get("hw_ms")
         if sw is None:
             return None

@@ -16,7 +16,7 @@ from tests.unit.reporting.test_review_report import snapshot
 
 
 def stage(name, load, margin, chain, st="nrt", binding="task"):
-    return {"stage": st, "bottleneck": name, "binding_ms": load, "bottleneck_ms": load, "margin_pct": margin,
+    return {"stage": st, "basis": "pipelined", "bottleneck": name, "binding_ms": load, "bottleneck_ms": load, "margin_pct": margin,
             "chain_ms": chain, "binding": binding, "hw_ms": chain - load, "sw_ms": load, "in_flight": 1}
 
 
@@ -123,3 +123,19 @@ def test_sw_requests_count_scenario_variant_pairs():
     s["scenarios"].append(twin)
     t = sw_requests(s)[0]
     assert t["low"] == [("uc", "cam-rec-c240"), ("uc-apv", "cam-rec-c240")] and len(t["variants"]) == 4
+
+
+def test_secondary_stream_cadence_and_legacy_stage_basis_and_budget_only_latency_risk():
+    s = perf_snap()
+    # preview / video hold 30 fps but a secondary encoder does not: the all-stream verdict wins
+    s["scenarios"].append(row("cam-rec-dual", 30, False, {"preview": 33.333, "video": 33.333}, []) | {"intervals_ok": False})
+    assert {o["variant_id"]: o for o in output_rows(s)}["cam-rec-dual"]["drop"] is True
+    # a stage without basis (engine < 15) was a stage-chain margin: HW 4 + SW 6 in 10 ms needs a 1 ms cut
+    legacy = {k: v for k, v in stage("blend", 3.0, 0.0, 10.0, st="post").items() if k != "basis"} | {"sw_ms": 6.0, "hw_ms": 4.0}
+    s2 = perf_snap()
+    s2["scenarios"] = [row("cam-rec-old", 100, True, {"preview": 10.0, "video": 10.0}, [legacy])]
+    assert sw_requests(s2)[0]["need_ms"] == 1.0
+    # outputs hold fps but a power budget fails: the latency / buffer risk still applies
+    s3 = perf_snap()
+    s3["scenarios"][0]["spec_ok"] = False
+    assert "cam-rec-a30" in _latency_risks(s3)[0]["affected"]

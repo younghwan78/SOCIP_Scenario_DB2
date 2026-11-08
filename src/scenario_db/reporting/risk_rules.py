@@ -421,7 +421,8 @@ def _latency_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
     limit = (((snap.get("review_context") or {}).get("policy") or {}).get("max_latency_frames"))
     if not limit:
         return []
-    over = [o for o in buffer_rows(snap) if o["spec_ok"] and o["frames"] > float(limit)]
+    # scenarios that hold their output fps (a power / BW budget miss still costs buffers); drops are fps risks already
+    over = [o for o in buffer_rows(snap) if not o["drop"] and o["frames"] > float(limit)]
     if not over:
         return []
     over.sort(key=lambda o: -o["frames"])

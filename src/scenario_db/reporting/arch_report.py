@@ -86,6 +86,8 @@ def build_snapshot(
             "period_ms": v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None),
             "latency": (v.get("objective_slice") or {}).get("latency"),
             "intervals": (v.get("objective_slice") or {}).get("intervals"),
+            # cadence verdict over every terminal output stream (secondary encoders included), not only preview / video
+            "intervals_ok": (v.get("objective_slice") or {}).get("intervals_ok"),
             "prediction_id": (pred or {}).get("id"), "selection_rule": (pred or {}).get("selection_rule"),
             "power": chosen.get("power") or {k: rec.get(k) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
             "bw_mbs": chosen.get("bw_mbs", rec.get("bw_mbs")),
