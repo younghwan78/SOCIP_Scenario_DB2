@@ -30,6 +30,7 @@ _IQ = {"adopted": ("IQ 승인", "ok"), "iq_eval": ("IQ 평가 중", "warn"), "ca
        "rejected": ("IQ 반려", "mute"), "not_required": ("IQ 영향 없음", "ok")}
 
 TIER0_CSS = """
+.prem{font-size:13.5px;margin:0 0 8px;padding:5px 10px;border-left:4px solid #9A9387;background:#FBFAF7;line-height:1.8}
 .t0 .strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid #EFEAE1;border-radius:8px;overflow:hidden;margin:8px 0}
 .t0 .strip>div{padding:7px 10px;border-right:1px solid #EFEAE1;display:grid;gap:1px;min-width:0}
 .t0 .strip .k{font-size:11.5px;color:#8A8274;font-weight:600}.t0 .strip .v{font-size:14px;font-weight:600;overflow-wrap:anywhere}
@@ -156,8 +157,37 @@ def kpi_table(board: list[dict[str, Any]], budget: float | None = None, statisti
     return h + "</table>"
 
 
+# Inputs that are assumptions at the spec stage (shown as premises, not as defects)
+_PREMISE_KEYS = ("sw_assumed", "sample_dvfs", "high_fps")
+_GRADE_PILL = {"A": "ok", "B": "warn", "C": "fail"}
+
+
+def premises(snap: dict[str, Any]) -> str:
+    """What the predictions rest on. The report is used at the SoC spec stage, long before silicon, so a missing
+    measurement is the normal state: it is stated as the basis, not graded as a failure. Once silicon captures are
+    compared, the model confidence grade appears here and the comparison detail sits in the appendix."""
+    conf = (snap.get("conclusion") or {}).get("confidence") or {}
+    real, compared = int(conf.get("real") or 0), int(conf.get("compared") or 0)
+    keys = _PREMISE_KEYS + (("model_bias",) if real else ())
+    ds = [d for d in drivers(snap) if d["key"] in keys]
+    chips = [f"{d['label']} {d['count']}/{d['total']}" for d in ds]
+    # reasons already said by the basis line (no silicon) or by a chip (SAMPLE DVFS) are not repeated
+    said = ("실제 silicon 측정과 대조한 variant 없음",) + (("DVFS table이 SAMPLE",) if any(d["key"] == "sample_dvfs" for d in ds) else ())
+    notes = [r for r in conf.get("reasons") or [] if not str(r).startswith(said)]
+    if real:
+        grade = str(conf.get("grade") or "—")
+        basis = (f"실측 대조 silicon {real}건 — 모델 신뢰도 {_p(grade, _GRADE_PILL.get(grade, 'mute'))} "
+                 f"{escape(str(conf.get('meaning') or ''))}")
+    else:
+        basis = "spec 단계 모델 예측 — silicon 실측 대조 전" + (f" (합성 fixture {compared}건은 근거 아님)" if compared else "")
+    return ("<p class='prem'><b>예측 전제</b> " + basis
+            + "".join(f" {_p(c, 'mute')}" for c in chips)
+            + "".join(f"<span class=meta> · {escape(r)}</span>" for r in notes) + "</p>")
+
+
 def top_risks(reg: list[dict[str, Any]], n: int = 5) -> str:
-    rows = [r for r in reg if r.get("status") not in ("closed", "accepted") and r.get("trend") != "resolve_candidate"][:n]
+    open_ = [r for r in reg if r.get("status") not in ("closed", "accepted") and r.get("trend") != "resolve_candidate"]
+    rows = open_[:n]
     if not rows:
         return "<p class=meta>열린 risk 없음</p>"
     h = "<table><tr><th>ID</th><th>심각도</th><th>내용</th><th>먼저 확인</th><th>Owner</th></tr>"
@@ -170,7 +200,7 @@ def top_risks(reg: list[dict[str, Any]], n: int = 5) -> str:
               f"<td class=meta>{escape(' → '.join((r.get('checks') or [])[:2]) or r.get('mitigation') or '—')}</td>"
               f"<td>{escape(r.get('owner') or '—')}" + (f"<div class=meta>{escape(str(r['due_date']))}</div>" if r.get("due_date") else "")
               + "</td></tr>")
-    return h + "</table>"
+    return h + "</table>" + (f"<p class=meta>외 {len(open_) - n}건 → Risk register</p>" if len(open_) > n else "")
 
 
 def tier0(snap: dict[str, Any]) -> str:
@@ -180,10 +210,7 @@ def tier0(snap: dict[str, Any]) -> str:
     reg = snap.get("risk_register") or []
     risks = [r | {"key": r.get("key") or r.get("risk_key")} for r in reg if r.get("status") not in ("closed", "accepted")]
     dec = decisions(risks)
-    conf = (snap.get("conclusion") or {}).get("confidence") or {}
-    h = "<div class='t0'>"
-    h += (f"<p class=meta>근거 등급 <b>{escape(str(conf.get('grade') or '—'))}</b> — {escape(str(conf.get('meaning') or ''))}"
-          + (f" ({escape('; '.join(conf.get('reasons') or []))})" if conf.get("reasons") else "") + "</p>")
+    h = "<div class='t0'>" + premises(snap)
     h += conditions_strip(snap.get("project_conditions")) + coverage_strip(snap.get("coverage"))
     budget = (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))
     stats = sorted({str((r.get("sw") or {}).get("statistic")) for r in snap.get("scenarios") or [] if (r.get("sw") or {}).get("statistic")})

@@ -494,12 +494,10 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
 
     out: list[tuple[str, str, str | None, int]] = []
     if (snap.get("scope") or {}).get("kind") == "project":
-        out.append(("경영 요약", tier0(snap), None, 0))
+        out.append(("검토 요약", tier0(snap), None, 0))
     out.append(("결론", ar._tier1(snap), None, 1))
     if "risk_register" in snap:
         out.append(("Risk register", drivers_table(snap) + ar._risk_register(snap["risk_register"], snap.get("scope") or {}), None, 1))
-    out.append(("이전 보고서 대비", previous_block(snap.get("previous")),
-                None if snap.get("previous") else "같은 과제의 이전 과제 보고서 없음 (첫 보고서)", 1))
     lat_rows = [r for r in snap["scenarios"] if r.get("latency")]
     lat_top = sorted(lat_rows, key=lambda r: (r["spec_ok"], -((r.get("latency") or {}).get("video_frames") or 0)))[:TOP_N]
     doms = snap.get("domains") or []
@@ -536,16 +534,21 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
                 else "<p class=meta>power option 결과 없음 — 조합 탐색에서 power option을 켜고 실행</p>"))
     model = (_lead_model(snap) + ar._model_block(snap.get("model")) + rail_bias_block(snap.get("model"))
              + _calibration_top(snap.get("calibration") or []) + ar.clock_block(snap.get("clock_residency") or []))
+    # Spec-stage review: silicon comes much later, so the measurement comparison and the model bookkeeping are
+    # appendix material, shown only when there is something to compare.
+    measured = bool(snap.get("calibration") or snap.get("clock_residency") or ((snap.get("model") or {}).get("coverage") or {}).get("compared"))
     out += [
         ("성능 · Timing", perf, None, 2),
         ("Power 구성", power, None, 2),
-        ("Lever · 발열", lever, None, 2),
+        ("발열 · 절감", lever, None, 2),
         ("CPU · SW", _lead_cpu(snap) + cpu_section(snap.get("cpu"), (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))), None, 2),
-        ("예측 ↔ 실측", model, None, 2),
         ("분류별 검토 의견", ar._opinions(snap.get("opinions") or []), None, 2),
+        ("이전 보고서 대비", previous_block(snap.get("previous")),
+         None if snap.get("previous") else "같은 과제의 이전 과제 보고서 없음 (첫 보고서)", 3),
+        ("예측 ↔ 실측", model, None if measured else "실측 대조 없음 — spec 단계 예측만", 3),
         ("검토 범위 · 모델", _coverage_table(snap.get("coverage")) + dq_table(snap) + ar._overview(snap["overview"]) + ar._scope(snap.get("scope"))
          + glossary(),
-         None, 2),
+         None, 3),
         ("Scenario dossier", dossier(snap), None, 3),
         ("Scenario 요약 표", ar._scenarios(snap["scenarios"]), None, 3),
         ("변경 이력", ar._history(snap["history"]), None if snap["history"] else "이전 등록 예측 대비 변경 없음", 3),

@@ -422,7 +422,7 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
     return "".join(parts)
 
 
-_TIER_NAME = {0: "Tier 0 · 경영 요약", 1: "Tier 1 · 결론", 2: "Tier 2 · 영역별", 3: "Tier 3 · 상세"}
+_TIER_NAME = {0: "Tier 0 · 검토 요약", 1: "Tier 1 · 결론 · Risk", 2: "Tier 2 · 영역별 검토", 3: "Tier 3 · 부록 · 상세"}
 
 
 def _render_tiered(title: str, snap: dict[str, Any]) -> str:
@@ -525,12 +525,13 @@ def _tier1(snap: dict[str, Any]) -> str:
             or "review_policy에 thermal_watch 없음"),
     ]
     h += "<div class='score'>" + "".join(boxes) + "</div>"
-    conf = c.get("confidence") or {}
-    if conf:
-        h += (f"<div class='kpis' style='margin-top:10px'><div class='kpi'>신뢰도<b class='{_GRADE_CLASS.get(str(conf.get('grade')), '')}'>{conf.get('grade')}</b>"
-              f"<span class=meta>{escape(conf.get('meaning', ''))}</span></div></div>")
-        if conf.get("reasons"):
-            h += "<ul>" + "".join(f"<li class=meta>{escape(r)}</li>" for r in conf["reasons"]) + "</ul>"
+    # A project report opens with 검토 요약 (Tier 0), which already carries the prediction premises and the top risks;
+    # repeating them here only lengthened the report. A run report has no Tier 0, so it keeps both.
+    if (snap.get("scope") or {}).get("kind") == "project":
+        return h + _actions(c)
+    from scenario_db.reporting.review_summary import premises
+
+    h += premises(snap)
     reg = [r for r in snap.get("risk_register") or [] if r.get("status") not in ("closed", "accepted") and r.get("trend") != "resolve_candidate"]
     h += "<h3 style='margin:14px 0 4px'>Top risk</h3>"
     if reg:
@@ -546,16 +547,21 @@ def _tier1(snap: dict[str, Any]) -> str:
             h += f"<p class=meta>외 {len(reg) - 5}건 → Risk register</p>"
     else:
         h += "<p class=meta>열린 risk 없음</p>"
-    if c.get("actions"):
-        h += ("<h3 style='margin:14px 0 4px'>권고 조치 — clock → compression → SW 순, 화질 열화 option은 마지막</h3>"
-              "<table><tr><th>순서</th><th>조치</th><th>대상</th><th>ΔPower</th><th>근거</th><th>필요 검증</th></tr>")
-        for a in c["actions"]:
-            d = (f"{a['delta_mw']:+.0f} mW" + (f" ({_f(a['delta_pct'], 1)}%)" if a.get("delta_pct") is not None else "")) if a["delta_mw"] is not None else "—"
-            h += (f"<tr><td class=meta>{escape(str(a.get('tier_label') or '—'))}</td><td>{escape(a['action'])}</td>"
-                  f"<td>{escape(_short(str(a['target'])))}</td><td class=n>{d}</td>"
-                  f"<td>{escape(a['basis'])}</td><td class='{'warn' if a.get('iq') else ''}'>{escape(a['check'])}</td></tr>")
-        h += "</table>"
-    return h
+    return h + _actions(c)
+
+
+def _actions(c: dict[str, Any]) -> str:
+    """권고 조치 — the one place the saving order is listed (the 발열 section points here instead of repeating it)."""
+    if not c.get("actions"):
+        return ""
+    h = ("<h3 style='margin:14px 0 4px'>권고 조치 — clock → compression → SW 순, 화질 열화 option은 마지막</h3>"
+         "<table><tr><th>순서</th><th>조치</th><th>대상</th><th>ΔPower</th><th>근거</th><th>필요 검증</th></tr>")
+    for a in c["actions"]:
+        d = (f"{a['delta_mw']:+.0f} mW" + (f" ({_f(a['delta_pct'], 1)}%)" if a.get("delta_pct") is not None else "")) if a["delta_mw"] is not None else "—"
+        h += (f"<tr><td class=meta>{escape(str(a.get('tier_label') or '—'))}</td><td>{escape(a['action'])}</td>"
+              f"<td>{escape(_short(str(a['target'])))}</td><td class=n>{d}</td>"
+              f"<td>{escape(a['basis'])}</td><td class='{'warn' if a.get('iq') else ''}'>{escape(a['check'])}</td></tr>")
+    return h + "</table><p class=meta>단계별 상위 후보만 — 전체 후보와 발열 대응 조합은 “발열 · 절감”</p>"
 
 
 def _risk_register(reg: list[dict[str, Any]], scope: dict[str, Any]) -> str:
