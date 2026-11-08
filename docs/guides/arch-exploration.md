@@ -89,7 +89,7 @@ engine이 다르면 Δ의 일부가 모델 차이이므로, 예측 현황 비교
   - Tier 2 — 성능 · Timing / Power 구성 / 발열 · 절감(발열 대응 · 전력 절감 후보 전체 · 화질 열화 option) / CPU · SW / 분류별 검토 의견.
     - 성능 · Timing (`reporting/perf_sections.py`): frame drop은 최종 출력(preview · video) 간격으로 판정해 drop → 여유 작은 순.
       SW 최적화 요청 = NRT · Post stage를 묶는 SW task별 영향 scenario · 최장 ms · 최소 여유 · 10% 여유까지 필요한 단축 ·
-      SW 증가 예산(`sw_growth_budget`) 적용 시 여유 — pipelined 판정은 binding SW load, stage 판정은 HW + stage SW 전체 기준.
+      SW 증가 예산(`sw_growth_budget`) 적용 시 여유(조합 탐색 SW 증가 slice 값) — pipelined 판정은 binding SW load, stage 판정은 HW + stage SW 전체 기준.
       frame drop 판정은 출력 간격(전력 · BW 예산만 미달이면 "출력 fps 충족 · 기타 spec 미달").
       Latency → buffer = ⌈latency ÷ 주기⌉ × frame당 DRAM write(목적 slice의 DMA write 합 ÷ fps, timing budget `bw.write_mb_frame`) —
       spec 단계 크기 상한 추정. 이 값이 없는 이전 run은 "미산정"(재탐색 후 표시). `max_latency_frames`를 넘는 fps 충족 scenario는 `latency_buffer`(Medium).

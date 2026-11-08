@@ -106,13 +106,15 @@ def output_fps_block(snap: dict[str, Any], top: int = 10) -> str:
 def buffer_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for r in snap.get("scenarios") or []:
-        lat, fb = r.get("latency") or {}, r.get("frame_buffer")
-        frames = max(float(lat.get("preview_frames") or 0), float(lat.get("video_frames") or 0))
+        lat, fb, p = r.get("latency") or {}, r.get("frame_buffer"), r.get("period_ms")
+        # frames from the unrounded latency (the stored frame counts are rounded to 0.01 and hide a boundary crossing)
+        ms = max(float(lat.get("preview_ms") or 0), float(lat.get("video_ms") or 0))
+        frames = ms / float(p) if ms and p else max(float(lat.get("preview_frames") or 0), float(lat.get("video_frames") or 0))
         if not frames:
             continue
         alive = max(1, math.ceil(frames - 1e-9))
         out.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "fps": r.get("fps"),
-                    "video_ms": lat.get("video_ms"), "preview_ms": lat.get("preview_ms"), "frames": round(frames, 2),
+                    "video_ms": lat.get("video_ms"), "preview_ms": lat.get("preview_ms"), "frames": frames,
                     "alive": alive, "frame_mb": (fb or {}).get("mb"),
                     "buffer_mb": round(alive * float(fb["mb"]), 1) if fb and fb.get("mb") is not None else None,
                     "spec_ok": r.get("spec_ok"), "drop": frame_drop(r)})
@@ -166,6 +168,17 @@ def _stage_load(st: dict[str, Any]) -> tuple[float, float, float] | None:
     return None if load is None else (float(load), float(load), 0.0)
 
 
+def _grown_margin(r: dict[str, Any], stage: str, margin: float, budget: float) -> float | None:
+    """The stage's margin at the project's SW growth budget, from the simulator's growth slices (runtime scaled,
+    fixed latency / overhead kept). A budget the objective already includes is the current margin; a budget no slice
+    tested is unknown (None)."""
+    scale0 = float(r.get("sw_scale") or 1.0)
+    if budget <= scale0 + 1e-9:
+        return margin
+    got = (r.get("sw_growth") or {}).get(f"{budget:g}")
+    return None if got is None else got.get(stage)
+
+
 def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
     """Per SW task that binds an NRT / Post stage: scenarios, longest load, smallest margin, the cut for a 10 % margin
     and the margin left under the project's SW growth budget. Rows are keyed by (scenario, variant)."""
@@ -183,17 +196,18 @@ def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
             sw, used, hw = ld
             p = float(p)
             need = max(0.0, used - (1 - TARGET_MARGIN_PCT / 100) * p)
-            grown = 100.0 * (p - hw - sw * budget) / p
+            grown = _grown_margin(r, str(st.get("stage")), float(st["margin_pct"]), budget)
             share = 100.0 * float(st.get("bottleneck_ms") or sw) / float(st["chain_ms"]) if st.get("chain_ms") else None
             t = tasks.setdefault(str(name), {"task": str(name), "stages": set(), "variants": [], "low": [], "grown_low": [],
                                               "max_ms": 0.0, "min_margin": None, "worst": None, "need_ms": 0.0,
                                               "need_variant": None, "need_fps": None, "share_pct": None, "binding": set(),
-                                              "need_model_fps": None, "basis": set()})
+                                              "need_model_fps": None, "basis": set(), "grown_unknown": []})
             t["stages"].add(str(st.get("stage")))
             t["binding"].add(str(st.get("binding") or "task"))
             t["basis"].add(str(st.get("basis") or "pipelined"))
             for lst, on in ((t["variants"], True), (t["low"], float(st["margin_pct"]) < TARGET_MARGIN_PCT),
-                            (t["grown_low"], grown < TARGET_MARGIN_PCT)):
+                            (t["grown_low"], grown is not None and grown < TARGET_MARGIN_PCT),
+                            (t["grown_unknown"], grown is None)):
                 if on and key not in lst:
                     lst.append(key)
             t["max_ms"] = max(t["max_ms"], sw)
@@ -244,7 +258,8 @@ def sw_request_block(snap: dict[str, Any], top: int = 8) -> str:
             h += (f"<tr><td class=mono><b>{escape(t['task'])}</b>"
                   + (" <span class=meta>(CPU 공유 load)</span>" if any(b != "task" for b in t["binding"]) else "") + "</td>"
                   f"<td>{escape(' · '.join(s.upper() for s in t['stages']))}</td><td class=n>{len(t['variants'])}</td>"
-                  f"<td class='n {'fail' if t['low'] else ''}'>{len(t['low'])}</td><td class='n {'warn' if t['grown_low'] else ''}'>{len(t['grown_low'])}</td>"
+                  f"<td class='n {'fail' if t['low'] else ''}'>{len(t['low'])}</td><td class='n {'warn' if t['grown_low'] else ''}'>{len(t['grown_low'])}"
+                  + (f" <span class=meta>(미탐색 {len(t['grown_unknown'])})</span>" if t["grown_unknown"] else "") + "</td>"
                   f"<td class=n>{t['max_ms']:.1f}</td><td class='n {'fail' if m is not None and m < 0 else 'warn' if m is not None and m < TARGET_MARGIN_PCT else ''}'>"
                   f"{_f(m, 0)}% <span class=meta>{escape(_short(str(t['worst'])))}</span></td>"
                   f"<td class=n>{_f(t['share_pct'], 0)}%</td><td>{escape(_advice(t))}</td></tr>")
@@ -253,7 +268,8 @@ def sw_request_block(snap: dict[str, Any], top: int = 8) -> str:
     h = ("<h3 style='margin:12px 0 4px'>SW 최적화 요청 — critical path SW task</h3>"
          f"<p class=meta>NRT · Post stage를 묶는 SW task별 집계 — pipelined 판정은 최장 task 또는 같은 CPU의 순차 load, stage 판정은 "
          f"HW + stage SW 전체가 주기 안에 들어야 함. 필요 단축 = 여유 {TARGET_MARGIN_PCT:.0f}%를 "
-         f"만드는 runtime 감소량, SW ×{budget:.1f} = 과제 SW 증가 예산(review_policy.sw_growth_budget) 적용 시. "
+         f"만드는 runtime 감소량, SW ×{budget:.1f} = 과제 SW 증가 예산(review_policy.sw_growth_budget) 적용 시 — 조합 탐색의 SW 증가 slice "
+         "(runtime만 배율, 고정 latency · overhead 유지) 값, 그 배율을 탐색하지 않은 scenario는 미탐색. "
          "stage chain 중 비중이 크면 latency(= buffer)도 같이 줄어든다. SW timing이 가정값이면 전과제 Perfetto runtime으로 먼저 확인.</p>"
          + (f"<p><b>요청 {len(act)}건</b>: " + escape(", ".join(t["task"] for t in act[:5])) + "</p>" if act else
             "<p class=meta>여유 &lt; 10% 또는 SW 증가 시 &lt; 10%인 task 없음</p>")

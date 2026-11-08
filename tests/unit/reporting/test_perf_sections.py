@@ -39,7 +39,8 @@ def perf_snap():
         row("cam-rec-a30", 30, True, {"preview": 33.333, "video": 33.333}, [stage("post_irta", 5.6, 83.2, 30.0)],
             {"video_ms": 70.0, "preview_ms": 54.0, "video_frames": 2.1, "preview_frames": 1.6}, {"mb": 40.0}),
         row("cam-rec-b60", 60, True, {"preview": 16.667, "video": 16.667}, [stage("post_irta", 14.0, 16.0, 20.0)],
-            {"video_ms": 30.0, "preview_ms": 30.0, "video_frames": 1.8, "preview_frames": 1.8}, {"mb": 30.0}),
+            {"video_ms": 30.0, "preview_ms": 30.0, "video_frames": 1.8, "preview_frames": 1.8}, {"mb": 30.0})
+        | {"sw_growth": {"1.1": {"nrt": 8.0}, "1.2": {"nrt": 2.0}}},
         row("cam-rec-c240", 240, False, {"preview": 8.333, "video": 8.333}, [stage("post_irta", 5.6, -34.0, 9.0),
                                                                            stage("blend", 1.0, 76.0, 1.0, st="post")],
             {"video_ms": 18.0, "preview_ms": 18.0, "video_frames": 4.4, "preview_frames": 4.4}, None),
@@ -139,3 +140,38 @@ def test_secondary_stream_cadence_and_legacy_stage_basis_and_budget_only_latency
     s3 = perf_snap()
     s3["scenarios"][0]["spec_ok"] = False
     assert "cam-rec-a30" in _latency_risks(s3)[0]["affected"]
+
+
+def test_growth_uses_the_simulated_slices_and_the_objective_scale():
+    from scenario_db.reporting.perf_sections import _grown_margin
+
+    r = {"sw_scale": 1.0, "sw_growth": {"1.2": {"nrt": 11.9}}}
+    # the slice (runtime scaled, fixed latency / overhead kept) decides, not SW × budget
+    assert _grown_margin(r, "nrt", 40.0, 1.2) == 11.9
+    # an objective already at ×1.2: its margin is the grown margin (no double growth)
+    assert _grown_margin({"sw_scale": 1.2}, "nrt", 13.6, 1.2) == 13.6
+    assert _grown_margin({"sw_scale": 1.0, "sw_growth": {}}, "nrt", 40.0, 1.3) is None
+    s = perf_snap()
+    s["review_context"]["policy"]["sw_growth_budget"] = 1.3
+    t = next(x for x in sw_requests(s) if x["task"] == "post_irta")
+    assert len(t["grown_unknown"]) == 3 and "미탐색 3" in sw_request_block(s)
+
+
+def test_buffer_frames_use_the_unrounded_latency():
+    s = perf_snap()
+    s["scenarios"][0]["latency"] = {"video_ms": 100.03, "preview_ms": 50.0, "video_frames": 3.0, "preview_frames": 1.5}
+    s["review_context"]["policy"]["max_latency_frames"] = 3
+    a = next(o for o in buffer_rows(s) if o["variant_id"] == "cam-rec-a30")
+    assert a["alive"] == 4 and a["buffer_mb"] == 160.0
+    assert "cam-rec-a30" in _latency_risks(s)[0]["affected"]
+
+
+def test_growth_margins_follow_each_stage_rule():
+    from scenario_db.reporting.arch_report import _growth_margins
+
+    v = {"fps": 100, "period_ms": 10.0, "sw_margin": {"statistic": "max"}, "slices": [
+        {"statistic": "max", "runtime_scale": 1.2, "stages": {
+            "nrt": {"throughput": "pipelined", "longest_sw_ms": 6.0, "cpu_load_ms": 7.0, "sw_ms": 9.0, "hw_ms": 4.0},
+            "post": {"throughput": "stage", "sw_ms": 5.0, "hw_ms": 4.0}, "rt": {"hw_ms": 3.0}}},
+        {"statistic": "mean", "runtime_scale": 1.2, "stages": {"nrt": {"throughput": "pipelined", "longest_sw_ms": 1.0}}}]}
+    assert _growth_margins(v, None) == {"1.2": {"nrt": 30.0, "post": 10.0}}

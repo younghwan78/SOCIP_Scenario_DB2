@@ -88,6 +88,10 @@ def build_snapshot(
             "intervals": (v.get("objective_slice") or {}).get("intervals"),
             # cadence verdict over every terminal output stream (secondary encoders included), not only preview / video
             "intervals_ok": (v.get("objective_slice") or {}).get("intervals_ok"),
+            # SW growth as the simulator computed it (runtime scaled, fixed latency / overhead kept): NRT / Post margin
+            # per tested runtime scale at the objective statistic, and the objective's own scale
+            "sw_growth": _growth_margins(v, (run["spec"].get("objective") or {}).get("statistic")),
+            "sw_scale": (v.get("objective_slice") or {}).get("runtime_scale"),
             "prediction_id": (pred or {}).get("id"), "selection_rule": (pred or {}).get("selection_rule"),
             "power": chosen.get("power") or {k: rec.get(k) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
             "bw_mbs": chosen.get("bw_mbs", rec.get("bw_mbs")),
@@ -307,6 +311,30 @@ def _conditions(dc: dict[str, Any]) -> dict[str, Any]:
     # Preserve custom compare_keys as well as the default keys; the reference selects
     # which recorded conditions participate in a comparison.
     return {k: v for k, v in dc.items() if v is not None}
+
+
+def _growth_margins(v: dict[str, Any], statistic: str | None) -> dict[str, dict[str, float]]:
+    """{runtime scale: {stage: margin %}} from the growth slices, with each stage's own throughput rule:
+    pipelined = period − max(longest SW task, one CPU's SW load), stage = period − (stage SW + HW)."""
+    period = v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None)
+    stat = (v.get("sw_margin") or {}).get("statistic") or (v.get("objective") or {}).get("statistic") or statistic or "max"
+    if not period:
+        return {}
+    out: dict[str, dict[str, float]] = {}
+    for sl in v.get("slices") or []:
+        if sl.get("statistic") != stat or sl.get("runtime_scale") is None:
+            continue
+        m = {}
+        for st, d in (sl.get("stages") or {}).items():
+            if st not in ("nrt", "post") or not isinstance(d, dict):
+                continue
+            if d.get("throughput") == "pipelined":
+                used = max(float(d.get("longest_sw_ms") or 0.0), float(d.get("cpu_load_ms") or 0.0))
+            else:
+                used = float(d.get("sw_ms") or 0.0) + float(d.get("hw_ms") or 0.0)
+            m[st] = round(100.0 * (float(period) - used) / float(period), 2)
+        out[f"{float(sl['runtime_scale']):g}"] = m
+    return out
 
 
 def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:
