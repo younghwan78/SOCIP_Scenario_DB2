@@ -63,3 +63,20 @@ def test_rows_use_the_scenario_name_fallback_like_the_coverage():
 def test_variant_id_prefix_does_not_override_the_scenario_category():
     c = classify("cam-rec-uhd30", "uc-custom-camera", 30, False, {}, name="Custom Camera")
     assert c["group"] == "Custom Camera" == group_of("uc-custom-camera", None, "Custom Camera") and c["category"] == "other"
+
+
+def test_empty_scenario_name_falls_back_to_the_id_in_rows_and_coverage():
+    from scenario_db.reporting.arch_report import build_snapshot
+    from scenario_db.reporting.review_snapshot import ProjectEvidence, ReviewEvidence
+
+    v = {"variant_id": "xr-a", "scenario_id": "uc-xr", "fps": 30, "eis_on": False, "spec_ok": True, "spec_reasons": [],
+         "distribution": {}, "recommended": {"total_mw": 100.0, "cpu_mw": 10, "hw_mw": 50, "bw_mw": 40}}
+    ev = ReviewEvidence(scope={"kind": "project"}, context={"policy": {}, "rows": [], "battery": {}},
+                        references={"references": {}, "tolerance_pct": None},
+                        project=ProjectEvidence(project_ref="p", scenarios=[("uc-xr", {"name": ""})], variants=[("uc-xr", "xr-a", None)],
+                                                model={"coverage": {}, "offsetting": 0, "flat_cpu": None, "confidence": {}, "bias": {}}))
+    snap = build_snapshot({"id": "EXP", "title": "t", "scenario_type": "x", "project_ref": "p", "spec": {}, "variants": [v],
+                           "summary": {}}, {}, {}, review=ev)
+    assert snap["scenarios"][0]["cls"]["group"] == "uc-xr"
+    html = category_section(snap)
+    assert "미탐색 — 검토 공백" not in html and "검토 · 1개 분류" in html

@@ -63,7 +63,7 @@ def build_snapshot(
     # level-1 review categories: review_policy.categories (scenario glob → name) over the built-in id rules
     groups = (((review.context or {}).get("policy") or {}).get("categories") or None) if review is not None else None
     # scenario names: the category fallback when neither a policy glob nor an id rule matches (same as coverage)
-    names = {sid: (md or {}).get("name") for sid, md in review.project.scenarios}         if review is not None and review.project is not None else {}
+    names = {sid: (md or {}).get("name") or sid for sid, md in review.project.scenarios}         if review is not None and review.project is not None else {}
     sample_dvfs = bool(run.get("dvfs_table_ref") and "sample" in str(run["dvfs_table_ref"]))
     rows = []
     for v in variants:
