@@ -53,18 +53,19 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
           <b>과제 현황</b><span className="faint" style={{ fontSize: 12 }}>과제별 최신 과제 보고서 · 고객 기준 3항목 · 열린 risk · 예측 신뢰도 · 행 클릭 = 그 보고서</span>
         </div>
         <div className="table-x"><table className="tb-mini-table pf-table" style={{ width: '100%' }}>
-          <thead><tr><th>SoC · 과제</th><th>최근 과제 보고서</th><th>① fps</th><th>② 전과제 대비 (이하 · 유사 · 조건부 · 초과 · 불가)</th><th>③ 발열 −10%</th><th>열린 risk (C · H · M)</th><th>신뢰도</th><th>등록 예측 mW</th></tr></thead>
+          <thead><tr><th>SoC · 과제</th><th>최근 과제 보고서</th><th>① fps</th><th>② 전과제 대비 (이하 · 유사 · 조건부 · 초과 · 불가)</th><th title='지속 전류 정책이 있으면 한도 이내 / 전체 (초과 · 주의), 없으면 발열 감시 −10% 가능 / 감시 variant'>③ 발열 (지속 전류 · −10%)</th><th>열린 risk (C · H · M)</th><th>신뢰도</th><th>등록 예측 mW</th></tr></thead>
           <tbody>{portfolio.map(({ project, report: r }) => {
             const s = r?.summary
             const fpsCls = s ? (s.fps.ok < s.fps.total ? 'fail' : 'ok') : ''
             const pwCls = s ? (s.power.over || s.power.flip ? 'fail' : s.power.missing || s.power.similar || s.power.conditional ? 'warn' : 'ok') : ''
-            const thCls = s ? (s.thermal.items && s.thermal.reach10 < s.thermal.items ? 'fail' : 'ok') : ''
+            const su = s?.sustained
+            const thCls = s ? (su ? (su.total === 0 || su.over ? (su.over ? 'fail' : 'warn') : su.watch ? 'warn' : 'ok') : s.thermal.items && s.thermal.reach10 < s.thermal.items ? 'fail' : 'ok') : ''
             return <tr key={project.id} className={r && r.id === id ? 'selected' : ''} onClick={() => (r ? ctx.navigate(undefined, { report: r.id, project: project.id }, true) : ctx.setProject(project.id))}>
               <td><b>{project.soc}</b> <span className="faint">{project.board || project.id}</span></td>
               <td className="faint">{r ? `${r.generated_at?.slice(0, 10)} · ${r.status}` : '과제 보고서 없음'}</td>
               <td className={`pf-cell ${fpsCls}`}>{s ? `${s.fps.ok} / ${s.fps.total}` : '—'}</td>
               <td className={`pf-cell ${pwCls}`} title={s?.power.flip ? `예측 ↔ 실측 반대 ${s.power.flip}건` : undefined}>{s ? `${s.power.ok} · ${s.power.similar} · ${s.power.conditional ?? 0} · ${s.power.over} · ${s.power.missing} / ${s.power.total}${s.power.flip ? ` (반대 ${s.power.flip})` : ''}` : '—'}</td>
-              <td className={`pf-cell ${thCls}`}>{s ? (s.thermal.items ? `${s.thermal.reach10} / ${s.thermal.items}` : '대상 없음') : '—'}</td>
+              <td className={`pf-cell ${thCls}`} title={su ? `지속 AP + mem 한도 ${su.limit_ma.toFixed(0)} mA` : undefined}>{s ? (su ? su.total === 0 ? `≤${su.limit_ma.toFixed(0)} mA 미평가` : `≤${su.limit_ma.toFixed(0)} mA ${su.total - su.over} / ${su.total}${su.over || su.watch ? ` (초과 ${su.over} · 주의 ${su.watch})` : ''}` : s.thermal.items ? `${s.thermal.reach10} / ${s.thermal.items}` : '대상 없음') : '—'}</td>
               <td>{s ? <><span className="badge v-fail">{s.risks.critical}</span> <span className="badge v-warn">{s.risks.high}</span> <span className="badge sev-med">{s.risks.medium}</span></> : '—'}</td>
               <td>{s?.confidence ? <span className={`badge ${s.confidence === 'A' ? 'v-ok' : s.confidence === 'B' ? 'v-warn' : 'v-fail'}`}>{s.confidence}</span> : '—'}</td>
               <td className="mono">{s?.power_range_mw ? `${s.power_range_mw[0].toFixed(0)}–${s.power_range_mw[1].toFixed(0)}` : '—'}</td>

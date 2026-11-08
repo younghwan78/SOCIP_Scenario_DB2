@@ -87,6 +87,10 @@ engine이 다르면 Δ의 일부가 모델 차이이므로, 예측 현황 비교
   - Tier 1 — 결론(고객 기준 3항목 · 권고 조치 단계별 상위 후보) · Risk register. 과제 보고서의 Top risk와 예측 전제는 Tier 0에만 둔다.
     Tier 0가 없는 run 보고서는 결론에 둘 다 남긴다.
   - Tier 2 — 성능 · Timing / Power 구성 / 발열 · 절감(발열 대응 · 전력 절감 후보 전체 · 화질 열화 option) / CPU · SW / 분류별 검토 의견.
+    - Power 구성: 전과제 대비, Total 상위, 요소별 상위 5(CPU · BW · ISP · Codec · DPU · GPU · NPU, `reporting/power_groups.py`),
+      scenario × 요소 heatmap. 가정 부하(`design_conditions.assumed_<ip>_mw`)는 해당 IP 군에 포함.
+    - 발열 · 절감: review_policy `sustained_current`가 있으면 지속 AP + mem 전류 표(한도 대비 · 필요 절감 · 한도까지 절감 조합,
+      `reporting/sustained_section.py`)가 먼저 나온다. 자세한 규칙은 `docs/design/review-policy-ko.md`.
     - CPU · SW: CPU what-if "검토서에 포함" snapshot. 허용치 = min(비용 ≥ 5 mW 또는 5%인 첫 OPP 상향 직전 배율,
       Timing Budget 여유(RT chain 포함) 소진 배율), 판정 기준 = review_policy `sw_growth_budget`. 범위 안 OPP 상향을 모두 나열하고,
       이전 계산 방식으로 기록된 snapshot은 "이전 계산"으로 표시한다.

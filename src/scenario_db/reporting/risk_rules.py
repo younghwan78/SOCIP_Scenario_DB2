@@ -7,8 +7,10 @@ across reports and people own owner / status / note.
 Severity follows the customer review rules (review_policy):
   critical  fps drop (spec miss under the current throughput model)
   high      power above the previous project · comparison variant without prediction ·
-            thermal 10 % ask unreachable with IQ-keeping levers · calculation failures
-  medium    thermal 20 % ask unreachable · SW margin < 10 % · model-wide prediction error
+            thermal 10 % ask unreachable with IQ-keeping levers · sustained AP + mem current over the limit ·
+            calculation failures
+  medium    thermal 20 % ask unreachable · sustained current in the watch band · SW margin < 10 % ·
+            model-wide prediction error
   info      SAMPLE inputs / no silicon measurement
 
 RISK-01: every risk carries ``validity`` (confirmed · model_limit · input_unverified); Critical is kept only for
@@ -194,6 +196,8 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                       "checks": ["scenario 정의 · 입력 확인", "조합 탐색 · 등록"]})
 
     thermal = snap.get("thermal") or {}
+    # the −10 / −20 % rules judge the customer watch list; sustained-current additions have their own rule below
+    thermal = {**thermal, "items": [i for i in thermal.get("items") or [] if i.get("source", "watch") == "watch"]}
     for pct, sev in ((10, "high"), (20, "medium")):
         # a −20 % miss only adds information when −10 % is reachable (otherwise the −10 % risk already covers it)
         short = [i for i in thermal.get("items") or [] if any(p["ask_pct"] == pct and not p["achieved"] for p in i.get("plans") or [])
@@ -213,6 +217,8 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                       "title": f"발열 감시 variant 미평가 {len(unassessed)}건", "detail": f"{_names(unassessed)} — 조합 탐색 결과 없음",
                       "affected": unassessed, "validity": "confirmed", "mitigation": "power option을 켜고 조합 탐색 실행",
                       "checks": ["조합 탐색 (power option 포함)"]})
+
+    risks += _sustained_risks(snap)
 
     # SW-01: every spec-ok scenario counts, not only the Top-5 table (legacy snapshots: Top-5 only)
     if snap.get("scenarios"):
@@ -365,4 +371,44 @@ def risk_counts(register: list[dict[str, Any]]) -> dict[str, int]:
     for r in register:
         if r.get("status") not in ("closed", "accepted") and r.get("auto_state") != "resolve_candidate":
             out[r["severity"]] = out.get(r["severity"], 0) + 1
+    return out
+
+
+def _scoped(r: dict[str, Any]) -> str:
+    """``scenario/variant``: the same variant id can exist in two scenarios and only one of them be affected."""
+    return f"{r['scenario_id']}/{r['variant_id']}" if r.get("scenario_id") else str(r["variant_id"])
+
+
+def _sustained_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """THERM-01: sustained AP + mem battery current over / near ``review_policy.sustained_current.limit_ma``."""
+    sv = snap.get("sustained")
+    if not sv:
+        return []
+    out: list[dict[str, Any]] = []
+    limit = sv["limit_ma"]
+    over = [r for r in sv["rows"] if r["status"] == "over"]
+    if over:
+        def plan_text(r: dict[str, Any]) -> str:
+            p = r.get("plan")
+            if not p:
+                return ""
+            return f", 절감 조합 최대 {p['saving_mw']:.0f} mW ({'한도 도달' if p['achieved'] else '부족'})"
+        out.append({"key": "sustained_over", "rule": "sustained_over", "severity": "high", "category": "발열",
+                    "title": f"지속 전류 {limit:.0f} mA 초과 {len(over)}건 — 절감 검토",
+                    "detail": "; ".join(f"{_short(r['variant_id'])} {r['ma']:.0f} mA (필요 −{r['need_mw']:.0f} mW{plan_text(r)})"
+                                        for r in over[:3]) + (f" 외 {len(over) - 3}" if len(over) > 3 else "")
+                    + (f" · AP 공통 {sv['base_mw']:.0f} mW 포함" if sv.get("base_mw") else ""),
+                    "affected": [_scoped(r) for r in over], "validity": "confirmed",
+                    "mitigation": LADDER_TEXT + " — 한도까지 못 줄이면 성능 조건(해상도 · fps · EIS) · 사용 시간 제한 협의",
+                    "checks": ["가장 큰 요소(CPU · BW · IP 군) 확인", "clock level 하향 여지", "compression 적용 buffer",
+                               "SW · CPU 배치 절감", "IQ 평가 대상 option"]})
+    watch = [r for r in sv["rows"] if r["status"] == "watch"]
+    if watch:
+        out.append({"key": "sustained_watch", "rule": "sustained_watch", "severity": "medium", "category": "발열",
+                    "title": f"지속 전류 주의 대역 {len(watch)}건 (≥ {sv['watch_ma']:.0f} mA)",
+                    "detail": ", ".join(f"{_short(r['variant_id'])} {r['ma']:.0f} mA" for r in watch[:4])
+                    + (f" 외 {len(watch) - 4}" if len(watch) > 4 else ""),
+                    "affected": [_scoped(r) for r in watch], "validity": "confirmed",
+                    "mitigation": "SW · 입력 증가(SW 증가 예산 · 가정 부하) 시 한도 초과 여부 재확인 — 여유 확보 lever 미리 확인",
+                    "checks": ["SW 증가 예산 적용 시 power", "가정 부하(GPU · NPU) 근거"]})
     return out

@@ -605,6 +605,8 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "cpu_by_task": report["power"]["cpu_by_task"],
         "cpu_basis": (report["power"].get("cpu_profile") or {}).get("kind", "flat"),
         "zero_power_ips": report["power"].get("zero_power_ips", []),
+        # declared assumed IP loads (GPU / NPU …), already inside hw_mw / total_mw; empty when none declared
+        **({"assumed_by_ip": report["power"]["assumed_by_ip"]} if report["power"].get("assumed_by_ip") else {}),
         "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
         "sw_nodes": sorted(report["bw"].get("sw_by_task", {})),
         "stages": {
@@ -1452,6 +1454,7 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
         "base_bw_ip_mw": s["power"]["bw_hw_mw"], "base_bw_cpu_mw": s["power"]["bw_sw_mw"],
         "base_bw_ip_mbs": s["bw"]["hw_mbs"], "base_bw_cpu_mbs": s["bw"]["sw_mbs"],
         "cpu_by_task": s["cpu_by_task"], "ips": ips, "buffers": bufs,
+        **({"assumed_by_ip": s["assumed_by_ip"]} if s.get("assumed_by_ip") else {}),
         "compression": sorted(comp), "compression_modes": {b: cmodes[b] for b in sorted(comp) if b in cmodes},
         "dvfs": dom_level, "verdict": s["verdict"]["status"],
         # why: reasons + NRT clock factor of the objective slice (board / 판정 popover)

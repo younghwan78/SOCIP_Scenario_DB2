@@ -89,6 +89,11 @@ def build_snapshot(
             "prediction_id": (pred or {}).get("id"), "selection_rule": (pred or {}).get("selection_rule"),
             "power": chosen.get("power") or {k: rec.get(k) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
             "bw_mbs": chosen.get("bw_mbs", rec.get("bw_mbs")),
+            # per-IP HW core power of the reported case (IP-group ranking) + declared assumed loads (GPU / NPU …)
+            "ip_mw": {ip["node"]: round(float(ip.get("power_mw") or 0.0), 3)
+                      for ip in (chosen.get("ips") if pred else None) or (v.get("objective_slice") or {}).get("ips") or []},
+            "assumed_mw": dict((chosen.get("assumed_by_ip") if pred else None)
+                               or (v.get("objective_slice") or {}).get("assumed_by_ip") or {}),
             "baseline_bw_mbs": (v.get("baseline") or {}).get("bw_mbs"),
             "baseline_total_mw": (v.get("baseline") or {}).get("total_mw"),
             "compression": chosen.get("compression", rec.get("compression", [])),
@@ -518,7 +523,7 @@ def _tier1(snap: dict[str, Any]) -> str:
             + (f" · 미등록(탐색값) {len(pw['unregistered'])}" if pw.get("unregistered") else "")
             + (f" · <b>예측 ↔ 실측 반대 {len(pw['flip'])}</b>" if pw.get("flip") else "")
             + f" · 허용 +{pw.get('tolerance_pct', '—')}%" + (" · 기준값 SAMPLE" if pw.get("sample") else "")),
-        box("③ 발열 대응 여지 (−10 / −20%)",
+        _sustained_box(cr["sustained"], box) if cr.get("sustained") else box("③ 발열 대응 여지 (−10 / −20%)",
             "미평가" if not th.get("items") else f"−10% 가능 {sum(1 for i in th['items'] if i.get('reach10'))} / {len(th['items'])}",
             th_cls, "; ".join(f"{escape(_short(i['variant_id']))}: −10% {'가능' if i.get('reach10') else '미달' if i.get('reach10') is False else '미평가'}"
                               f", −20% {'가능' if i.get('reach20') else '미달' if i.get('reach20') is False else '미평가'}" for i in (th.get("items") or [])[:4])
@@ -548,6 +553,18 @@ def _tier1(snap: dict[str, Any]) -> str:
     else:
         h += "<p class=meta>열린 risk 없음</p>"
     return h + _actions(c)
+
+
+def _sustained_box(su: dict[str, Any], box) -> str:
+    """③ when review_policy.sustained_current is declared: sustained AP + mem current against the limit."""
+    over, watch, n = su.get("over") or [], su.get("watch") or [], int(su.get("total") or 0)
+    if n == 0:
+        return box(f"③ 지속 전류 ≤ {float(su['limit_ma']):.0f} mA", "미평가", "warn",
+                   "등록 예측이 없어 지속 전류를 판정하지 않음 — 조합 탐색 후 예측 등록")
+    detail = (f"초과: {escape(', '.join(_short(v) for v in over[:4]))}" if over else "초과 없음") + (
+        f" · 주의 {len(watch)}" if watch else "") + " · 온도 대신 지속 전류로 판정 (방열 성능 의존)"
+    return box(f"③ 지속 전류 ≤ {float(su['limit_ma']):.0f} mA", f"{n - len(over)} / {n}",
+               "fail" if over else "warn" if watch else "ok", detail)
 
 
 def _actions(c: dict[str, Any]) -> str:

@@ -430,6 +430,20 @@ def messages(snap: dict[str, Any], board: list[dict[str, Any]], verdicts: list[d
         out.append(f"평가 완료 {n}개 fps 충족." if n else "fps 평가 완료 결과 없음.")
     if s.get("errors"):
         out[0] = f"[부분 평가] 계산 실패 {len(s['errors'])}개. " + out[0]
+    sv = snap.get("sustained")
+    if sv:
+        over = [r for r in sv["rows"] if r["status"] == "over"]
+        watch = [r for r in sv["rows"] if r["status"] == "watch"]
+        top = sv["rows"][0] if sv["rows"] else None
+        if over:
+            names = ", ".join(f"{short(r['variant_id'])} {r['ma']:.0f} mA" for r in over[:3])
+            out.append(f"지속 전류(AP + mem) {sv['limit_ma']:.0f} mA 초과 {len(over)}개({names}) — 발열 기준 절감 검토 대상."
+                       + (f" 주의 대역 {len(watch)}개." if watch else ""))
+        elif not top:
+            out.append(f"지속 전류(AP + mem) {sv['limit_ma']:.0f} mA 미평가 — 등록 예측 없음.")
+        else:
+            out.append(f"지속 전류(AP + mem) 전 scenario {sv['limit_ma']:.0f} mA 이내 — 최대 {short(top['variant_id'])} {top['ma']:.0f} mA"
+                       + (f", 주의 대역 {len(watch)}개." if watch else "."))
     judged = [v for v in verdicts if v["state"] not in ("na", "uncovered")]
     if verdicts:
         flips = [v for v in judged if v.get("flip")]
@@ -451,12 +465,13 @@ def messages(snap: dict[str, Any], board: list[dict[str, Any]], verdicts: list[d
     elif non_iq:
         out.append(f"화질 영향 없는 조치 후보 {len(non_iq)}건(clock · compression · SW)을 먼저 확인, 화질 영향 항목 {len(iq)}건"
                    "(lossy 압축 · 화질 열화 option)은 IQ 평가를 거쳐 마지막에.")
-    return out[:3]
+    return out[:4]
 
 
 _DECISION = {
     "verdict_flip": "전과제 대비 판정 기준을 silicon 실측 우선으로 확정",
     "power_over_reference": "전류 초과 scenario의 절감 계획 승인 (clock → compression → SW 순)",
+    "sustained_over": "지속 전류 한도 초과 scenario의 절감 목표 · 순서 승인 (못 미치면 성능 조건 협의)",
     "kpi_uncovered": "미커버 KPI scenario 탐색 · 등록 일정",
     "sw_margin_low": "차기 SW 증가 예산 합의 (SW 여유 부족 scenario 기준)",
     "iq_gated_saving": "화질 열화 option IQ 평가 착수 여부 (clock · compression · SW 소진 후)",
@@ -579,6 +594,8 @@ def risk_priority(risk: dict[str, Any], snap: dict[str, Any]) -> int:
     """Check order within a severity: customer criterion × KPI weight × how likely the verdict flips (0..100)."""
     tiers = {k["variant_ref"]: k.get("tier") or "base" for k in kpi_list(snap)}
     aff = risk.get("affected") or []
-    kpi_w = max((_TIER_W.get(tiers[v], 1.0) for v in aff if v in tiers), default=1.0)
+    # affected entries are variant ids or "scenario/variant" (scoped risks)
+    vids = [str(v).rsplit("/", 1)[-1] for v in aff]
+    kpi_w = max((_TIER_W.get(tiers[v], 1.0) for v in vids if v in tiers), default=1.0)
     sens = _SENS.get(str(risk.get("key")), 0.6 if risk.get("validity") not in (None, "confirmed") else 0.5)
     return int(round(_CAT_W.get(str(risk.get("category")), 2) * kpi_w * sens * 10))
