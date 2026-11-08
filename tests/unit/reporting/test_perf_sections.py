@@ -1,7 +1,7 @@
 """Performance sections: output fps, latency → buffer use, SW optimisation requests."""
 from copy import deepcopy
 
-from scenario_db.reporting.arch_report import _frame_buffer, render_html
+from scenario_db.reporting.arch_report import render_html
 from scenario_db.reporting.perf_sections import (
     buffer_rows,
     latency_buffer_block,
@@ -37,9 +37,9 @@ def perf_snap():
     s["review_context"] = {"policy": {"sw_growth_budget": 1.2, "max_latency_frames": 2}}
     s["scenarios"] = [
         row("cam-rec-a30", 30, True, {"preview": 33.333, "video": 33.333}, [stage("post_irta", 5.6, 83.2, 30.0)],
-            {"video_ms": 70.0, "preview_ms": 54.0, "video_frames": 2.1, "preview_frames": 1.6}, {"mb": 40.0, "raw_mb": 50.0}),
+            {"video_ms": 70.0, "preview_ms": 54.0, "video_frames": 2.1, "preview_frames": 1.6}, {"mb": 40.0}),
         row("cam-rec-b60", 60, True, {"preview": 16.667, "video": 16.667}, [stage("post_irta", 14.0, 16.0, 20.0)],
-            {"video_ms": 30.0, "preview_ms": 30.0, "video_frames": 1.8, "preview_frames": 1.8}, {"mb": 30.0, "raw_mb": 30.0}),
+            {"video_ms": 30.0, "preview_ms": 30.0, "video_frames": 1.8, "preview_frames": 1.8}, {"mb": 30.0}),
         row("cam-rec-c240", 240, False, {"preview": 8.333, "video": 8.333}, [stage("post_irta", 5.6, -34.0, 9.0),
                                                                            stage("blend", 1.0, 76.0, 1.0, st="post")],
             {"video_ms": 18.0, "preview_ms": 18.0, "video_frames": 4.4, "preview_frames": 4.4}, None),
@@ -63,7 +63,7 @@ def test_latency_buffer_estimate_uses_frames_alive_and_the_compressed_frame():
     assert a["alive"] == 3 and a["buffer_mb"] == 120.0
     assert next(o for o in rows if o["variant_id"] == "cam-rec-c240")["buffer_mb"] is None
     html = latency_buffer_block(perf_snap())
-    assert "압축 전 50.0" in html and "latency 한도 2 frame" in html
+    assert "latency 한도 2 frame" in html and "DMA write 합" in html
     risks = _latency_risks(perf_snap())
     # a spec miss is a frame drop risk already; the buffer risk lists fps-holding scenarios only
     assert risks[0]["key"] == "latency_buffer" and risks[0]["affected"] == ["cam-rec-a30"]
@@ -73,24 +73,14 @@ def test_latency_buffer_estimate_uses_frames_alive_and_the_compressed_frame():
     assert _latency_risks(s) == []
 
 
-def test_frame_buffer_divides_traffic_by_fps_and_ports_and_applies_the_case_compression():
-    bufs = [{"buffer": "A", "raw_mbs": 3000.0, "ports": ["w", "r"], "comp_ratio": 0.7,
-             "modes": [{"mode": "LOSSY", "comp_ratio": 0.5}]},
-            {"buffer": "B", "raw_mbs": 900.0, "ports": ["w", "r1", "r2"]}]
-    assert _frame_buffer(bufs, 30, [], {}) == {"raw_mb": 60.0, "mb": 60.0, "buffers": 2}
-    assert _frame_buffer(bufs, 30, ["A"], {"A": "LOSSY"})["mb"] == 35.0
-    assert _frame_buffer(bufs, 30, ["A"], {})["mb"] == 45.0
-    assert _frame_buffer([], 30, [], {}) is None and _frame_buffer(bufs, None, [], {}) is None
-
-
 def test_sw_requests_rank_tasks_that_need_a_cut_and_flag_growth():
     reqs = sw_requests(perf_snap())
     top = reqs[0]
-    assert top["task"] == "post_irta" and top["low"] == ["cam-rec-c240"] and len(top["variants"]) == 3
+    assert top["task"] == "post_irta" and top["low"] == [("uc", "cam-rec-c240")] and len(top["variants"]) == 3
     # 10 % margin at 240 fps: 5.6 − 0.9 × 4.167 = 1.85 ms
     assert top["need_ms"] == 1.85 and top["need_variant"] == "cam-rec-c240"
     # ×1.2 growth: b60 14 × 1.2 = 16.8 ms > 0.9 × 16.67 → under 10 %
-    assert "cam-rec-b60" in top["grown_low"]
+    assert ("uc", "cam-rec-b60") in top["grown_low"]
     blend = next(t for t in reqs if t["task"] == "blend")
     assert blend["stages"] == ["post"] and blend["need_ms"] == 0 and not blend["grown_low"]
     snap = perf_snap()
@@ -103,3 +93,33 @@ def test_sw_requests_rank_tasks_that_need_a_cut_and_flag_growth():
     full = render_html("Review", snap)
     assert "SW 최적화 요청 post_irta −1.9 ms (고속 batch 미모델 상한)" in full and "Frame drop — 최종 출력 fps" in full
     assert "Latency → buffer 사용" in full
+
+
+def test_frame_drop_comes_from_the_output_intervals_not_the_overall_spec_verdict():
+    s = perf_snap()
+    # outputs hold 30 fps; the spec miss is a power budget
+    s["scenarios"].append(row("cam-rec-budget", 30, False, {"preview": 33.333, "video": 33.333}, [stage("post_irta", 5.6, 83.2, 30.0)]))
+    rows = {o["variant_id"]: o for o in output_rows(s)}
+    assert rows["cam-rec-budget"]["drop"] is False and rows["cam-rec-c240"]["drop"] is True
+    html = output_fps_block(s)
+    assert "frame drop 1" in html and "다른 spec(전력 · BW 예산 등) 미달 1" in html and "기타 spec 미달" in html
+    # without intervals (older snapshot) the spec verdict stands
+    s["scenarios"].append(row("cam-rec-old", 30, False, {}, []))
+    assert {o["variant_id"]: o for o in output_rows(s)}["cam-rec-old"]["drop"] is True
+
+
+def test_stage_basis_cuts_the_whole_serial_stage():
+    s = perf_snap()
+    st = stage("blend", 3.0, 0.0, 10.0, st="post") | {"basis": "stage", "sw_ms": 6.0, "hw_ms": 4.0}
+    s["scenarios"] = [row("cam-rec-s", 100, True, {"preview": 10.0, "video": 10.0}, [st])]
+    t = sw_requests(s)[0]
+    # period 10 ms, HW 4 + SW 6 = 10 ms: 1 ms cut for a 10 % margin (the 3 ms longest task alone would say 0)
+    assert t["need_ms"] == 1.0 and t["basis"] == ["stage"] and t["max_ms"] == 6.0
+
+
+def test_sw_requests_count_scenario_variant_pairs():
+    s = perf_snap()
+    twin = dict(s["scenarios"][2]) | {"scenario_id": "uc-apv"}
+    s["scenarios"].append(twin)
+    t = sw_requests(s)[0]
+    assert t["low"] == [("uc", "cam-rec-c240"), ("uc-apv", "cam-rec-c240")] and len(t["variants"]) == 4

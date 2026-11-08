@@ -113,13 +113,13 @@ def build_snapshot(
             # SW-02/03: stage time vs frame period and the SW-growth slices (objective statistic)
             "sw": _sw_detail(v, (run["spec"].get("objective") or {}).get("statistic")),
             # PERF-02: every NRT / Post stage's binding SW load (the SW optimisation requests aggregate these)
-            "sw_stages": [{k: st.get(k) for k in ("stage", "hw_ms", "sw_ms", "chain_ms", "bottleneck", "bottleneck_ms",
+            "sw_stages": [{k: st.get(k) for k in ("stage", "basis", "hw_ms", "sw_ms", "chain_ms", "bottleneck", "bottleneck_ms",
                                                    "binding", "binding_ms", "margin_pct", "sw_share_pct", "in_flight")}
                           for st in (v.get("sw_margin") or {}).get("stages") or []],
-            # PERF-03: DRAM held per frame by the M2M buffers of the reported case (frames alive × this = buffer use)
-            "frame_buffer": _frame_buffer(v.get("buffers") or [], v.get("fps"),
-                                          chosen.get("compression", rec.get("compression", [])),
-                                          chosen.get("compression_modes", rec.get("compression_modes", {})) or {}),
+            # PERF-03: DRAM one frame occupies = every DMA write of the objective slice per frame (planes and buffers
+            # once each, after the slice's compression); runs from before this field = None (re-explore to fill)
+            "frame_buffer": ({"mb": float(wmb), "basis": "objective_slice"}
+                             if (wmb := ((v.get("objective_slice") or {}).get("bw") or {}).get("write_mb_frame")) is not None else None),
         })
 
     clocks = []
@@ -305,27 +305,6 @@ def _conditions(dc: dict[str, Any]) -> dict[str, Any]:
     # Preserve custom compare_keys as well as the default keys; the reference selects
     # which recorded conditions participate in a comparison.
     return {k: v for k, v in dc.items() if v is not None}
-
-
-def _frame_buffer(buffers: list[dict[str, Any]], fps: Any, compression: list[str], modes: dict[str, str]) -> dict[str, Any] | None:
-    """DRAM one frame occupies in the M2M buffers: per buffer, its traffic ÷ fps ÷ DMA ports (each port moves about
-    one frame per frame: one write, then each read), times the compression ratio when the reported case compresses it.
-    An estimate for buffer sizing at the spec stage, not an allocator figure."""
-    if not buffers or not fps:
-        return None
-    raw = mb = 0.0
-    on = set(compression or [])
-    for b in buffers:
-        ports = len(b.get("ports") or []) or 1
-        frame = float(b.get("raw_mbs") or 0.0) / float(fps) / ports
-        ratio = 1.0
-        if b.get("buffer") in on:
-            mode = modes.get(b["buffer"])
-            m = next((x for x in b.get("modes") or [] if x.get("mode") == mode), None)
-            ratio = float((m or {}).get("comp_ratio") or b.get("comp_ratio") or 1.0)
-        raw += frame
-        mb += frame * ratio
-    return {"raw_mb": round(raw, 2), "mb": round(mb, 2), "buffers": len(buffers)}
 
 
 def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:

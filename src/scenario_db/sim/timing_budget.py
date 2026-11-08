@@ -1196,6 +1196,9 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
             "hw": round(100 * sum(bw_hw.values()) / bw_total, 1) if bw_total else 0.0,
             "sw": round(100 * sum(bw_sw.values()) / bw_total, 1) if bw_total else 0.0,
         },
+        # DRAM written per frame (every write port: each plane and each M2M buffer once a frame, after its
+        # compression) = the DRAM one frame occupies; frames in flight x this sizes the buffers (report only)
+        "write_mb_frame": round(sum(d.bw_mbs for d in result.dma_breakdown if d.direction == "write") * period / 1000.0, 3),
     }
     return power, bw
 

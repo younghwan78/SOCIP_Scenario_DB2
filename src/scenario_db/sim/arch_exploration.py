@@ -607,7 +607,8 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "zero_power_ips": report["power"].get("zero_power_ips", []),
         # declared assumed IP loads (GPU / NPU …), already inside hw_mw / total_mw; empty when none declared
         **({"assumed_by_ip": report["power"]["assumed_by_ip"]} if report["power"].get("assumed_by_ip") else {}),
-        "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
+        "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")}
+        | ({"write_mb_frame": report["bw"]["write_mb_frame"]} if "write_mb_frame" in report["bw"] else {}),
         "sw_nodes": sorted(report["bw"].get("sw_by_task", {})),
         "stages": {
             k: {f: st[k][f] for f in ("sw_ms", "budget_ms", "hw_ms", "overhead_ms", "feasible", "fill_pct")}
