@@ -13,6 +13,7 @@ from html import escape
 from typing import Any
 
 from scenario_db.reporting import arch_report as ar
+from scenario_db.reporting.perf_sections import latency_buffer_block, output_fps_block, sw_request_block, sw_requests
 from scenario_db.reporting.power_groups import heatmap_block, ranking_block
 from scenario_db.reporting.sustained_section import sustained_block, sustained_lead
 from scenario_db.reporting.risk_rules import cpu_tolerance_min
@@ -261,6 +262,9 @@ def _lead_perf(snap: dict[str, Any]) -> str:
         t += f" · 미달 {s['spec_fail']}건 ({escape(', '.join(_short(f['variant_id']) for f in s['failed'][:3]))})"
     if low:
         t += f" · SW margin 10% 미만 {len(low)}건 (최소 {low[0]['margin_pct']:.0f}% {escape(_short(low[0]['variant_id']))})"
+    asks = [x for x in sw_requests(snap) if x["need_ms"] > 0]
+    if asks:
+        t += " · SW 최적화 요청 " + escape(", ".join(f"{x['task']} −{x['need_ms']:.1f} ms" for x in asks[:3]))
     return _lead(t, "fail" if s["spec_fail"] else "warn" if low else "ok")
 
 
@@ -511,7 +515,6 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
     if "risk_register" in snap:
         out.append(("Risk register", drivers_table(snap) + ar._risk_register(snap["risk_register"], snap.get("scope") or {}), None, 1))
     lat_rows = [r for r in snap["scenarios"] if r.get("latency")]
-    lat_top = sorted(lat_rows, key=lambda r: (r["spec_ok"], -((r.get("latency") or {}).get("video_frames") or 0)))[:TOP_N]
     doms = snap.get("domains") or []
     dom_head = {}
     for d in doms:
@@ -519,9 +522,9 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
             key = (d["scenario_id"], d["variant_id"])
             dom_head[key] = min(dom_head.get(key, 1e9), d["headroom_pct"])
     tight = set(sorted(dom_head, key=lambda v: dom_head[v])[:TOP_N])
-    perf = (_lead_perf(snap) + ar._spec(s)
-            + f"<h3 style='margin:12px 0 4px'>Latency · 출력 간격 — 미달 · frame 지연 큰 {len(lat_top)}개</h3>" + ar._latency(lat_top)
-            + (_more(f"Latency 전체 {len(lat_rows)}개", ar._latency(lat_rows)) if len(lat_rows) > len(lat_top) else "")
+    perf = (_lead_perf(snap) + output_fps_block(snap) + ar._spec(s)
+            + sw_request_block(snap) + latency_buffer_block(snap)
+            + (_more(f"Latency · 출력 간격 상세 {len(lat_rows)}개", ar._latency(lat_rows)) if lat_rows else "")
             + sw_table(snap)
             + "<h3 style='margin:12px 0 4px'>SW margin</h3>" + (ar._margins(snap["sw_margin_top5"], ar.sw_statistic(snap)) if snap["sw_margin_top5"] else "<p class=meta>SW margin 계산 결과 없음</p>")
             + ar._fail_margins(snap.get("sw_margin_fail") or [])
