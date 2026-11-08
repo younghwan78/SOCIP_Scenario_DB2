@@ -15,6 +15,7 @@ from html import escape
 from typing import Any
 
 TARGET_MARGIN_PCT = 10.0   # same as risk_rules.LOW_MARGIN_PCT: below this an SW stage is a timing risk
+HIGH_FPS = 120.0           # ≥ this the NRT batch behaviour is not modelled (1 frame = 1 period): a cut there is an upper bound
 _TOL = 0.001               # output interval within ±0.1 % of the period = fps held
 
 
@@ -156,7 +157,8 @@ def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
             share = 100.0 * float(st.get("bottleneck_ms") or load) / float(st["chain_ms"]) if st.get("chain_ms") else None
             t = tasks.setdefault(str(name), {"task": str(name), "stages": set(), "variants": [], "low": [], "grown_low": [],
                                               "max_ms": 0.0, "min_margin": None, "worst": None, "need_ms": 0.0,
-                                              "need_variant": None, "share_pct": None, "binding": set()})
+                                              "need_variant": None, "need_fps": None, "share_pct": None, "binding": set(),
+                                              "need_model_fps": None})
             t["stages"].add(str(st.get("stage")))
             t["binding"].add(str(st.get("binding") or "task"))
             if r["variant_id"] not in t["variants"]:
@@ -169,7 +171,10 @@ def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
             if t["min_margin"] is None or float(st["margin_pct"]) < t["min_margin"]:
                 t["min_margin"], t["worst"] = float(st["margin_pct"]), r["variant_id"]
             if need > t["need_ms"]:
-                t["need_ms"], t["need_variant"] = round(need, 2), r["variant_id"]
+                t["need_ms"], t["need_variant"], t["need_fps"] = round(need, 2), r["variant_id"], r.get("fps")
+            # the largest cut among scenarios the model represents (below the unmodelled high-fps batch range)
+            if need > 0 and float(r.get("fps") or 0) < HIGH_FPS and need > (t["need_model_fps"] or 0.0):
+                t["need_model_fps"] = round(need, 2)
             if share is not None:
                 t["share_pct"] = max(t["share_pct"] or 0.0, round(share, 0))
     out = []
@@ -183,7 +188,12 @@ def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _advice(t: dict[str, Any]) -> str:
     if t["need_ms"] > 0:
-        return (f"{t['need_ms']:.1f} ms 이상 단축 필요 ({_short(str(t['need_variant']))}) — task 분할(thread 병렬) · HW offload · "
+        hfr = float(t.get("need_fps") or 0) >= HIGH_FPS
+        note = ""
+        if hfr:
+            note = (f" · {HIGH_FPS:.0f} fps 이상 batch 미모델 — 상한값, batch 동작 정의 후 재판정"
+                    + (f" (그 외 최대 {t['need_model_fps']:.1f} ms)" if t.get("need_model_fps") else " (그 외 scenario는 단축 불필요)"))
+        return (f"{t['need_ms']:.1f} ms 이상 단축 필요 ({_short(str(t['need_variant']))}){note} — task 분할(thread 병렬) · HW offload · "
                 "상위 cluster 배치 · 고속 mode 간헐 실행")
     if t["grown_low"]:
         return f"현재 여유 있음, SW ×{t['budget']:.1f} 증가 시 {len(t['grown_low'])}개 여유 < {TARGET_MARGIN_PCT:.0f}% — 차기 SW 최적화 목표에 포함"

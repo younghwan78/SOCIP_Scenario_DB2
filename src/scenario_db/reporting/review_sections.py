@@ -264,7 +264,9 @@ def _lead_perf(snap: dict[str, Any]) -> str:
         t += f" · SW margin 10% 미만 {len(low)}건 (최소 {low[0]['margin_pct']:.0f}% {escape(_short(low[0]['variant_id']))})"
     asks = [x for x in sw_requests(snap) if x["need_ms"] > 0]
     if asks:
-        t += " · SW 최적화 요청 " + escape(", ".join(f"{x['task']} −{x['need_ms']:.1f} ms" for x in asks[:3]))
+        t += " · SW 최적화 요청 " + escape(", ".join(
+            f"{x['task']} −{x['need_model_fps']:.1f} ms" if x.get("need_model_fps")
+            else f"{x['task']} −{x['need_ms']:.1f} ms (고속 batch 미모델 상한)" for x in asks[:3]))
     return _lead(t, "fail" if s["spec_fail"] else "warn" if low else "ok")
 
 

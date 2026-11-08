@@ -98,6 +98,8 @@ def test_sw_requests_rank_tasks_that_need_a_cut_and_flag_growth():
     html = sw_request_block(snap)
     assert snap == before
     assert "요청 1건" in html and "1.9 ms 이상 단축 필요" in html and "SW ×1.2" in html
+    # the cut comes from a 240 fps scenario (batch not modelled): flagged as an upper bound
+    assert "batch 미모델 — 상한값" in html and "그 외 scenario는 단축 불필요" in html
     full = render_html("Review", snap)
-    assert "SW 최적화 요청 post_irta −1.9 ms" in full and "Frame drop — 최종 출력 fps" in full
+    assert "SW 최적화 요청 post_irta −1.9 ms (고속 batch 미모델 상한)" in full and "Frame drop — 최종 출력 fps" in full
     assert "Latency → buffer 사용" in full
