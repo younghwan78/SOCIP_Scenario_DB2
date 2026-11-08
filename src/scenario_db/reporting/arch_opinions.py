@@ -1,15 +1,17 @@
 """Category review opinions for the architecture report.
 
-Rows are grouped the way recording scenarios are reviewed:
-30 fps (resolution x EIS x codec), 60 fps (resolution), high-speed (>= 100 fps)
-and heavy modes (pro / portrait / dual / triple). Every sentence is derived
-from the frozen snapshot numbers; nothing here is a measured result.
+Two levels. Level 1 is the scenario category the report is organised by (Camera Recording, Camera Preview, Video
+Playback, Game …): ``review_policy.categories`` (scenario id glob → name) first, then built-in scenario-id rules.
+Level 2 is the category's own review classes. Camera Recording is reviewed as 30 fps (resolution x EIS x codec),
+60 fps (resolution), high-speed (>= 100 fps) and heavy modes (pro / portrait / dual / triple); a category without
+rules yet is one block. Every sentence is derived from the frozen snapshot numbers; nothing here is a measured result.
 """
 
 from __future__ import annotations
 
 import re
 import statistics
+from fnmatch import fnmatchcase
 from typing import Any
 
 from scenario_db.reporting.reason_text import diagnose, explain_all, first_text
@@ -21,19 +23,46 @@ CATEGORIES = [
     ("heavy", "Heavy scenario", "Pro · Portrait · Dual/PIP/RCV · Triple — 기존 과제 heavy 분류"),
     ("other", "기타", "위 분류에 속하지 않는 variant"),
 ]
+RECORDING = "Camera Recording"
+# built-in level-1 rules on the scenario id (first match); review_policy.categories globs win
+GROUP_RULES: tuple[tuple[str, str], ...] = (
+    ("*cam-recording*", RECORDING), ("*cam-rec*", RECORDING), ("*recording*", RECORDING),
+    ("*cam-preview*", "Camera Preview"), ("*preview*", "Camera Preview"),
+    ("*cam-capture*", "Camera Capture"), ("*capture*", "Camera Capture"),
+    ("*youtube*", "Video Playback"), ("*vid-playback*", "Video Playback"), ("*playback-local*", "Video Playback"),
+    ("*game*", "Game"), ("*call-video*", "Video Call"), ("*video-call*", "Video Call"),
+    ("*call-voice*", "Voice Call"), ("*voice*", "Voice Call"), ("*call*", "Call"),
+    ("*aud-*", "Audio"), ("*audio*", "Audio"), ("*disp-*", "Display"), ("*gallery*", "Display"),
+)
+OTHER_GROUP = "기타"
+
+
+def group_of(scenario_id: str, overrides: dict[str, str] | None = None, name: str | None = None) -> str:
+    """Level-1 review category of a scenario."""
+    sid = str(scenario_id).lower()
+    for pattern, label in (overrides or {}).items():
+        if fnmatchcase(sid, str(pattern).lower()):
+            return str(label)
+    for pattern, label in GROUP_RULES:
+        if fnmatchcase(sid, pattern):
+            return label
+    return str(name) if name else OTHER_GROUP
+
+
 _RES_RE = re.compile(r"(?:^|-)(fhd|uhd|qhd|8k|4k|hd)(?=\d|-|$)", re.I)
 _HEAVY_ID = re.compile(r"(?:^|-)(pro|portrait|pip|rcv|rdual|rtriple|dual|triple)(?:-|$)", re.I)
 
 
 def classify(variant_id: str, scenario_id: str, fps: float | None, eis_on: bool | None, dc: dict[str, Any] | None,
-             severity: str | None = None) -> dict[str, Any]:
-    """Category + axes of one variant. dc = resolved design_conditions (may be empty)."""
+             severity: str | None = None, groups: dict[str, str] | None = None) -> dict[str, Any]:
+    """Level-1 group, level-2 category and axes of one variant. dc = resolved design_conditions (may be empty)."""
     dc = dc or {}
+    group = group_of(scenario_id, groups)
     res = str(dc.get("resolution") or "").upper()
     if not res:
         m = _RES_RE.search(variant_id)
         res = m.group(1).upper() if m else "해상도 미정"
-    recording = "camera-recording" in scenario_id.lower() or variant_id.startswith("cam-rec-")
+    recording = group == RECORDING or (not groups and variant_id.startswith("cam-rec-"))
     codec = str(dc.get("codec_mfc") or ("APV" if "apv" in scenario_id.lower() else "HEVC" if recording else "미정")).upper()
     mode = str(dc.get("camera_mode") or "")
     heavy_kind = None
@@ -59,8 +88,8 @@ def classify(variant_id: str, scenario_id: str, fps: float | None, eis_on: bool 
         cat = "fps30"
     else:
         cat = "other"
-    return {"category": cat, "resolution": res, "codec": codec, "eis": bool(eis_on), "heavy_kind": heavy_kind,
-            "fps": f, "severity": severity}
+    return {"group": RECORDING if recording else group, "category": cat, "resolution": res, "codec": codec,
+            "eis": bool(eis_on), "heavy_kind": heavy_kind, "fps": f, "severity": severity}
 
 
 def _share(p: dict[str, Any]) -> dict[str, float]:
@@ -112,6 +141,33 @@ def _f(v: float | None, d: int = 0) -> str:
     return "—" if v is None else f"{v:,.{d}f}"
 
 
+def _group(r: dict[str, Any]) -> str:
+    """Level-1 group of a row (rows frozen before groups existed: recording when the class says so)."""
+    c = r["cls"]
+    return c.get("group") or (RECORDING if c.get("category") != "other" or str(r.get("variant_id", "")).startswith("cam-rec-")
+                              else OTHER_GROUP)
+
+
+def _blocks(rows: list[dict[str, Any]]) -> list[tuple[str, str, str, str, list[dict[str, Any]]]]:
+    """(group, category, title, scope, rows): Camera Recording by its review classes, every other group as one block
+    until it has review rules of its own. Recording first, then the larger groups."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        groups.setdefault(_group(r), []).append(r)
+    order = sorted(groups, key=lambda g: (g != RECORDING, g == OTHER_GROUP, -len(groups[g]), g))
+    out = []
+    for g in order:
+        rs = groups[g]
+        if g == RECORDING:
+            for cat, title, scope in CATEGORIES:
+                sub = [r for r in rs if r["cls"]["category"] == cat]
+                if sub:
+                    out.append((g, cat, title if cat != "other" else "기타 recording", scope, sub))
+        else:
+            out.append((g, "other", g, "분류 규칙 미정 — category 전체를 한 묶음으로 검토", rs))
+    return out
+
+
 def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *, sample_dvfs: bool = False,
                    measured: set[tuple[str, str]] | None = None, options: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """One block per non-empty category: stats + ordered opinion sentences.
@@ -121,10 +177,7 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
     """
     measured = measured or set()
     out = []
-    for cat, title, scope in CATEGORIES:
-        rs = [r for r in rows if r["cls"]["category"] == cat]
-        if not rs:
-            continue
+    for group, cat, title, scope, rs in _blocks(rows):
         ok = [r for r in rs if r["spec_ok"]]
         tot = [r["power"]["total_mw"] for r in ok if r["power"].get("total_mw") is not None]
         bws = [r["bw_mbs"] for r in ok if r.get("bw_mbs") is not None]
@@ -207,7 +260,7 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
             d = min(dom, key=lambda x: x["headroom_pct"])
             add(f"DVFS headroom 최소: {d['domain']} L{d['level']} {_f(d['speed_mhz'])} MHz, 필요 {_f(d['required_mhz'])} MHz (+{d['headroom_pct']:.0f}%, driver {d.get('driver') or '-'}).", dv)
         evidence = _evidence(rs, measured, sample_dvfs, avg_share)
-        out.append({"category": cat, "title": title, "scope": scope, "variants": [r["variant_id"] for r in rs],
+        out.append({"group": group, "category": cat, "title": title, "scope": scope, "variants": [r["variant_id"] for r in rs],
                     "spec_ok": len(ok), "count": len(rs), "power_range_mw": [min(tot), max(tot)] if tot else None,
                     "share_pct": {k: round(v, 1) for k, v in avg_share.items()}, "opinions": ops, "basis": basis,
                     "evidence": evidence,

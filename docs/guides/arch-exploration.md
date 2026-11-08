@@ -86,7 +86,7 @@ engine이 다르면 Δ의 일부가 모델 차이이므로, 예측 현황 비교
     게시 전 확인 항목, 핵심 메시지, Top risk(열린 risk 상위 5, 나머지는 Risk register), 결정 요청.
   - Tier 1 — 결론(고객 기준 3항목 · 권고 조치 단계별 상위 후보) · Risk register. 과제 보고서의 Top risk와 예측 전제는 Tier 0에만 둔다.
     Tier 0가 없는 run 보고서는 결론에 둘 다 남긴다.
-  - Tier 2 — 성능 · Timing / Power 구성 / 발열 · 절감(발열 대응 · 전력 절감 후보 전체 · 화질 열화 option) / CPU · SW / 분류별 검토 의견.
+  - Tier 2 — 성능 · Timing / Power 구성 / 발열 · 절감(발열 대응 · 전력 절감 후보 전체 · 화질 열화 option) / CPU · SW / Category별 검토 의견.
     - 성능 · Timing (`reporting/perf_sections.py`): frame drop은 최종 출력(preview · video) 간격으로 판정해 drop → 여유 작은 순.
       SW 최적화 요청 = NRT · Post stage를 묶는 SW task별 영향 scenario · 최장 ms · 최소 여유 · 10% 여유까지 필요한 단축 ·
       SW 증가 예산(`sw_growth_budget`) 적용 시 여유(조합 탐색 SW 증가 slice 값) — pipelined 판정은 binding SW load, stage 판정은 HW + stage SW 전체 기준.
@@ -100,10 +100,13 @@ engine이 다르면 Δ의 일부가 모델 차이이므로, 예측 현황 비교
     - CPU · SW: CPU what-if "검토서에 포함" snapshot. 허용치 = min(비용 ≥ 5 mW 또는 5%인 첫 OPP 상향 직전 배율,
       Timing Budget 여유(RT chain 포함) 소진 배율), 판정 기준 = review_policy `sw_growth_budget`. 범위 안 OPP 상향을 모두 나열하고,
       이전 계산 방식으로 기록된 snapshot은 "이전 계산"으로 표시한다.
-    - 분류별 의견: `reporting/arch_opinions.py`.
+    - Category별 검토 의견 (`reporting/arch_opinions.py`): 2단계. 1단계 = scenario category(review_policy `categories`의
+      scenario id glob → 이름, 없으면 scenario id 규칙: Camera Recording · Preview · Capture · Video Playback · Game · Call · Audio · Display,
+      그 외는 scenario 이름). 과제 전체 category의 검토 범위(탐색 0 = 검토 공백)를 먼저 보이고, 2단계 = category별 분류 규칙 —
+      Camera Recording은 30 fps · 60 fps · 고속 · Heavy, 규칙이 없는 category는 한 묶음.
   - Tier 3 — 부록 · 상세: 이전 보고서 대비(Power 변화마다 계산 모델 변경 여부 표시), 예측 ↔ 실측(실측 대조가 없으면 생략),
     검토 범위 · 모델(모델 한계: power model · version, BW model, CPU flat/profile 비중), dossier, 요약 표, 변경 이력(모델 · engine 변경 행 분리), 부록.
-  - 분류: 30 fps(해상도 × EIS on/off × HEVC/APV) · 60 fps(FHD/UHD) · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual·PIP·RCV/Triple).
+  - Camera Recording 분류: 30 fps(해상도 × EIS on/off × HEVC/APV) · 60 fps(FHD/UHD) · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual·PIP·RCV/Triple).
     분류 입력은 run에 저장된 resolved `design_conditions`와 `severity`다.
 
 ## 5. DB
