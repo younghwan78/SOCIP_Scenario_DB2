@@ -219,10 +219,12 @@ unchanged; the original detailed coverage contract remains available.
 
 ## Tiered review report (RPT-08..12)
 
-Snapshots with `criteria` render as Tier 1 (결론 · Risk register · 이전 보고서 대비),
-Tier 2 area sections whose first line is the area's conclusion (성능 · Timing, Power 구성
-with the previous-project dumbbell, Lever · 발열, CPU · SW, 예측 ↔ 실측 with rail bias,
-분류별 의견, 검토 범위) and Tier 3 (Scenario dossier, 요약 표, 변경 이력, 부록). Long tables show
+Snapshots with `criteria` render as Tier 0 (검토 요약, project reports only: prediction
+premises, KPI scenarios, top risks, decisions), Tier 1 (결론 · Risk register), Tier 2 area
+sections whose first line is the area's conclusion (성능 · Timing, Power 구성 with the
+previous-project dumbbell, 발열 · 절감, CPU · SW, 분류별 의견) and Tier 3 (이전 보고서 대비,
+예측 ↔ 실측 with rail bias — omitted when nothing was compared, 검토 범위 · 모델, Scenario
+dossier, 요약 표, 변경 이력, 부록). The snapshot fields are unchanged. Long tables show
 the top 10 with the full table folded (`details.more`, hidden in print). Project reports
 freeze `snapshot.previous` (`reporting.report_diff`): new / reopened / resolved risks, power
 changes ≥ 1 mW, criteria / basis / policy / CPU tolerance changes against the previous
