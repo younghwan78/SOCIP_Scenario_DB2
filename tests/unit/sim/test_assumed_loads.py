@@ -64,3 +64,12 @@ def test_timing_budget_condition_hash_tracks_assumed_loads(monkeypatch):
     assert svc._condition_hash(graph({"fps": 30, "assumed_gpu_basis": "note only"}), opts, shim, {}) == base
     gpu = svc._condition_hash(graph({"fps": 30, "assumed_gpu_mw": 50}), opts, shim, {})
     assert gpu != base and gpu != svc._condition_hash(graph({"fps": 30, "assumed_gpu_mw": 400}), opts, shim, {})
+
+
+def test_dram_write_per_frame_sums_every_write_port(graph_factory):
+    r = tb.analyze_timing_budget(graph_factory("cam-rec-r1-uhd30-sdr"))
+    # UHD YUV420 8-bit is 12.4 MB a plane set; the whole camera chain writes several of those per frame
+    assert r["bw"]["write_mb_frame"] > 12.4
+    writes = sum(d["bw_mbs"] for d in r.get("dma") or [] if d.get("direction") == "write") if r.get("dma") else None
+    if writes is not None:
+        assert r["bw"]["write_mb_frame"] == pytest.approx(writes * r["period_ms"] / 1000, rel=1e-3)

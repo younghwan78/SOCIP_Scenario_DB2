@@ -86,6 +86,14 @@ def build_snapshot(
             "period_ms": v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None),
             "latency": (v.get("objective_slice") or {}).get("latency"),
             "intervals": (v.get("objective_slice") or {}).get("intervals"),
+            # cadence verdict over every terminal output stream (secondary encoders included), not only preview / video
+            "intervals_ok": (v.get("objective_slice") or {}).get("intervals_ok"),
+            "intervals_ok_by": (v.get("objective_slice") or {}).get("intervals_ok_by"),
+            "interval_tolerance": (v.get("objective_slice") or {}).get("interval_tolerance"),
+            # SW growth as the simulator computed it (runtime scaled, fixed latency / overhead kept): NRT / Post margin
+            # per tested runtime scale at the objective statistic, and the objective's own scale
+            "sw_growth": _growth_margins(v, (run["spec"].get("objective") or {}).get("statistic")),
+            "sw_scale": (v.get("objective_slice") or {}).get("runtime_scale"),
             "prediction_id": (pred or {}).get("id"), "selection_rule": (pred or {}).get("selection_rule"),
             "power": chosen.get("power") or {k: rec.get(k) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
             "bw_mbs": chosen.get("bw_mbs", rec.get("bw_mbs")),
@@ -112,6 +120,14 @@ def build_snapshot(
             "conditions": _conditions(v.get("design_conditions") or {}),
             # SW-02/03: stage time vs frame period and the SW-growth slices (objective statistic)
             "sw": _sw_detail(v, (run["spec"].get("objective") or {}).get("statistic")),
+            # PERF-02: every NRT / Post stage's binding SW load (the SW optimisation requests aggregate these)
+            "sw_stages": [{k: st.get(k) for k in ("stage", "basis", "hw_ms", "sw_ms", "chain_ms", "bottleneck", "bottleneck_ms",
+                                                   "binding", "binding_ms", "margin_pct", "sw_share_pct", "in_flight")}
+                          for st in (v.get("sw_margin") or {}).get("stages") or []],
+            # PERF-03: DRAM one frame occupies = every DMA write of the objective slice per frame (planes and buffers
+            # once each, after the slice's compression); runs from before this field = None (re-explore to fill)
+            "frame_buffer": ({"mb": float(wmb), "basis": "objective_slice"}
+                             if (wmb := ((v.get("objective_slice") or {}).get("bw") or {}).get("write_mb_frame")) is not None else None),
         })
 
     clocks = []
@@ -297,6 +313,30 @@ def _conditions(dc: dict[str, Any]) -> dict[str, Any]:
     # Preserve custom compare_keys as well as the default keys; the reference selects
     # which recorded conditions participate in a comparison.
     return {k: v for k, v in dc.items() if v is not None}
+
+
+def _growth_margins(v: dict[str, Any], statistic: str | None) -> dict[str, dict[str, float]]:
+    """{runtime scale: {stage: margin %}} from the growth slices, with each stage's own throughput rule:
+    pipelined = period − max(longest SW task, one CPU's SW load), stage = period − (stage SW + HW)."""
+    period = v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None)
+    stat = (v.get("sw_margin") or {}).get("statistic") or (v.get("objective") or {}).get("statistic") or statistic or "max"
+    if not period:
+        return {}
+    out: dict[str, dict[str, float]] = {}
+    for sl in v.get("slices") or []:
+        if sl.get("statistic") != stat or sl.get("runtime_scale") is None:
+            continue
+        m = {}
+        for st, d in (sl.get("stages") or {}).items():
+            if st not in ("nrt", "post") or not isinstance(d, dict):
+                continue
+            if d.get("throughput") == "pipelined":
+                used = max(float(d.get("longest_sw_ms") or 0.0), float(d.get("cpu_load_ms") or 0.0))
+            else:
+                used = float(d.get("sw_ms") or 0.0) + float(d.get("hw_ms") or 0.0)
+            m[st] = round(100.0 * (float(period) - used) / float(period), 2)
+        out[f"{float(sl['runtime_scale']):g}"] = m
+    return out
 
 
 def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:

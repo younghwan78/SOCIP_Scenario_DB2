@@ -218,7 +218,7 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                       "affected": unassessed, "validity": "confirmed", "mitigation": "power option을 켜고 조합 탐색 실행",
                       "checks": ["조합 탐색 (power option 포함)"]})
 
-    risks += _sustained_risks(snap)
+    risks += _sustained_risks(snap) + _latency_risks(snap)
 
     # SW-01: every spec-ok scenario counts, not only the Top-5 table (legacy snapshots: Top-5 only)
     if snap.get("scenarios"):
@@ -412,3 +412,25 @@ def _sustained_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                     "mitigation": "SW · 입력 증가(SW 증가 예산 · 가정 부하) 시 한도 초과 여부 재확인 — 여유 확보 lever 미리 확인",
                     "checks": ["SW 증가 예산 적용 시 power", "가정 부하(GPU · NPU) 근거"]})
     return out
+
+
+def _latency_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """PERF-03: latency above ``review_policy.max_latency_frames`` — each frame in flight holds its M2M buffers."""
+    from scenario_db.reporting.perf_sections import buffer_rows
+
+    limit = (((snap.get("review_context") or {}).get("policy") or {}).get("max_latency_frames"))
+    if not limit:
+        return []
+    # scenarios that hold their output fps (a power / BW budget miss still costs buffers); drops are fps risks already
+    over = [o for o in buffer_rows(snap) if not o["drop"] and o["frames"] > float(limit) + 1e-4]
+    if not over:
+        return []
+    over.sort(key=lambda o: -o["frames"])
+    return [{"key": "latency_buffer", "rule": "latency_buffer", "severity": "medium", "category": "성능",
+             "title": f"latency {limit} frame 초과 {len(over)}건 — buffer 사용 증가",
+             "detail": "; ".join(f"{_short(o['variant_id'])} {o['frames']:.1f} frame"
+                                 + (f" (추정 buffer {o['buffer_mb']:.0f} MB)" if o.get("buffer_mb") is not None else "")
+                                 for o in over[:3]) + (f" 외 {len(over) - 3}" if len(over) > 3 else ""),
+             "affected": [o["variant_id"] for o in over], "validity": "confirmed",
+             "mitigation": "critical path SW 단축(SW 최적화 요청) · stage 분할로 동시 frame 수 축소, buffer 할당량 확인",
+             "checks": ["stage chain 중 SW 비중", "buffer 할당 · DRAM 여유", "SW timing 가정값 여부"]}]
