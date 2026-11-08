@@ -139,6 +139,22 @@ def test_policy_registers_the_iq_keeping_case_and_builds_the_thermal_watch(engin
             db.commit()
             tiny = review.thermal_watch(db, pid, battery=bat)["items"][0]["plans"][0]
             assert 0 < tiny["ask_pct"] < 0.05 and tiny["picked"] == ["lossy"]
+            # AP base power alone above the limit: the ask stays above 100 % and the plan cannot reach it
+            project.globals_ = {"review_policy": policy | {"thermal_watch": [],
+                                                           "sustained_current": {"limit_ma": 3.0, "base_mw": 20.0}}}
+            db.commit()
+            hopeless = review.thermal_watch(db, pid, battery=bat)["items"][0]
+            assert hopeless["plans"][0]["ask_pct"] > 100 and not hopeless["plans"][0]["achieved"]
+            assert any("도달 불가" in n for n in hopeless["notes"])
+            # a current prediction whose variant was removed from the YAML is not a sustained target (no 422)
+            ghost = Prediction(id=f"PRED-ghost-{token}", scenario_ref=sid, variant_ref="ghost", project_ref=pid, status="current",
+                               exploration_run_ref=rid, case_key="k", selection_rule="auto:min-power", selected_by="auto",
+                               metrics={"power": {"total_mw": 999.0}}, input_hash="x")
+            db.add(ghost)
+            db.commit()
+            assert [i["variant_id"] for i in review.thermal_watch(db, pid, battery=bat)["items"]] == ["shared"]
+            db.delete(ghost)
+            db.commit()
             project.globals_ = {"review_policy": policy | {"sustained_current": {"limit_ma": 3.0}}}
             db.commit()   # already on the watch list: listed once, as the customer watch item
             assert [i["source"] for i in review.thermal_watch(db, pid, battery=bat)["items"]] == ["watch"]

@@ -48,8 +48,14 @@ def _condition_hash(graph, options, shim, tables) -> str:
     import hashlib
     import json
 
+    from scenario_db.sim.assumed_loads import assumed_loads
+
     payload = {"simulation": _request_hash(build_simulation_inputs(graph, shim.config), shim, dvfs_tables=tables),
                "options": options.model_dump(mode="json", exclude={"include_whatif", "whatif_scales", "timeline_frames"})}
+    # declared assumed IP loads change the power without touching the simulation inputs; absent = hash unchanged
+    loads = assumed_loads(getattr(graph.variant, "design_conditions", None))
+    if loads:
+        payload["assumed_loads"] = {ip: a["mw"] for ip, a in loads.items()}
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 

@@ -49,3 +49,18 @@ def test_assumed_loads_add_a_constant_to_ip_and_total_power_only(graph_factory):
     assert (p1["cpu_mw"], p1["bw_mw"]) == (p0["cpu_mw"], p0["bw_mw"])
     assert p1["hw_by_ip"] == p0["hw_by_ip"]  # real pipeline nodes only
     assert loaded["verdict"]["status"] == base["verdict"]["status"]
+
+
+def test_timing_budget_condition_hash_tracks_assumed_loads(monkeypatch):
+    from types import SimpleNamespace
+
+    from scenario_db.api.services import timing_budget as svc
+
+    monkeypatch.setattr(svc, "build_simulation_inputs", lambda graph, config: None)
+    monkeypatch.setattr(svc, "_request_hash", lambda *a, **k: "same-simulation-inputs")
+    opts, shim = tb.TimingBudgetOptions(), SimpleNamespace(config=None)
+    graph = lambda dc: SimpleNamespace(variant=SimpleNamespace(design_conditions=dc))  # noqa: E731
+    base = svc._condition_hash(graph({"fps": 30}), opts, shim, {})
+    assert svc._condition_hash(graph({"fps": 30, "assumed_gpu_basis": "note only"}), opts, shim, {}) == base
+    gpu = svc._condition_hash(graph({"fps": 30, "assumed_gpu_mw": 50}), opts, shim, {})
+    assert gpu != base and gpu != svc._condition_hash(graph({"fps": 30, "assumed_gpu_mw": 400}), opts, shim, {})

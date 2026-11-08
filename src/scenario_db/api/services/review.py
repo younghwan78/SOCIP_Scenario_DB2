@@ -287,7 +287,10 @@ def sustained_targets(db: Session, project_ref: str, policy: Any, battery: dict[
         return []
     k = float(battery["vbat"]) * float(battery["pmic_efficiency"])
     out = []
-    for p in db.query(Prediction).filter_by(project_ref=project_ref, status="current").order_by(
+    # only predictions whose variant still exists (ETL drops removed variants but keeps their predictions)
+    for p in db.query(Prediction).join(ScenarioVariant, (ScenarioVariant.scenario_id == Prediction.scenario_ref)
+                                       & (ScenarioVariant.id == Prediction.variant_ref)).filter(
+            Prediction.project_ref == project_ref, Prediction.status == "current").order_by(
             Prediction.scenario_ref, Prediction.variant_ref).all():
         mw = ((p.metrics or {}).get("power") or {}).get("total_mw")
         if mw is not None and (float(mw) + sc.base_mw) / k > sc.limit_ma and (p.scenario_ref, p.variant_ref) not in skip:
@@ -346,8 +349,11 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None, battery: d
             limit_mw = sc.limit_ma * float(battery["vbat"]) * float(battery["pmic_efficiency"])
             need = float(current) + sc.base_mw - limit_mw
             row["limit_mw"] = round(limit_mw, 1)
-            # exact ask: a rounded one (e.g. 4081 mW vs a 4080 mW limit → 0.0 %) would mark an empty menu as reaching it
-            asks = [min(100.0, 100.0 * need / float(current))] if need > 0 else []
+            # exact ask: a rounded one (e.g. 4081 mW vs a 4080 mW limit → 0.0 %) would mark an empty menu as reaching it.
+            # Not capped at 100 %: with base_mw above the limit the scenario alone cannot reach it, and the plan must say so
+            asks = [100.0 * need / float(current)] if need > 0 else []
+            if need >= float(current):
+                row["notes"].append(f"AP 공통 {sc.base_mw:.0f} mW만으로 한도 {limit_mw:.0f} mW 이상 — scenario 절감으로는 도달 불가")
         if v is None or current is None:
             row["notes"].append("조합 탐색 결과가 없습니다 — 이 variant를 포함해 조합 탐색(power option 켬)을 실행하세요")
         else:
