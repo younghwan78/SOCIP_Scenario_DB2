@@ -16,8 +16,17 @@ def _plan(r: dict[str, Any]) -> str:
     p, ap = r.get("plan"), r.get("approved_plan")
     if r["status"] != "over":
         return "<td class=meta>—</td>"
+    if not p and r.get("watched"):
+        best = r.get("watch_best_mw")
+        if best is None:
+            return "<td class=meta>발열 감시 항목 — 아래 −10 / −20% 표 참조</td>"
+        cls = "warn" if best >= r["need_mw"] else "fail"
+        return (f"<td class='{cls}'>발열 감시 계획 최대 −{best:.0f} mW ({'한도 도달 가능' if best >= r['need_mw'] else '한도까지 부족'})"
+                "<div class=meta>−10 / −20% 계획 기준 (아래 표) · 화질 유지 최적 기준</div></td>")
     if not p:
         return "<td class=meta>절감 조합 미계산 (조합 탐색 결과 없음)</td>"
+    if p.get("picked") == ["switch:iq_keep"]:
+        return (f"<td class=ok>화질 유지 최적 조합으로 등록 변경 시 한도 이내<div class=meta>{p['saving_mw']:.0f} mW · 추가 절감 불필요</div></td>")
     sure = f"확정 {ap['saving_mw']:.0f} mW" if ap else "확정 —"
     verdict = ("확정 항목으로 한도 도달" if ap and ap.get("achieved") else
                "IQ 평가 항목 포함 시 도달" if p.get("achieved") else "부족 — 성능 조건 협의")

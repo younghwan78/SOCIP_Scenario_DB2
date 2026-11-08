@@ -146,6 +146,19 @@ def test_policy_registers_the_iq_keeping_case_and_builds_the_thermal_watch(engin
             hopeless = review.thermal_watch(db, pid, battery=bat)["items"][0]
             assert hopeless["plans"][0]["ask_pct"] > 100 and not hopeless["plans"][0]["achieved"]
             assert any("도달 불가" in n for n in hopeless["notes"])
+            # registered case over the limit, IQ-keeping optimum (12 mW) under it: switching the registration is the plan
+            pred_row = db.get(Prediction, pred.id)
+            saved = pred_row.metrics
+            pred_row.metrics = saved | {"power": saved["power"] | {"total_mw": 13.0}}
+            project.globals_ = {"review_policy": policy | {"thermal_watch": [],
+                                                           "sustained_current": {"limit_ma": 12.5 / 3.4}}}
+            db.commit()
+            sw = review.thermal_watch(db, pid, battery=bat)["items"][0]
+            assert sw["plans"][0]["picked"] == ["switch:iq_keep"] and sw["plans"][0]["achieved"]
+            assert sw["plans"][0]["saving_mw"] == -1.0 and any("등록을 바꾸면" in n for n in sw["notes"])
+            pred_row.metrics = saved
+            project.globals_ = {"review_policy": policy | {"thermal_watch": [], "sustained_current": {"limit_ma": 3.0}}}
+            db.commit()
             # a current prediction whose variant was removed from the YAML is not a sustained target (no 422)
             ghost = Prediction(id=f"PRED-ghost-{token}", scenario_ref=sid, variant_ref="ghost", project_ref=pid, status="current",
                                exploration_run_ref=rid, case_key="k", selection_rule="auto:min-power", selected_by="auto",

@@ -155,6 +155,8 @@ def sustained_view(ctx: dict[str, Any], thermal_items: list[dict[str, Any]]) -> 
     limit, base = float(sc["limit_ma"]), float(sc.get("base_mw") or 0.0)
     watch_ma = limit * float(sc.get("watch_ratio") or 0.85)
     plans = {(i.get("scenario_id"), i["variant_id"]): i for i in thermal_items if i.get("source") == "sustained"}
+    # an over-limit variant already on the customer watch list keeps its −10 / −20 % plans there (listed once)
+    watched = {(i.get("scenario_id"), i["variant_id"]): i for i in thermal_items if i.get("source", "watch") == "watch"}
     rows = []
     for r in ctx.get("rows") or []:
         if r.get("total_mw") is None:
@@ -165,7 +167,10 @@ def sustained_view(ctx: dict[str, Any], thermal_items: list[dict[str, Any]]) -> 
         item = plans.get((r["scenario_id"], r["variant_id"])) or {}
         plan = (item.get("plans") or [None])[0]
         approved = (item.get("approved_plans") or [None])[0]
+        w = watched.get((r["scenario_id"], r["variant_id"]))
+        best = max((-float(p["saving_mw"]) for p in (w or {}).get("plans") or [] if p.get("saving_mw") is not None), default=None)
         rows.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "total_mw": round(float(r["total_mw"]), 1),
+                     "watched": w is not None, "watch_best_mw": round(best, 1) if best is not None else None,
                      "ap_mw": round(ap, 1), "ma": round(ma, 1), "status": status,
                      "need_mw": round(max(0.0, ap - limit * k), 1), "need_ma": round(max(0.0, ma - limit), 1),
                      "plan": plan, "approved_plan": approved, "baseline_mw": item.get("current_mw")})

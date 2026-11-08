@@ -352,6 +352,12 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None, battery: d
             # exact ask: a rounded one (e.g. 4081 mW vs a 4080 mW limit → 0.0 %) would mark an empty menu as reaching it.
             # Not capped at 100 %: with base_mw above the limit the scenario alone cannot reach it, and the plan must say so
             asks = [100.0 * need / float(current)] if need > 0 else []
+            if need <= 0 and registered is not None and float(registered) > float(current):
+                # the registered case is over the limit but the IQ-keeping optimum of the same run is not
+                row["switch_plan"] = {"ask_pct": 0.0, "need_mw": round(limit_mw - sc.base_mw - float(registered), 2),
+                                      "saving_mw": round(float(current) - float(registered), 2), "achieved": True,
+                                      "picked": ["switch:iq_keep"], "iq_cost": False, "iq_pending": []}
+                row["notes"].append(f"화질 유지 최적 조합({float(current):.0f} mW)으로 등록을 바꾸면 한도 이내 — 추가 절감 불필요")
             if need >= float(current):
                 row["notes"].append(f"AP 공통 {sc.base_mw:.0f} mW만으로 한도 {limit_mw:.0f} mW 이상 — scenario 절감으로는 도달 불가")
         if v is None or current is None:
@@ -375,6 +381,8 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None, battery: d
                                          review_of=lambda k, vid=w.variant_ref: _review_state(reviews, vid, k))
             row["plans"] = [plan_for(row["menu"], float(current), p) for p in asks]
             row["approved_plans"] = [approved_plan(row["menu"], float(current), p) for p in asks]
+            if row.get("switch_plan"):
+                row["plans"] = row["approved_plans"] = [row.pop("switch_plan")]
             row["trades"] = performance_trades(db, w.scenario_ref, w.variant_ref, float(current))
             if rec_lossy and keep:
                 row["notes"].append(f"등록 예측 {registered:.0f} mW는 lossy 압축 포함 (IQ 평가 전제) — 기준은 화질 유지 최적 {current:.0f} mW")

@@ -92,3 +92,24 @@ def test_sustained_risks_section_and_scorecard():
     assert "③ 지속 전류 ≤ 1200 mA" in html and "2 / 3" in html and "③ 발열 대응 여지" not in html
     none = snapshot()
     assert "sustained_current 미설정" in render_html("Review", none) and "③ 발열 대응 여지" in render_html("Review", none)
+
+
+def test_over_limit_variant_on_the_watch_list_points_to_its_watch_plans():
+    watch = {"scenario_id": "uc", "variant_id": "cam-rec-hot", "source": "watch", "current_mw": 4500,
+             "plans": [{"ask_pct": 10, "saving_mw": -450, "achieved": True}, {"ask_pct": 20, "saving_mw": -500, "achieved": False}]}
+    sv = sustained_view(ctx(), [watch])
+    hot = next(r for r in sv["rows"] if r["variant_id"] == "cam-rec-hot")
+    assert hot["watched"] and hot["plan"] is None and hot["watch_best_mw"] == 500.0
+    snap = snapshot()
+    snap["sustained"] = sv
+    html = sustained_block(snap)
+    assert "발열 감시 계획 최대 −500 mW (한도 도달 가능)" in html and "조합 탐색 결과 없음" not in html
+
+
+def test_switch_to_the_iq_keeping_case_renders_as_the_plan():
+    switch = {"ask_pct": 0.0, "need_mw": 80.0, "saving_mw": -500.0, "achieved": True, "picked": ["switch:iq_keep"]}
+    item = {"scenario_id": "uc", "variant_id": "cam-rec-hot", "source": "sustained", "current_mw": 4000,
+            "plans": [switch], "approved_plans": [switch]}
+    snap = snapshot()
+    snap["sustained"] = sustained_view(ctx(), [item])
+    assert "화질 유지 최적 조합으로 등록 변경 시 한도 이내" in sustained_block(snap)
