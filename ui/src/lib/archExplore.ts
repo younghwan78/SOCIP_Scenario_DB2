@@ -332,6 +332,8 @@ export interface ReportSummary {
   power: { ok: number; similar: number; over: number; total: number; missing: number; conditional?: number; flip?: number }
   blockers?: number
   thermal: { items: number; reach10: number }
+  /** review_policy.sustained_current declared: sustained AP + mem current vs the limit */
+  sustained?: { limit_ma: number; total: number; over: number; watch: number }
   power_range_mw: [number, number] | null
 }
 

@@ -30,6 +30,7 @@ def _criteria(snap: dict[str, Any]) -> dict[str, Any]:
     return {"fps_ok": fps.get("ok"), "fps_total": fps.get("total"), "power_ok": pw.get("ok"), "power_similar": pw.get("similar"),
             "power_over": pw.get("over"), "power_missing": len(pw.get("missing") or []),
             "thermal_reach10": sum(1 for i in items if i.get("reach10")), "thermal_items": len(items),
+            **({"sustained_over": len((cr.get("sustained") or {}).get("over") or [])} if cr.get("sustained") else {}),
             "confidence": ((snap.get("conclusion") or {}).get("confidence") or {}).get("grade")}
 
 

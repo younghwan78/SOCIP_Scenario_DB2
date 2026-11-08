@@ -44,6 +44,9 @@ document:
         reduction_pct: [10, 20]
       # 1쪽 요약(Tier 0) KPI — 2026 camera recording KPI + heavy (SAMPLE 선정, 사내 과제별 조정)
       sw_growth_budget: 1.2
+      # 발열 기준 — 지속 AP + mem 전류가 이 값을 넘으면 절감 검토 (온도는 방열 성능 의존이라 전류로 판정)
+      sustained_current:
+        limit_ma: 1200
       kpi:
       - variant_ref: cam-rec-r1-fhd30-sdr
         label: FHD30

@@ -21,6 +21,11 @@ globals:
       compare_keys: [resolution, fps, hdr, sensor_board]       # (선택) 조건 비교 key (없으면 해상도 · fps · HDR · sensor · IS version · bitrate 등)
       tolerance_pct: 3
     sw_growth_budget: 1.2            # (선택) 차기 SW 증가 예산 — 1쪽 요약 조건에 표시
+    sustained_current:               # (선택) 발열 기준 — 지속 AP + mem 전류 한도 (없으면 thermal_watch −10/−20%만)
+      limit_ma: 1200                 #   초과 = 절감 검토 (High), 한도 × watch_ratio 이상 = 주의 (Medium)
+      watch_ratio: 0.85
+      base_mw: 0                     #   (선택) scenario 모델 밖 AP 공통 power (always-on · idle domain 등)
+    ip_groups: {abox: 기타 IP, "vpu*": Codec}   # (선택) node glob → 보고서 IP 군 (ISP · Codec · DPU · GPU · NPU · 기타 IP)
     kpi:                             # (선택) 1쪽 요약 KPI 목록 (없으면 thermal_watch + 전과제 기준 variant)
     - {variant_ref: cam-rec-r1-uhd30-vdis, label: UHD30 VDIS, tier: base}
     - {variant_ref: cam-rec-apv-uhd60-422-sdr, scenario_ref: uc-cam-recording-apv-e2600, label: APV UHD60, tier: thermal}
@@ -67,3 +72,14 @@ E2600 (사외 fixture): `values_mw`는 **SAMPLE 가상 값** — 사내에서는
 | 추적 (RISK-03) | risk별 기한 · 종료 근거 · 결정 필요. 종료(closed)는 종료 근거가 있어야 하며 종료 상태에서는 근거를 지울 수 없음. 기한은 유효한 달력 날짜여야 함 (alembic 0031) |
 | 데이터 품질 (DATA-02) | 조건이 다른데 결과가 같은 variant, resolution · fps 미기재, fps 미달로 power 미산출, 출처 미기록 실측, KPI 미탐색(block) |
 | 게시 (AUTO-02) | block 항목이 있으면 `acknowledge_gaps: true` + 검토 의견이 있어야 게시. 게시 기록에 확인한 항목이 남음 |
+
+## Spec 단계 power · 발열 (2026-11-08)
+보고서는 silicon 실측보다 훨씬 먼저 쓰인다. 실측이 없는 것은 정상 상태라 "예측 전제"로 밝힌다.
+
+| 항목 | 규칙 |
+|---|---|
+| 지속 전류 (THERM-01) | 온도는 phone 방열 성능에 따라 달라 지속 AP + mem 배터리 전류로 판정. AP + mem = 등록 예측 total(CPU + IP + 가정 부하 + BW(MIF · DRAM)) + `base_mw`, mA = mW ÷ Vbat ÷ PMIC 효율(run config, 기본 4.0 V · 0.85). 전 등록 예측을 mA 순으로 판정 — 초과 `sustained_over`(High) · 주의 `sustained_watch`(Medium) |
+| 한도까지 절감 조합 | 초과 variant는 thermal-watch 계산에 `source: sustained`로 추가되어 요청 1개(= 화질 유지 최적 + base − 한도, 기준 대비 %)의 절감 조합을 받는다. 이미 watch list에 있으면 watch 항목으로 한 번만. −10 / −20% 판정 · risk는 watch list만 대상 |
+| 결론 ③ | `sustained_current`가 있으면 "③ 지속 전류 ≤ 한도 n / N", 없으면 기존 "③ 발열 대응 여지 (−10 / −20%)". 과제 현황(portfolio) 열도 같은 규칙 |
+| 요소별 power | 행마다 IP별 power(`ip_mw`)와 가정 부하(`assumed_mw`)를 고정하고, render 때 IP 군으로 묶는다. 요소별 상위 5(Total · CPU · BW · ISP · Codec · DPU · GPU · NPU)와 scenario × 요소 heatmap. 입력이 없는 군은 0이 아니라 "미입력". 기타 IP로 떨어진 node를 나열 — `ip_groups`로 지정 |
+| 가정 부하 | pipeline node가 아직 없는 IP(GPU · NPU …)는 variant `design_conditions`에 `assumed_<ip>_mw`(+ 선택 `assumed_<ip>_basis`)로 선언. IP(HW core) power와 total에 상수로 더해져 조합 순위 · DVFS · compression delta는 그대로. 선언 없는 variant는 결과 불변(engine revision 유지), 선언하면 variant 문서가 바뀌어 input hash가 바뀜 → 재탐색 · 재등록 |

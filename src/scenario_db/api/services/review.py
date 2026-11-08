@@ -19,6 +19,7 @@ from scenario_db.api.services.review_policy import policy_view, project_policy
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
 from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+from scenario_db.models.definition.project import ThermalWatch
 from scenario_db.reporting.arch_report import COMPARE_KEYS
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 
@@ -278,18 +279,41 @@ def performance_trades(db: Session, scenario_id: str, variant_id: str, current_m
     return rows[:limit]
 
 
-def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None) -> dict[str, Any]:
+def sustained_targets(db: Session, project_ref: str, policy: Any, battery: dict[str, Any] | None,
+                      skip: set[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Current predictions whose sustained AP + mem current is over ``review_policy.sustained_current.limit_ma``."""
+    sc = getattr(policy, "sustained_current", None)
+    if sc is None or not battery:
+        return []
+    k = float(battery["vbat"]) * float(battery["pmic_efficiency"])
+    out = []
+    for p in db.query(Prediction).filter_by(project_ref=project_ref, status="current").order_by(
+            Prediction.scenario_ref, Prediction.variant_ref).all():
+        mw = ((p.metrics or {}).get("power") or {}).get("total_mw")
+        if mw is not None and (float(mw) + sc.base_mw) / k > sc.limit_ma and (p.scenario_ref, p.variant_ref) not in skip:
+            out.append((p.scenario_ref, p.variant_ref))
+    return out
+
+
+def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None, battery: dict[str, Any] | None = None) -> dict[str, Any]:
     """Per watch-list variant: current prediction, reference judgement, reduction menu and 10 / 20 % plans.
 
     ``dvfs_whatif(scenario_id, variant_id) -> {base, rows}`` supplies DVFS level-down rows with their baseline; omitted =
     no DVFS levers (tests, or when the timing analysis fails).
+    With ``review_policy.sustained_current`` and a ``battery`` conversion, every current prediction above the sustained
+    current limit is added (``source: "sustained"``) with one plan: the cut that brings AP + mem down to the limit.
     """
     policy = project_policy(db, project_ref)
     if policy is None:
         raise NotFoundError(f"project has no review_policy: {project_ref}")
     refs = power_references(db, project_ref)
     out = []
-    for w in policy.thermal_watch:
+    sc = policy.sustained_current
+    watched = {(w.scenario_ref, w.variant_ref) for w in policy.thermal_watch}
+    targets: list[tuple[Any, str]] = [(w, "watch") for w in policy.thermal_watch] + [
+        (ThermalWatch(scenario_ref=sid, variant_ref=vid, reduction_pct=[]), "sustained")
+        for sid, vid in sustained_targets(db, project_ref, policy, battery, watched)]
+    for w, source in targets:
         scenario = db.get(Scenario, w.scenario_ref)
         if scenario is None or scenario.project_ref != project_ref:
             raise UnprocessableError("thermal-watch scenario must belong to the selected project")
@@ -314,8 +338,15 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None) -> dict[st
             "throughput_model": ((pred.metrics or {}).get("throughput_model") if pred is not None else (v or {}).get("throughput_model")) or "stage",
             "verdict": (pred.metrics or {}).get("verdict") if pred is not None else ((v or {}).get("recommended") or {}).get("verdict"),
             "reference": judge_power(current, refs["references"].get(w.variant_ref), refs["tolerance_pct"]),
-            "menu": [], "plans": [], "approved_plans": [], "trades": [], "notes": [],
+            "menu": [], "plans": [], "approved_plans": [], "trades": [], "notes": [], "source": source,
         }
+        asks = list(w.reduction_pct)
+        if source == "sustained" and sc is not None and battery and current:
+            # the cut that brings AP + mem (baseline + base_mw) down to the limit, as % of the baseline
+            limit_mw = sc.limit_ma * float(battery["vbat"]) * float(battery["pmic_efficiency"])
+            need = float(current) + sc.base_mw - limit_mw
+            row["limit_mw"] = round(limit_mw, 1)
+            asks = [round(min(100.0, 100.0 * need / float(current)), 1)] if need > 0 else []
         if v is None or current is None:
             row["notes"].append("조합 탐색 결과가 없습니다 — 이 variant를 포함해 조합 탐색(power option 켬)을 실행하세요")
         else:
@@ -335,8 +366,8 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None) -> dict[st
             reviews = _reviews(db, w.scenario_ref)
             row["menu"] = reduction_menu(v, float(current), dv_rows,
                                          review_of=lambda k, vid=w.variant_ref: _review_state(reviews, vid, k))
-            row["plans"] = [plan_for(row["menu"], float(current), p) for p in w.reduction_pct]
-            row["approved_plans"] = [approved_plan(row["menu"], float(current), p) for p in w.reduction_pct]
+            row["plans"] = [plan_for(row["menu"], float(current), p) for p in asks]
+            row["approved_plans"] = [approved_plan(row["menu"], float(current), p) for p in asks]
             row["trades"] = performance_trades(db, w.scenario_ref, w.variant_ref, float(current))
             if rec_lossy and keep:
                 row["notes"].append(f"등록 예측 {registered:.0f} mW는 lossy 압축 포함 (IQ 평가 전제) — 기준은 화질 유지 최적 {current:.0f} mW")

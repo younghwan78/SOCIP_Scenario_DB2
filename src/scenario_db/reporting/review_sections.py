@@ -13,6 +13,8 @@ from html import escape
 from typing import Any
 
 from scenario_db.reporting import arch_report as ar
+from scenario_db.reporting.power_groups import heatmap_block, ranking_block
+from scenario_db.reporting.sustained_section import sustained_block, sustained_lead
 from scenario_db.reporting.risk_rules import cpu_tolerance_min
 
 _f, _short = ar._f, ar._short
@@ -87,7 +89,7 @@ def previous_block(p: dict[str, Any] | None) -> str:
         h += (f"<p class=meta>추가 variant {len(pw.get('added') or [])}: {escape(', '.join(_short(v) for v in (pw.get('added') or [])[:6]))}"
               f" · 제외 {len(pw.get('removed') or [])}: {escape(', '.join(_short(v) for v in (pw.get('removed') or [])[:6]))}</p>")
     label = {"fps_ok": "① fps 만족", "fps_total": "평가 variant", "power_ok": "② 전과제 이하", "power_similar": "② 유사",
-             "power_over": "② 초과", "power_missing": "② 예측 없음", "thermal_reach10": "③ −10% 가능", "thermal_items": "③ 감시 variant",
+             "power_over": "② 초과", "power_missing": "② 예측 없음", "thermal_reach10": "③ −10% 가능", "thermal_items": "③ 감시 variant", "sustained_over": "③ 지속 전류 초과",
              "confidence": "모델 신뢰도"}
     changes = [(label.get(c["item"], c["item"]), c["prev"], c["cur"]) for c in p.get("criteria") or []]
     changes += [(f"기준 · {b['item']}", b["prev"], b["cur"]) for b in p.get("basis") or []]
@@ -273,14 +275,22 @@ def _lead_power(snap: dict[str, Any]) -> str:
     return _lead(t, "fail" if pw.get("over") or pw.get("flip") else "warn" if pw.get("missing") or pw.get("conditional") else "ok")
 
 
+def _watch_items(snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """The customer thermal watch list (sustained-current additions are shown in their own table)."""
+    return [i for i in (snap.get("thermal") or {}).get("items") or [] if i.get("source", "watch") == "watch"]
+
+
 def _lead_lever(snap: dict[str, Any]) -> str:
-    th = (snap.get("thermal") or {}).get("items") or []
+    th = _watch_items(snap)
     reach = sum(1 for i in th if any(p["ask_pct"] == 10 and p["achieved"] for p in i.get("plans") or []))
     opts = snap.get("power_options") or []
     best = min((o["best"]["delta_mw"] for o in opts if o.get("best")), default=None)
-    t = (f"발열 −10% 가능 <b>{reach}/{len(th)}</b> (화질 열화 option 포함)" if th else "발열 감시 대상 없음") + (
+    sus = sustained_lead(snap)
+    t = ((sus + " · ") if sus else "") + (
+        f"발열 −10% 가능 <b>{reach}/{len(th)}</b> (화질 열화 option 포함)" if th else "발열 감시 대상 없음") + (
         f" · 화질 열화 option 최대 {best:+.0f} mW — clock · compression · SW 다음 최후 수단" if best is not None else "")
-    return _lead(t, "fail" if th and reach < len(th) else "ok")
+    over = any(r["status"] == "over" for r in (snap.get("sustained") or {}).get("rows") or [])
+    return _lead(t, "fail" if over or (th and reach < len(th)) else "ok")
 
 
 def _lead_cpu(snap: dict[str, Any]) -> str:
@@ -474,6 +484,7 @@ TIER_CSS = """
 .lead{font-size:15.5px;margin:0 0 10px;padding:6px 10px;border-left:4px solid #9A9387;background:#FBFAF7}
 .lead.ok{border-color:#2F6F68}.lead.warn{border-color:#B45309}.lead.fail{border-color:#9B1C1C}
 nav .tier{font-size:11.5px;color:#7A7468;font-weight:700;margin-left:6px}
+.hm td,.hm th{padding:3px 6px;font-size:12.5px}
 .dos-q{font:inherit;padding:6px 10px;border:1px solid #E4DED3;border-radius:6px;width:280px;margin:4px 0 10px}
 .dos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:12px}
 .dos{border:1px solid #E4DED3;border-left:5px solid #2F6F68;border-radius:8px;padding:8px 12px;break-inside:avoid}
@@ -520,14 +531,15 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
             + ar._clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in ok_rows]) + "</details>")
     power = (_lead_power(snap) + dumbbell(snap.get("review_context"), ((snap.get("criteria") or {}).get("power") or {}).get("tolerance_pct"))
              + (verdict_table(snap) or ar._review(snap.get("review_context"))) + decomp_table(snap)
-             + power_top(snap)
+             + power_top(snap) + ranking_block(snap) + heatmap_block(snap)
              + _more(f"Power · BW 분포 (조합 × SW 통계) 전체", ar._boxes(snap["scenarios"]))
              + _more("CPU / IP / BW 구성 전체", ar._split(snap["scenarios"]))
              + (_more(f"Compression 절감 — buffer {len(snap['compression'])}개 (IP 지원 확인 · 잠재 구분)",
                       ar._compression(snap["compression"], snap["scenarios"])) if snap["compression"]
                 else "<p class=meta>BW를 줄이는 compression buffer가 없음</p>"))
-    lever = (_lead_lever(snap) + "<h3 style='margin:4px 0'>발열 대응 (−10 / −20%)</h3>"
-             + (ar._thermal(th) if th.get("items") else f"<p class=meta>{escape(th.get('reason') or 'review_policy에 thermal_watch 대상이 없음')}</p>")
+    watch_th = {**th, "items": _watch_items(snap)}
+    lever = (_lead_lever(snap) + sustained_block(snap) + "<h3 style='margin:12px 0 4px'>발열 대응 (−10 / −20%)</h3>"
+             + (ar._thermal(watch_th) if watch_th["items"] else f"<p class=meta>{escape(th.get('reason') or 'review_policy에 thermal_watch 대상이 없음')}</p>")
              + ladder_table(snap)
              + "<h3 style='margin:12px 0 4px'>화질 열화 option — 최후 수단 (IQ 평가 대상)</h3>"
              + (_options_top(snap.get("power_options") or []) if snap.get("power_options")

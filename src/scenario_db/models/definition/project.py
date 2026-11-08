@@ -49,6 +49,23 @@ class ThermalWatch(BaseScenarioModel):
     note: str | None = None
 
 
+class SustainedCurrent(BaseScenarioModel):
+    """Thermal rule used at the spec stage: a scenario that keeps AP + memory above this battery current for long
+    is a power-cut candidate. Temperature itself depends on the phone's heat dissipation, so the current is judged.
+
+    AP + mem = predicted total (CPU + IP + BW incl. DRAM, plus declared assumed loads) + ``base_mw``; mA = mW ÷ Vbat ÷
+    PMIC efficiency (the run's config profile, default 4.0 V · 0.85)."""
+    limit_ma: float = Field(gt=0, le=20000, allow_inf_nan=False)
+    # at or above limit × watch_ratio = 주의 (medium)
+    watch_ratio: float = Field(default=0.85, gt=0, le=1.0, allow_inf_nan=False)
+    # AP power the scenario model does not carry (always-on, idle domains, other masters), added before converting
+    base_mw: float = Field(default=0.0, ge=0, le=20000, allow_inf_nan=False)
+    note: str | None = None
+
+
+IpGroup = Literal["ISP", "Codec", "DPU", "GPU", "NPU", "기타 IP"]
+
+
 class KpiVariant(BaseScenarioModel):
     """COV-03: a customer KPI scenario shown on the one-page summary (in list order)."""
     variant_ref: str
@@ -72,6 +89,10 @@ class ReviewPolicy(BaseScenarioModel):
     kpi: list[KpiVariant] = Field(default_factory=list, max_length=40)
     # SW-03: SW growth the next project must absorb (shown on the summary; ×1.0 = none declared)
     sw_growth_budget: float | None = Field(default=None, ge=1.0, le=3.0)
+    # sustained AP + mem battery current rule (thermal); None = previous behaviour (thermal_watch −10 / −20 % only)
+    sustained_current: SustainedCurrent | None = None
+    # IP node (glob, e.g. "front_*", "mfc*") -> report power group; overrides the built-in node-name rules
+    ip_groups: dict[str, IpGroup] = Field(default_factory=dict, max_length=200)
 
 
 class ProjectGlobals(BaseScenarioModel):

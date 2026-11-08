@@ -847,7 +847,7 @@ def _report_evidence(db: Session, run: dict[str, Any], preds: dict[tuple[str, st
             evidence.option_states[(sid, vid, key)] = set_status([item_status(states, vid, k) for k in key.split("+")])
     if project_ref:
         try:
-            evidence.thermal = review_svc.thermal_watch(db, project_ref)
+            evidence.thermal = review_svc.thermal_watch(db, project_ref, battery=evidence.context.get("battery"))
         except (NotFoundError, UnprocessableError) as exc:
             evidence.thermal = {"items": [], "reason": str(exc)[:200]}
         project = db.get(Project, project_ref)
@@ -1048,6 +1048,10 @@ def _report_summary(snap: dict[str, Any]) -> dict[str, Any] | None:
             "power": {k: cr["power"][k] for k in ("ok", "similar", "over", "total")} | {"missing": len(cr["power"]["missing"])}
             | {"conditional": cr["power"].get("conditional", 0), "flip": len(cr["power"].get("flip") or [])},
             "thermal": {"items": len(cr["thermal"]["items"]), "reach10": sum(1 for i in cr["thermal"]["items"] if i["reach10"])},
+            # review_policy.sustained_current declared: sustained AP + mem current against the limit
+            **({"sustained": {"limit_ma": cr["sustained"]["limit_ma"], "total": cr["sustained"]["total"],
+                              "over": len(cr["sustained"]["over"]), "watch": len(cr["sustained"]["watch"])}}
+               if cr.get("sustained") else {}),
             "power_range_mw": (snap.get("spec_summary") or {}).get("power_range_mw"),
             "blockers": len(report_blockers(snap))}
 

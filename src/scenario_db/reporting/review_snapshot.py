@@ -68,6 +68,8 @@ def _assemble_review(snapshot: dict[str, Any], predictions: dict[tuple[str, str]
     judged = [r for r in ctx.get("rows") or [] if r.get("reference")]
     status = [r["reference"]["status"] for r in judged]
     snapshot["thermal"] = _thermal(evidence.thermal)
+    # the customer thermal watch list (−10 / −20 %); sustained-current additions are judged separately
+    watch_items = [i for i in snapshot["thermal"]["items"] if i.get("source", "watch") == "watch"]
 
     def reach(item: dict[str, Any], pct: int) -> bool | None:
         plan = next((p for p in item["plans"] if p["ask_pct"] == pct), None)
@@ -81,9 +83,15 @@ def _assemble_review(snapshot: dict[str, Any], predictions: dict[tuple[str, str]
                   "over": status.count("over"), "missing": missing, "tolerance_pct": refs.get("tolerance_pct"),
                   "sample": any(r.get("source") == "explicit" for r in refs["references"].values())},
         "thermal": {"items": [{"variant_id": i["variant_id"], "reach10": reach(i, 10), "reach20": reach(i, 20)}
-                              for i in snapshot["thermal"]["items"]],
-                    "unassessed": sum(1 for i in snapshot["thermal"]["items"] if i.get("current_mw") is None)},
+                              for i in watch_items],
+                    "unassessed": sum(1 for i in watch_items if i.get("current_mw") is None)},
     }
+    snapshot["sustained"] = sustained_view(ctx, snapshot["thermal"]["items"])
+    if snapshot["sustained"] is not None:
+        sv = snapshot["sustained"]
+        snapshot["criteria"]["sustained"] = {"limit_ma": sv["limit_ma"], "total": len(sv["rows"]),
+                                             "over": [r["variant_id"] for r in sv["rows"] if r["status"] == "over"],
+                                             "watch": [r["variant_id"] for r in sv["rows"] if r["status"] == "watch"]}
     snapshot["references"] = refs["references"]
     _option_reviews(snapshot, evidence.option_states)
     if evidence.project is not None:
@@ -133,6 +141,40 @@ def _lineage_labels(rows: list[dict[str, Any]]) -> list[str] | None:
     return [k for k, _ in sorted(counts.items(), key=lambda kv: -kv[1])] or None
 
 
+def sustained_view(ctx: dict[str, Any], thermal_items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Sustained AP + mem current per registered prediction (``review_policy.sustained_current``), highest first.
+
+    AP + mem = registered total (CPU + IP incl. assumed loads + BW incl. DRAM) + ``base_mw``; mA = mW ÷ Vbat ÷ PMIC
+    efficiency of the frozen battery conversion. ``over`` > limit, ``watch`` ≥ limit × watch_ratio. The cut plan of an
+    over-limit row comes from the thermal-watch addition with ``source: "sustained"``."""
+    sc = (ctx.get("policy") or {}).get("sustained_current")
+    if not sc:
+        return None
+    bat = ctx.get("battery") or {}
+    k = float(bat.get("vbat") or 4.0) * float(bat.get("pmic_efficiency") or 0.85)
+    limit, base = float(sc["limit_ma"]), float(sc.get("base_mw") or 0.0)
+    watch_ma = limit * float(sc.get("watch_ratio") or 0.85)
+    plans = {(i.get("scenario_id"), i["variant_id"]): i for i in thermal_items if i.get("source") == "sustained"}
+    rows = []
+    for r in ctx.get("rows") or []:
+        if r.get("total_mw") is None:
+            continue
+        ap = float(r["total_mw"]) + base
+        ma = ap / k
+        status = "over" if ma > limit else "watch" if ma >= watch_ma else "ok"
+        item = plans.get((r["scenario_id"], r["variant_id"])) or {}
+        plan = (item.get("plans") or [None])[0]
+        approved = (item.get("approved_plans") or [None])[0]
+        rows.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "total_mw": round(float(r["total_mw"]), 1),
+                     "ap_mw": round(ap, 1), "ma": round(ma, 1), "status": status,
+                     "need_mw": round(max(0.0, ap - limit * k), 1), "need_ma": round(max(0.0, ma - limit), 1),
+                     "plan": plan, "approved_plan": approved, "baseline_mw": item.get("current_mw")})
+    rows.sort(key=lambda x: -x["ma"])
+    return {"limit_ma": limit, "watch_ma": round(watch_ma, 1), "watch_ratio": float(sc.get("watch_ratio") or 0.85),
+            "base_mw": base, "limit_mw": round(limit * k, 1), "vbat": bat.get("vbat"),
+            "pmic_efficiency": bat.get("pmic_efficiency"), "note": sc.get("note"), "rows": rows}
+
+
 def _thermal(thermal: dict[str, Any]) -> dict[str, Any]:
     if not thermal.get("items") and "reason" in thermal:
         return {"items": [], "reason": thermal["reason"]}
@@ -144,6 +186,8 @@ def _thermal(thermal: dict[str, Any]) -> dict[str, Any]:
         "approved_plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked")}
                            for p in i.get("approved_plans") or []],
         "registered": i.get("prediction_id") is not None, "notes": (i.get("notes") or [])[:3],
+        # "sustained" = added because AP + mem is over review_policy.sustained_current (plan = cut to the limit)
+        "source": i.get("source") or "watch", **({"limit_mw": i["limit_mw"]} if i.get("limit_mw") is not None else {}),
     } for i in thermal.get("items") or []]}
 
 

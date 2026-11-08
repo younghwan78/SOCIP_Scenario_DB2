@@ -122,6 +122,23 @@ def test_policy_registers_the_iq_keeping_case_and_builds_the_thermal_watch(engin
                 "mhz": 333, "verdict": "ok", "delta_mw": -50}]})
             assert not any(m["kind"] == "dvfs" for m in mismatched["items"][0]["menu"])
 
+            # Sustained AP + mem current: a prediction over the limit joins with one cut-to-limit plan.
+            project = db.get(Project, pid)
+            project.globals_ = {"review_policy": policy | {"thermal_watch": [],
+                                                           "sustained_current": {"limit_ma": 3.0, "base_mw": 0.0}}}
+            db.commit()
+            bat = {"vbat": 4.0, "pmic_efficiency": 0.85}            # 12 mW = 3.53 mA > 3 mA (10.2 mW)
+            assert review.thermal_watch(db, pid)["items"] == []    # no battery conversion = no sustained judgement
+            sus = review.thermal_watch(db, pid, battery=bat)["items"]
+            assert [(i["variant_id"], i["source"]) for i in sus] == [("shared", "sustained")]
+            assert sus[0]["limit_mw"] == 10.2 and [p["ask_pct"] for p in sus[0]["plans"]] == [15.0]
+            assert sus[0]["plans"][0]["achieved"] and sus[0]["plans"][0]["picked"] == ["lossy"]
+            project.globals_ = {"review_policy": policy | {"sustained_current": {"limit_ma": 3.0}}}
+            db.commit()   # already on the watch list: listed once, as the customer watch item
+            assert [i["source"] for i in review.thermal_watch(db, pid, battery=bat)["items"]] == ["watch"]
+            project.globals_ = {"review_policy": policy}
+            db.commit()
+
             # IQ policy never silently falls back to the lossy optimum.
             run = db.get(ArchExplorationRun, rid)
             run.variants = [s | {"tiers": {"keep": None}}]

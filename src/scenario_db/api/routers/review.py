@@ -38,7 +38,7 @@ def thermal_watch(
 
     settings = get_settings()
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
-        return svc.thermal_watch(db, project_ref, dvfs_whatif=dvfs_rows)
+        return svc.thermal_watch(db, project_ref, dvfs_whatif=dvfs_rows, battery=svc.battery_of(db, config_profile_ref))
 
 
 class RiskUpdateRequest(BaseModel):

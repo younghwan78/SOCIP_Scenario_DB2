@@ -31,6 +31,7 @@ from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_simulation_inputs
+from scenario_db.sim.assumed_loads import assumed_loads
 from scenario_db.sim.cpu_power import PROFILER_COEFF as _CPU_PROFILER_COEFF
 from scenario_db.sim.models import CpuProfile, DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.power_params import effective_power_params
@@ -986,7 +987,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
             }
         )
     intervals, latency = _cadence(result, run["inputs"], plan, options)
-    power, bw = _power_bw(result, plan, options, period)
+    power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions))
     bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
     verdict = _verdict(stages, intervals, ips, domains, period)
@@ -1129,7 +1130,8 @@ def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> di
             "avg_mbs": bw["total_mbs"]}
 
 
-def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, period: float):
+def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, period: float,
+              assumed: dict[str, dict[str, Any]] | None = None):
     stage = plan["stage"]
     tasks = plan["tasks"]
     hw_by_ip = {n: r.total_power_mw * plan["dual"].get(n, 1) for n, r in result.resolved.items()}
@@ -1155,7 +1157,9 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
             bw_hw[d.node_id] = bw_hw.get(d.node_id, 0.0) + d.bw_mbs
             bw_power_hw += d.bw_power_mw
     cpu = sum(cpu_by_task.values())
-    hw = sum(hw_by_ip.values())
+    # declared assumed loads (GPU / NPU …) are IP power with no pipeline node: kept apart from hw_by_ip (real nodes)
+    assumed_by_ip = {ip: a["mw"] for ip, a in (assumed or {}).items()}
+    hw = sum(hw_by_ip.values()) + sum(assumed_by_ip.values())
     bwp = bw_power_hw + bw_power_sw
     total = cpu + hw + bwp
     share = {
@@ -1179,6 +1183,9 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         "cpu_model": options.cpu.model_dump(),
         "zero_power_ips": sorted(n for n, v in hw_by_ip.items() if v <= 0),
     }
+    if assumed_by_ip:  # absent key = nothing declared (reports from before stay byte-identical)
+        power["assumed_by_ip"] = assumed_by_ip
+        power["assumed_basis"] = {ip: a["basis"] for ip, a in (assumed or {}).items() if a.get("basis")}
     bw = {
         "total_mbs": round(bw_total, 1),
         "hw_mbs": round(sum(bw_hw.values()), 1),
