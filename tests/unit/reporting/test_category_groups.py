@@ -42,3 +42,19 @@ def test_category_section_lists_unexplored_categories_as_review_gaps():
     assert "Game &lt;Play&gt;" in html and html.index("Camera Recording") < html.index("Game")
     assert "<div class='grp'><b>Camera Recording</b>" in html and "300–400 mW" in html
     assert category_section({"opinions": []}).startswith("<p class='meta'>분류 정보 없음")
+
+
+def test_coverage_shows_without_opinions_and_derived_only_review_is_still_a_product_gap():
+    cov = {"rows": [{"scenario_id": "uc-xr-passthrough", "name": "XR Passthrough", "variants": 2, "explored": 0, "registered": 0}]}
+    html = category_section({"opinions": [], "coverage": cov})
+    assert "Category별 검토 범위" in html and "XR Passthrough" in html and "평가 완료 variant가 없어" in html
+    assert "이전 형식" not in html
+    block = {"group": "XR Passthrough", "category": "other", "title": "XR Passthrough", "scope": "s", "variants": ["xr-a-sub"],
+             "spec_ok": 1, "count": 1, "share_pct": {}, "opinions": ["ok"], "basis": ["산출"]}
+    html = category_section({"opinions": [block], "coverage": cov})
+    assert "파생 variant만 검토 (1개 분류) — 제품 variant 공백" in html and "<span class=ok>검토" not in html
+
+
+def test_rows_use_the_scenario_name_fallback_like_the_coverage():
+    c = classify("xr-a", "uc-xr-passthrough", 30, False, {}, name="XR Passthrough")
+    assert c["group"] == "XR Passthrough" == group_of("uc-xr-passthrough", None, "XR Passthrough")

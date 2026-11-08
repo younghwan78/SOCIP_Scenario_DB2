@@ -54,10 +54,11 @@ _HEAVY_ID = re.compile(r"(?:^|-)(pro|portrait|pip|rcv|rdual|rtriple|dual|triple)
 
 
 def classify(variant_id: str, scenario_id: str, fps: float | None, eis_on: bool | None, dc: dict[str, Any] | None,
-             severity: str | None = None, groups: dict[str, str] | None = None) -> dict[str, Any]:
-    """Level-1 group, level-2 category and axes of one variant. dc = resolved design_conditions (may be empty)."""
+             severity: str | None = None, groups: dict[str, str] | None = None, name: str | None = None) -> dict[str, Any]:
+    """Level-1 group, level-2 category and axes of one variant. dc = resolved design_conditions (may be empty);
+    ``name`` = the scenario's display name, the same fallback the coverage table uses."""
     dc = dc or {}
-    group = group_of(scenario_id, groups)
+    group = group_of(scenario_id, groups, name)
     res = str(dc.get("resolution") or "").upper()
     if not res:
         m = _RES_RE.search(variant_id)

@@ -476,7 +476,7 @@ def category_section(snap: dict[str, Any]) -> str:
     from scenario_db.reporting.arch_opinions import OTHER_GROUP, RECORDING, group_of
 
     blocks = snap.get("opinions") or []
-    if not blocks:
+    if not blocks and not (snap.get("coverage") or {}).get("rows"):
         return ar._opinions(blocks)
     overrides = (((snap.get("review_context") or {}).get("policy") or {}).get("categories")) or {}
     cov: dict[str, dict[str, Any]] = {}
@@ -500,7 +500,11 @@ def category_section(snap: dict[str, Any]) -> str:
             nb = len(by.get(g) or [])
             if c is None:
                 continue
-            state = (f"<span class=ok>검토 · {nb}개 분류</span>" if nb else "<span class=warn>미탐색 — 검토 공백</span>")
+            # judged on the product variants explored (coverage excludes derived sub-variants): opinion blocks built
+            # from derived variants alone do not close the product gap
+            state = (f"<span class=ok>검토 · {nb}개 분류</span>" if c["explored"] and nb else
+                     f"<span class=warn>파생 variant만 검토 ({nb}개 분류) — 제품 variant 공백</span>" if nb else
+                     "<span class=warn>미탐색 — 검토 공백</span>")
             h += (f"<tr><td><b>{escape(g)}</b></td><td class=meta>{escape(', '.join(c['scenarios']))}</td><td class=n>{c['variants']}</td>"
                   f"<td class='n {'' if c['explored'] else 'warn'}'>{c['explored']}</td><td class=n>{c['registered']}</td><td>{state}</td></tr>")
         h += "</table>"
@@ -513,6 +517,8 @@ def category_section(snap: dict[str, Any]) -> str:
               f"<b class='{'ok' if ok == n else 'fail'}'>{ok}/{n}</b>"
               + (f" · {min(x[0] for x in rng):,.0f}–{max(x[1] for x in rng):,.0f} mW" if rng else "") + "</span></div>"
               + ar._opinions(bs, intro=(g == RECORDING)))
+    if not blocks:
+        h += "<p class=meta>평가 완료 variant가 없어 category별 의견 없음 — 계산 실패 · 미탐색 variant를 확인</p>"
     return h
 
 

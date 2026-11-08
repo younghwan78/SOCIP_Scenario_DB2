@@ -62,6 +62,8 @@ def build_snapshot(
     ok = [v for v in variants if v["spec_ok"]]
     # level-1 review categories: review_policy.categories (scenario glob → name) over the built-in id rules
     groups = (((review.context or {}).get("policy") or {}).get("categories") or None) if review is not None else None
+    # scenario names: the category fallback when neither a policy glob nor an id rule matches (same as coverage)
+    names = {sid: (md or {}).get("name") for sid, md in review.project.scenarios}         if review is not None and review.project is not None else {}
     sample_dvfs = bool(run.get("dvfs_table_ref") and "sample" in str(run["dvfs_table_ref"]))
     rows = []
     for v in variants:
@@ -71,7 +73,7 @@ def build_snapshot(
         worst = (v.get("sw_margin") or {}).get("worst") or {}
         rows.append({
             "cls": classify(v["variant_id"], v["scenario_id"], v["fps"], v["eis_on"], v.get("design_conditions"), v.get("severity"),
-                            groups=groups),
+                            groups=groups, name=names.get(v["scenario_id"])),
             "sw_margin_pct": worst.get("margin_pct"), "sw_stage": worst.get("stage"), "sw_bottleneck": worst.get("bottleneck"),
             # throughput rule of the margin (engine ≥ 15; None = stage chain rule of older engines)
             "sw_margin_basis": worst.get("basis"),
