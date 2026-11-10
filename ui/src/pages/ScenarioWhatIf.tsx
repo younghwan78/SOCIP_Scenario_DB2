@@ -10,6 +10,7 @@ import { Card } from '../components/TimingCharts'
 import { BaselineCard, CandidateBench, ImpactPreview, PowerCoverage, ResultState } from '../components/WhatIfWorkbench'
 import { readExperimentContext, updateExperimentContext } from '../lib/experimentContext'
 import { WhatIfSweep } from '../components/WhatIfSweep'
+import { notify } from '../lib/status'
 
 const ASK_FALLBACK: { ask: AskKind; label: string; description: string }[] = [
   { ask: 'what_if', label: '조건 바꿔보기', description: 'DVFS level · IP clock · 크기 · FPS를 바꾸면 timing · 전력 · BW가 어떻게 되나' },
@@ -102,7 +103,6 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
   const [dirty, setDirty] = useState(false)
   const [request, setRequest] = useState<PreviewRequest | null>(null)
   const [draft, setDraft] = useState<ExperimentDraft>({ ...emptyDraft })
-  const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [stale, setStale] = useState(false)
   const busyRef = useRef(false)
@@ -117,9 +117,9 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
   const run = async (action: (active: () => boolean) => Promise<void>) => {
     if (busyRef.current) return
     const sequence = generation.current
-    busyRef.current = true; setBusy(true); setMessage('')
+    busyRef.current = true; setBusy(true)
     const active = () => live.current && generation.current === sequence
-    try { await action(active) } catch (error) { if (active()) { setMessage(textError(error)); if (error instanceof ApiError && error.status === 409) { setStale(true); setResp(null); setRequest(null) } } }
+    try { await action(active) } catch (error) { if (active()) { notify({ kind: 'error', text: textError(error) }); if (error instanceof ApiError && error.status === 409) { setStale(true); setResp(null); setRequest(null) } } }
     finally { busyRef.current = false; if (live.current) setBusy(false) }
   }
   /** Builder edits keep the last answer on screen but mark it as not matching the conditions any more. */
@@ -132,6 +132,7 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
     if (!active()) return
     if (settings !== modelSettings) { setModelSettings(settings); updateExperimentContext(scope, settings) }
     setResp(res); setAsked(label); setDirty(false); setStale(false)
+    if (res.answer) notify({ kind: 'ok', text: res.answer.headline })
     if (res.plan) {   // what was executed (or interpreted) becomes the builder state, editable from here
       setAskKind(res.plan.ask)
       if (res.plan.ask === 'what_if' || res.plan.ask === 'combine') setChanges(res.plan.changes)
@@ -151,7 +152,7 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
     if (!resp?.result || !request || !draft.title.trim()) return
     const saved = await whatIfApi.save(request, resp.result, { ...draft, title: draft.title.trim() }, asked)
     if (active()) {
-      setTick((n) => n + 1); setOffset(0); setMessage(`실험 저장됨: ${saved.title} · ${saved.visibility === 'private' ? '개인' : '공유'}`)
+      setTick((n) => n + 1); setOffset(0); notify({ kind: 'ok', text: `실험 저장됨: ${saved.title} · ${saved.visibility === 'private' ? '개인' : '공유'}` })
       const context = readExperimentContext(scope)
       if (context) updateExperimentContext(scope, { candidates: context.candidates.map((candidate) => candidate.condition_hash === resp.result!.condition_hash ? { ...candidate, saved_experiment_id: saved.id } : candidate) })
     }
@@ -165,7 +166,7 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
     updateExperimentContext(scope, { changes: saved.preview_request.changes, config: saved.preview_request.config, options: saved.preview_request.options, basis_ref: saved.preview_request.basis_ref, comparison: saved.preview_request.comparison })
     setDraft({ title: saved.title, purpose: saved.purpose ?? '', description: saved.description ?? '', assumptions: saved.assumptions ?? '', conclusion: saved.conclusion ?? '', visibility: saved.visibility })
     setStale(false); setBasisTick((n) => n + 1)
-    setMessage('저장된 조건을 불러왔습니다. 현재 기준으로 “답 보기”를 눌러 다시 계산하세요.')
+    notify({ kind: 'info', text: '저장된 조건을 불러왔습니다. 현재 기준으로 “답 보기”를 눌러 다시 계산하세요.' })
   })
   /** New row from the kind's first instance, prefilled with something worth asking (one DVFS level down). */
   const add = (kind: ChangeKindMeta) => {
@@ -181,9 +182,9 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
     if (entry.experiment) { void reopen(entry.experiment); return }
     if (!entry.whatif_target) return
     const kind = entry.whatif_catalog ? kinds.find((k) => k.target === 'sensor_binding' && k.choices.some((row) => row.options?.some((o) => o.sensor_binding?.catalog_ref === entry.whatif_catalog))) ?? kinds.find((k) => k.target === entry.whatif_target) : kinds.find((k) => k.target === entry.whatif_target)
-    if (!kind) { setMessage('선택한 IP에는 이 변경이 지원되지 않거나 모델 근거가 없습니다. 다른 조건을 고르세요.'); return }
+    if (!kind) { notify({ kind: 'error', text: '선택한 IP에는 이 변경이 지원되지 않거나 모델 근거가 없습니다. 다른 조건을 고르세요.' }); return }
     const selected = kind.choices.find((row) => (entry.whatif_node && row.id === entry.whatif_node) || (entry.whatif_ip && (row.ip === entry.whatif_ip || t.nodes.find((node) => node.id === row.id)?.ip === entry.whatif_ip)) || (entry.whatif_catalog && row.options?.some((o) => o.sensor_binding?.catalog_ref === entry.whatif_catalog || o.ip_ref === entry.whatif_catalog)))
-    if ((entry.whatif_node || entry.whatif_ip || entry.whatif_catalog) && !selected) { setMessage('선택한 IP·센서의 변경 가능 대상을 찾지 못했습니다. 기준과 지원 범위를 확인하세요.'); return }
+    if ((entry.whatif_node || entry.whatif_ip || entry.whatif_catalog) && !selected) { notify({ kind: 'error', text: '선택한 IP·센서의 변경 가능 대상을 찾지 못했습니다. 기준과 지원 범위를 확인하세요.' }); return }
     const next = defaultChange(selected ? { ...kind, choices: [selected] } : kind, [], t.fps)
     const catalogOption = selected?.options?.find((o) => (o.sensor_binding?.catalog_ref === entry.whatif_catalog || o.ip_ref === entry.whatif_catalog) && o.supported !== false)
     if (entry.whatif_catalog && catalogOption) { next.option = catalogOption.id; if (catalogOption.sensor_binding) next.sensor_binding = catalogOption.sensor_binding }
@@ -254,14 +255,14 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
         const settings = { config: candidate.config, options: candidate.options, basis_ref: candidate.basis_ref, comparison: candidate.comparison }
         edited(); setChanges(candidate.changes); setModelSettings(settings); setStale(false); setAskKind('what_if')
         updateExperimentContext(scope, { changes: candidate.changes, ...settings })
-        setMessage('후보 조건과 모델 설정을 불러왔습니다. 기준을 확인한 뒤 다시 계산하세요.')
+        notify({ kind: 'info', text: '후보 조건과 모델 설정을 불러왔습니다. 기준을 확인한 뒤 다시 계산하세요.' })
       }} />
       {t && <WhatIfSweep scope={scope} targets={t} changes={changes} settings={modelSettings} onLoad={(preview) => {
         const settings = { config: preview.config, options: preview.options, basis_ref: preview.basis_ref, comparison: preview.comparison }
         edited(); setChanges(preview.changes); setModelSettings(settings); setStale(false); setAskKind('what_if')
         loadedExpected.current = { expected_baseline_hash: preview.expected_baseline_hash, expected_analysis_hash: preview.expected_analysis_hash }
         updateExperimentContext(scope, { changes: preview.changes, ...settings })
-        setMessage('탐색 후보의 조건과 OPP 비교 방식을 불러왔습니다. “답 보기”로 상세 결과를 확인하세요.')
+        notify({ kind: 'info', text: '탐색 후보의 조건과 OPP 비교 방식을 불러왔습니다. “답 보기”로 상세 결과를 확인하세요.' })
       }} />}
       {resp?.result && request && <Card id="wi-save" title="실험 기록 저장" note="작성자와 계산 근거를 함께 기록합니다." defaultWide>
         <div className="collab-form">{([{ key: 'title', label: '실험 제목', max: 200 }, { key: 'purpose', label: '검토 목적', max: 4000 }, { key: 'description', label: '실험 상세 설명', max: 12000 }, { key: 'assumptions', label: '실험 가정 · 제약', max: 6000 }, { key: 'conclusion', label: '실험 결론', max: 6000 }] as const).map(({ key, label, max }) => <label key={key}>{label}<textarea className="input" aria-label={label} rows={key === 'description' ? 3 : 1} maxLength={max} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} /></label>)}
@@ -280,7 +281,7 @@ function WhatIfBody({ scope, entry }: { scope: WhatIfScope; entry: Record<string
         </>}
       </Card>
     </div>
-    {busy && <p role="status">계산 중…</p>}{message && <p role="status" className={stale ? 'err' : ''}>{message}</p>}
+    {busy && <p role="status">계산 중…</p>}
   </>
 }
 /** The answer first: verdict + one sentence + facts, then what the LLM read (if a question was asked). */
