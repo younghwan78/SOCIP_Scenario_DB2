@@ -2,6 +2,7 @@
 import { fetchAdmitted } from './admission'
 import { authVersion } from './auth'
 import { currentReadSignal } from './readRequestScope'
+import { useAsync } from './route'
 export const API_BASE: string = (import.meta.env.VITE_SCENARIODB_API_BASE as string | undefined) ?? '/api/v1'
 
 export type Dict = Record<string, unknown>
@@ -114,6 +115,18 @@ export interface Evidence {
   /** simulation: tool (scenariodb-sim = Simulate 기본 조건, scenariodb-timing-budget = Timing Budget 조건), timestamp, config profile, writer */
   run_info?: Dict | null
   measured_at?: string | null
+}
+
+export type EvidenceHeavyField = 'calculation_trace' | 'dma_breakdown' | 'ip_breakdown' | 'timing_breakdown'
+  | 'dvfs_breakdown' | 'external_devices' | 'cpu_breakdown' | 'sw_task_timing' | 'hw_task_timing'
+  | 'stage_timing' | 'sw_event_latency' | 'handoff_flows' | 'pipeline_model'
+export type EvidenceSummary = Omit<Evidence, EvidenceHeavyField> & {
+  heavy: Record<EvidenceHeavyField, { present: boolean; bytes: number }>
+}
+
+/** Selected reads share cancellation, in-flight requests and the existing API cache. */
+export function useEvidenceDetail(id: string | undefined) {
+  return useAsync(() => id ? api.evidence(id) : Promise.resolve(undefined), [id])
 }
 
 /** sdb.handoff/1 — docs/design/handoff-flow-ko.md (validated on import; layer / kind values as in the backend model) */
@@ -343,7 +356,7 @@ export const api = {
   /** variants with a full-stack trace or a sdb.handoff/1 document (Scenario page Behavior filter) */
   behaviorIndex: (project?: string) => getJson<BehaviorEntry[]>(`/behavior/index${project ? `?project_ref=${enc(project)}` : ''}`),
   ipCatalog: (ipId: string) => getJson<IpCatalog>(`/ip-catalogs/${enc(ipId)}`),
-  evidenceList: (scenarioId: string, variantId: string, projectRef?: string) => allPages<Evidence>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, project_ref: projectRef }, 200),
+  evidenceList: (scenarioId: string, variantId: string, projectRef?: string) => allPages<EvidenceSummary>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, project_ref: projectRef, view: 'summary' }, 200),
   evidence: (id: string) => getJson<Evidence>(`/evidence/${enc(id)}`),
   simConfigs: (projectRef: string) => getJson<Paged<{ id: string; status?: string; version?: number; description?: string | null; approved_by?: string | null; run_config?: { vbat?: number | null; pmic_efficiency?: number | null; [k: string]: unknown } }>>('/sim-config-profiles', { project_ref: projectRef, limit: 50 }),
   simulate: (req: SimRunRequest) => postJson<SimRunResponse>('/simulation/run', { persist: false, ...req }),

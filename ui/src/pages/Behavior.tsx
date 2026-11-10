@@ -5,7 +5,7 @@
 //   Processing flow   — each unit's cross-layer hand-off order and its loop (sdb.handoff/1 document, else the selected chain)
 import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
-import { api, type BehaviorEntry, type Evidence, type HandoffDoc } from '../lib/api'
+import { api, useEvidenceDetail, type BehaviorEntry, type HandoffDoc } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { buildTimeline, chainOf, FRAME_HUES, FULLSTACK_GROUPS, INDEPENDENT_STYLE, isFullStack, LAYER_COLORS, type Slice, type Timeline } from '../lib/timeline'
 import { TimelineView, type FlowMode } from '../components/TimelineView'
@@ -26,9 +26,11 @@ export function BehaviorPage({ ctx }: { ctx: Ctx }) {
   const tab: Tab = (['fullstack', 'cadence', 'flow'] as Tab[]).includes(ctx.params.tab as Tab) ? (ctx.params.tab as Tab) : 'fullstack'
   const setTab = (t: Tab) => ctx.navigate(undefined, { tab: t }, true)
   const evQ = useAsync(() => (variant ? api.evidenceList(scenario, variant, ctx.project) : Promise.resolve({ items: [], total: 0 })), [scenario, variant, ctx.project])
-  const traces = useMemo(() => (evQ.data?.items ?? []).filter((e) => isFullStack(e.timeline_events) || !!e.handoff_flows), [evQ.data])
+  const traces = useMemo(() => (evQ.data?.items ?? []).filter((e) => isFullStack(e.timeline_events) || e.heavy.handoff_flows.present), [evQ.data])
   const [traceId, setTraceId] = useState('')
-  const trace: Evidence | undefined = traces.find((t) => t.id === traceId) ?? traces[0]
+  const selectedTrace = traces.find((t) => t.id === traceId) ?? traces[0]
+  const detailQ = useEvidenceDetail(selectedTrace?.id)
+  const trace = detailQ.data
   const timeline = useMemo(() => (trace && isFullStack(trace.timeline_events) ? buildTimeline(trace.timeline_events ?? [], { maxFrames: 64, groupOrder: FULLSTACK_GROUPS }) : null), [trace])
   // 'layer' | 'participant' (stored by earlier versions) or the layers spread per process
   const [columns, setColumns] = usePref<ColumnSpec>('behavior.flow.columns', 'layer')
@@ -44,9 +46,9 @@ export function BehaviorPage({ ctx }: { ctx: Ctx }) {
       <div className="seg" role="tablist" aria-label="Behavior 보기">
         {TABS.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)} title={t.hint}>{t.label}</button>)}
       </div>
-      {traces.length > 1 && <select value={trace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); ctx.navigate(undefined, { slice: undefined, flow: undefined }, true) }} aria-label="full-stack trace" style={{ minWidth: 0, flex: '0 1 340px' }}>
+      {traces.length > 1 && <select value={selectedTrace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); ctx.navigate(undefined, { slice: undefined, flow: undefined }, true) }} aria-label="full-stack trace" style={{ minWidth: 0, flex: '0 1 340px' }}>
         {traces.map((t) => <option key={t.id} value={t.id}>{t.id}</option>)}</select>}
-      {traces.length === 1 && trace && <span className="chip" title="full-stack trace evidence">{trace.id}</span>}
+      {traces.length === 1 && selectedTrace && <span className="chip" title="full-stack trace evidence">{selectedTrace.id}</span>}
       {tab === 'fullstack' && timeline && <>
         <div className="seg sm" role="group" aria-label="화살표">
           {([['chain', '선택 chain'], ['frame', '같은 frame'], ['all', '모두'], ['none', '없음']] as [FlowMode, string][]).map(([k, l]) =>
@@ -63,8 +65,8 @@ export function BehaviorPage({ ctx }: { ctx: Ctx }) {
 
   let main
   if (!variant) main = <div className="empty">Variant를 선택하세요.</div>
-  else if (evQ.error) main = <div className="err">{evQ.error}</div>
-  else if (evQ.loading) main = <div className="empty">Evidence 불러오는 중…</div>
+  else if (evQ.error || detailQ.error) main = <div className="err">{evQ.error || detailQ.error}</div>
+  else if (evQ.loading || (selectedTrace && detailQ.loading)) main = <div className="empty">Evidence 불러오는 중…</div>
   else if (!trace) main = <NoBehavior ctx={ctx} />
   else if (tab === 'flow') {
     const doc = trace.handoff_flows ?? (timeline ? deriveHandoffOrNull(timeline, selected) : null)

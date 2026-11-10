@@ -5,7 +5,16 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
-class EvidenceResponse(BaseModel):
+# Timeline contents and profiling source metadata are used to filter/rank list
+# choices. Keep them until the list has an equivalent compact trace index.
+EVIDENCE_HEAVY_FIELDS = (
+    "calculation_trace", "dma_breakdown", "ip_breakdown", "timing_breakdown",
+    "dvfs_breakdown", "external_devices", "cpu_breakdown", "sw_task_timing",
+    "hw_task_timing", "stage_timing", "sw_event_latency", "handoff_flows", "pipeline_model",
+)
+
+
+class EvidenceListFields(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -25,30 +34,42 @@ class EvidenceResponse(BaseModel):
     aggregation: dict = {}
     kpi: dict = {}
     run_info: dict | None = None
+    timeline_events: list | None = None
+    topology_order: list | None = None
+    vdd_power: dict | None = None
+    power_breakdown: dict | None = None
+    params_hash: str | None = None
+    provenance: dict | None = None
+    execution_path_id: str | None = None
+    profiling_metadata: dict | None = None
+    metric_observations: list | None = None
+    artifacts: list | None = None
+    sw_version_hint: str | None = None
+
+
+class EvidenceHeavyField(BaseModel):
+    present: bool
+    bytes: int
+
+
+class EvidenceSummaryResponse(EvidenceListFields):
+    heavy: dict[str, EvidenceHeavyField]
+
+
+class EvidenceResponse(EvidenceListFields):
     ip_breakdown: list | None = None
     dma_breakdown: list | None = None
     timing_breakdown: list | None = None
     dvfs_breakdown: list | None = None
-    timeline_events: list | None = None
     handoff_flows: dict | None = None
     external_devices: list | None = None
-    topology_order: list | None = None
-    vdd_power: dict | None = None
-    power_breakdown: dict | None = None
     calculation_trace: dict | None = None
-    params_hash: str | None = None
-    provenance: dict | None = None
     cpu_breakdown: list | None = None
     sw_task_timing: list | None = None
-    execution_path_id: str | None = None
     pipeline_model: dict | None = None
     stage_timing: list | None = None
-    profiling_metadata: dict | None = None
     hw_task_timing: list | None = None
     sw_event_latency: list | None = None
-    metric_observations: list | None = None
-    artifacts: list | None = None
-    sw_version_hint: str | None = None
 
 
 class SweepJobResponse(BaseModel):
