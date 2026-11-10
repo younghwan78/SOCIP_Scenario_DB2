@@ -1,6 +1,7 @@
 import { experimentHref, useExperimentContext, type ExperimentContext } from '../lib/experimentContext'
 import type { WhatIfScope } from '../lib/scenarioWhatIf'
 import { CHANGE_LABELS } from '../lib/scenarioWhatIf'
+import { TimingVerdictBadge } from './TimingVerdictBadge'
 
 const value = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? '—' : n.toFixed(1)
 const delta = (a: number | null | undefined, b: number | null | undefined) => a == null || b == null ? '—' : `${a - b > 0 ? '+' : ''}${value(a - b)}`
@@ -40,7 +41,7 @@ export function CandidateReview({ scope, exportable = false }: { scope: WhatIfSc
         <td className="mono">{delta(c.metrics.modeled_power_mw, c.baseline_metrics.modeled_power_mw)}</td>
         <td className="mono">{delta(c.metrics.bw_mbs, c.baseline_metrics.bw_mbs)}</td>
         <td className="mono">{delta(c.metrics.latency_ms, c.baseline_metrics.latency_ms)}</td>
-        <td><span className={`badge ${c.metrics.feasible ? 'v-ok' : 'v-fail'}`}>{c.metrics.feasible ? '성능 충족' : '성능 미충족'}</span>
+        <td>{c.metrics.verdict === 'not_applicable' ? <TimingVerdictBadge status={c.metrics.verdict} /> : <span className={`badge ${c.metrics.feasible ? 'v-ok' : 'v-fail'}`}>{c.metrics.feasible ? '성능 충족' : '성능 미충족'}</span>}
           {!c.coverage.complete && <span className="badge v-warn" title={c.coverage.missing_components.join(', ')}>일부 power만 모델링</span>}
           {c.iq_required.length > 0 && <span className="badge v-warn">IQ 검증 필요</span>}
           {((context.baseline_hash && c.baseline_hash !== context.baseline_hash) || (context.analysis_hash && c.analysis_hash !== context.analysis_hash)) && <span className="badge v-warn">다른 기준 · 재계산 필요</span>}</td>
@@ -54,6 +55,6 @@ export function ExperimentEntry({ scope }: { scope: WhatIfScope }) {
   const candidate = context?.candidates.find((c) => c.id === context.active_candidate_id) ?? context?.candidates[0]
   return <div className="experiment-entry"><a href={experimentHref('whatif', scope)} onClick={(e) => e.stopPropagation()}>조건 실험 →</a>
     {candidate && <small title={`저장 당시 기준 ${candidate.baseline_hash} 대비 모델 추정치 · ${candidate.created_at}`}>
-      저장 Δ {delta(candidate.metrics.modeled_power_mw, candidate.baseline_metrics.modeled_power_mw)} mW · {candidate.metrics.feasible ? '성능 OK' : '성능 FAIL'}
+      저장 Δ {delta(candidate.metrics.modeled_power_mw, candidate.baseline_metrics.modeled_power_mw)} mW · {candidate.metrics.verdict === 'not_applicable' ? <TimingVerdictBadge status={candidate.metrics.verdict} /> : candidate.metrics.feasible ? '성능 OK' : '성능 FAIL'}
     </small>}</div>
 }

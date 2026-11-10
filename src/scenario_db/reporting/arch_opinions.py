@@ -15,6 +15,7 @@ from fnmatch import fnmatchcase
 from typing import Any
 
 from scenario_db.reporting.reason_text import diagnose, explain_all, first_text
+from scenario_db.reporting.timing_status import timing_failed, timing_unsupported
 
 CATEGORIES = [
     ("fps30", "30 fps recording", "해상도(FHD · UHD · 8K) × EIS on/off × HEVC/APV"),
@@ -182,7 +183,9 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
     measured = measured or set()
     out = []
     for group, cat, title, scope, rs in _blocks(rows):
-        ok = [r for r in rs if r["spec_ok"]]
+        ok = [r for r in rs if r["spec_ok"] and not timing_unsupported(r)]
+        fails = [r for r in rs if timing_failed(r)]
+        unsupported_n = sum(timing_unsupported(r) for r in rs)
         tot = [r["power"]["total_mw"] for r in ok if r["power"].get("total_mw") is not None]
         bws = [r["bw_mbs"] for r in ok if r.get("bw_mbs") is not None]
         shares = [s for s in (_share(r["power"]) for r in ok) if s]
@@ -195,7 +198,8 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
             basis.append(b)
 
         dv = "산출 · DVFS SAMPLE" if sample_dvfs else "산출"
-        add(f"{len(rs)}개 variant 중 spec 만족 {len(ok)}개" + (f", 미달 {len(rs) - len(ok)}개" if len(ok) < len(rs) else "") + ".", "산출")
+        add(f"{len(rs)}개 variant 중 spec 만족 {len(ok)}개" + (f", 미달 {len(fails)}개" if fails else "")
+            + (f", 판정 미지원 {unsupported_n}건" if unsupported_n else "") + ".", "산출")
         if tot:
             add(f"예측 Total (등록 또는 추천) {_f(min(tot))}–{_f(max(tot))} mW (중앙 {_f(statistics.median(tot))} mW), BW {_f(min(bws))}–{_f(max(bws))} MB/s." if bws
                        else f"예측 Total (등록 또는 추천) {_f(min(tot))}–{_f(max(tot))} mW.", dv)
@@ -241,7 +245,6 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
                 add("Dual/Triple은 물리 IP 공유를 보수적으로 가정한 contention 모델 — 실제 ISP chain 수와 RT 스케줄 확인 전까지 참고치.", "가정 · contention")
             if "Portrait" in kinds:
                 add("Portrait의 depth/segmentation 가속기 전력은 catalog 계수가 없으면 합계에서 빠짐 — 과소 추정 가능.", "가정 · catalog")
-        fails = [r for r in rs if not r["spec_ok"]]
         if fails:
             by_reason: dict[str, list[str]] = {}
             for r in fails:
@@ -266,6 +269,7 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
         evidence = _evidence(rs, measured, sample_dvfs, avg_share)
         out.append({"group": group, "category": cat, "title": title, "scope": scope, "variants": [r["variant_id"] for r in rs],
                     "spec_ok": len(ok), "count": len(rs), "power_range_mw": [min(tot), max(tot)] if tot else None,
+                    **({"not_applicable": unsupported_n} if unsupported_n else {}),
                     "share_pct": {k: round(v, 1) for k, v in avg_share.items()}, "opinions": ops, "basis": basis,
                     "evidence": evidence,
                     "sections": _sections(cat, rs, ok, ops, basis, avg_share, dom, options or [], evidence, sample_dvfs)})
@@ -308,7 +312,7 @@ def _sections(cat: str, rs: list[dict[str, Any]], ok: list[dict[str, Any]], ops:
     if sample_dvfs:
         risk.append(["DVFS table이 SAMPLE — 전압·level 기반 power 수치는 상대 비교용.", "입력"])
     mitig: list[list[str]] = []
-    fails = [r for r in rs if not r["spec_ok"]]
+    fails = [r for r in rs if timing_failed(r)]
     if fails:
         groups: dict[str, list[dict[str, Any]]] = {}
         for r in fails:

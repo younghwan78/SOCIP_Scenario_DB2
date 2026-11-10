@@ -17,7 +17,7 @@ from scenario_db.reporting.perf_sections import latency_buffer_block, output_fps
 from scenario_db.reporting.power_groups import heatmap_block, ranking_block
 from scenario_db.reporting.sustained_section import sustained_block, sustained_lead
 from scenario_db.reporting.risk_rules import cpu_tolerance_min
-from scenario_db.reporting.timing_status import timing_class, timing_label, timing_unsupported
+from scenario_db.reporting.timing_status import timing_class, timing_failed, timing_label, timing_unsupported
 
 _f, _short = ar._f, ar._short
 
@@ -257,7 +257,7 @@ def _lead_perf(snap: dict[str, Any]) -> str:
     s = snap["spec_summary"]
     low = sorted(({"variant_id": r["variant_id"], "margin_pct": r["sw_margin_pct"]} for r in snap.get("scenarios") or []
                   if r.get("spec_ok") and r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < 10), key=lambda m: m["margin_pct"]) \
-        or [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < 10]
+        or [m for m in snap.get("sw_margin_top5") or [] if not timing_unsupported(m) and m.get("margin_pct") is not None and m["margin_pct"] < 10]
     t = f"fps 만족 <b>{s['spec_ok']}/{s['explored']}</b>"
     if s["spec_fail"]:
         t += f" · 미달 {s['spec_fail']}건 ({escape(', '.join(_short(f['variant_id']) for f in s['failed'][:3]))})"
@@ -417,7 +417,7 @@ def dossier(snap: dict[str, Any]) -> str:
             ("Latency", f"video {_f(lat.get('video_ms'))} ms ({_f(lat.get('video_frames'), 2)} frame) · preview {_f(lat.get('preview_ms'))} ms" if lat else "—"),
         ]
         m = margins.get(key)
-        if m:
+        if m and not timing_unsupported(r) and not timing_unsupported(m):
             mcls = "fail" if m["margin_pct"] < 0 else "warn" if m["margin_pct"] < 10 else "ok"
             rows.append(("SW margin", f"<b class={mcls}>{m['margin_pct']:.1f}%</b>"
                          f" · {escape(str(m.get('stage', '')).upper())} · 병목 {escape(str(m.get('bottleneck') or '—'))}"
@@ -459,9 +459,10 @@ def dossier(snap: dict[str, Any]) -> str:
         rk = (risks.get(v) or []) + (risks.get(f"{r['scenario_id']}/{v}") or [])
         if rk:
             rows.append(("Risk", " ".join(f"{ar._sev(x['severity'])} <span class=mono>{escape(x['label'])}</span> {escape(x['title'])}<br>" for x in rk)))
-        sev = "fail" if not r["spec_ok"] or any(x["severity"] == "critical" for x in rk) else "warn" if rk else "ok"
+        sev = "fail" if timing_failed(r) or any(x["severity"] == "critical" for x in rk) else "warn" if rk else "meta" if timing_unsupported(r) else "ok"
         tag = _cls_label(r.get("cls"))
-        cards.append(({"fail": 0, "warn": 1, "ok": 2}[sev], v, f"<article class='dos d-{sev}' id='d-{escape(r['scenario_id'] + '/' + v)}' data-k='{escape((v + ' ' + tag).lower())}'>"
+        style = " style='border-left-color:#8A8274'" if sev == "meta" else ""
+        cards.append(({"fail": 0, "warn": 1, "ok": 2, "meta": 3}[sev], v, f"<article class='dos d-{sev}'{style} id='d-{escape(r['scenario_id'] + '/' + v)}' data-k='{escape((v + ' ' + tag).lower())}'>"
                      f"<h4>{escape(_short(v))} <span class=meta>{escape(r['scenario_id'])} · {escape(tag)}</span></h4><table>"
                      + "".join(f"<tr><th>{k}</th><td>{val}</td></tr>" for k, val in rows) + "</table></article>"))
     cards.sort(key=lambda c: (c[0], c[1]))
@@ -515,9 +516,13 @@ def category_section(snap: dict[str, Any]) -> str:
         bs = by[g]
         n = sum(int(b.get("count") or 0) for b in bs)
         ok = sum(int(b.get("spec_ok") or 0) for b in bs)
+        unsupported_n = sum(int(b.get("not_applicable") or 0) for b in bs)
+        judged = n - unsupported_n
+        cls = "meta" if unsupported_n and not judged else "ok" if ok == judged else "fail"
         rng = [b["power_range_mw"] for b in bs if b.get("power_range_mw")]
         h += (f"<div class='grp'><b>{escape(g)}</b> <span class=meta>· {len(bs)}개 분류 · variant {n} · spec "
-              f"<b class='{'ok' if ok == n else 'fail'}'>{ok}/{n}</b>"
+              f"<b class='{cls}'>{ok}/{judged}</b>"
+              + (f" · 판정 미지원 {unsupported_n}건" if unsupported_n else "")
               + (f" · {min(x[0] for x in rng):,.0f}–{max(x[1] for x in rng):,.0f} mW" if rng else "") + "</span></div>"
               + ar._opinions(bs, intro=(g == RECORDING)))
     if not blocks:

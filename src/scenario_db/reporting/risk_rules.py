@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from scenario_db.reporting.timing_status import timing_unsupported
+
 from scenario_db.reporting.review_verdict import (
     LADDER_TEXT,
     STATE_LABEL,
@@ -89,7 +91,8 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                       "affected": vids, "mitigation": "입력(catalog · DVFS · SW timing) 확인 후 재탐색",
                       "checks": ["계산 오류 메시지 확인", "입력 catalog · DVFS table · SW timing 확인", "재탐색"]})
 
-    failed = s.get("failed") or []
+    unsupported = {(r.get("scenario_id"), r["variant_id"]) for r in snap.get("scenarios") or [] if timing_unsupported(r)}
+    failed = [f for f in s.get("failed") or [] if not timing_unsupported(f) and (f.get("scenario_id"), f["variant_id"]) not in unsupported]
     if failed:
         groups: dict[str, list[dict[str, Any]]] = {}
         for f in failed:
@@ -227,7 +230,7 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
         low = [{"variant_id": r["variant_id"], "margin_pct": r["sw_margin_pct"], "stage": r.get("sw_stage"), "bottleneck": r.get("sw_bottleneck"),
                 "assumed": (r.get("inputs") or {}).get("sw_timing_source") == "assumed"} for r in low_rows]
     else:
-        low = [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT]
+        low = [m for m in snap.get("sw_margin_top5") or [] if not timing_unsupported(m) and m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT]
     if low:
         m0 = low[0]
         neg = sum(1 for m in low if m["margin_pct"] < 0)

@@ -12,7 +12,7 @@ from scenario_db.reporting.arch_opinions import build_opinions, classify
 from scenario_db.reporting.reason_text import diagnose, explain_all
 from scenario_db.reporting.clock_section import clock_block
 from scenario_db.reporting.review_snapshot import ReviewEvidence, _assemble_review
-from scenario_db.reporting.timing_status import timing_class, timing_label, timing_unsupported
+from scenario_db.reporting.timing_status import timing_class, timing_failed, timing_label, timing_unsupported
 from scenario_db.sim.arch_exploration import ENGINE_REV
 from scenario_db.sim.model_lineage import LINEAGE_FIELDS
 
@@ -200,7 +200,7 @@ def build_snapshot(
     for v in variants:
         m = v.get("sw_margin") or {}
         w = m.get("worst")
-        if not w:
+        if not w or timing_unsupported(m) or timing_unsupported((v.get("objective_slice") or {}).get("verdict") or {}):
             continue
         margins.append({"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "fps": v["fps"], "verdict": m.get("verdict"), "spec_ok": v["spec_ok"],
                         **w, "statistic": m.get("statistic") or (v.get("objective") or {}).get("statistic"),
@@ -237,6 +237,7 @@ def build_snapshot(
                           for r in ranked if r["spec_ok"] and r["delta_mw"] < 0), None),
             "singles": [{"key": r["key"], "label": r["labels"][0], "delta_mw": r["delta_mw"], "delta_pct": r["delta_pct"],
                          "spec_ok": r["spec_ok"], "kind": (items.get(r["items"][0]) or {}).get("kind"),
+                         **({"verdict": "not_applicable"} if timing_unsupported(r) else {}),
                          "delta_latency_ms": r.get("delta_latency_ms"), "iq_eval": r.get("iq_eval")} for r in singles],
             "sets": len(ranked), "notes": po.get("notes") or [],
         })
@@ -552,7 +553,7 @@ def _tier1(snap: dict[str, Any]) -> str:
     if fps.get("fail") and snap.get("scenarios"):
         from scenario_db.reporting.review_verdict import fps_validity
 
-        rows = [r for r in snap["scenarios"] if not r.get("spec_ok")]
+        rows = [r for r in snap["scenarios"] if timing_failed(r)]
         if rows and all(fps_validity(r)[0] != "confirmed" for r in rows):
             fps_cls = "warn"
     pw_cls = ("fail" if pw.get("over") or pw.get("flip") else
@@ -923,8 +924,13 @@ def _opinions(blocks: list[dict[str, Any]], intro: bool = True) -> str:
     for b in blocks:
         rng = b.get("power_range_mw")
         sh = b.get("share_pct") or {}
+        unsupported_n = b.get("not_applicable") or 0
+        judged = b["count"] - unsupported_n
+        cls = "meta" if unsupported_n and not judged else "ok" if b["spec_ok"] == judged else "fail"
         h += (f"<div class='op'><h3>{escape(b['title'])} <span class=meta>· {escape(b['scope'])} · "
-              f"spec <b class='{'ok' if b['spec_ok'] == b['count'] else 'fail'}'>{b['spec_ok']}/{b['count']}</b>{f' · {rng[0]:,.0f}–{rng[1]:,.0f} mW' if rng else ''}</span></h3>")
+              f"spec <b class='{cls}'>{b['spec_ok']}/{judged}</b>"
+              + (f" · 판정 미지원 {unsupported_n}건" if unsupported_n else "")
+              + f"{f' · {rng[0]:,.0f}–{rng[1]:,.0f} mW' if rng else ''}</span></h3>")
         if sh:
             h += ("<div class='bar'>" + "".join(f"<i style='width:{v:.1f}%;background:{C[c]}' title='{k} {v:.0f}%'></i>"
                   for (k, v), c in zip(sh.items(), ("cpu", "hw", "bw"), strict=False)) + "</div>")
@@ -1117,7 +1123,7 @@ def _box_svg(rows: list[dict[str, Any]], key: str) -> str:
         y = i * rh + 2
         cy = y + rh / 2
         g.append(f"<text x='{lw-8}' y='{cy + 4.5:.1f}' font-size='13' text-anchor='end' fill='{C['ink']}'>{escape(_short(r['variant_id']))}</text>")
-        col = C[_KEY_COLOR[key]] if r["spec_ok"] else C["fail"]
+        col = C["mute"] if timing_unsupported(r) else C[_KEY_COLOR[key]] if r["spec_ok"] else C["fail"]
         g.append(f"<g><title>{escape(_short(r['variant_id']))}: min {d['min']:,.0f} · p25 {d['p25']:,.0f} · median {d['median']:,.0f} · p75 {d['p75']:,.0f} · max {d['max']:,.0f} {unit}</title>")
         g.append(f"<line x1='{lw+d['min']*k:.1f}' x2='{lw+d['max']*k:.1f}' y1='{cy:.1f}' y2='{cy:.1f}' stroke='{col}' stroke-width='1.5'/>")
         g.append(f"<rect x='{lw+d['p25']*k:.1f}' y='{y+5}' width='{max(1.5,(d['p75']-d['p25'])*k):.1f}' height='{rh-10}' rx='2' fill='{col}' fill-opacity='.28' stroke='{col}'/>")
@@ -1230,7 +1236,7 @@ def _power_options(rows: list[dict[str, Any]]) -> str:
         b = r["best"]
         cats = ", ".join(f"{k} {v:+.1f}" for k, v in list((b or {}).get("by_category", {}).items())[:3])
         singles = "<br>".join(f"{escape(x['label'])} <b class='n'>{x['delta_mw']:+.1f}</b> · {_lat_text(x.get('delta_latency_ms'))}"
-                              f"{'' if x['spec_ok'] else ' <span class=fail>spec fail</span>'}" for x in r["singles"])
+                              f"{' <span class=meta>판정 미지원</span>' if timing_unsupported(x) else '' if x['spec_ok'] else ' <span class=fail>spec fail</span>'}" for x in r["singles"])
         delta = (f"<b>{b['delta_mw']:+.1f}</b> mW<br><span class=meta>{_f(b['delta_pct'], 1)}%</span>" if b else "—")
         best = escape(" + ".join(b["labels"])) if b else "—"
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td class=n>{_f(r['base_total_mw'],1)}</td>"
@@ -1268,6 +1274,7 @@ def margin_text(rows: list[dict[str, Any]], statistic: str | None = None) -> str
 
 
 def _margins(rows: list[dict[str, Any]], statistic: str | None = None) -> str:
+    rows = [r for r in rows if not timing_unsupported(r)]
     h = (f"<p class='meta'>{escape(margin_text(rows, statistic))}</p>"
          "<table><tr><th>#</th><th>Scenario</th><th>fps</th><th>stage</th><th>margin</th><th>SW / P</th><th>병목 task</th><th title='DVFS를 growth마다 다시 고르면 허용되는 SW 증가 (재최적화 가능 범위)'>SW 증가 허용<br><span class=meta>DVFS 재선택</span></th>"
          "<th title='추천 DVFS level을 고정했을 때 흡수 가능한 SW 증가 (robustness)'>SW 증가 허용<br><span class=meta>추천 DVFS 고정</span></th><th>권고</th></tr>")

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from scenario_db.reporting.timing_status import timing_unsupported
+
 # Limits that hold for every engine revision so far (kept until the in-house model removes them).
 STANDING_LIMITS = (
     "Compression은 BW만 감소 (encoder/decoder 전력 · 화질 영향 미반영). catalog에 없는 ratio는 assumed.",
@@ -151,6 +153,10 @@ def calibration_confidence(cal: list[dict[str, Any]], *, input_reasons: list[str
 
 def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
     s = snap["spec_summary"]
+    unsupported = {(r.get("scenario_id"), r["variant_id"]) for r in snap.get("scenarios") or [] if timing_unsupported(r)}
+    unsupported_n = len(s.get("not_applicable") or unsupported)
+    failed = [f for f in s["failed"] if not timing_unsupported(f) and (f.get("scenario_id"), f["variant_id"]) not in unsupported]
+    fail_n = len(failed) if unsupported_n else s["spec_fail"]
     risks: list[dict[str, str]] = []
     errors = s.get("errors") or []
     if errors:
@@ -158,19 +164,19 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
         risks.append({"title": f"계산 실패 {len(errors)}/{s.get('requested', s['explored'] + len(errors))} — 부분 평가",
                       "detail": f"{', '.join(str(e.get('variant_id')) for e in errors[:5])}{' …' if len(errors) > 5 else ''} "
                                 f"({', '.join(cats)}) — 결론은 평가 완료 scenario만 대상"})
-    if s["spec_fail"]:
-        names = [f["variant_id"] for f in s["failed"]]
+    if fail_n:
+        names = [f["variant_id"] for f in failed]
         first = next(((f.get("explained") or [{"text": r} for r in f["reasons"]])[0]["text"]
-                      for f in s["failed"] if f.get("explained") or f["reasons"]), "")
-        risks.append({"title": f"spec 미달 {s['spec_fail']}/{s['explored']}",
+                      for f in failed if f.get("explained") or f["reasons"]), "")
+        risks.append({"title": f"spec 미달 {fail_n}/{s['explored']}",
                       "detail": f"{', '.join(names[:5])}{' …' if len(names) > 5 else ''} — {first}"})
     # SW-01: every spec-ok scenario, not only the Top-5 table
     low = ([{"variant_id": r["variant_id"], "margin_pct": r["sw_margin_pct"], "stage": r.get("sw_stage"), "bottleneck": r.get("sw_bottleneck"),
              "tolerance": (r.get("sw") or {}).get("growth_tolerance"), "tested": (r.get("sw") or {}).get("growth_tested_max")}
-            for r in sorted((r for r in snap.get("scenarios") or [] if r.get("spec_ok") and r.get("sw_margin_pct") is not None
+            for r in sorted((r for r in snap.get("scenarios") or [] if not timing_unsupported(r) and r.get("spec_ok") and r.get("sw_margin_pct") is not None
                              and r["sw_margin_pct"] < LOW_MARGIN_PCT), key=lambda r: r["sw_margin_pct"])]
            or [m | {"tolerance": m.get("growth_tolerance")} for m in snap.get("sw_margin_top5") or []
-               if m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT])
+               if not timing_unsupported(m) and m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT])
     if low:
         m0 = low[0]
         risks.append({"title": f"SW timing margin < {LOW_MARGIN_PCT:.0f}% · {len(low)}건",
@@ -195,7 +201,7 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
                         "target": f"{_s(t[0])}{f' 외 {len(t) - 1}' if len(t) > 1 else ''}" if t else "—", "targets": t,
                         "delta_mw": a["delta_mw"], "delta_pct": None, "basis": a["basis"], "check": a["check"], "iq": a["iq"]})
     by_code: dict[str, list[tuple[str, dict[str, str]]]] = {}
-    for f in s["failed"]:
+    for f in failed:
         for e in f.get("explained") or []:
             if e["code"] != "interval":  # intervals follow from the stage overrun
                 by_code.setdefault(e["code"], []).append((f["variant_id"], e))
@@ -207,9 +213,9 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
                         "target": f"{_s(names[0])}{f' 외 {len(names) - 1}' if len(names) > 1 else ''}", "targets": names,
                         "delta_mw": None, "delta_pct": None, "basis": f"spec 미달 · {items[0][1]['text']}",
                         "check": "batch 모델 + 실측" if code == "sw_budget" else "IP 처리량 · DVFS table 확인", "iq": False})
-    if s["spec_fail"] and not by_code:
+    if fail_n and not by_code:
         actions.append({"tier": 0, "tier_label": "fps 미달", "action": "NRT batch · SW 병렬화 또는 HW 예산 재배분",
-                        "target": f"spec 미달 {s['spec_fail']}건", "targets": [], "delta_mw": None,
+                        "target": f"spec 미달 {fail_n}건", "targets": [], "delta_mw": None,
                         "delta_pct": None, "basis": "timing budget", "check": "batch 모델 + 실측", "iq": False})
     actions.sort(key=lambda a: a["tier"])
     ok, n = s["spec_ok"], s["explored"]
@@ -219,7 +225,8 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
               "등록 예측" if sources.get("registered") else "탐색 추천" if sources.get("recommended") else "예측")
     prefix = (f"[부분 평가] 요청 {s.get('requested', n + len(errors))}개 중 계산 실패 {len(errors)}개 · " if errors else "")
     headline = (prefix + f"탐색 {n}개 중 {ok}개 spec 만족" + (f", {source} {rng[0]:,.0f}–{rng[1]:,.0f} mW" if rng else "")
-                + (f". 미달 {n - ok}개는 조치 필요" if n - ok else (". 평가 완료분 미달 없음" if errors else ". 미달 없음")))
+                + (f", 판정 미지원 {unsupported_n}건" if unsupported_n else "")
+                + (f". 미달 {fail_n}개는 조치 필요" if fail_n else (". 평가 완료분 미달 없음" if errors else ". 미달 없음")))
     return {"headline": headline, "risks": risks[:3], "actions": actions[:10], "confidence": _confidence(snap)}
 
 

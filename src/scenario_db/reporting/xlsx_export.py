@@ -13,7 +13,7 @@ from typing import Any
 from xml.sax.saxutils import escape, quoteattr
 
 from scenario_db.reporting.clock_section import clock_sheet
-from scenario_db.reporting.timing_status import timing_label
+from scenario_db.reporting.timing_status import timing_label, timing_unsupported
 
 Row = list[Any]
 Sheet = tuple[str, Row, list[Row]]  # name, header, rows
@@ -176,7 +176,7 @@ def report_sheets(snap: dict[str, Any], meta: dict[str, Any] | None = None) -> l
         for x in p["singles"]:
             lat = x.get("delta_latency_ms") or {}
             po_rows.append([p["variant_id"], p["fps"], _r(p.get("base_total_mw")), x["label"], x.get("kind"), _r(x["delta_mw"]), _r(x["delta_pct"], 2),
-                            lat.get("preview_ms"), lat.get("video_ms"), x.get("iq_eval"), x["spec_ok"]])
+                            lat.get("preview_ms"), lat.get("video_ms"), x.get("iq_eval"), "판정 미지원" if timing_unsupported(x) else x["spec_ok"]])
     sheets.append(("Power option", ["variant", "fps", "기준 mW", "option", "종류", "ΔmW", "Δ%", "Δ preview latency ms", "Δ video latency ms", "IQ", "spec"], po_rows))
     sheets.append(("IP clock", ["scenario", "variant", "node", "stage", "DVFS group", "required MHz", "set MHz", "level", "mV", "headroom %"],
                    [[x["scenario_id"], x["variant_id"], x["node"], x["stage"], x["dvfs_group"], _r(x.get("required_mhz")), x.get("set_mhz"), x.get("level"),

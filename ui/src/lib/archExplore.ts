@@ -149,6 +149,16 @@ export interface DesignPoint {
 }
 
 /** Every listable case of the variant (design points at the resolved DVFS + listed cases), split by IQ cost. */
+export function variantSpecState(v: VariantResult): 'ok' | 'fail' | 'not_applicable' {
+  return v.baseline.verdict === 'not_applicable' ? 'not_applicable' : v.spec_ok ? 'ok' : 'fail'
+}
+
+export function variantSpecCounts(variants: VariantResult[]) {
+  const counts = { ok: 0, fail: 0, not_applicable: 0 }
+  for (const variant of variants) counts[variantSpecState(variant)]++
+  return counts
+}
+
 export function caseGroups(v: VariantResult, withRaise: boolean): { keep: ExpCase[]; trade: ExpCase[] } {
   const b = v.baseline
   const fromPoint = (p: DesignPoint): ExpCase | null => (p.key ? {
@@ -188,6 +198,7 @@ export interface OptionItem {
 }
 export interface OptionDimension { id: string; kind: 'knob' | 'ip_mode'; label: string; current: string; node?: string; ip_ref?: string; items: OptionItem[] }
 export interface OptionResult {
+  verdict?: string
   key: string; items: string[]; labels: string[]; kinds: string[]; iq_eval: string; spec_ok: boolean; spec_reasons: string[]
   total_mw: number | null; delta_mw: number | null; delta_pct: number | null; delta_bw_mbs: number | null
   raw_delta_mw: number; raw_delta_pct: number | null
