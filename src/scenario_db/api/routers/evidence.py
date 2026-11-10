@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.exc import NoResultFound
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from scenario_db.api.deps import get_db
 from scenario_db.api.pagination import apply_sort, validate_sort_column
 from scenario_db.api.schemas.common import PagedResponse
-from scenario_db.api.schemas.evidence import EvidenceResponse
+from scenario_db.api.schemas.evidence import (
+    EVIDENCE_HEAVY_FIELDS,
+    EvidenceResponse,
+    EvidenceSummaryResponse,
+)
 from scenario_db.comparison.evidence import compare_prediction_measurement
 from scenario_db.db.models.evidence import Evidence
 
@@ -44,7 +51,24 @@ def evidence_summary(
     return result
 
 
-@router.get("/evidence", response_model=PagedResponse[EvidenceResponse])
+def _summary_query(query):
+    """Only SQL inspects deferred JSONB values; ORM access raises on lazy load."""
+    metadata = []
+    for name in EVIDENCE_HEAVY_FIELDS:
+        column = getattr(Evidence, name)
+        metadata.extend((name, func.jsonb_build_object(
+            "present", column.is_not(None) & (func.jsonb_typeof(column) != "null"),
+            "bytes", func.coalesce(func.pg_column_size(column), 0),
+        )))
+    return query.options(*(
+        defer(getattr(Evidence, name), raiseload=True) for name in EVIDENCE_HEAVY_FIELDS
+    )).add_columns(func.jsonb_build_object(*metadata).label("heavy"))
+
+
+@router.get(
+    "/evidence",
+    response_model=PagedResponse[EvidenceSummaryResponse] | PagedResponse[EvidenceResponse],
+)
 def list_evidence(
     scenario_ref: str | None = Query(None),
     variant_ref: str | None = Query(None),
@@ -57,6 +81,7 @@ def list_evidence(
     offset: int = Query(0, ge=0),
     sort_by: str | None = Query(None),
     sort_dir: str = Query("asc"),
+    view: Literal["full", "summary"] = Query("full"),
     db: Session = Depends(get_db),
 ):
     """Evidence 목록 조회. 다중 필터 지원."""
@@ -77,6 +102,18 @@ def list_evidence(
     if feasibility is not None:
         q = q.filter(Evidence.overall_feasibility == feasibility)
     q = apply_sort(q, Evidence, sort_by, sort_dir)
+    if view == "summary":
+        total = q.with_entities(func.count(Evidence.id)).order_by(None).scalar()
+        rows = _summary_query(q).offset(offset).limit(limit).all()
+        items = [
+            EvidenceSummaryResponse.model_validate({
+                **{name: getattr(row, name) for name in EvidenceSummaryResponse.model_fields
+                   if name != "heavy"},
+                "heavy": heavy,
+            })
+            for row, heavy in rows
+        ]
+        return PagedResponse[EvidenceSummaryResponse].from_items(items, total, limit, offset)
     return PagedResponse.from_query(q, limit=limit, offset=offset)
 
 

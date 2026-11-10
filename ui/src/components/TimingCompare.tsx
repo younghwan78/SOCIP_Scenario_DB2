@@ -1,6 +1,6 @@
 // Pipeline Timing "예측 ↔ 실측" view.
 import { useMemo, useState } from 'react'
-import type { Evidence, ViewResponse } from '../lib/api'
+import { useEvidenceDetail, type EvidenceSummary, type ViewResponse } from '../lib/api'
 import { buildTimeline } from '../lib/timeline'
 import { evidenceSource } from '../lib/conditions'
 import { compareTimelines, errTone, factorJson, type IpDelta } from '../lib/timingCompare'
@@ -41,15 +41,16 @@ function Overlay({ ips, period }: { ips: IpDelta[]; period: number | null }) {
 }
 
 export function TimingCompare({ traces, view, fps, laneOfPid, onPickPid }: {
-  traces: Evidence[]; view?: ViewResponse; fps: number | null; laneOfPid: (pid: string) => string | undefined; onPickPid?: (pid: string) => void
+  traces: EvidenceSummary[]; view?: ViewResponse; fps: number | null; laneOfPid: (pid: string) => string | undefined; onPickPid?: (pid: string) => void
 }) {
   const preds = traces.filter((t) => evidenceSource(t) === 'calculated')
   const meas = traces.filter((t) => evidenceSource(t) !== 'calculated')
   const [aId, setA] = useState(''), [bId, setB] = useState('')
   const A = preds.find((t) => t.id === aId) ?? preds[0], B = meas.find((t) => t.id === bId) ?? meas[0]
+  const aQ = useEvidenceDetail(A && B ? A.id : undefined), bQ = useEvidenceDetail(A && B ? B.id : undefined)
   const [copied, setCopied] = useState(false)
-  const cmp = useMemo(() => (A && B ? compareTimelines(buildTimeline(A.timeline_events ?? [], { maxFrames: 16 }), buildTimeline(B.timeline_events ?? [], { maxFrames: 16 }), view, fps, laneOfPid) : null),
-    [A, B, view, fps, laneOfPid])
+  const cmp = useMemo(() => (aQ.data && bQ.data ? compareTimelines(buildTimeline(aQ.data.timeline_events ?? [], { maxFrames: 16 }), buildTimeline(bQ.data.timeline_events ?? [], { maxFrames: 16 }), view, fps, laneOfPid) : null),
+    [aQ.data, bQ.data, view, fps, laneOfPid])
   if (!A || !B) return <div className="empty">비교하려면 예측(simulation) trace와 실측(또는 합성) trace가 모두 필요합니다 — 예측 {preds.length}건 · 실측 {meas.length}건.</div>
   const ranked = [...(cmp?.ips ?? [])].filter((d) => d.dDurPct !== null).sort((p, q) => Math.abs(q.dDurPct!) - Math.abs(p.dDurPct!))
   return (
@@ -64,6 +65,8 @@ export function TimingCompare({ traces, view, fps, laneOfPid, onPickPid }: {
         <button className="btn tb-mini" onClick={() => cmp && navigator.clipboard?.writeText(factorJson(cmp, { predicted: A.id, measured: B.id })).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })}
           title="IP별 실측/예측 길이 비 — simulation profile 보정 후보">{copied ? '복사됨' : '보정계수 JSON 복사'}</button>
       </div>
+      {(aQ.error || bQ.error) && <div className="err">{aQ.error || bQ.error}</div>}
+      {(aQ.loading || bQ.loading) && <div className="empty">Evidence 불러오는 중…</div>}
       {cmp && <>
         <h4 className="cad-title">출력 stream <span className="faint">— 예측 → 실측 (Δ)</span></h4>
         <table className="tb-mini-table" style={{ width: '100%' }} aria-label="stream 비교">

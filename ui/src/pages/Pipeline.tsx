@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
-import { api, type Evidence } from '../lib/api'
+import { api, useEvidenceDetail, type Evidence } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { bufferPills, buildGraph, ipPills, layoutGraph, memoryText, pipelineIdOf, type Layout } from '../lib/graph'
 import { libraryApi } from '../lib/library'
@@ -117,7 +117,9 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   // full-stack traces (App … HW layers) belong to the Behavior page, not the Pipeline timing
   const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3 && !isFullStack(e.timeline_events)).sort((a, b) => rankTrace(b) - rankTrace(a)),
     [evidenceQ.data])
-  const trace: Evidence | undefined = traces.find((t) => t.id === traceId) ?? traces[0]
+  const selectedTrace = traces.find((t) => t.id === traceId) ?? traces[0]
+  const detailQ = useEvidenceDetail(tview === 'compare' ? undefined : selectedTrace?.id)
+  const trace = tview === 'compare' ? selectedTrace : detailQ.data
   const canCompare = traces.some((t) => evidenceSource(t) === 'calculated') && traces.some((t) => evidenceSource(t) !== 'calculated')
   const timeline = useMemo(() => (trace ? buildTimeline(trace.timeline_events ?? [], { maxFrames: 16 }) : null), [trace])
   const timing = useMemo(() => (timeline ? stageTimings(timeline) : undefined), [timeline])
@@ -332,8 +334,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
               <button className={tview === 'compare' ? 'on' : ''} onClick={() => setTview('compare')} disabled={!canCompare}
                 title={canCompare ? '예측(simulation) trace와 실측 trace를 IP·출력 stream별로 비교' : '예측 trace와 실측 trace가 모두 있어야 합니다'}>예측 ↔ 실측</button>
             </div>
-            {trace && tview !== 'compare' && <span className={`badge src-${evidenceSource(trace)}`}>{evidenceSource(trace)}</span>}
-            {traces.length > 0 && tview !== 'compare' && <select value={trace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); setSlice(null) }} aria-label="timing evidence" style={{ minWidth: 0, flex: '0 1 300px' }}>
+            {selectedTrace && tview !== 'compare' && <span className={`badge src-${evidenceSource(selectedTrace)}`}>{evidenceSource(selectedTrace)}</span>}
+            {traces.length > 0 && tview !== 'compare' && <select value={selectedTrace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); setSlice(null) }} aria-label="timing evidence" style={{ minWidth: 0, flex: '0 1 300px' }}>
               {traces.map((t) => <option key={t.id} value={t.id}>{`${evidenceSource(t)} · ${new Set((t.timeline_events ?? []).map((x) => x.frame_index)).size}f · ${t.id}`}</option>)}
             </select>}
             <span className="grow" />
@@ -354,9 +356,9 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             </span>
             </>} />}
           <div className="pane-body">
-            {evidenceQ.error && <div className="err">{evidenceQ.error}</div>}
-            {evidenceQ.loading && <div className="empty">Evidence 불러오는 중…</div>}
-            {!evidenceQ.loading && !timeline && <div className="empty">이 variant에는 timeline event가 있는 evidence가 없습니다. Timing Budget에서 조건을 정하고 “Sim evidence 저장”하거나 Camera Profiling에서 trace를 import하세요.</div>}
+            {(evidenceQ.error || detailQ.error) && <div className="err">{evidenceQ.error || detailQ.error}</div>}
+            {(evidenceQ.loading || (selectedTrace && tview !== 'compare' && detailQ.loading)) && <div className="empty">Evidence 불러오는 중…</div>}
+            {!evidenceQ.loading && !selectedTrace && <div className="empty">이 variant에는 timeline event가 있는 evidence가 없습니다. Timing Budget에서 조건을 정하고 “Sim evidence 저장”하거나 Camera Profiling에서 trace를 import하세요.</div>}
             {timeline && tview === 'trace' && <TimelineView timeline={timeline} selectedSlice={slice?.id ?? null} colorBy={colorBy}
               highlightNode={slice ? null : highlightPid} showFlows={showFlows} onSelect={selectSlice} />}
             {timeline && tview === 'compare' && canCompare && <div style={{ overflow: 'auto', padding: 12 }}><TimingCompare traces={traces} view={view} fps={fps} laneOfPid={laneOfPid}

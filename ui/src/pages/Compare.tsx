@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
 import { CandidateReview } from '../components/CandidateReview'
-import { api, type Dict, type Evidence, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
+import { api, type Dict, type EvidenceSummary, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { MISSING, evidenceSource, valueText, varyingKeys } from '../lib/conditions'
 import { formatItems, type CompareItem } from '../lib/projects'
@@ -71,12 +71,12 @@ export function transfers(view: ViewResponse | undefined): Map<string, string> {
   return out
 }
 
-function pickEvidence(items: Evidence[]): Evidence | undefined {
+function pickEvidence(items: EvidenceSummary[]): EvidenceSummary | undefined {
   const rank = { measured: 0, calculated: 1, synthetic: 2, assumed: 3 }
   return [...items].filter((e) => e.kpi && Object.keys(e.kpi).length).sort((a, b) => rank[evidenceSource(a)] - rank[evidenceSource(b)])[0]
 }
-function pickTrace(items: Evidence[]): Evidence | undefined {
-  const score = (e: Evidence) => { const t = e.timeline_events ?? []; return (t.some((x) => /^(panel|dpu|mfc)/.test(String(x.node_id ?? ''))) ? 1000 : 0) + new Set(t.map((x) => x.frame_index)).size }
+function pickTrace(items: EvidenceSummary[]): EvidenceSummary | undefined {
+  const score = (e: EvidenceSummary) => { const t = e.timeline_events ?? []; return (t.some((x) => /^(panel|dpu|mfc)/.test(String(x.node_id ?? ''))) ? 1000 : 0) + new Set(t.map((x) => x.frame_index)).size }
   return items.filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => score(b) - score(a))[0]
 }
 
@@ -102,6 +102,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const detailsQ = useAsync(() => Promise.all(cItems.map((it) => api.variant(it.scenario, it.variant))), [key])
   const [evTick, setEvTick] = useState(0)
   const evQ = useAsync(() => Promise.all(cItems.map((it) => api.evidenceList(it.scenario, it.variant, catOf(it.scenario)?.project_id).then((r) => r.items))), [key, ctx.allCatalog.length, evTick])
+  const traceIds = (evQ.data ?? []).map((items) => pickTrace(items)?.id)
+  const traceQ = useAsync(() => Promise.all(traceIds.map((id) => id ? api.evidence(id) : Promise.resolve(undefined))), [key, JSON.stringify(traceIds)])
   const [onlyDiff, setOnlyDiff] = usePref('compare.onlyDiff', true)
   const [orient, setOrient] = usePref<'items' | 'variants'>('compare.orient', 'items')
   const [show, setShow] = usePref<'both' | 'table' | 'plot'>('compare.show', 'both')
@@ -132,13 +134,12 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const models: (PipelineModel | null)[] = useMemo(() => (viewsQ.data ?? []).map((v, i) => (v ? buildModel(v, scnDef(cItems[i].scenario), detailsQ.data?.[i], undefined, { compCatalog: compOf(cItems[i].scenario) }) : null)), [viewsQ.data, scnQ.data, detailsQ.data, socQ.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const ipMaps = (viewsQ.data ?? []).map((v) => nodeIps(v))
   const sizeMaps = (detailsQ.data ?? []).map((d) => nodeSizes(d))
-  const cadences = useMemo(() => (evQ.data ?? []).map((items, i) => {
-    const t = pickTrace(items)
+  const cadences = useMemo(() => (traceQ.data ?? []).map((t, i) => {
     if (!t) return null
     const tl = buildTimeline(t.timeline_events ?? [], { maxFrames: 64 })
     const fps = models[i]?.fps ?? null
     return { trace: t, fps, ...analyse(tl, viewsQ.data?.[i], fps) }
-  }), [evQ.data, models, viewsQ.data])
+  }), [traceQ.data, models, viewsQ.data])
   /** KPI source per item: evidence KPI, else an on-demand (not persisted) simulation result. */
   const kpiOf = (i: number): { kpi: Dict | null | undefined; source: string | null } => {
     if (kpiMode === 'pred') {
@@ -426,7 +427,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       {variantsQ.error && <div className="err">{variantsQ.error}</div>}
       {missing.length > 0 && <div className="err">DB에 없는 항목: {missing.join(', ')}</div>}
       {analysis}
-      {[viewsQ.error, detailsQ.error, evQ.error].filter(Boolean).map((error, i) => <div className="err" key={i}>{error}</div>)}
+      {[viewsQ.error, detailsQ.error, evQ.error, traceQ.error].filter(Boolean).map((error, i) => <div className="err" key={i}>{error}</div>)}
+      {(evQ.loading || traceQ.loading) && <div className="empty">Evidence 불러오는 중…</div>}
       {show !== 'table' && plots}
       {show !== 'plot' && table}
       </>}
