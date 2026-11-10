@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card } from './TimingCharts'
 import { fmt } from '../lib/timingBudget'
+import { TimingVerdictBadge } from './TimingVerdictBadge'
 import { describeChange, evidenceLabel, type ChangeKindMeta, type WhatIfSettings, type WhatIfChange, type WhatIfCoverage, type WhatIfResult, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
 import { experimentHref, updateExperimentContext, useExperimentContext, type ExperimentCandidate } from '../lib/experimentContext'
 import './WhatIfWorkbench.css'
@@ -66,7 +67,7 @@ export function CandidateBench({ scope, result, targets, settings, dirty, onLoad
       const compatible = candidate.baseline_hash === (targets?.baseline_hash ?? result?.baseline_hash ?? context?.baseline_hash) && (!candidate.analysis_hash || !targets?.analysis_hash || candidate.analysis_hash === targets.analysis_hash)
       return <tr key={candidate.id}><th>{candidate.title}<small>{candidate.changes.map(describeChange).join(' · ')}</small><small>{candidate.comparison === 'fixed_opp' ? '기준 OPP 고정' : '변경 후 OPP 재선택'}</small></th>
         <td>{compatible ? fmt(candidate.metrics.modeled_power_mw - candidate.baseline_metrics.modeled_power_mw, 2) : '기준 다름'}</td><td>{fmt(candidate.metrics.modeled_power_mw, 2)}</td><td>{fmt(candidate.metrics.bw_mbs, 0)}</td><td>{fmt(candidate.metrics.latency_ms, 2)}</td><td>{fmt(candidate.metrics.fps, 0)}</td>
-        <td>{candidate.metrics.feasible ? 'Timing 충족' : 'Timing 미달'}<small>{candidate.coverage.complete ? '모델 범위 충족' : '부분 모델'} · {candidate.iq_required.length ? 'IQ 미검증' : 'IQ 별도 확인'}{!compatible ? ' · 현재 기준으로 재계산 필요' : ''}</small></td>
+        <td>{candidate.metrics.verdict === 'not_applicable' ? <TimingVerdictBadge status={candidate.metrics.verdict} /> : candidate.metrics.feasible ? 'Timing 충족' : 'Timing 미달'}<small>{candidate.coverage.complete ? '모델 범위 충족' : '부분 모델'} · {candidate.iq_required.length ? 'IQ 미검증' : 'IQ 별도 확인'}{!compatible ? ' · 현재 기준으로 재계산 필요' : ''}</small></td>
         <td><button className="btn tb-mini" onClick={() => { updateExperimentContext(scope, { active_candidate_id: candidate.id }); onLoad(candidate) }}>조건 불러오기</button>{candidate.saved_experiment_id && <a href={experimentHref('whatif', scope, candidate.saved_experiment_id)}>저장 기록</a>}
           <button className="btn tb-mini" aria-label={`${candidate.title} 비교에서 제거`} onClick={() => updateExperimentContext(scope, { candidates: candidates.filter((c) => c.id !== candidate.id), active_candidate_id: context?.active_candidate_id === candidate.id ? undefined : context?.active_candidate_id })}>제거</button></td></tr>
     })}</tbody></table></div>}

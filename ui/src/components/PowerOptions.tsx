@@ -1,6 +1,7 @@
 // Power-saving options (IQ 평가 대상): knob values / substitute IP modes explored on top of a variant.
 import { useState } from 'react'
 import { fmt } from '../lib/timingBudget'
+import { TimingVerdictBadge } from './TimingVerdictBadge'
 import {
   CAT_COLOR, REVIEW, REVIEW_ORDER, archApi,
   type BoardRow, type OptionItem, type OptionResult, type ReviewStatus,
@@ -46,7 +47,7 @@ export function OptionResults({ results, best }: { results: OptionResult[]; best
             <td className="mono">{signed(r.delta_bw_mbs, 0)}</td>
             {fixedCol && <td className="mono">{r.effect_given_fixed == null ? <span className="faint">—</span> : signed(r.effect_given_fixed)}</td>}
             <td><Causes by={r.attribution.by_category} /></td>
-            <td title={r.spec_reasons.join('\n')}><span className={`badge ${r.spec_ok ? 'v-ok' : 'v-fail'}`}>{r.spec_ok ? 'OK' : 'Fail'}</span></td>
+            <td title={r.spec_reasons.join('\n')}>{r.verdict === 'not_applicable' ? <TimingVerdictBadge status={r.verdict} /> : <span className={`badge ${r.spec_ok ? 'v-ok' : 'v-fail'}`}>{r.spec_ok ? 'OK' : 'Fail'}</span>}</td>
             <td>{r.review_status ? <ReviewBadge status={r.review_status} /> : <span className="faint" style={{ fontSize: 11 }}>{r.iq_eval === 'required' ? '평가 필요' : '—'}</span>}</td>
           </tr>))}</tbody>
       </table>

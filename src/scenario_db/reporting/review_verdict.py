@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from scenario_db.reporting.timing_status import timing_failed, timing_unsupported
+
 HIGH_FPS = 120.0          # STANDING_LIMITS: NRT batch processing is not modelled at or above this rate
 BIAS_MIN_N = 5            # a total-power bias is applied only when it is systematic and backed by enough captures
 LOW_MARGIN_PCT = 10.0
@@ -65,7 +67,7 @@ def _pct(x: float | None, ref: float | None) -> float | None:
     return round(100.0 * (float(x) - float(ref)) / float(ref), 2)
 
 
-def _keymap(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+def _keymap(rows: list[dict[str, Any]]) -> dict[tuple[str | None, str], dict[str, Any]]:
     return {(r.get("scenario_id"), r["variant_id"]): r for r in rows if r.get("variant_id")}
 
 
@@ -261,7 +263,9 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
                             "power": None, "verdict": v, "sw_margin_pct": None, "iq": None,
                             "overall": {"cls": "fail", "label": "미커버"}})
             continue
-        if r["spec_ok"]:
+        if timing_unsupported(r):
+            fps = {"state": "not_applicable", "label": "판정 미지원", "cls": "mute"}
+        elif r["spec_ok"]:
             n = (r.get("sw") or {}).get("in_flight")
             # engine ≥ 15 records the margin basis (pipelined margin = per thread, frames in flight from the chain);
             # older rows only have the stage chain margin, negative when more than one frame is in flight
@@ -294,7 +298,9 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
             if not v.get("registered"):
                 cls.append("org")
         worst = min(cls, key=lambda x: _RANK[x])
-        if v is not None and v.get("flip"):
+        if fps["state"] == "not_applicable":
+            label = "판정 미지원"
+        elif v is not None and v.get("flip"):
             label = "불일치 · " + STATE_LABEL[v["state"]]
         elif fps["state"] == "fail":
             label = "fps 미달" if fps["cls"] == "fail" else "검증 필요"
@@ -344,7 +350,7 @@ def lever_actions(snap: dict[str, Any], limit_per_tier: int = 3) -> list[dict[st
     # ③ SW: the common SW bottleneck of low-margin scenarios + recorded CPU placement gains
     low = [{"variant_id": r["variant_id"], "bottleneck": r.get("sw_bottleneck")} for r in snap.get("scenarios") or []
            if r.get("spec_ok") and r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < LOW_MARGIN_PCT] \
-        or [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT]
+        or [m for m in snap.get("sw_margin_top5") or [] if not timing_unsupported(m) and m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT]
     tasks: dict[str, list[str]] = {}
     for r in low:
         tasks.setdefault(str(r.get("bottleneck") or "—"), []).append(r["variant_id"])
@@ -402,7 +408,7 @@ def drivers(snap: dict[str, Any]) -> list[dict[str, Any]]:
         nb = max((b.get("n") or 0) for b in bias.values())
         out.append({"key": "model_bias", "label": "예측 모델 체계 오차", "count": nb, "total": n, "note": " · ".join(common),
                     "check": "Power fit 보정 · rail별 오차 확인 후 전과제 판정"})
-    hi = [r for r in rows if float(r.get("fps") or 0) >= HIGH_FPS]
+    hi = [r for r in rows if not timing_unsupported(r) and float(r.get("fps") or 0) >= HIGH_FPS]
     if hi:
         out.append({"key": "high_fps", "label": "120 fps 이상 batch 미모델", "count": len(hi), "total": n,
                     "note": f"미달 {sum(1 for r in hi if not r.get('spec_ok'))} · 미등록 {sum(1 for r in hi if not r.get('prediction_id'))}",
@@ -418,13 +424,18 @@ def drivers(snap: dict[str, Any]) -> list[dict[str, Any]]:
 def messages(snap: dict[str, Any], board: list[dict[str, Any]], verdicts: list[dict[str, Any]]) -> list[str]:
     s = snap.get("spec_summary") or {}
     out = []
-    fails = [r for r in snap.get("scenarios") or [] if not r.get("spec_ok")]
+    unsupported = [r for r in snap.get("scenarios") or [] if timing_unsupported(r)]
+    fails = [r for r in snap.get("scenarios") or [] if not r.get("spec_ok") and not timing_unsupported(r)]
     if fails:
         unv = [r for r in fails if fps_validity(r)[0] != "confirmed"]
         t = f"{s.get('explored', 0)}개 중 {s.get('spec_ok', 0)}개 fps 충족. 미달 {len(fails)}개({', '.join(short(r['variant_id']) for r in fails[:3])})"
         t += (" 모두 모델 한계 · 입력 미확정 — 판정 보류, 모델 · 입력 확인 후 재판정." if len(unv) == len(fails)
               else f" 중 확정 {len(fails) - len(unv)}개는 조치 필요.")
+        if unsupported:
+            t += f" 판정 미지원 {len(unsupported)}건."
         out.append(t)
+    elif unsupported:
+        out.append(f"{s.get('spec_ok', 0)}개 fps 충족 · 판정 미지원 {len(unsupported)}건.")
     else:
         n = s.get('explored', 0)
         out.append(f"평가 완료 {n}개 fps 충족." if n else "fps 평가 완료 결과 없음.")
@@ -520,7 +531,7 @@ def data_quality(snap: dict[str, Any]) -> list[dict[str, Any]]:
         out.append({"key": "missing_condition", "level": "warn", "variants": [r["variant_id"] for r in miss],
                     "text": f"resolution · fps 미기재 {len(miss)}건: {', '.join(short(r['variant_id']) for r in miss[:5])}",
                     "check": "variant design_conditions에 resolution · fps 기입"})
-    nopw = [r for r in rows if not r.get("spec_ok")]
+    nopw = [r for r in rows if timing_failed(r)]
     if nopw:
         out.append({"key": "fail_without_power", "level": "info", "variants": [r["variant_id"] for r in nopw],
                     "text": f"fps 미달 {len(nopw)}건은 power 미산출 — 전력 · 발열 판정 대상에서 빠짐",

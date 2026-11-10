@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from itertools import product
 from math import prod
+from typing import Any
 
 from scenario_db.api.schemas.scenario_whatif import WhatIfPreviewRequest, WhatIfScope, WhatIfSweepRequest
 from scenario_db.api.services import scenario_whatif as engine
@@ -25,6 +26,8 @@ def _eligibility(result, constraints):
     slack = engine._min_slack(report)[1]
     latency = _latency(report)
     reasons = list(report["verdict"].get("reasons") or []) if not metrics["feasible"] else []
+    if (report.get("verdict") or {}).get("status") == "not_applicable":
+        reasons.append(engine.NOT_APPLICABLE_NOTE)
     for key, value, label in (("max_power_mw", metrics["modeled_power_mw"], "모델 전력 상한"),
                               ("max_bw_mbs", metrics["bw_mbs"], "BW 상한"),
                               ("max_latency_ms", latency, "지연 상한")):
@@ -80,7 +83,7 @@ def run_sweep(db, request: WhatIfSweepRequest, *, checkpoint=None, previous=None
             out["cancelled"] = True
             break
         changes = request.changes + list(values)
-        row = {"id": f"case-{index + 1}", "label": " · ".join(
+        row: dict[str, Any] = {"id": f"case-{index + 1}", "label": " · ".join(
             f"{axis.label}={value.option or (f'{value.width}×{value.height}' if value.width else value.level if value.level is not None else value.value)}"
             for axis, value in zip(request.axes, values)),
             "changes": [c.model_dump(mode="json", exclude_none=True) for c in changes]}

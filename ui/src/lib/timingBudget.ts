@@ -1,7 +1,7 @@
 import { currentReadSignal } from './readRequestScope'
 // Stage timing budget: API types + pure helpers used by the Timing Budget pages.
 // Backend: POST /timing-budget/variant, /timing-budget/fleet (src/scenario_db/sim/timing_budget.py).
-import { API_BASE, ApiError, getJson } from './api'
+import { API_BASE, ApiError, getJson, type TimingVerdictStatus } from './api'
 import type { VariantFailure } from '../components/VariantFailures'
 import { fetchAdmitted } from './admission'
 
@@ -121,7 +121,7 @@ export function cpuTileNote(p: PowerSplit): string {
   return `${fmt(p.cpu_busy_ms, 1)} ms/frame · CL${p.cpu_model.cluster} ${p.cpu_model.freq_mhz} MHz ${p.cpu_model.volt_v} V${c?.note ? ` · ${c.note}` : ''}`
 }
 export interface BwSplit { total_mbs: number; hw_mbs: number; sw_mbs: number; hw_by_ip: Record<string, number>; sw_by_task: Record<string, number>; share_pct: { hw: number; sw: number } }
-export interface Verdict { status: 'ok' | 'clock_up' | 'fail'; reasons: string[]; notes?: string[]; nrt_clock_factor: number | null }
+export interface Verdict { status: TimingVerdictStatus; reasons: string[]; notes?: string[]; nrt_clock_factor: number | null }
 export interface WhatIfRow {
   statistic: Statistic; eis: boolean; scale: number; verdict: Verdict
   stages: Record<StageId, { sw_ms: number; budget_ms: number; hw_ms: number; feasible: boolean }>
@@ -334,7 +334,8 @@ export function stageSegments(stage: StageRow): Segment[] {
   return segs
 }
 
-export function verdictChip(v: Verdict['status']): { label: string; cls: string } {
+export function verdictChip(v: string): { label: string; cls: string; explanation?: string } {
+  if (v === 'not_applicable') return { label: 'timing 판정 미지원', cls: 'v-na', explanation: 'RT 단계와 판정할 출력 간격이 없어 timing 판정을 적용하지 않습니다.' }
   if (v === 'ok') return { label: 'OK', cls: 'v-ok' }
   if (v === 'clock_up') return { label: 'Clock ↑', cls: 'v-warn' }
   return { label: 'Fail', cls: 'v-fail' }

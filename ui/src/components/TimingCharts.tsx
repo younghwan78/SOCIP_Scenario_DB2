@@ -587,7 +587,7 @@ export function FleetRank({ rows, onPick, limit, margin = 0.25 }: { rows: FleetR
         <span style={{ width: swW }}>NRT SW / period</span><span style={{ width: valW }}>배율 · level</span>
       </div>
       {data.map(({ r, rule, set, sw }) => {
-        const color = r.verdict.status === 'fail' ? '#7F1D1D' : set > rule * 1.05 ? '#C2410C' : '#2F6F68'
+        const color = r.verdict.status === 'not_applicable' ? '#9CA3AF' : r.verdict.status === 'fail' ? '#7F1D1D' : set > rule * 1.05 ? '#C2410C' : '#2F6F68'
         return (
           <button key={r.variant_id} className="tb-rank-row" onClick={() => onPick(r.variant_id)} title={`${r.variant_id} · ${r.verdict.reasons[0] ?? r.verdict.status}`}>
             <span className="mono" style={{ width: labelW, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.variant_id.replace(/^cam-rec-/, '')}</span>

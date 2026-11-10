@@ -14,6 +14,8 @@ import math
 from html import escape
 from typing import Any
 
+from scenario_db.reporting.timing_status import timing_unsupported
+
 TARGET_MARGIN_PCT = 10.0   # same as risk_rules.LOW_MARGIN_PCT: below this an SW stage is a timing risk
 HIGH_FPS = 120.0           # ≥ this the NRT batch behaviour is not modelled (1 frame = 1 period): a cut there is an upper bound
 _TOL = 0.001               # output interval within ±0.1 % of the period = fps held (the engine default)
@@ -53,6 +55,8 @@ def _stream(r: dict[str, Any], kind: str) -> tuple[float | None, bool | None]:
 def frame_drop(r: dict[str, Any]) -> bool:
     """Frame drop of one report row: the cadence verdict over every output stream (``intervals_ok``); older rows
     without it judge the preview / video intervals, and rows without intervals keep the spec verdict."""
+    if timing_unsupported(r):
+        return False  # no judged cadence is evidence of neither a drop nor a pass
     if r.get("intervals_ok") is not None:
         return not bool(r["intervals_ok"])
     judged = [ok for ok in (_stream(r, "preview")[1], _stream(r, "video")[1]) if ok is not None]
@@ -64,13 +68,14 @@ def output_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
     for r in snap.get("scenarios") or []:
         pf, pok = _stream(r, "preview")
         vf, vok = _stream(r, "video")
-        stages = [s for s in r.get("sw_stages") or [] if s.get("margin_pct") is not None]
+        stages = [s for s in r.get("sw_stages") or [] if s.get("margin_pct") is not None and not timing_unsupported(r)]
         worst = min(stages, key=lambda s: s["margin_pct"], default=None)
         drop = frame_drop(r)
         out.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "fps": r.get("fps"),
                     "preview_fps": pf, "preview_ok": pok, "video_fps": vf, "video_ok": vok, "spec_ok": r.get("spec_ok"),
                     "drop": drop,
-                    "margin_pct": worst["margin_pct"] if worst else r.get("sw_margin_pct"),
+                    **({"verdict": "not_applicable"} if timing_unsupported(r) else {}),
+                    "margin_pct": None if timing_unsupported(r) else worst["margin_pct"] if worst else r.get("sw_margin_pct"),
                     "stage": worst["stage"] if worst else r.get("sw_stage"),
                     "bottleneck": worst["bottleneck"] if worst else r.get("sw_bottleneck"),
                     "reasons": [x.get("text") if isinstance(x, dict) else str(x) for x in (r.get("reasons_explained") or r.get("reasons") or [])][:2]})
@@ -84,7 +89,7 @@ def output_fps_block(snap: dict[str, Any], top: int = 10) -> str:
     if not rows:
         return ""
     drops = [o for o in rows if o["drop"]]
-    other = [o for o in rows if not o["drop"] and not o["spec_ok"]]
+    other = [o for o in rows if not o["drop"] and not o["spec_ok"] and not timing_unsupported(o)]
     near = [o for o in rows if o["spec_ok"] and o["margin_pct"] is not None and o["margin_pct"] < TARGET_MARGIN_PCT]
 
     def cell(fps: float | None, ok: bool | None) -> str:
@@ -98,7 +103,8 @@ def output_fps_block(snap: dict[str, Any], top: int = 10) -> str:
             mcls = "fail" if m is not None and m < 0 else "warn" if m is not None and m < TARGET_MARGIN_PCT else ""
             h += (f"<tr><td>{escape(_short(o['variant_id']))}</td><td class=n>{_f(o['fps'], 0)}</td>"
                   + cell(o["preview_fps"], o["preview_ok"]) + cell(o["video_fps"], o["video_ok"])
-                  + ("<td class=fail>frame drop</td>" if o["drop"] else
+                  + ("<td class=meta>판정 미지원</td>" if timing_unsupported(o) else
+                     "<td class=fail>frame drop</td>" if o["drop"] else
                      "<td class=ok>충족</td>" if o["spec_ok"] else "<td class=warn>출력 fps 충족 · 기타 spec 미달</td>")
                   + f"<td class='n {mcls}'>{_f(m, 0) + '%' if m is not None else '—'}"
                   + (f" <span class=meta>{escape(str(o['stage']).upper())}</span>" if o.get("stage") else "") + "</td>"
@@ -120,6 +126,8 @@ def output_fps_block(snap: dict[str, Any], top: int = 10) -> str:
 def buffer_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for r in snap.get("scenarios") or []:
+        if timing_unsupported(r):
+            continue
         lat, fb, p = r.get("latency") or {}, r.get("frame_buffer"), _period(r)
         # frames from the unrounded latency (the stored frame counts are rounded to 0.01 and hide a boundary crossing)
         ms = max(float(lat.get("preview_ms") or 0), float(lat.get("video_ms") or 0))
@@ -200,6 +208,8 @@ def sw_requests(snap: dict[str, Any]) -> list[dict[str, Any]]:
     budget = float((((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget")) or 1.0)
     tasks: dict[str, dict[str, Any]] = {}
     for r in snap.get("scenarios") or []:
+        if timing_unsupported(r):
+            continue
         p = r.get("period_ms")
         if not p:
             continue

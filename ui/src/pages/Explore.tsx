@@ -7,7 +7,7 @@ import { useRegistrationGuard } from '../lib/registration'
 import { RegistrationBasis } from '../components/RegistrationBasis'
 import { fmt, type Statistic } from '../lib/timingBudget'
 import {
-  DEFAULT_RUN, IQ_COLOR, METRIC_COLOR, archApi, caseGroups, bestOption, caseCount, caseDelta, coverageOf, levels, promoteTargets, runBody, short, variantKey,
+  DEFAULT_RUN, IQ_COLOR, METRIC_COLOR, archApi, caseGroups, bestOption, caseCount, caseDelta, coverageOf, levels, promoteTargets, runBody, short, variantKey, variantSpecCounts, variantSpecState,
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
@@ -25,6 +25,7 @@ import { VariantFailures } from '../components/VariantFailures'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
 import { notify } from '../lib/status'
+import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
@@ -198,11 +199,12 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
 // ---------------------------------------------------------------- run detail
 function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const [metric, setMetric] = useState<DistKey>('total_mw')
-  const [filter, setFilter] = useState<'all' | 'ok' | 'fail'>('ok')
+  const [filter, setFilter] = useState<'all' | 'ok' | 'fail' | 'not_applicable'>('ok')
   const [order, setOrder] = useState<'power' | 'name'>('power')
   const [busy, setBusy] = useState(false)
   const sel = run.variants.find((v) => variantKey(v) === ctx.params.v)
-  const rows = run.variants.filter((v) => filter === 'all' || (filter === 'ok') === v.spec_ok)
+  const counts = variantSpecCounts(run.variants)
+  const rows = run.variants.filter((v) => filter === 'all' || variantSpecState(v) === filter)
   const ranked = order === 'name' ? rows : [...rows].sort((a, b) => (a.recommended?.[metric] ?? a.distribution[metric]?.median ?? 0) - (b.recommended?.[metric] ?? b.distribution[metric]?.median ?? 0))
   const s = run.summary
   const sample = (run.dvfs_table_ref ?? '').includes('sample')
@@ -228,7 +230,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   }
   const kpis = [
     ['탐색 variant', `${s.variants}`, s.errors ? `실패 ${s.errors}` : run.scenario_type],
-    ['spec 만족', `${s.spec_ok} / ${s.variants}`, `미달 ${s.variants - s.spec_ok}`],
+    ['spec 만족', `${s.spec_ok} / ${s.variants}`, `미달 ${counts.fail}${counts.not_applicable ? ` · 판정 미지원 ${counts.not_applicable}건` : ''}`],
     ['조합 수', s.cases.toLocaleString(), `eligible ${s.eligible_cases.toLocaleString()}`],
     ['추천 검증', `${s.verified} / ${s.spec_ok}`, '재시뮬레이션 power·BW 일치 + 제약 재적용'],
     ['추천 power', s.recommended_power_mw ? `${fmt(s.recommended_power_mw[0], 0)}–${fmt(s.recommended_power_mw[1], 0)}` : '—', 'mW (scenario별 최저)'],
@@ -241,7 +243,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
     { key: 'spec', label: 'spec', width: 96, sort: (r) => (r.spec_ok ? 1 : 0), title: (r) => [...r.spec_reasons, ...(coverageOf(r) === 'partial' ? [`전력 미모델 IP: ${(r.coverage?.zero_power_ips ?? []).join(', ')} — power는 모델된 IP 합계`] : [])].join('\n'),
-      render: (r) => <span style={{ display: 'inline-flex', gap: 4 }}><span className={`badge ${r.spec_ok ? 'v-ok' : 'v-fail'}`}>{r.spec_ok ? 'OK' : 'Fail'}</span>
+      render: (r) => <span style={{ display: 'inline-flex', gap: 4 }}><TimingVerdictBadge status={r.baseline.verdict === 'not_applicable' ? 'not_applicable' : r.spec_ok ? 'ok' : 'fail'} />
         {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}</span> },
     { key: 'tot', label: '추천 mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.recommended?.total_mw ?? -1, render: (r) => r.recommended ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.recommended} width={70} /><b className="mono">{fmt(r.recommended.total_mw, 1)}</b></span> : '—' },
     { key: 'cpu', label: 'CPU', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.cpu_mw ?? -1, render: (r) => fmt(r.recommended?.cpu_mw, 0) },
@@ -284,7 +286,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     </div>
     {foreign && <div className="err" role="status">이 run은 다른 과제({run.project_ref ?? '—'})의 결과입니다 — 비교 보기 전용이며, 현재 과제({ctx.project})의 예측으로 등록할 수 없습니다.</div>}
     {confirm && !foreign && <section className="panel" style={{ padding: 12, display: 'grid', gap: 8 }} aria-label="등록 대상 확인">
-      <div><b>Project {run.project_ref}</b> · {targets.length}개 variant의 current 예측을 최저 power 조합으로 교체합니다. spec 미달 {run.variants.length - targets.length}개는 건너뜀.</div>
+      <div><b>Project {run.project_ref}</b> · {targets.length}개 variant의 current 예측을 최저 power 조합으로 교체합니다. spec 미달 {run.variants.length - targets.length - counts.not_applicable}개는 건너뜀.{counts.not_applicable ? ` 판정 미지원 ${counts.not_applicable}건도 제외합니다.` : ''}</div>
       <div className="faint mono" style={{ fontSize: 12, maxHeight: 120, overflow: 'auto' }}>{targets.map((v) => `${short(v.variant_id)} ${fmt(v.recommended?.total_mw, 1)} mW${coverageOf(v) === 'partial' ? ' (부분 모델)' : ''}`).join(' · ')}</div>
       <div style={{ display: 'flex', gap: 8 }}>
         <RegistrationBasis guard={guard} />
@@ -297,11 +299,11 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       <Card id="ax-range" title="Scenario별 Power · BW range" note="행 클릭 = 조합 상세" defaultWide
         actions={<>
           <div className="seg sm">{METRICS.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}><span className="ax-dot" style={{ background: METRIC_COLOR[k] }} />{l}</button>)}</div>
-          <div className="seg sm">{(['ok', 'fail', 'all'] as const).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? '전체' : f === 'ok' ? `만족 ${s.spec_ok}` : `미달 ${s.variants - s.spec_ok}`}</button>)}</div>
+          <div className="seg sm">{(['ok', 'fail', ...(counts.not_applicable ? ['not_applicable'] as const : []), 'all'] as const).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? '전체' : f === 'ok' ? `만족 ${s.spec_ok}` : f === 'not_applicable' ? `판정 미지원 ${counts.not_applicable}건` : `미달 ${counts.fail}`}</button>)}</div>
           <div className="seg sm">{(['power', 'name'] as const).map((f) => <button key={f} className={order === f ? 'on' : ''} onClick={() => setOrder(f)}>{f === 'power' ? '추천값 순' : '이름 순'}</button>)}</div></>}>
         <RangeBoxes unit={METRICS.find((m) => m[0] === metric)?.[2] ?? ''} selected={ctx.params.v} onPick={choose}
           color={METRIC_COLOR[metric]}
-          rows={ranked.map((v) => ({ id: variantKey(v), label: short(v.variant_id), dist: v.distribution[metric], ok: v.spec_ok,
+          rows={ranked.map((v) => ({ id: variantKey(v), label: short(v.variant_id), dist: v.distribution[metric], ok: v.spec_ok, verdict: v.baseline.verdict,
             marker: v.recommended?.[metric] ?? null, base: v.baseline[metric] ?? null }))} />
       </Card>
       <Card id="ax-comp-bars" title="추천 조합 Power 구성" note="CPU · CPU BW · IP · IP BW (mW) · range 카드와 같은 순서" defaultWide>
@@ -401,7 +403,7 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
         {(v.ip_modes ?? []).some((m) => m.alternatives.some((a) => a.explorable)) && <> · 대체 mode 결과는 아래 Power option / IP mode 카드</>}</div>}
       {v.power_budget?.mw && <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>power budget ≤ <b className="mono">{v.power_budget.mw.toFixed(0)}</b> mW ({v.power_budget.source}{v.power_budget.reference_mw ? ` · 기준 ${v.power_budget.reference_mw.toFixed(0)} mW` : ''})
         {v.status?.power_budget_status && <span className={`badge ${v.status.power_budget_status === 'pass' ? 'v-ok' : v.status.power_budget_status === 'fail' ? 'v-fail' : 'v-info'}`} style={{ marginLeft: 6 }}>{v.status.power_budget_status}</span>}</div>}
-      {!v.spec_ok && <div className="err" style={{ fontSize: 12 }}>{v.spec_reasons.slice(0, 3).map((x) => <div key={x}>{x}</div>)}</div>}
+      {variantSpecState(v) === 'not_applicable' ? <TimingVerdictBadge status="not_applicable" /> : !v.spec_ok && <div className="err" style={{ fontSize: 12 }}>{v.spec_reasons.slice(0, 3).map((x) => <div key={x}>{x}</div>)}</div>}
       {coverageOf(v) === 'partial' && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         <span className="badge v-warn">부분 모델</span> 전력 미모델 IP {(v.coverage?.zero_power_ips ?? []).join(', ')} — Total은 모델된 IP 합계(하한)
         {v.status?.power_budget_status === 'unknown' ? ' · power budget 판정 불가' : ''}</div>}

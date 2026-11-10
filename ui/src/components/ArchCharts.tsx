@@ -1,10 +1,11 @@
 import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { fmt, niceMax } from '../lib/timingBudget'
+import { TimingVerdictBadge } from './TimingVerdictBadge'
 import { CAT_COLOR, PCOL, powerParts, waterfall, type Attribution, type BufferRow, type DomainRow, type IpModeRow, type Power, type Quant } from '../lib/archExplore'
 
 // ---------------------------------------------------------------- range boxes (one row per scenario, no overlap)
-export interface RangeRow { id: string; label: string; dist: Quant | null | undefined; marker?: number | null; base?: number | null; ok: boolean }
+export interface RangeRow { id: string; label: string; dist: Quant | null | undefined; marker?: number | null; base?: number | null; ok: boolean; verdict?: string }
 /** One row per scenario (no overlap): distribution box + recommended ◆ + baseline ○ on one value axis. */
 export function RangeBoxes({ rows, unit, onPick, selected, color = PCOL.total }: {
   rows: RangeRow[]; unit: string; onPick?: (id: string) => void; selected?: string; color?: string
@@ -21,7 +22,7 @@ export function RangeBoxes({ rows, unit, onPick, selected, color = PCOL.total }:
         {ticks.map((t) => <g key={t}><line x1={labelW + t * k} x2={labelW + t * k} y1={0} y2={rows.length * rh + 4} stroke="#EFEAE1" />
           <text x={labelW + t * k} y={rows.length * rh + 16} fontSize={10} fill="#8A8274" textAnchor="middle">{fmt(t, 0)}</text></g>)}
         {rows.map((r, i) => {
-          const y = i * rh + 2, d = r.dist, col = r.ok ? color : '#9B1C1C'
+          const y = i * rh + 2, d = r.dist, col = r.verdict === 'not_applicable' ? '#9CA3AF' : r.ok ? color : '#9B1C1C'
           return (
             <g key={r.id} transform={`translate(0,${y})`} style={{ cursor: onPick ? 'pointer' : undefined }} onClick={() => onPick?.(r.id)}>
               <rect x={0} y={0} width={labelW + plotW + valW} height={rh - 2} fill={selected === r.id ? '#F3EFE8' : 'transparent'} />
@@ -191,7 +192,7 @@ export function BufferSavings({ buffers, selected }: { buffers: BufferRow[]; sel
 }
 
 /** Per-IP sim mode table: current mode / unit power, declared alternatives, explored saving. */
-export function IpModes({ rows, results }: { rows: IpModeRow[]; results?: { items: string[]; delta_mw: number | null; spec_ok: boolean }[] }) {
+export function IpModes({ rows, results }: { rows: IpModeRow[]; results?: { items: string[]; delta_mw: number | null; spec_ok: boolean; verdict?: string }[] }) {
   if (!rows.length) return <div className="empty">IP mode 정보 없음 (engine rev 6 이전 run)</div>
   const single = (node: string, mode: string) => results?.find((r) => r.items.length === 1 && r.items[0] === `mode:${node}=${mode}`)
   return (
@@ -211,7 +212,7 @@ export function IpModes({ rows, results }: { rows: IpModeRow[]; results?: { item
               const d = a.unit_power_mw_mp !== null && r.unit_power_mw_mp ? ((a.unit_power_mw_mp - r.unit_power_mw_mp) / r.unit_power_mw_mp) * 100 : null
               return <span key={a.mode} className={`mode-alt ${a.explorable ? 'on' : ''}`} title={a.explorable ? `${a.note ?? ''}\n현재 mode 대체 가능 (substitutes) → power option으로 탐색` : '기능/해상도 mode — 대체 선언(substitutes) 없음, 탐색 안 함'}>
                 {a.mode} <span className="mono">{fmt(a.unit_power_mw_mp, 3)}{d !== null ? ` (${d >= 0 ? '+' : ''}${fmt(d, 0)}%)` : ''}</span>
-                {res && res.delta_mw !== null && <b className="mono" style={{ color: res.delta_mw < 0 ? 'var(--primary-strong)' : 'var(--del-text)' }}> → {res.delta_mw >= 0 ? '+' : ''}{fmt(res.delta_mw, 1)} mW{res.spec_ok ? '' : ' (spec ✗)'}</b>}
+                {res && res.delta_mw !== null && <b className="mono" style={{ color: res.delta_mw < 0 ? 'var(--primary-strong)' : 'var(--del-text)' }}> → {res.delta_mw >= 0 ? '+' : ''}{fmt(res.delta_mw, 1)} mW{res.verdict === 'not_applicable' ? <TimingVerdictBadge status={res.verdict} /> : res.spec_ok ? '' : ' (spec ✗)'}</b>}
                 {a.explorable && !res && <span className="faint"> · 탐색 대상</span>}
               </span>
             }) : <span className="faint">—</span>}</td>

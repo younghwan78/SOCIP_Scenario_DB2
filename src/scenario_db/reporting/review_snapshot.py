@@ -78,6 +78,7 @@ def _assemble_review(snapshot: dict[str, Any], predictions: dict[tuple[str, str]
     snapshot["criteria"] = {
         "fps": {"ok": s.get("spec_ok", 0), "total": s.get("explored", 0),
                 "fail": [f["variant_id"] for f in s.get("failed") or []],
+                **({"not_applicable": list(s["not_applicable"])} if s.get("not_applicable") else {}),
                 "basis": snapshot["basis"]["throughput_model"]},
         "power": {"total": len(ref_vids), "ok": status.count("ok"), "similar": status.count("similar"),
                   "over": status.count("over"), "missing": missing, "tolerance_pct": refs.get("tolerance_pct"),

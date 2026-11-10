@@ -11,8 +11,9 @@ import { ProvBadge } from '../components/Provenance'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
 import { ISSUE_LABEL, ISSUE_ORDER, issueCounts, verdictIssues, type IssueCode } from '../lib/provenance'
+import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 
-type Filter = 'all' | 'ok' | 'clock_up' | 'fail'
+type Filter = 'all' | 'ok' | 'clock_up' | 'fail' | 'not_applicable'
 
 export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
   const statistic: Statistic = ctx.params.stat === 'max' ? 'max' : DEFAULT_STATISTIC
@@ -52,7 +53,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     { key: 'pw', label: 'Power mW', width: 160, firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <PowerMini r={r} /> },
     { key: 'cpu', label: 'CPU %', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.share_pct.cpu, render: (r) => fmt(r.power.share_pct.cpu, 0) },
     { key: 'bw', label: 'BW MB/s', width: 90, align: 'right', firstDir: -1, sort: (r) => r.bw.total_mbs, render: (r) => fmt(r.bw.total_mbs, 0) },
-    { key: 'verdict', label: '판정', width: 120, sort: (r) => ({ fail: 0, clock_up: 1, ok: 2 }[r.verdict.status]), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <span className={`badge ${verdictChip(r.verdict.status).cls}`}>{verdictChip(r.verdict.status).label}</span> },
+    { key: 'verdict', label: '판정', width: 200, sort: (r) => ({ not_applicable: -1, fail: 0, clock_up: 1, ok: 2 }[r.verdict.status]), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <TimingVerdictBadge status={r.verdict.status} /> },
     { key: 'why', label: '원인', width: 260, sort: (r) => verdictIssues(r.verdict.reasons).map((i) => i.code).join(','), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <Issues r={r} /> },
   ]
 
@@ -68,7 +69,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
         </div>
         <span className="muted" style={{ fontSize: 13 }}>판정</span>
         <div className="seg" role="group" aria-label="판정 필터">
-          {(['all', 'fail', 'clock_up', 'ok'] as Filter[]).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? `전체 ${rows.length}` : `${verdictChip(f).label} ${counts[f] ?? 0}`}</button>)}
+          {(['all', 'fail', 'clock_up', 'ok', 'not_applicable'] as Filter[]).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? `전체 ${rows.length}` : `${verdictChip(f).label} ${counts[f] ?? 0}`}</button>)}
         </div>
         {ISSUE_ORDER.some((c) => issueN[c] > 0) && <>
           <span className="muted" style={{ fontSize: 13 }}>Fail 원인</span>

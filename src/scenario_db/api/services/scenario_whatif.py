@@ -28,7 +28,7 @@ from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableEr
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.measured_timing import baseline_fingerprint
 from scenario_db.sim.service import _enforce_input_limits
-from scenario_db.sim.timing_budget import _stage_slack, analyze_timing_budget
+from scenario_db.sim.timing_budget import NOT_APPLICABLE_NOTE, _stage_slack, analyze_timing_budget
 
 ENGINE_REV = "scenario-whatif/4"  # 4: v2-vf clock term uses the work clock; 3: SBWC mean ratio = typical in the engine baseline
 _log = logging.getLogger("scenario_db.api.analysis")
@@ -274,9 +274,17 @@ def _calculate_case(graph, config, options, tables, ref):
                "bw_mbs": report["bw"]["total_mbs"], "fps": report["fps"], "period_ms": report["period_ms"],
                "latency_ms": max((v for k, v in (report.get("latency") or {}).items()
                    if k.endswith("_ms") and isinstance(v, (int, float))), default=None),
-               "feasible": report["verdict"]["status"] != "fail"}
+               "feasible": report["verdict"]["status"] in ("ok", "clock_up"),
+               **({"verdict": "not_applicable"} if report["verdict"]["status"] == "not_applicable" else {})}
     return {"report": report, "metrics": metrics, "coverage": coverage,
             "input_fingerprint": _digest(inputs.model_dump(mode="json"))}
+
+
+def _timing_reason(report: dict) -> str:
+    verdict = report["verdict"]
+    if verdict["status"] == "not_applicable":
+        return NOT_APPLICABLE_NOTE
+    return (verdict["reasons"] or ["timing 미달"])[0]
 
 
 def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
@@ -420,7 +428,8 @@ def _search_limit(base: dict, domains: list[dict], ids: list[str]) -> list[dict[
             m = case["metrics"]
             rows.append({"level": lv["level"], "mhz": lv["mhz"], "feasible": m["feasible"], "power_mw": m["modeled_power_mw"],
                          "delta_mw": round(m["modeled_power_mw"] - base_mw, 2), "min_slack_ms": slack, "tight_stage": stage,
-                         "reason": None if m["feasible"] else ((case["report"]["verdict"]["reasons"] or ["timing 미달"])[0])})
+                         "reason": None if m["feasible"] else _timing_reason(case["report"]),
+                         **({"verdict": "not_applicable"} if case["report"]["verdict"]["status"] == "not_applicable" else {})})
             if not m["feasible"]:
                 break
         ok = [r for r in rows if r["feasible"]]
@@ -451,6 +460,8 @@ def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[
     _, s0, n0 = _min_slack(b["report"])
     rows: list[dict[str, Any]] = [{"key": "baseline", "levers": [], "metrics": bm, "delta": {k: 0.0 for k in _DELTA},
                                    "feasible": bm["feasible"], "min_slack_ms": s0, "tight_stage": n0, "reason": None, "notes": []}]
+    if b["report"]["verdict"]["status"] == "not_applicable":
+        rows[0].update(verdict="not_applicable", reason=NOT_APPLICABLE_NOTE)
     for sub in subsets:
         notes: list[str] = []
         try:
@@ -467,7 +478,8 @@ def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[
         rows.append({"key": "+".join(map(str, sub)), "levers": list(sub), "metrics": m,
                      "delta": {k: round(m[k] - bm[k], 3) for k in _DELTA}, "feasible": m["feasible"],
                      "min_slack_ms": slack, "tight_stage": stage, "notes": notes,
-                     "reason": None if m["feasible"] else (case["report"]["verdict"]["reasons"] or ["timing 미달"])[0]})
+                     "reason": None if m["feasible"] else _timing_reason(case["report"]),
+                     **({"verdict": "not_applicable"} if case["report"]["verdict"]["status"] == "not_applicable" else {})})
     singles = {r["levers"][0]: r for r in rows if len(r["levers"]) == 1}
     together = next((r for r in rows if len(r["levers"]) == n), None)
     interaction = None
@@ -497,6 +509,7 @@ def _combine_answer(combo: dict) -> dict[str, Any]:
     name = lambda r: " + ".join(f"#{i + 1}" for i in r["levers"])  # noqa: E731
     pct = lambda d: f"{d / base_mw * 100:+.1f}%" if base_mw else ""  # noqa: E731
     best = next((r for r in rows if r["key"] == combo["best"]), None)
+    timing = lambda r: "timing 판정 미지원" if r.get("verdict") == "not_applicable" else "fps 충족" if r["feasible"] else "미달: " + str(r["reason"])  # noqa: E731
     facts = [f"#{lv['index'] + 1} {lv['label']}" + (" · IQ 평가 필요" if lv["iq_required"] else "") for lv in levers]
     for r in rows[1:]:
         if len(r["levers"]) != 1:
@@ -505,14 +518,16 @@ def _combine_answer(combo: dict) -> dict[str, Any]:
             facts.append(f"{name(r)} 단독: 적용 불가 — {r['reason']}")
         else:
             facts.append(f"{name(r)} 단독: {r['delta']['modeled_power_mw']:+.1f} mW ({pct(r['delta']['modeled_power_mw'])}) · "
-                         f"BW {r['delta']['bw_mbs']:+.0f} MB/s · {'fps 충족' if r['feasible'] else '미달: ' + str(r['reason'])}")
+                         f"BW {r['delta']['bw_mbs']:+.0f} MB/s · {timing(r)}")
     all_row = next((r for r in rows if len(r["levers"]) == len(levers)), None)
     if all_row and all_row.get("delta"):
         facts.append(f"모두 적용: {all_row['delta']['modeled_power_mw']:+.1f} mW ({pct(all_row['delta']['modeled_power_mw'])}) · "
-                     f"{'fps 충족' if all_row['feasible'] else '미달: ' + str(all_row['reason'])}"
+                     f"{timing(all_row)}"
                      + (f" · 단독 합과 차이 {combo['interaction_mw']:+.1f} mW (레버 간 상호작용 — 공유 DVFS domain · 같은 buffer)"
                         if combo.get("interaction_mw") is not None and abs(combo["interaction_mw"]) >= 0.5 else ""))
     if best is None:
+        if all(r.get("verdict") == "not_applicable" for r in rows if not r.get("error")):
+            return {"verdict": "not_applicable", "headline": "timing 판정 미지원", "facts": [NOT_APPLICABLE_NOTE] + facts, "actions": []}
         return {"verdict": "fail", "headline": "fps(처리량)를 충족하는 조합이 없습니다", "facts": facts, "actions": []}
     keep = next((r for r in rows if r["key"] == combo.get("best_keep")), None)
     trade = next((r for r in rows if r["key"] == combo.get("best_trade")), None)
@@ -562,7 +577,7 @@ def _diag_facts(diag: dict) -> list[str]:
     return facts
 
 
-def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[str], combo=None) -> dict[str, Any] | None:
+def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[str], combo=None, baseline_verdict=None) -> dict[str, Any] | None:
     actions: list[dict[str, Any]] = []
     if combo is not None:
         out = _combine_answer(combo)
@@ -574,7 +589,9 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
         _, s1, n1 = _min_slack(c["report"])
         _, s0, n0 = _min_slack(b["report"])
         bm, cm = b["metrics"], c["metrics"]
-        if cm["feasible"]:
+        if c["report"]["verdict"]["status"] == "not_applicable":
+            verdict, headline = "not_applicable", f"{desc}: timing 판정 미지원"
+        elif cm["feasible"]:
             verdict, headline = "ok", f"{desc}: timing 충족, 최소 여유 {n1} {s1:.2f} ms (기준 {n0} {s0:.2f} ms)"
         else:
             verdict = "fail"
@@ -589,6 +606,8 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
             facts.append("적용 clock: " + " · ".join(f"{ip['node']} {base_ips[ip['node']]['set_clock_mhz']:g}→"
                                                      f"{base_ips[ip['node']]['set_clock_mhz'] + ip['set_clock_mhz']:g} MHz" for ip in moved))
         facts += [f"미달: {r}" for r in c["report"]["verdict"]["reasons"][1:4]]
+        if verdict == "not_applicable":
+            facts.append(NOT_APPLICABLE_NOTE)
         facts += result.get("lever_notes") or []
         if result.get("iq_required"):
             facts.append("IQ 평가 필요: " + ", ".join(CHANGE_KINDS[t].label if t in CHANGE_KINDS else t for t in result["iq_required"])
@@ -609,6 +628,9 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
                 actions.append({"label": f"{ch['domain']} 어디까지 낮출 수 있나", "ask": "search_limit", "search_domains": [ch["domain"]]})
         return {"verdict": verdict, "headline": headline, "facts": boundaries + facts, "actions": actions}
     if search is not None:
+        if ((baseline_verdict or {}).get("status") == "not_applicable"
+                or any(r.get("verdict") == "not_applicable" for d in search for r in d["rows"])):
+            return {"verdict": "not_applicable", "headline": "timing 판정 미지원", "facts": boundaries + [NOT_APPLICABLE_NOTE], "actions": []}
         lines = []
         for row in search:
             cur = f"{row['domain']} (현재 L{row['level']}, {row['mhz']:g} MHz)"
@@ -628,8 +650,10 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
         return {"verdict": "info", "headline": lines[0] if len(lines) == 1 else "domain별로 낮출 수 있는 한계",
                 "facts": boundaries + (lines[1:] if len(lines) == 1 else lines), "actions": []}
     if diag is not None:
+        if diag["verdict"] == "not_applicable":
+            return {"verdict": "not_applicable", "headline": "timing 판정 미지원", "facts": boundaries + diag["notes"], "actions": []}
         t = diag["tight"]
-        ok = diag["verdict"] != "fail"
+        ok = diag["verdict"] in ("ok", "clock_up")
         headline = (f"가장 빠듯한 구간 {t['name']} — 여유 {t['slack_ms']:.2f} ms (frame {diag['period_ms']:.2f} ms)"
                     if t else ("timing 충족" if ok else "timing 미달"))
         facts = _diag_facts(diag)[1:] + [f"미달: {r}" for r in diag["reasons"][:3]]
@@ -700,7 +724,7 @@ def ask(db: Session, request: WhatIfAskRequest, *, compute_slot=nullcontext, llm
             result = _preview_from(base, WhatIfPreviewRequest(**scope.model_dump(), basis_ref=request.basis_ref, comparison=request.comparison, config=request.config, options=request.options,
                                                       changes=plan_["changes"], expected_baseline_hash=baseline_hash))
         return {**common, "interpretation": interpretation, "plan": plan_,
-                "answer": _answer(plan_, targets_, result, search, diag, boundaries, combo),
+                "answer": _answer(plan_, targets_, result, search, diag, boundaries, combo, base["case"]["report"]["verdict"]),
                 "result": result, "search": search, "diagnose": diag, "combine": combo}
 
 

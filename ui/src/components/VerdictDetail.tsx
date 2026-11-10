@@ -14,12 +14,12 @@ export function VerdictPopover({ d, at, onClose, onTiming }: { d: VerdictDetail;
     const t = setTimeout(() => window.addEventListener('mousedown', click), 0)
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('mousedown', click); clearTimeout(t) }
   }, [onClose])
-  const chip = verdictChip(d.status as 'ok' | 'clock_up' | 'fail')
+  const chip = verdictChip(d.status)
   const left = Math.min(at.x, window.innerWidth - 440), top = Math.min(at.y + 8, window.innerHeight - 360)
   return (
     <div ref={ref} className="verdict-pop" role="dialog" aria-label="판정 상세" style={{ left: Math.max(8, left), top: Math.max(8, top) }}>
       <div className="vp-head"><span className={`badge ${chip.cls}`}>{chip.label}</span>
-        <b>{d.status === 'ok' ? '모든 stage가 budget 안' : d.status === 'clock_up' ? 'NRT clock 상향 필요' : 'timing 위반'}</b>
+        <b>{chip.explanation ?? (d.status === 'ok' ? '모든 stage가 budget 안' : d.status === 'clock_up' ? 'NRT clock 상향 필요' : 'timing 위반')}</b>
         <span className="grow" /><button className="btn tb-mini" aria-label="닫기" onClick={onClose}>✕</button></div>
       {d.reasons.length > 0 && <ul className="vp-reasons">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
       {d.nrt_clock_factor !== null && <div className="vp-kv"><span>NRT clock</span><span className="mono">25% rule 대비 ×{fmt(d.nrt_clock_factor, 2)}{d.nrt_clock_factor > 1.05 ? ' (상향)' : ''}</span></div>}

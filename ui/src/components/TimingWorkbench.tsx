@@ -53,7 +53,7 @@ export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpen
     try { setAct({ status: 'done', text: await f(), link }) } catch (e) { setAct({ status: 'error', text: e instanceof Error ? e.message : String(e) }) }
     finally { busy.current = false }
   }
-  const canRegister = verdict !== 'fail' && registrationReady
+  const canRegister = (verdict === 'ok' || verdict === 'clock_up') && registrationReady
   return <div className="panel tb-cond" style={{ padding: '6px 10px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
     <b style={{ fontSize: 12 }}>예측 조건</b>
     {conditionChips(cond).map((c) => <span key={c} className="chip" style={{ fontSize: 11.5 }}>{c}</span>)}
@@ -61,7 +61,7 @@ export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpen
     <button className="btn tb-mini" disabled={act.status === 'busy'} onClick={() => run(onSaveEvidence)}
       title="이 조건의 계산 결과(timeline 포함)를 simulation evidence로 저장 — Pipeline trace · Compare · 예측↔실측에서 사용. 같은 조건은 1건">Sim evidence 저장</button>
     {!asking ? <button className="btn tb-mini primary" disabled={act.status === 'busy' || !canRegister} onClick={() => setAsking(true)}
-      title={canRegister ? '이 조건을 이 variant의 current 예측으로 등록 (예측 현황 · 보고서 숫자). 이전 등록은 superseded' : 'timing fail 조건은 등록할 수 없습니다 (fps drop 불가)'}>예측으로 등록…</button>
+      title={canRegister ? '이 조건을 이 variant의 current 예측으로 등록 (예측 현황 · 보고서 숫자). 이전 등록은 superseded' : verdict === 'not_applicable' ? 'timing 판정 미지원 조건은 등록할 수 없습니다' : 'timing fail 조건은 등록할 수 없습니다 (fps drop 불가)'}>예측으로 등록…</button>
       : <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
         <input className="input" style={{ width: 220, padding: '3px 6px' }} placeholder="등록 사유 (필수)" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="등록 사유" autoFocus />
         <button className="btn tb-mini primary" disabled={!reason.trim() || act.status === 'busy' || !canRegister} onClick={() => { setAsking(false); run(() => onRegister(reason.trim()), { label: '예측 현황 →', onClick: onOpenPredictions }) }}>등록</button>

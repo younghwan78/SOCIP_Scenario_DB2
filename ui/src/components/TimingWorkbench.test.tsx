@@ -23,3 +23,8 @@ it('draws interval and latency boxes per output stream', () => {
   expect(html).toContain('Preview · dpu')
   expect(html).toContain('post_irta')
 })
+
+it('blocks registering an unsupported timing judgement', () => {
+  const html = renderToStaticMarkup(createElement(ConditionBar, { cond, verdict: 'not_applicable', onSaveEvidence: noop, onRegister: noop, onOpenPredictions: () => {} }))
+  expect(html).toMatch(/disabled="" title="timing 판정 미지원/)
+})
