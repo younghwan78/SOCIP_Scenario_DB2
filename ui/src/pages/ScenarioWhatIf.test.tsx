@@ -8,9 +8,13 @@ import { whatIfApi, type AskResponse, type WhatIfExperiment, type WhatIfResult, 
 import type { TimingReport } from '../lib/timingBudget'
 import { setApiCredential } from '../lib/auth'
 import { readExperimentContext, updateExperimentContext } from '../lib/experimentContext'
+import { ApiError } from '../lib/api'
+import { notify } from '../lib/status'
+
+vi.mock('../lib/status', () => ({ notify: vi.fn() }))
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-afterEach(() => { setApiCredential(null); sessionStorage.clear(); vi.restoreAllMocks() })
+afterEach(() => { setApiCredential(null); sessionStorage.clear(); vi.restoreAllMocks(); vi.mocked(notify).mockClear() })
 const scope = { project_ref: 'project', scenario_id: 'scenario', variant_id: 'variant' }
 const hash = 'a'.repeat(64)
 const ladder = [{ level: 5, mhz: 133 }, { level: 4, mhz: 200 }, { level: 3, mhz: 400 }, { level: 2, mhz: 533 }]
@@ -64,11 +68,14 @@ it('builds a DVFS level condition from the ladder and answers first, then saves 
     expect(level.value).toBe('4')                                                             // one level down by default
     await act(async () => button(host, '답 보기').click())
     expect(ask).toHaveBeenCalledWith({ ...scope, ask: 'what_if', changes: [level4] })
+    expect(notify).toHaveBeenCalledWith({ kind: 'ok', text: answered().answer!.headline })
     expect(host.querySelector('.wi-headline')!.textContent).toBe('timing 충족 INTCAM L3→L4 (200 MHz): timing 충족, 최소 여유 NRT 3.74 ms (기준 NRT 4.10 ms)')
     expect(host.textContent).toContain('기준 대비 조건 변경 결과')
     act(() => { edit(host.querySelector<HTMLTextAreaElement>('[aria-label="실험 제목"]')!, 'intcam'); select(host.querySelector<HTMLSelectElement>('[aria-label="실험 공개 범위"]')!, 'shared') })
     await act(async () => button(host, '실험 저장').click())
     expect(save).toHaveBeenCalledWith({ ...scope, changes: [level4], expected_baseline_hash: hash }, result, expect.objectContaining({ title: 'intcam', visibility: 'shared' }), 'INTCAM → L4')
+    expect(notify).toHaveBeenCalledWith({ kind: 'ok', text: '실험 저장됨: intcam · 공유' })
+    expect(host.textContent).not.toContain('실험 저장됨: intcam')
     // a follow-up action runs the next question directly
     ask.mockResolvedValue(answered({ plan: { ask: 'search_limit', changes: [], search_domains: ['INTCAM'], focus: [] }, result: null,
       answer: { verdict: 'info', headline: 'INTCAM (현재 L3, 400 MHz): L5 (133 MHz)까지 2단계 가능', facts: [], actions: [] },
@@ -77,6 +84,21 @@ it('builds a DVFS level condition from the ladder and answers first, then saves 
     expect(ask).toHaveBeenLastCalledWith({ ...scope, ask: 'search_limit', search_domains: ['INTCAM'] })
     expect(host.textContent).toContain('Level 한계 탐색')
     expect(host.querySelector<HTMLInputElement>('.wi-chip input')!.checked).toBe(true)        // the builder follows what ran
+  } finally { act(() => root.unmount()) }
+})
+it.each([
+  [new Error('calculation failed'), 'calculation failed'],
+  [new ApiError('changed', 409), '기준 입력이 변경되었습니다. 기준 갱신 후 다시 계산하세요.'],
+])('sends action failures to the global error notifier: %s', async (error, text) => {
+  mocks()
+  vi.spyOn(whatIfApi, 'ask').mockRejectedValue(error)
+  const { host, root } = await mount()
+  try {
+    await act(async () => button(host, '+ DVFS level').click())
+    await act(async () => button(host, '답 보기').click())
+    expect(notify).toHaveBeenCalledWith({ kind: 'error', text })
+    expect(host.textContent).not.toContain(text)
+    expect(button(host, '답 보기').disabled).toBe(error instanceof ApiError)
   } finally { act(() => root.unmount()) }
 })
 it('marks the answer as outdated when conditions change and warns that a clock floor below the applied clock does nothing', async () => {
@@ -177,6 +199,7 @@ it('loads experiment conditions without running and keeps the saved model settin
   const { host, root } = await mount()
   try {
     await act(async () => button(host, '조건 불러오기').click())
+    expect(notify).toHaveBeenCalledWith({ kind: 'info', text: '저장된 조건을 불러왔습니다. 현재 기준으로 “답 보기”를 눌러 다시 계산하세요.' })
     expect(ask).not.toHaveBeenCalled()
     expect(whatIfApi.targets).toHaveBeenLastCalledWith(scope, { config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' } })
     expect(host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')!.value).toBe('4')

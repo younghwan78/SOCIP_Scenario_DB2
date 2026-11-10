@@ -24,9 +24,26 @@ import { JUDGE_CLASS, JUDGE_LABEL, judgePower, useReferences } from '../lib/revi
 import { VariantFailures } from '../components/VariantFailures'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
+import { notify } from '../lib/status'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
+type Preset = 'quick' | 'standard' | 'full'
+const PRESETS: Record<Preset, { label: string; options: RunOptions }> = {
+  quick: { label: '빠른 점검', options: { ...DEFAULT_RUN, statistics: ['mean'], runtime_scales: [1.0], dvfs_headroom_levels: 0,
+    objective_statistic: 'mean', objective_scale: 1.0,
+    options: { ...DEFAULT_RUN.options, knobs: false, modes: false } } },
+  standard: { label: '표준 검토', options: DEFAULT_RUN },
+  full: { label: '전수', options: { ...DEFAULT_RUN, statistics: ['mean', 'max'], runtime_scales: SCALES, dvfs_headroom_levels: 2,
+    modes: ['lossless', 'lossy'], options: { ...DEFAULT_RUN.options, knobs: true, modes: true } } },
+}
+// 2026-11-10 engine measurement: 1.2–1.3 seconds per variant; run summaries expose no elapsed time.
+const SECONDS_PER_VARIANT = 1.3
+function estimatedDuration(variants: number): string {
+  const seconds = Math.round(variants * SECONDS_PER_VARIANT)
+  const minutes = Math.floor(seconds / 60), remainder = seconds % 60
+  return minutes ? `${minutes}분${remainder ? ` ${remainder}초` : ''}` : `${seconds}초`
+}
 
 export function ExplorePage({ ctx }: { ctx: Ctx }) {
   const runId = ctx.params.run
@@ -73,20 +90,29 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
   const [scenarios, setScenarios] = useState<string[]>([ctx.scenario])
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string>()
+  const [preset, setPreset] = useState<Preset | null>('standard')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [runningEstimate, setRunningEstimate] = useState('')
   const [cfgSel, setCfgSel] = useState<string | undefined>(ctx.params.cfg)
   const sp = useSimProfiles(ctx.project, cfgSel)
-  const set = <K extends keyof RunOptions>(k: K, v: RunOptions[K]) => setO((p) => ({ ...p, [k]: v }))
+  const edited = () => { setPreset(null); setAdvancedOpen(true) }
+  const set = <K extends keyof RunOptions>(k: K, v: RunOptions[K]) => { edited(); setO((p) => ({ ...p, [k]: v })) }
+  const applyPreset = (key: Preset) => { setO(PRESETS[key].options); setPreset(key); setAdvancedOpen(false) }
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   // project policy iq_keep registers the IQ-keeping optimum: lossless SBWC must stay in the explored space
   const iqKeep = useReferences(ctx.project)?.policy.register_baseline === 'iq_keep'
   const eff: RunOptions = iqKeep && !o.modes.includes('lossless') ? { ...o, modes: [...o.modes, 'lossless'] } : o
   const cases = caseCount(eff)
   const variants = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).reduce((s, c) => s + c.variant_count, 0)
+  const estimate = estimatedDuration(variants)
   const typeLabel = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).map((c) => c.scenario_name).join(' + ')
   const run = async () => {
-    setBusy(true); setErr(undefined)
-    try { onDone(await archApi.createRun(runBody(scenarios, title, typeLabel, eff, sp.ref))) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    setBusy(true); setRunningEstimate(estimate)
+    try {
+      const created = await archApi.createRun(runBody(scenarios, title, typeLabel, eff, sp.ref))
+      notify({ kind: 'ok', text: `탐색 완료: ${created.title} · variant ${created.summary.variants}개` })
+      onDone(created)
+    } catch (e) { notify({ kind: 'error', text: e instanceof Error ? e.message : String(e) }) } finally { setBusy(false) }
   }
   const byCat = useMemo(() => {
     const g: Record<string, typeof ctx.catalog> = {}
@@ -95,6 +121,11 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
   }, [ctx.catalog])
   return (
     <section className="panel" style={{ padding: 14, display: 'grid', gap: 12 }} aria-label="새 탐색">
+      <div className="ax-row"><span className="ax-label">프리셋</span>
+        <div className="seg" role="group" aria-label="탐색 프리셋">{(Object.keys(PRESETS) as Preset[]).map((key) => <button key={key} type="button"
+          className={preset === key ? 'on' : ''} aria-pressed={preset === key} onClick={() => applyPreset(key)}>{PRESETS[key].label}</button>)}</div>
+        {preset === null && <span className="chip">사용자 설정</span>}
+      </div>
       <div className="ax-form">
         <div>
           <div className="ax-label">Scenario Type (탐색 대상)</div>
@@ -107,6 +138,10 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
         </div>
         <div style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
           <label className="ax-row"><span className="ax-label">제목</span><input className="input" style={{ flex: 1, minWidth: 260 }} value={title} placeholder={`${typeLabel} exploration`} onChange={(e) => setTitle(e.target.value)} /></label>
+          <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={setCfgSel} basis={sp.basis} followsBasis={sp.followsBasis} />
+          <details className="explore-advanced" open={advancedOpen} onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}>
+          <summary>고급 설정</summary>
+          <div className="explore-advanced-fields">
           <div className="ax-row"><span className="ax-label">SW 통계 (range)</span>
             {(['mean', 'max'] as Statistic[]).map((s) => <label key={s} className="ax-check"><input type="checkbox" checked={o.statistics.includes(s)} onChange={() => set('statistics', toggle(o.statistics, s))} />{s}</label>)}</div>
           <div className="ax-row"><span className="ax-label">차기 SW 증가</span>
@@ -144,16 +179,17 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
             <input className="input" type="number" min={1} max={256} value={o.options.max_sets} style={{ width: 70 }} aria-label="option 조합 상한"
               onChange={(e) => set('options', { ...o.options, max_sets: Math.max(1, Math.min(256, Number(e.target.value) || 1)) })} />
             <span className="faint" style={{ fontSize: 12 }}>full factorial · 조합별 재시뮬레이션 · variant 아님 (IQ 평가 대상)</span></div>
+          </div>
+          </details>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span className="chip" title="파생(-explored-/-timing-) variant는 제외">variant ≤{variants} × 최대 {cases.toLocaleString()} 조합</span>
+        <span className="chip" title="catalog 전체 variant 수 기준 상한 · 실행 시 파생(-explored-/-timing-) variant 제외">variant ≤{variants} × 최대 {cases.toLocaleString()} 조합 · 예상 최대 약 {estimate}</span>
         <span className="faint" style={{ fontSize: 12 }}>SW 통계·증가 = timeline sim · DVFS·compression = analytic · 추천 조합은 재시뮬레이션 검증</span>
-        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={setCfgSel} basis={sp.basis} followsBasis={sp.followsBasis} />
         <span className="grow" />
-        {(sp.error || err) && <span className="err" style={{ margin: 0 }}>{sp.error || err}</span>}
+        {sp.error && <span className="err" style={{ margin: 0 }}>{sp.error}</span>}
         <button className="btn primary" disabled={busy || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}>
-          {busy ? `탐색 중… (variant당 ~0.5 s)` : '탐색 실행'}</button>
+          {busy ? `탐색 중… (예상 최대 약 ${runningEstimate})` : '탐색 실행'}</button>
       </div>
     </section>
   )
@@ -164,7 +200,6 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const [metric, setMetric] = useState<DistKey>('total_mw')
   const [filter, setFilter] = useState<'all' | 'ok' | 'fail'>('ok')
   const [order, setOrder] = useState<'power' | 'name'>('power')
-  const [msg, setMsg] = useState<string>()
   const [busy, setBusy] = useState(false)
   const sel = run.variants.find((v) => variantKey(v) === ctx.params.v)
   const rows = run.variants.filter((v) => filter === 'all' || (filter === 'ok') === v.spec_ok)
@@ -179,17 +214,17 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const [confirm, setConfirm] = useState(false)
   const promoteAll = async () => {
     if (busy || foreign || !guard.ready || !guard.expected) return
-    setBusy(true); setMsg(undefined)
+    setBusy(true)
     try {
       const r = await archApi.promote(run.id, undefined, undefined, undefined, undefined, run.project_ref ?? undefined, guard.expected)
       guard.refresh()
-      setMsg(`${r.promoted.length}개 variant를 최저 power 조합으로 등록 (건너뜀 ${r.skipped.length})`); setConfirm(false)
-    } catch (e) { setMsg(guard.fail(e)) } finally { setBusy(false) }
+      notify({ kind: r.promoted.length ? 'ok' : 'info', text: `${r.promoted.length}개 variant를 최저 power 조합으로 등록 (건너뜀 ${r.skipped.length})` }); setConfirm(false)
+    } catch (e) { notify({ kind: 'error', text: guard.fail(e) }) } finally { setBusy(false) }
   }
   const report = async () => {
     if (busy) return
-    setBusy(true); setMsg(undefined)
-    try { const r = await archApi.createReport(run.id); ctx.navigate('reports', { report: r.id }) } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); setBusy(false) }
+    setBusy(true)
+    try { const r = await archApi.createReport(run.id); ctx.navigate('reports', { report: r.id }) } catch (e) { notify({ kind: 'error', text: e instanceof Error ? e.message : String(e) }); setBusy(false) }
   }
   const kpis = [
     ['탐색 variant', `${s.variants}`, s.errors ? `실패 ${s.errors}` : run.scenario_type],
@@ -243,7 +278,6 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       <span className={`chip ${sample ? 'mode-warn' : ''}`} title="DVFS table">DVFS {run.dvfs_table_ref ?? '미연결'}{sample ? ' · SAMPLE' : ''}</span>
       <span className="chip mode-info">MIF DVFS 미반영 · CPU 가정 모델</span>
       <span className="grow" />
-      {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       <button className="btn" disabled={busy || foreign || !targets.length} onClick={() => setConfirm((c) => !c)}
         title={foreign ? '다른 과제의 run — 비교 보기 전용' : 'spec 만족 variant 전체를 최저 power 조합으로 current 등록 (대상 확인 후)'}>최저 power 조합 전체 등록…</button>
       <button className="btn primary" disabled={busy} onClick={report}>{busy ? '처리 중…' : '검토 보고서 생성'}</button>
@@ -322,7 +356,6 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
     : []
   const [pick, setPick] = useState<string | undefined>(defaultKey)
   const [reason, setReason] = useState('')
-  const [msg, setMsg] = useState<string>()
   const [busy, setBusy] = useState(false)
   const allCases = groups ? [...groups.keep, ...groups.trade] : candRows.map((x) => x.c)
   const registering = useRef(false)
@@ -334,20 +367,20 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
   const promote = async () => {
     if (registering.current || readOnly || !picked?.eligible || !guard.ready || !guard.expected) return
     registering.current = true
-    setBusy(true); setMsg(undefined)
+    setBusy(true)
     try {
       if (viaLever && picked) {
         const r = await archApi.registerLever({ run_id: run.id, scenario_id: v.scenario_id, variant_id: v.variant_id,
           compression: picked.compression_modes ?? {}, options: [], iq_results: [], reason: reason || undefined, expected_project_ref: run.project_ref ?? undefined, expected_current: guard.expected })
         guard.refresh()
-        setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW · ${r.rule})` : `건너뜀: ${r.skipped?.[0]?.reason ?? ''}`)
+        notify({ kind: r.promoted.length ? 'ok' : 'info', text: r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW · ${r.rule})` : `건너뜀: ${r.skipped?.[0]?.reason ?? ''}` })
         return
       }
       const chosen = pick && pick !== serverDefault ? pick : undefined
       const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id, run.project_ref ?? undefined, guard.expected)
       guard.refresh()
-      setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}`)
-    } catch (e) { setMsg(guard.fail(e)) } finally { registering.current = false; setBusy(false) }
+      notify({ kind: r.promoted.length ? 'ok' : 'info', text: r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}` })
+    } catch (e) { notify({ kind: 'error', text: guard.fail(e) }) } finally { registering.current = false; setBusy(false) }
   }
   const m = v.sw_margin
   const tip = useTip()
@@ -405,7 +438,6 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
         <RegistrationBasis guard={guard} />
         <button className="btn primary" disabled={busy || !guard.ready || readOnly || !v.spec_ok || !picked?.eligible || (needsReason && !reason.trim())} onClick={promote}
           title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '예측으로 등록 (current)'}</button>
-        {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>
     </Card>
  <Card id="ax-tiers" title={`${short(v.variant_id)} — 화질·성능 유지 최적 범위 vs Power 우선 메뉴`} note="A = lossy · IQ option 없이 timing 만족 최저 + 최저 +3% 이내 평가 조합 · B = 화질을 희생할 때 항목별 단독 효과" defaultWide>
