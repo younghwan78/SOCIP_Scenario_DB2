@@ -184,12 +184,12 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span className="chip" title="파생(-explored-/-timing-) variant는 제외">variant {variants} × 최대 {cases.toLocaleString()} 조합 · 예상 약 {estimate}</span>
+        <span className="chip" title="catalog 전체 variant 수 기준 상한 · 실행 시 파생(-explored-/-timing-) variant 제외">variant ≤{variants} × 최대 {cases.toLocaleString()} 조합 · 예상 최대 약 {estimate}</span>
         <span className="faint" style={{ fontSize: 12 }}>SW 통계·증가 = timeline sim · DVFS·compression = analytic · 추천 조합은 재시뮬레이션 검증</span>
         <span className="grow" />
         {sp.error && <span className="err" style={{ margin: 0 }}>{sp.error}</span>}
         <button className="btn primary" disabled={busy || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}>
-          {busy ? `탐색 중… (예상 약 ${runningEstimate})` : '탐색 실행'}</button>
+          {busy ? `탐색 중… (예상 최대 약 ${runningEstimate})` : '탐색 실행'}</button>
       </div>
     </section>
   )

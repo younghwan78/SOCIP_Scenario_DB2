@@ -165,16 +165,16 @@ it.each(['statistic', 'options'])('marks a changed advanced %s as custom and ope
   expect(form().textContent).not.toContain('사용자 설정')
 })
 
-it('estimates from variant count at 1.3 seconds and keeps the submitted estimate while busy', async () => {
+it('shows catalog variant count and time as upper bounds and keeps the submitted estimate while busy', async () => {
   let finish!: (created: RunDetail) => void
   vi.mocked(archApi.createRun).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
   await mount()
-  expect(form().textContent).toContain('variant 70 × 최대 34,992 조합 · 예상 약 1분 31초')
+  expect(form().textContent).toContain('variant ≤70 × 최대 34,992 조합 · 예상 최대 약 1분 31초')
   await act(async () => button('탐색 실행').click())
-  expect(button('탐색 중… (예상 약 1분 31초)').disabled).toBe(true)
+  expect(button('탐색 중… (예상 최대 약 1분 31초)').disabled).toBe(true)
   act(() => form().querySelector<HTMLInputElement>('.ax-scen input')!.click())
-  expect(form().textContent).toContain('variant 0 × 최대 34,992 조합 · 예상 약 0초')
-  expect(button('탐색 중… (예상 약 1분 31초)').disabled).toBe(true)
+  expect(form().textContent).toContain('variant ≤0 × 최대 34,992 조합 · 예상 최대 약 0초')
+  expect(button('탐색 중… (예상 최대 약 1분 31초)').disabled).toBe(true)
   await act(async () => finish(run))
   expect(host.querySelector('[aria-label="작업 알림"]')?.textContent).toContain('탐색 완료: Synthetic run · variant 70개')
 })
