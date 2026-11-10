@@ -9,6 +9,8 @@ import { ExperimentContextBar } from './components/ExperimentContext'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, loadCompareSet, parseItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
 import { AdmissionWaitPill } from './components/AdmissionWait'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { StatusToast } from './components/StatusToast'
 
 const ExplorerPage = lazy(() => import('./pages/Explorer').then((m) => ({ default: m.ExplorerPage })))
 const MatrixPage = lazy(() => import('./pages/Matrix').then((m) => ({ default: m.MatrixPage })))
@@ -225,6 +227,7 @@ export default function App() {
         {!catalogQ.error && route.page !== 'home' && route.page !== 'settings' && route.page !== 'whatif' && <ExperimentContextBar scope={{ project_ref: project, scenario_id: scenario, variant_id: variant }} page={route.page} />}
         {catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
         <Suspense fallback={<div className="page" role="status">화면을 불러오는 중…</div>}>
+        <ErrorBoundary pageKey={JSON.stringify([route.page, project, scenario, variant, route.params])} pageName={TITLES[route.page]}>
         {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage key={project} ctx={ctx} />}
         {!catalogQ.error && route.page === 'pipeline' && <PipelinePage key={`${scenario}:${variant}`} ctx={ctx} />}
@@ -241,6 +244,7 @@ export default function App() {
         {!catalogQ.error && route.page === 'whatif' && <ScenarioWhatIfPage ctx={ctx} />}
         {!catalogQ.error && route.page === 'library' && <LibraryPage ctx={ctx} />}
         {route.page === 'settings' && <SettingsPage ctx={ctx} />}
+        </ErrorBoundary>
         </Suspense>
       </div>
       <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} projects={projects} scenarioId={scenario}
@@ -248,6 +252,7 @@ export default function App() {
           : navigate(pickerTarget(route.page), { scenario: s, variant: v }))}
         onAddCompare={toCompare} />
       <AdmissionWaitPill />
+      <StatusToast />
     </div>
   )
 }

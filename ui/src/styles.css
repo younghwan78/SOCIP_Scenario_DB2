@@ -860,6 +860,22 @@ tr.row-off td { opacity: .6; }
 @keyframes adm-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .admission-wait .spinner { animation: none; } }
 
+/* Page failures and global action feedback; leave room below for the admission wait pill. */
+.page-error-boundary { overflow-wrap: anywhere; }
+.page-error-boundary p { white-space: pre-wrap; }
+.status-toasts { position: fixed; top: 16px; right: 16px; z-index: 60; width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 160px); overflow-y: auto; display: grid; gap: 8px; }
+.status-toast { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface); box-shadow: 0 3px 12px rgba(0, 0, 0, .14); font-size: 13px; }
+.status-toast > div { display: grid; gap: 4px; flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.status-toast > button { flex-shrink: 0; }
+.status-toast-ok { border-left: 4px solid #2F6F68; }
+.status-toast-error { border-left: 4px solid #B42318; }
+.status-toast-info { border-left: 4px solid #0072B2; }
+.explore-advanced { border-top: 1px solid var(--line-soft); padding-top: 8px; }
+.explore-advanced > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.explore-advanced-fields { display: grid; gap: 10px; padding-top: 10px; }
+
 /* 조합 탐색 · Lever 분석 (2026-10-11) */
 .lever { display: grid; gap: 10px; }
 .lever h4 { margin: 0 0 4px; font-size: 12.5px; }
