@@ -23,9 +23,10 @@ from __future__ import annotations
 import math
 import random
 import re
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import Field, model_validator
 
@@ -52,6 +53,7 @@ _OUTPUT_RE = re.compile(r"(^|_)(mfc|mfd|apv|dpu|panel|display)", re.I)
 _GDC_RE = re.compile(r"(^|_)gdc", re.I)
 _ENCODER_RE = re.compile(r"(^|_)(mfc|apv)", re.I)
 _DISPLAY_RE = re.compile(r"(^|_)dpu", re.I)
+NOT_APPLICABLE_NOTE = "판정할 RT 단계와 출력(preview · video sink)이 없어 timing 판정을 적용하지 않음"
 
 
 # --------------------------------------------------------------------- inputs
@@ -262,7 +264,7 @@ def _sw_ranges(plan: dict, options: TimingBudgetOptions) -> dict[str, tuple[floa
             row = plan["profiles"].get(item["task"]) or {}
             if item["task"] in options.task_runtime:
                 row = options.task_runtime[item["task"]].model_dump()
-            vals = [row.get(k) for k in ("min_ms", "mean_ms", "max_ms")]
+            vals: list[Any] = [row.get(k) for k in ("min_ms", "mean_ms", "max_ms")]
             if any(v is None for v in vals) or float(vals[2]) <= float(vals[0]):
                 continue
             lo, mean, hi = (float(v) * options.runtime_scale for v in vals)
@@ -724,7 +726,7 @@ def _sw_order(sw_items: dict[str, list[dict[str, Any]]], edges: list) -> dict[st
             for st, items in sw_items.items()}
 
 
-def _stage_paths(sw_items: dict[str, list[dict[str, Any]]], stage: dict[str, str], workloads: dict[str, Any],
+def _stage_paths(sw_items: dict[str, list[dict[str, Any]]], stage: Mapping[str, str], workloads: dict[str, Any],
                  edges: list) -> dict[str, list[list[str]]]:
     """In-frame order of each stage's SW items and HW nodes together (same rule as ``_sw_order``): the stage
     chain is the longest path over them, so serial HW between SW items adds up (``chain_graph``)."""
@@ -919,7 +921,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "hw_ms":round(timing[node].hw_time_ms, 3) if node in timing else None,
                 # OTF-linked across DVFS domains: hw_ms is the group's time; standalone = this IP alone
                 "otf_group": timing[node].otf_group if node in timing else None,
-                "standalone_hw_ms": round(timing[node].standalone_hw_time_ms, 3)
+                "standalone_hw_ms": round(cast(float, timing[node].standalone_hw_time_ms), 3)
                 if node in timing and timing[node].standalone_hw_time_ms is not None else None,
                 "power_mw": round(res.total_power_mw * cores, 3),
                 # v2-vf clock term inputs (0 / None under v1) for analytic re-scaling.
@@ -1246,11 +1248,17 @@ def _verdict(stages, intervals, ips, domains=None, period: float | None = None) 
         factor = max(ip["set_clock_mhz"] / ip["rule_clock_mhz"] for ip in nrt)
     if reasons:
         status = "fail"
+    elif (not rt.get("nodes") and intervals["preview"]["ok"] is None
+          and intervals["video"]["ok"] is None and not intervals.get("streams")):
+        # Real failures win. RT-only capture and judged outputs keep their existing verdict and notes.
+        status = "not_applicable"
     elif factor and factor > 1.05:
         status = "clock_up"
     else:
         status = "ok"
     notes = []
+    if status == "not_applicable":
+        notes.append(NOT_APPLICABLE_NOTE)
     period = intervals.get("target_ms") or 0.0
     for s in stages:
         if s.get("throughput") == "pipelined" and period and s["chain_ms"] > period * 1.0001:
@@ -1595,12 +1603,12 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
                 break
             ladder = sorted(tables[g].levels, key=lambda lv: lv.speed_mhz)
             idx = next((i for i, lv in enumerate(ladder) if lv.level == found[g]["level"]), None)
-            j = None if idx is None else idx + k
-            if j is None or not 0 <= j < len(ladder):
+            combo_index = None if idx is None else idx + k
+            if combo_index is None or not 0 <= combo_index < len(ladder):
                 problem = f"{g} {k:+d}: OPP 경계 밖"
                 break
-            overrides[g] = ladder[j].level
-            label.append(f"{g} L{ladder[j].level}")
+            overrides[g] = ladder[combo_index].level
+            label.append(f"{g} L{ladder[combo_index].level}")
         row: dict[str, Any] = {"combo": dict(sorted(combo.items())), "label": " + ".join(label) or None}
         if problem:
             rows_combo = row | {"error": problem, "boundary": "경계" if "경계" in problem else None}

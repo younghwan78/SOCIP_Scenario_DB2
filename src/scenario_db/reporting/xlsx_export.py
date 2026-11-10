@@ -13,6 +13,7 @@ from typing import Any
 from xml.sax.saxutils import escape, quoteattr
 
 from scenario_db.reporting.clock_section import clock_sheet
+from scenario_db.reporting.timing_status import timing_label
 
 Row = list[Any]
 Sheet = tuple[str, Row, list[Row]]  # name, header, rows
@@ -148,7 +149,7 @@ def report_sheets(snap: dict[str, Any], meta: dict[str, Any] | None = None) -> l
                          " → ".join(r.get("checks") or []), r.get("mitigation"), r.get("owner"), r.get("status")] for r in snap["risk_register"]]))
     sheets.append(("Scenario", ["scenario", "variant", "fps", "EIS", "spec", "total mW", "CPU mW", "IP mW", "IP BW mW", "CPU BW mW", "BW MB/s",
                                 "range min mW", "range max mW", "compression buf", "DVFS", "prediction id"],
-                   [[r["scenario_id"], r["variant_id"], r["fps"], r["eis_on"], "OK" if r["spec_ok"] else "FAIL",
+                   [[r["scenario_id"], r["variant_id"], r["fps"], r["eis_on"], timing_label(r),
                      _r(r["power"].get("total_mw")), _r(r["power"].get("cpu_mw")), _r(r["power"].get("hw_mw")),
                      _r(r["power"].get("bw_ip_mw", r["power"].get("bw_mw"))), _r(r["power"].get("bw_cpu_mw")), _r(r.get("bw_mbs"), 0),
                      _r((r.get("distribution") or {}).get("total_mw", {}).get("min")), _r((r.get("distribution") or {}).get("total_mw", {}).get("max")),
@@ -159,7 +160,7 @@ def report_sheets(snap: dict[str, Any], meta: dict[str, Any] | None = None) -> l
                     [{"text": x, "action": "", "raw": x} for x in f["reasons"]])]))
     sheets.append(("Latency", ["variant", "fps", "period ms", "preview latency ms", "video latency ms", "preview interval ms", "video interval ms", "spec"],
                    [[r["variant_id"], r["fps"], _r(r.get("period_ms"), 3), _r((r.get("latency") or {}).get("preview_ms")), _r((r.get("latency") or {}).get("video_ms")),
-                     _r((r.get("intervals") or {}).get("preview"), 3), _r((r.get("intervals") or {}).get("video"), 3), "OK" if r["spec_ok"] else "FAIL"]
+                     _r((r.get("intervals") or {}).get("preview"), 3), _r((r.get("intervals") or {}).get("video"), 3), timing_label(r)]
                     for r in snap["scenarios"] if r.get("latency")]))
     sheets.append(("실측 대조", ["variant", "합성", "측정일", "실측 mW", "예측 mW", "total Δ%", "CPU Δ%", "IP Δ%", "BW Δ%", "미모델 mW", "최대 오차 항목", "상쇄"],
                    [[r["variant_id"], r["synthetic"], str(r.get("measured_at") or "")[:10], _r(r["measured_mw"]), _r(r["predicted_mw"]), _r(r["delta_pct"], 2)]

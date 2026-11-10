@@ -642,9 +642,11 @@ def _slice_ok(s: dict[str, Any], c: ExplorationConstraints) -> tuple[bool, list[
     status = s["verdict"]["status"]
     if status == "fail":
         reasons += s["verdict"]["reasons"] or ["timing fail"]
+    elif status == "not_applicable":
+        reasons += s["verdict"].get("notes") or ["timing 판정 미지원"]
     if status == "clock_up" and not c.allow_clock_up:
         reasons.append("clock above the 25% rule is not allowed")
-    if c.require_intervals and not s["intervals_ok"]:
+    if c.require_intervals and not s["intervals_ok"] and status != "not_applicable":
         reasons.append("preview/video interval off target")
     if c.require_power_model and s["power"]["hw_mw"] <= 0:
         reasons.append("IP core power 미모델 (unit_power=0) — power 비교 불가")
@@ -1043,7 +1045,7 @@ def _pareto(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _fixed_growth(slices: list[dict[str, Any]], obj: Any, rec: dict[str, Any] | None) -> dict[str, Any]:
     """SW growth the *recommended* DVFS levels absorb (no re-selection), vs the re-optimised tolerance.
 
-    A growth slice passes when its timing verdict is not fail and, per DVFS domain, the recommended
+    A growth slice passes when its timing verdict is ok/clock_up and, per DVFS domain, the recommended
     level's speed covers that slice's required clock (analytic check; no extra simulation).
     """
     if rec is None:
@@ -1057,7 +1059,7 @@ def _fixed_growth(slices: list[dict[str, Any]], obj: Any, rec: dict[str, Any] | 
     for s in sorted((x for x in slices if x["statistic"] == obj.statistic), key=lambda x: x["runtime_scale"]):
         short = [d["domain"] for d in s.get("domains") or []
                  if speed.get(d["domain"], {}).get(rec["dvfs"].get(d["domain"], d["base_level"]), 0.0) < d["max_required_mhz"]]
-        rows.append({"runtime_scale": s["runtime_scale"], "ok": s["verdict"]["status"] != "fail" and not short,
+        rows.append({"runtime_scale": s["runtime_scale"], "ok": s["verdict"]["status"] in ("ok", "clock_up") and not short,
                      "short_domains": short})
     tol = None
     for r in rows:
@@ -1236,7 +1238,7 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
             **row,
         })
     worst = min(rows, key=lambda r: r["margin_pct"], default=None)
-    passing = [s["runtime_scale"] for s in slices if s["statistic"] == obj.statistic and s["verdict"]["status"] != "fail"]
+    passing = [s["runtime_scale"] for s in slices if s["statistic"] == obj.statistic and s["verdict"]["status"] in ("ok", "clock_up")]
     all_scales = sorted(s["runtime_scale"] for s in slices if s["statistic"] == obj.statistic)
     by_stat = {s["statistic"]: s["stages"].get(worst["stage"], {}).get("sw_ms", 0.0)
                for s in slices if worst and s["runtime_scale"] == obj.runtime_scale}
@@ -1262,6 +1264,8 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
 
 
 def recommendations(m: dict[str, Any], s: dict[str, Any]) -> list[str]:
+    if s["verdict"]["status"] == "not_applicable":
+        return list(s["verdict"].get("notes") or ["timing 판정 미지원"])
     w = m.get("worst")
     if not w:
         return []
@@ -1565,6 +1569,8 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     milestone shows how far the greedy path stopped above it. A baseline that already misses the constraints
     makes the analysis reference-only (``baseline_eligible`` False, no eligibility filter).
     """
+    if ((summary.get("objective_slice") or {}).get("verdict") or {}).get("status") == "not_applicable":
+        return {"status": "none"}  # the reference-only fallback must not produce optima without a timing judgement
     po = summary.get("power_options") or {}
     item_iq: dict[str, str] = {}
     item_label: dict[str, str] = {}

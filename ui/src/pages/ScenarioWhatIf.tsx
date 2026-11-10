@@ -4,7 +4,8 @@ import { api, ApiError } from '../lib/api'
 import { projectText } from '../lib/projects'
 import { useCredentialKeyId } from '../lib/auth'
 import { useAsync } from '../lib/route'
-import { fmt } from '../lib/timingBudget'
+import { fmt, verdictChip } from '../lib/timingBudget'
+import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 import { LEVER_GROUPS, clockExplanation, defaultChange, describeChange, evidenceLabel, geometryError, groupOf, kindsOf, shrink, suggestedLevers, upsertChange, validChange, whatIfApi, type AskKind, type AskRequest, type AskResponse, type ChangeKindMeta, type CombineMode, type CombineResult, type ExperimentDraft, type FocusMetric, type LeverOption, type PreviewRequest, type WhatIfChange, type WhatIfResult, type WhatIfScope, type WhatIfTargets, type WhatIfSettings } from '../lib/scenarioWhatIf'
 import { Card } from '../components/TimingCharts'
 import { BaselineCard, CandidateBench, ImpactPreview, PowerCoverage, ResultState } from '../components/WhatIfWorkbench'
@@ -19,7 +20,8 @@ const ASK_FALLBACK: { ask: AskKind; label: string; description: string }[] = [
   { ask: 'diagnose', label: '병목 찾기', description: '기준 조건에서 가장 빠듯한 구간 · IP와 domain별 여유' },
 ]
 /** Badge per verdict; the wording follows the question kind (a condition is 가능/불가, a baseline is 충족/미달). */
-function verdictBadge(verdict: string, ask: AskKind | undefined): { label: string; cls: string } {
+function verdictBadge(verdict: string, ask: AskKind | undefined): { label: string; cls: string; explanation?: string } {
+  if (verdict === 'not_applicable') return verdictChip(verdict)
   if (verdict === 'ok') return { label: 'timing 충족', cls: 'v-ok' }
   if (verdict === 'fail') return { label: ask === 'what_if' ? '불가' : 'timing 미달', cls: 'v-fail' }
   if (verdict === 'boundary') return { label: '더 바꿀 수 없음', cls: 'v-warn' }
@@ -293,6 +295,7 @@ function AnswerView({ resp, asked, dirty, busy, onAction, onChoose }: { resp: As
     <ResultState dirty={dirty} condition={asked} />
     {a && <>
       {(() => { const badge = verdictBadge(a.verdict, resp.plan?.ask); return <p className="wi-headline"><span className={`badge ${dirty ? 'v-na' : badge.cls}`}>{dirty ? '이전 판정' : badge.label}</span> <b>{a.headline}</b></p> })()}
+      {verdictBadge(a.verdict, resp.plan?.ask).explanation && <p className="faint">{verdictBadge(a.verdict, resp.plan?.ask).explanation}</p>}
       {resp.result && <PowerCoverage coverage={resp.result.candidate.coverage} sensorPower={resp.result.candidate.metrics.sensor_power_mw} />}
       {a.facts.length > 0 && <ul className="wi-answer">{a.facts.map((f) => <li key={f} className={f.startsWith('미달') ? 'warn' : ''}>{f}</li>)}</ul>}
       {a.actions.length > 0 && <div className="toolbar" style={{ flexWrap: 'wrap' }}><span className="faint">이어서</span>{a.actions.map((x) => <button key={x.label} className="btn tb-mini" disabled={busy} onClick={() => onAction(x)}>{x.label}</button>)}</div>}
@@ -312,7 +315,7 @@ function SearchView({ rows, dirty, condition }: { rows: NonNullable<AskResponse[
     <ResultState dirty={dirty} condition={condition} />
     {rows.map((r) => <div key={r.domain} className="table-x"><p><b>{r.domain}</b> <span className="faint">현재 L{r.level} · {r.mhz} MHz · {r.ips.join(', ')}</span></p>
       {r.at_min ? <p className="faint">이미 최저 OPP입니다.</p> : <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>level</th><th>MHz</th><th>판정</th><th>모델 전력 Δ mW</th><th>최소 여유 ms</th><th>미달 사유</th></tr></thead>
-        <tbody>{r.rows.map((x) => <tr key={x.level} className={x.feasible ? '' : 'wi-fail'}><th>L{x.level}</th><td className="mono">{x.mhz}</td><td>{x.feasible ? '충족' : '미달'}</td>
+        <tbody>{r.rows.map((x) => <tr key={x.level} className={x.feasible ? '' : 'wi-fail'}><th>L{x.level}</th><td className="mono">{x.mhz}</td><td>{x.verdict === 'not_applicable' ? <TimingVerdictBadge status={x.verdict} /> : x.feasible ? '충족' : '미달'}</td>
           <td className="mono">{x.delta_mw != null ? fmt(x.delta_mw, 1) : '—'}</td><td className="mono">{x.min_slack_ms != null ? `${fmt(x.min_slack_ms, 2)} (${x.tight_stage})` : '—'}</td><td>{x.reason ?? ''}</td></tr>)}</tbody></table>}
     </div>)}
   </Card>
@@ -454,7 +457,7 @@ function CombineView({ combo, dirty, condition }: { combo: CombineResult; dirty:
             <rect x={(Math.min(0, d) - lo) / span * 150} width={Math.abs(d) / span * 150} y={1} height={8} fill={d <= 0 ? '#009E73' : '#D55E00'} /></svg>}</td>
           {(['ip_power_mw', 'memory_power_mw', 'cpu_power_mw'] as const).map((k) => <td key={k} className="mono">{r.delta ? fmt(r.delta[k], 1) : '—'}</td>)}
           <td className="mono">{r.delta ? fmt(r.delta.bw_mbs, 0) : '—'}</td>
-          <td>{r.error ? <span className="badge v-na">적용 불가</span> : <span className={`badge ${r.feasible ? 'v-ok' : 'v-fail'}`}>{r.feasible ? '충족' : '미달'}</span>}</td>
+          <td>{r.error ? <span className="badge v-na">적용 불가</span> : r.verdict === 'not_applicable' ? <TimingVerdictBadge status={r.verdict} /> : <span className={`badge ${r.feasible ? 'v-ok' : 'v-fail'}`}>{r.feasible ? '충족' : '미달'}</span>}</td>
           <td className="mono">{r.min_slack_ms != null ? `${fmt(r.min_slack_ms, 2)}${r.tight_stage ? ` (${r.tight_stage})` : ''}` : '—'}</td>
           <td className="faint" style={{ maxWidth: 360 }}>{[r.reason, ...r.notes].filter(Boolean).join(' · ')}</td></tr> })}</tbody></table></div>
     {combo.interaction_mw != null && Math.abs(combo.interaction_mw) >= 0.5 && <p className="faint">모두 적용 − 단독 합 = {combo.interaction_mw >= 0 ? '+' : ''}{fmt(combo.interaction_mw, 1)} mW — 같은 DVFS domain · 같은 buffer를 건드리는 레버는 효과가 단순 합산되지 않습니다.</p>}
@@ -474,7 +477,7 @@ function ResultView({ result, focus, dirty }: { result: WhatIfResult; focus: Foc
     <Card id="wi-result" title="기준 대비 조건 변경 결과" note="요구 clock과 적용 clock을 구분하고 모델 범위를 함께 확인하세요." defaultWide>
       <ResultState dirty={dirty} condition={condition} />
       <PowerCoverage coverage={after.coverage} sensorPower={after.metrics.sensor_power_mw} />
-      <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>항목</th><th>기준</th><th>변경</th><th>변화</th></tr></thead><tbody>{metrics.map(({ key, label, unit }) => <tr key={key} className={hot.has(key) ? 'wi-focus' : ''}><th>{label} ({unit})</th><td className="mono">{fmt(before.metrics[key], 2)}</td><td className="mono">{fmt(after.metrics[key], 2)}</td><td className="mono">{delta(before.metrics[key], after.metrics[key])}</td></tr>)}<tr><th>처리량 조건</th><td>{before.metrics.feasible ? '충족' : '미달'}</td><td>{after.metrics.feasible ? '충족' : '미달'}</td><td>{after.report.verdict.reasons.join(' · ')}</td></tr></tbody></table>
+      <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>항목</th><th>기준</th><th>변경</th><th>변화</th></tr></thead><tbody>{metrics.map(({ key, label, unit }) => <tr key={key} className={hot.has(key) ? 'wi-focus' : ''}><th>{label} ({unit})</th><td className="mono">{fmt(before.metrics[key], 2)}</td><td className="mono">{fmt(after.metrics[key], 2)}</td><td className="mono">{delta(before.metrics[key], after.metrics[key])}</td></tr>)}<tr><th>처리량 조건</th><td>{before.report.verdict.status === 'not_applicable' ? <TimingVerdictBadge status={before.report.verdict.status} /> : before.metrics.feasible ? '충족' : '미달'}</td><td>{after.report.verdict.status === 'not_applicable' ? <TimingVerdictBadge status={after.report.verdict.status} /> : after.metrics.feasible ? '충족' : '미달'}</td><td>{after.report.verdict.reasons.join(' · ')}</td></tr></tbody></table>
       <div className="table-x"><table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>IP</th><th>요구 clock MHz (기준 → 변경)</th><th>적용 clock MHz (기준 → 변경)</th><th>IP power mW (기준 → 변경)</th><th>변경 근거</th></tr></thead><tbody>{after.report.ips.map((ip) => { const base = baseIps.get(ip.node); return <tr key={ip.node}><th>{ip.node}</th><td>{fmt(base?.required_clock_mhz, 1)} → {fmt(ip.required_clock_mhz, 1)}</td><td>{fmt(base?.set_clock_mhz, 1)} → {fmt(ip.set_clock_mhz, 1)}</td><td>{fmt(base?.power_mw, 1)} → {fmt(ip.power_mw, 1)}</td><td title={explanations.get(ip.node)}>{clockExplanation(ip, explanations.get(ip.node))}</td></tr> })}</tbody></table></div>
       <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>Stage</th><th>HW ms (기준 → 변경)</th><th>예산 ms (기준 → 변경)</th><th>SW ms (기준 → 변경)</th></tr></thead><tbody>{after.report.stages.map((stage) => { const base = baseStages.get(stage.id); return <tr key={stage.id}><th>{stage.name}</th><td>{fmt(base?.hw_ms, 2)} → {fmt(stage.hw_ms, 2)}</td><td>{fmt(base?.budget_ms, 2)} → {fmt(stage.budget_ms, 2)}</td><td>{fmt(base?.sw_ms, 2)} → {fmt(stage.sw_ms, 2)}</td></tr> })}</tbody></table>
       {!!result.lever_notes?.length && <ul className="wi-answer">{result.lever_notes.map((n) => <li key={n}>{n}</li>)}</ul>}

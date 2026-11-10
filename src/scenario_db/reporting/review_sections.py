@@ -17,6 +17,7 @@ from scenario_db.reporting.perf_sections import latency_buffer_block, output_fps
 from scenario_db.reporting.power_groups import heatmap_block, ranking_block
 from scenario_db.reporting.sustained_section import sustained_block, sustained_lead
 from scenario_db.reporting.risk_rules import cpu_tolerance_min
+from scenario_db.reporting.timing_status import timing_class, timing_label, timing_unsupported
 
 _f, _short = ar._f, ar._short
 
@@ -260,6 +261,8 @@ def _lead_perf(snap: dict[str, Any]) -> str:
     t = f"fps 만족 <b>{s['spec_ok']}/{s['explored']}</b>"
     if s["spec_fail"]:
         t += f" · 미달 {s['spec_fail']}건 ({escape(', '.join(_short(f['variant_id']) for f in s['failed'][:3]))})"
+    if s.get("not_applicable"):
+        t += f" · 판정 미지원 {len(s['not_applicable'])}건"
     if low:
         t += f" · SW margin 10% 미만 {len(low)}건 (최소 {low[0]['margin_pct']:.0f}% {escape(_short(low[0]['variant_id']))})"
     asks = [x for x in sw_requests(snap) if x["need_ms"] > 0]
@@ -267,7 +270,7 @@ def _lead_perf(snap: dict[str, Any]) -> str:
         t += " · SW 최적화 요청 " + escape(", ".join(
             f"{x['task']} −{x['need_model_fps']:.1f} ms" if x.get("need_model_fps")
             else f"{x['task']} −{x['need_ms']:.1f} ms (고속 batch 미모델 상한)" for x in asks[:3]))
-    return _lead(t, "fail" if s["spec_fail"] else "warn" if low else "ok")
+    return _lead(t, "fail" if s["spec_fail"] else "warn" if low else "meta" if s.get("not_applicable") else "ok")
 
 
 def _lead_power(snap: dict[str, Any]) -> str:
@@ -402,8 +405,8 @@ def dossier(snap: dict[str, Any]) -> str:
         ma = (ctx.get(key) or {}).get("ma")
         lat = r.get("latency") or {}
         rows: list[tuple[str, str]] = [
-            ("판정", f"<b class={'ok' if r['spec_ok'] else 'fail'}>{'fps 만족' if r['spec_ok'] else 'fps 미달'}</b> · {_f(r['fps'], 0)} fps"
-             + ("" if r["spec_ok"] or fps_validity(r)[0] == "confirmed" else
+            ("판정", f"<b class={timing_class(r)}>{timing_label(r, 'fps 만족', 'fps 미달')}</b> · {_f(r['fps'], 0)} fps"
+             + ("" if timing_unsupported(r) or r["spec_ok"] or fps_validity(r)[0] == "confirmed" else
                 f" <b class=warn>검증 필요 · {VALIDITY_LABEL[fps_validity(r)[0]]}</b> <span class=meta>{escape(fps_validity(r)[1])}</span>")
              + ("" if r.get("prediction_id") or not r["spec_ok"] else " <span class=warn>미등록 (탐색값)</span>")
              + (" · EIS" if r.get("eis_on") else "")
@@ -496,17 +499,17 @@ def category_section(snap: dict[str, Any]) -> str:
               "category = review_policy.categories(scenario id glob) 또는 scenario id 규칙. 탐색 0인 category는 이 보고서의 판정 밖(검토 공백).</p>"
               "<table><tr><th>Category</th><th>Scenario</th><th>제품 variant</th><th>탐색</th><th>등록 예측</th><th>검토</th></tr>")
         for g in order:
-            c = cov.get(g)
+            coverage_group = cov.get(g)
             nb = len(by.get(g) or [])
-            if c is None:
+            if coverage_group is None:
                 continue
             # judged on the product variants explored (coverage excludes derived sub-variants): opinion blocks built
             # from derived variants alone do not close the product gap
-            state = (f"<span class=ok>검토 · {nb}개 분류</span>" if c["explored"] and nb else
+            state = (f"<span class=ok>검토 · {nb}개 분류</span>" if coverage_group["explored"] and nb else
                      f"<span class=warn>파생 variant만 검토 ({nb}개 분류) — 제품 variant 공백</span>" if nb else
                      "<span class=warn>미탐색 — 검토 공백</span>")
-            h += (f"<tr><td><b>{escape(g)}</b></td><td class=meta>{escape(', '.join(c['scenarios']))}</td><td class=n>{c['variants']}</td>"
-                  f"<td class='n {'' if c['explored'] else 'warn'}'>{c['explored']}</td><td class=n>{c['registered']}</td><td>{state}</td></tr>")
+            h += (f"<tr><td><b>{escape(g)}</b></td><td class=meta>{escape(', '.join(coverage_group['scenarios']))}</td><td class=n>{coverage_group['variants']}</td>"
+                  f"<td class='n {'' if coverage_group['explored'] else 'warn'}'>{coverage_group['explored']}</td><td class=n>{coverage_group['registered']}</td><td>{state}</td></tr>")
         h += "</table>"
     for i, g in enumerate(g for g in order if g in by):
         bs = by[g]
@@ -572,7 +575,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
         out.append(("Risk register", drivers_table(snap) + ar._risk_register(snap["risk_register"], snap.get("scope") or {}), None, 1))
     lat_rows = [r for r in snap["scenarios"] if r.get("latency")]
     doms = snap.get("domains") or []
-    dom_head = {}
+    dom_head: dict[tuple[str, str], float] = {}
     for d in doms:
         if d.get("headroom_pct") is not None:
             key = (d["scenario_id"], d["variant_id"])

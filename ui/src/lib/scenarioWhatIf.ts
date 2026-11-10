@@ -1,5 +1,6 @@
-import { getJson, postJson } from './api'
+import { getJson, postJson, type TimingVerdictStatus } from './api'
 import type { IpRow, TimingReport } from './timingBudget'
+import { verdictChip } from './timingBudget'
 
 export interface WhatIfScope { project_ref: string; scenario_id: string; variant_id: string }
 /** ``target`` names a server-registered change kind (``WhatIfTargets.change_kinds``); the editor is driven by that metadata. */
@@ -65,10 +66,10 @@ export interface WhatIfTargets extends WhatIfScope {
 export interface WhatIfDomain { id: string; level: number; mhz: number; ips: string[]; stages: string[]; ladder: { level: number; mhz: number }[]; index: number }
 export type AskKind = 'what_if' | 'combine' | 'search_limit' | 'diagnose'
 export interface AskAction { label: string; ask: AskKind; search_domains?: string[] }
-export interface WhatIfAnswer { verdict: 'ok' | 'fail' | 'info' | 'boundary'; headline: string; facts: string[]; actions: AskAction[] }
+export interface WhatIfAnswer { verdict: 'ok' | 'fail' | 'info' | 'boundary' | 'not_applicable'; headline: string; facts: string[]; actions: AskAction[] }
 export interface SearchRow {
   domain: string; level: number; mhz: number; ips: string[]; at_min: boolean
-  rows: { level: number; mhz: number; feasible: boolean; power_mw?: number; delta_mw?: number; min_slack_ms?: number; tight_stage?: string; reason: string | null }[]
+  rows: { level: number; mhz: number; feasible: boolean; verdict?: TimingVerdictStatus; power_mw?: number; delta_mw?: number; min_slack_ms?: number; tight_stage?: string; reason: string | null }[]
   lowest: SearchRow['rows'][number] | null; first_fail: SearchRow['rows'][number] | null
 }
 export interface Diagnosis {
@@ -83,7 +84,7 @@ export type CombineMode = 'each' | 'factorial'
 export interface CombineRow {
   key: string; levers: number[]; metrics: WhatIfMetrics | null
   delta: Record<'modeled_power_mw' | 'cpu_power_mw' | 'ip_power_mw' | 'memory_power_mw' | 'bw_mbs', number> | null
-  feasible: boolean; min_slack_ms: number | null; tight_stage: string | null; reason: string | null; error?: boolean; notes: string[]
+  feasible: boolean; verdict?: TimingVerdictStatus; min_slack_ms: number | null; tight_stage: string | null; reason: string | null; error?: boolean; notes: string[]
   /** API ≥ scenario-whatif/3: worst IQ class of the row's levers */
   iq?: IqClass
 }
@@ -121,7 +122,7 @@ export interface WhatIfPlan {
 }
 export interface PreviewRequest extends WhatIfScope { basis_ref?: string; comparison?: 'retune' | 'fixed_opp'; changes: WhatIfChange[]; expected_baseline_hash: string; expected_analysis_hash?: string; config?: Record<string, unknown>; options?: Record<string, unknown> }
 export type WhatIfSettings = Pick<PreviewRequest, 'config' | 'options' | 'basis_ref' | 'comparison'>
-export interface WhatIfMetrics { modeled_power_mw: number; total_power_mw: number | null; cpu_power_mw: number; ip_power_mw: number; memory_power_mw: number; bw_mbs: number; fps: number; period_ms: number; feasible: boolean; sensor_power_mw?: number | null; latency_ms?: number | null }
+export interface WhatIfMetrics { modeled_power_mw: number; total_power_mw: number | null; cpu_power_mw: number; ip_power_mw: number; memory_power_mw: number; bw_mbs: number; fps: number; period_ms: number; feasible: boolean; verdict?: TimingVerdictStatus; sensor_power_mw?: number | null; latency_ms?: number | null }
 export interface WhatIfCoverage { complete: boolean; scope: string; missing_components: string[]; excluded_components: string[]; cpu_model: string; assumptions: string[] }
 export interface WhatIfResult {
   baseline_hash: string; analysis_hash?: string; condition_hash: string; normalized_condition: { scope: WhatIfScope; changes: WhatIfChange[]; comparison?: 'retune' | 'fixed_opp'; config: Record<string, unknown>; options: Record<string, unknown> }
@@ -322,7 +323,7 @@ export function answerLines(result: WhatIfResult, focus: FocusMetric[] = []): { 
       const s0 = tight(b), s1 = tight(c)
       if (s1) lines.push({ key, warn: !s1.feasible, text: `가장 빠듯한 stage ${s1.name}: ${(s1.hw_ms + s1.sw_ms).toFixed(2)} / ${s1.budget_ms.toFixed(2)} ms (사용률 ${(s1.fill_pct ?? 0).toFixed(0)}%${s0 ? `, 기준 ${s0.name} ${(s0.fill_pct ?? 0).toFixed(0)}%` : ''}) · frame period ${b.metrics.period_ms.toFixed(2)} → ${c.metrics.period_ms.toFixed(2)} ms` })
     } else if (key === 'feasible') {
-      lines.push({ key, warn: !c.metrics.feasible, text: c.metrics.feasible ? `처리량 조건 충족${b.metrics.feasible ? '' : ' (기준은 미달)'}` : `처리량 조건 미달 — ${c.report.verdict.reasons.join(' · ') || '사유 미상'}` })
+      lines.push({ key, warn: !c.metrics.feasible, text: c.report.verdict.status === 'not_applicable' ? verdictChip(c.report.verdict.status).label : c.metrics.feasible ? `처리량 조건 충족${b.metrics.feasible ? '' : ' (기준은 미달)'}` : `처리량 조건 미달 — ${c.report.verdict.reasons.join(' · ') || '사유 미상'}` })
     }
   }
   return lines

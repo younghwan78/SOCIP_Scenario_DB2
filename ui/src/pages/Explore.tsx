@@ -25,6 +25,7 @@ import { VariantFailures } from '../components/VariantFailures'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
 import { notify } from '../lib/status'
+import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
@@ -241,7 +242,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
     { key: 'spec', label: 'spec', width: 96, sort: (r) => (r.spec_ok ? 1 : 0), title: (r) => [...r.spec_reasons, ...(coverageOf(r) === 'partial' ? [`전력 미모델 IP: ${(r.coverage?.zero_power_ips ?? []).join(', ')} — power는 모델된 IP 합계`] : [])].join('\n'),
-      render: (r) => <span style={{ display: 'inline-flex', gap: 4 }}><span className={`badge ${r.spec_ok ? 'v-ok' : 'v-fail'}`}>{r.spec_ok ? 'OK' : 'Fail'}</span>
+      render: (r) => <span style={{ display: 'inline-flex', gap: 4 }}><TimingVerdictBadge status={r.baseline.verdict === 'not_applicable' ? 'not_applicable' : r.spec_ok ? 'ok' : 'fail'} />
         {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}</span> },
     { key: 'tot', label: '추천 mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.recommended?.total_mw ?? -1, render: (r) => r.recommended ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.recommended} width={70} /><b className="mono">{fmt(r.recommended.total_mw, 1)}</b></span> : '—' },
     { key: 'cpu', label: 'CPU', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.cpu_mw ?? -1, render: (r) => fmt(r.recommended?.cpu_mw, 0) },

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { updateExperimentContext } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
+import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
+import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -133,7 +134,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
           measuredOption: (measQ.data ?? []).find((o) => o.id === measured?.measurement_ref) ?? null, powerParams: pp, defaultPowerParams: defaultPp,
           pinnedDomains: Object.keys(overrides).sort(), cpuModel: appliedCpuModel(r, measured?.cpu ? 'profile' : cpuModel) }} />
         <span className="grow" />
-        {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
+        {r && <TimingVerdictBadge status={r.verdict.status} reasons={r.verdict.reasons} />}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}
           onClick={() => { const d = document.getElementById('tb-warnings') as HTMLDetailsElement | null; if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }) } }}>경고 {r.warnings.length}</button>}
         {r && <span className="chip">{fmt(r.fps, 0)} fps · P {fmt(r.period_ms, 3)} ms</span>}

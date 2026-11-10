@@ -6,6 +6,7 @@ import { useAsync } from './route'
 export const API_BASE: string = (import.meta.env.VITE_SCENARIODB_API_BASE as string | undefined) ?? '/api/v1'
 
 export type Dict = Record<string, unknown>
+export type TimingVerdictStatus = 'ok' | 'clock_up' | 'fail' | 'not_applicable'
 
 export interface Paged<T> { items: T[]; total: number }
 
