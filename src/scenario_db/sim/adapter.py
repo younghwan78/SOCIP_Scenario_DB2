@@ -7,6 +7,7 @@ from scenario_db.sim.external_devices import (
     active_sensor_nodes,
     external_devices,
     selected_sensor_mode,
+    sensor_mode_cache,
 )
 from scenario_db.sim.models import IPWorkload, PortTransferSpec, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
@@ -17,6 +18,7 @@ from scenario_db.sim.timing_profiles import timing_case, timing_profiles
 from scenario_db.sim.workloads import build_workload_for_node, node_sim_block
 
 
+@sensor_mode_cache()
 def build_simulation_inputs(
     graph: CanonicalScenarioGraph,
     config: SimulationRunConfig | None = None,
