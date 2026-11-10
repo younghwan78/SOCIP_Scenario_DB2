@@ -1,8 +1,97 @@
 from __future__ import annotations
 
-from typing import Any
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
+from dataclasses import dataclass, field
+from functools import lru_cache, wraps
+from typing import Any, Callable, Iterator, TypeVar
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
+
+
+@dataclass
+class _SensorModeCache:
+    # Retain graphs until this adapter call ends, so their identity cannot be reused.
+    graphs: dict[int, CanonicalScenarioGraph] = field(default_factory=dict)
+    results: dict[tuple[Any, ...], Any] = field(default_factory=dict)
+    design_keys: dict[int, tuple[dict[str, Any], str]] = field(default_factory=dict)
+
+    def design_key(self, graph: CanonicalScenarioGraph) -> str:
+        design = graph.variant.design_conditions or {}
+        entry = self.design_keys.get(id(graph))
+        # Design conditions are stable during adaptation. Keep a snapshot so an
+        # explicit in-place edit still invalidates the key without repeated repr().
+        if entry is None or entry[0] != design:
+            entry = (deepcopy(design), repr(design))
+            self.design_keys[id(graph)] = entry
+        return entry[1]
+
+
+_SENSOR_MODE_CACHE: ContextVar[_SensorModeCache | None] = ContextVar(
+    "sensor_mode_cache", default=None,
+)
+_T = TypeVar("_T")
+_SensorResolver = Callable[[CanonicalScenarioGraph, dict[str, Any] | None], _T]
+_SensorKey = Callable[[CanonicalScenarioGraph, dict[str, Any] | None], Any]
+
+
+@contextmanager
+def sensor_mode_cache() -> Iterator[None]:
+    """Opt in to an isolated cache for one adapter call, including nested helpers."""
+    token = _SENSOR_MODE_CACHE.set(_SensorModeCache())
+    try:
+        yield
+    finally:
+        _SENSOR_MODE_CACHE.reset(token)
+
+
+def _memoized_sensor_resolution(
+    key_for_node: _SensorKey, *, copy_result: bool = False,
+) -> Callable[[_SensorResolver[_T]], _SensorResolver[_T]]:
+    def decorate(resolve: _SensorResolver[_T]) -> _SensorResolver[_T]:
+        @wraps(resolve)
+        def cached(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> _T:
+            cache = _SENSOR_MODE_CACHE.get()
+            if cache is None:
+                result = resolve(graph, node)
+            else:
+                cache.graphs[id(graph)] = graph
+                # Catalogs are read-only during adaptation. Every design value matters:
+                # mode preference/cropping searches the entire design text for "video".
+                key = (resolve, id(graph), graph.scenario_id,
+                       cache.design_key(graph),
+                       key_for_node(graph, node))
+                if key not in cache.results:
+                    cache.results[key] = resolve(graph, node)
+                result = cache.results[key]
+            # Private helpers are read-only consumers. Copy the public selection once,
+            # including nested DT payloads, rather than at every helper boundary.
+            return deepcopy(result) if copy_result and isinstance(result, dict) else result
+        return cached
+    return decorate
+
+
+def _selected_sensor_key(graph: CanonicalScenarioGraph, node: dict[str, Any] | None) -> Any:
+    cfg = (graph.variant.node_configs or {}).get(str(node.get("id")), {}) if node else {}
+    return (
+        node.get("id") if node else None, node.get("ip_ref") if node else None,
+        repr(tuple(cfg.get(key) for key in (
+            "resolved_sensor_mode", "sensor_readout", "mode", "selected_mode",
+            "sensor_mode", "sensor_mode_ref",
+        ))),
+    )
+
+
+def _sensor_row_key(graph: CanonicalScenarioGraph, node: dict[str, Any] | None) -> Any:
+    ip_ref = str(node.get("ip_ref")) if node and node.get("ip_ref") else None
+    row = graph.ip_catalog.get(ip_ref) if ip_ref else None
+    # Non-sensor nodes all use the same design-selected fallback row.
+    return ip_ref if row is not None and str(getattr(row, "category", "") or "").lower() == "sensor" else None
+
+
+def _base_sensor_key(graph: CanonicalScenarioGraph, node: dict[str, Any] | None) -> Any:
+    return (_sensor_row_key(graph, node), repr(_node_selected_sensor_mode(graph, node)))
 
 
 def apply_source_sink_constraints(
@@ -64,9 +153,10 @@ def active_sensor_nodes(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
     return result
 
 
+@_memoized_sensor_resolution(_selected_sensor_key, copy_result=True)
 def selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> dict[str, Any] | None:
     cfg = ((graph.variant.node_configs or {}).get(str(node.get("id")), {}) if node else {})
-    mode = cfg.get("resolved_sensor_mode") or _base_selected_sensor_mode(graph, node)
+    mode = deepcopy(cfg.get("resolved_sensor_mode")) or _base_selected_sensor_mode(graph, node)
     override = ((graph.variant.node_configs or {}).get(str(node.get("id")), {}) if node else {}).get("sensor_readout")
     if mode is None or not override:
         return mode
@@ -81,6 +171,7 @@ def selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | N
     }
 
 
+@_memoized_sensor_resolution(_base_sensor_key)
 def _base_selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> dict[str, Any] | None:
     row = _selected_sensor_row(graph, node)
     if row is None:
@@ -111,6 +202,7 @@ def selected_panel_properties(graph: CanonicalScenarioGraph) -> dict[str, Any] |
     return None
 
 
+@_memoized_sensor_resolution(_sensor_row_key)
 def _selected_sensor_row(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> Any | None:
     candidates = [
         row
@@ -284,18 +376,32 @@ def _size_text(value: Any) -> str | None:
 
 
 def _size_tuple(value: Any) -> tuple[int, int] | None:
-    if isinstance(value, str) and "x" in value.lower():
-        left, right = value.lower().split("x", 1)
-        try:
-            return int(left), int(right)
-        except ValueError:
-            return None
+    if isinstance(value, str):
+        return _string_size_tuple(value)
     if isinstance(value, (list, tuple)) and len(value) >= 2:
         try:
-            return int(value[0] or 0), int(value[1] or 0)
-        except (TypeError, ValueError):
+            return _size_from_values(value[0] or 0, value[1] or 0)
+        except TypeError:
+            # Invalid, unhashable dimensions were rejected by int() as well.
             return None
     return None
+
+
+@lru_cache(maxsize=512)
+def _string_size_tuple(value: str) -> tuple[int, int] | None:
+    if "x" not in value.lower():
+        return None
+    left, right = value.lower().split("x", 1)
+    return _size_from_values(left, right)
+
+
+@lru_cache(maxsize=512)
+def _size_from_values(width: Any, height: Any) -> tuple[int, int] | None:
+    # Pure value keys also cover the list-valued sizes used by catalog rows.
+    try:
+        return int(width), int(height)
+    except (TypeError, ValueError):
+        return None
 
 
 def _is_16_9_size(value: Any) -> bool:
@@ -398,7 +504,8 @@ def _calc_v_valid_ms(mode: dict[str, Any]) -> float | None:
     size = mode.get("active_size") or mode.get("sensor_size")
     pclk = _float_or_none(mode.get("sensor_pclk"))
     line_length = _float_or_none(mode.get("sensor_line_length_pck"))
-    height = _size_tuple(size)[1] if _size_tuple(size) else None
+    parsed_size = _size_tuple(size)
+    height = parsed_size[1] if parsed_size else None
     if height and pclk and line_length:
         return round(line_length * 1000.0 / pclk * height, 6)
     return None
