@@ -5,8 +5,9 @@ export type SensitivityRow = {
   delta_low_mw: number; delta_high_mw: number; swing_mw: number; swing_pct: number | null
   break_even_pct: Record<string, number | null>; crosses: string[]
   timing?: { growth_tolerance: number; break_even_pct: number; at_least: boolean; fails_at_high: boolean }
+  note?: string
 }
-export type Sensitivity = { method: string; pct: number; voltage_pct: number; total_mw: number; limits: Record<string, number>; rows: SensitivityRow[] }
+export type Sensitivity = { method: string; pct: number; voltage_pct: number; total_mw: number; limits: Record<string, number>; rows: SensitivityRow[]; notes?: string[] }
 
 /** S-03 tornado: Δ total power when one assumed input moves by ±step on its own, largest first. */
 export function SensitivityTornado({ data, top = 8 }: { data: Sensitivity; top?: number }) {
@@ -25,7 +26,7 @@ export function SensitivityTornado({ data, top = 8 }: { data: Sensitivity; top?:
         for (const [name, pct] of Object.entries(r.break_even_pct)) if (pct != null && !r.crosses.includes(name)) effects.push(`${name}까지 ${pct > 0 ? '+' : ''}${fmt(pct, 0)}%`)
         if (r.timing) effects.push(r.timing.fails_at_high ? `SW +${data.pct}%면 timing 미달` : `timing 여유 ${r.timing.at_least ? '≥' : ''}+${fmt(r.timing.break_even_pct, 0)}%`)
         return <tr key={r.key}>
-          <td>{r.label}<span className="faint"> · ±{r.step_pct}%</span></td>
+          <td>{r.label}<span className="faint"> · ±{r.step_pct}%{r.note ? ` · ${r.note}` : ''}</span></td>
           <td className="faint">{r.source}</td>
           <td><div className="sens-bar" role="img" aria-label={`${r.label}: ${fmt(lo, 1)} ~ +${fmt(hi, 1)} mW`}>
             <span className="sens-zero" /><span className="sens-span" style={{ left: `${left}%`, width: `${Math.max(0.5, right - left)}%` }} /></div></td>
@@ -34,8 +35,9 @@ export function SensitivityTornado({ data, top = 8 }: { data: Sensitivity; top?:
         </tr>
       })}</tbody>
     </table>
+    {(data.notes ?? []).map((n) => <div key={n} className="faint" style={{ fontSize: 12 }}>{n}</div>)}
     <div className="faint" style={{ fontSize: 12 }}>
-      기준 total {fmt(data.total_mw, 1)} mW{limits.map(([k, v]) => ` · ${k} ${fmt(v, 0)} mW`).join('')} · 입력 하나씩 ±{data.pct}% (SAMPLE 전압 ±{data.voltage_pct}%) · 예측 조합 기준 선형 추정 (재시뮬레이션 아님) —위쪽 입력부터 실측하면 결론의 불확실성이 가장 많이 줄어듭니다.
+      기준 total {fmt(data.total_mw, 1)} mW{limits.map(([k, v]) => ` · ${k} ${fmt(v, 0)} mW`).join('')} · 입력 하나씩 ±{data.pct}% (SAMPLE 전압 ±{data.voltage_pct}%) · 예측 조합 기준 선형 추정 (재시뮬레이션 아님) — 위쪽 입력부터 실측하면 결론의 불확실성이 가장 많이 줄어듭니다.
     </div>
   </div>
 }

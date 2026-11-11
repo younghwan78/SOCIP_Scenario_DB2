@@ -7,7 +7,7 @@ import re
 from html import escape
 from typing import Any
 
-from scenario_db.sim.sensitivity import variant_sensitivity
+from scenario_db.sim.sensitivity import is_sample_dvfs, variant_sensitivity
 from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits, run_lineage
 from scenario_db.reporting.arch_opinions import build_opinions, classify
 from scenario_db.reporting.reason_text import diagnose, explain_all
@@ -111,7 +111,10 @@ def build_snapshot(
             "assumed_mw": dict((chosen.get("assumed_by_ip") if pred else None)
                                or (v.get("objective_slice") or {}).get("assumed_by_ip") or {}),
             # S-03: assumed inputs that move the reported case most (linear ±20 %, no re-simulation)
-            "sensitivity": variant_sensitivity(v, chosen if pred else None, sample_dvfs=sample_dvfs),
+            # the DVFS table of the run this variant came from (a project report merges runs)
+            "sensitivity": variant_sensitivity(v, chosen if pred else None,
+                                               sample_dvfs=is_sample_dvfs(v.get("dvfs_table_ref")) if v.get("dvfs_table_ref")
+                                               else sample_dvfs),
             "baseline_bw_mbs": (v.get("baseline") or {}).get("bw_mbs"),
             "baseline_total_mw": (v.get("baseline") or {}).get("total_mw"),
             "compression": chosen.get("compression", rec.get("compression", [])),

@@ -503,10 +503,10 @@ def run_variant(db: Session, run_id: str, scenario_id: str, variant_id: str) -> 
         raise NotFoundError(f"exploration run not found: {run_id}")
     if found[1] is None:
         raise NotFoundError(f"variant {scenario_id}/{variant_id} not in run {run_id}")
-    from scenario_db.sim.sensitivity import variant_sensitivity
+    from scenario_db.sim.sensitivity import is_sample_dvfs, variant_sensitivity
 
     # S-03: which assumed input moves this case most (computed from the stored breakdown; any run)
-    sens = variant_sensitivity(found[1], sample_dvfs=bool(found[2] and "sample" in str(found[2])))
+    sens = variant_sensitivity(found[1], sample_dvfs=is_sample_dvfs(found[1].get("dvfs_table_ref") or found[2]))
     return found[1] | {"detail": True, **({"sensitivity": sens} if sens else {})}
 
 
