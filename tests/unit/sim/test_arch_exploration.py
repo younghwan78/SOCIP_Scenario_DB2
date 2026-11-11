@@ -421,8 +421,7 @@ def test_sw_dma_uses_adapter_resolved_fps(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import MagicMock
     transfer = SimpleNamespace(node_id="writer", port="read", port_type=SimpleNamespace(value="RDMA"))
-    monkeypatch.setattr(ax, "build_simulation_inputs", lambda *a: SimpleNamespace(
-        config=SimpleNamespace(fps=60), workloads=[], port_transfers=[transfer]))
+    monkeypatch.setattr(ax, "build_port_transfers", lambda *a: (60, [], [transfer]))
     calc = MagicMock(return_value=SimpleNamespace(bw_mbs=10, bw_power_mw=1))
     monkeypatch.setattr(ax, "calc_port_bw", calc)
     ax._dma(None, ax.SimulationRunConfig())
