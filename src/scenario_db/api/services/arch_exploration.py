@@ -497,12 +497,17 @@ def run_variant(db: Session, run_id: str, scenario_id: str, variant_id: str) -> 
     R = ArchExplorationRun
     found = db.query(R.id, func.jsonb_path_query_first(
         R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v)'::jsonpath"),
-        func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id))).filter(R.id == run_id).one_or_none()
+        func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id)), R.dvfs_table_ref
+    ).filter(R.id == run_id).one_or_none()
     if found is None:
         raise NotFoundError(f"exploration run not found: {run_id}")
     if found[1] is None:
         raise NotFoundError(f"variant {scenario_id}/{variant_id} not in run {run_id}")
-    return found[1] | {"detail": True}
+    from scenario_db.sim.sensitivity import is_sample_dvfs, variant_sensitivity
+
+    # S-03: which assumed input moves this case most (computed from the stored breakdown; any run)
+    sens = variant_sensitivity(found[1], sample_dvfs=is_sample_dvfs(found[1].get("dvfs_table_ref") or found[2]))
+    return found[1] | {"detail": True, **({"sensitivity": sens} if sens else {})}
 
 
 def list_runs(db: Session, *, scenario_type: str | None = None, project_ref: str | None = None,

@@ -182,7 +182,35 @@ def premises(snap: dict[str, Any]) -> str:
         basis = "spec 단계 모델 예측 — silicon 실측 대조 전" + (f" (합성 fixture {compared}건은 근거 아님)" if compared else "")
     return ("<p class='prem'><b>예측 전제</b> " + basis
             + "".join(f" {_p(c, 'mute')}" for c in chips)
-            + "".join(f"<span class=meta> · {escape(r)}</span>" for r in notes) + "</p>")
+            + "".join(f"<span class=meta> · {escape(r)}</span>" for r in notes) + "</p>"
+            + assumption_ranking(snap))
+
+
+def assumption_ranking(snap: dict[str, Any], n: int = 5) -> str:
+    """S-03: the assumed inputs that move the predicted power most (largest swing over the reported variants).
+    Snapshots from before the sensitivity rows existed show nothing."""
+    from scenario_db.sim.sensitivity import top_inputs
+
+    results = [r["sensitivity"] for r in snap.get("scenarios") or [] if r.get("sensitivity")]
+    tops = top_inputs(results, n)
+    if not tops:
+        return ""
+    pct = results[0].get("pct")
+    items = []
+    for t in tops:
+        flag = ""
+        if t.get("crosses_any"):
+            flag = " " + _p("한도 넘김", "fail")
+        timing = t.get("timing") or {}
+        if timing.get("fails_at_high"):
+            flag += " " + _p(f"SW +{pct:g}%면 timing 미달", "fail")
+        elif timing.get("break_even_pct") is not None:
+            flag += f"<span class=meta> (timing 여유 {'≥' if timing.get('at_least') else ''}+{timing['break_even_pct']:g}%)</span>"
+        items.append(f"<li><b>{escape(t['label'])}</b> ±{t['swing_mw'] / 2:.1f} mW"
+                     f"<span class=meta> · {escape(t['source'])} · variant {t['count']}개</span>{flag}</li>")
+    return (f"<div class='prem'><b>결론에 영향이 큰 가정 상위 {len(tops)}</b>"
+            f"<span class=meta> — 입력 하나씩 ±{pct:g}% (SAMPLE 전압 ±{results[0].get('voltage_pct', 5):g}%), "
+            "예측 조합 기준 선형 추정 · 먼저 실측할 입력</span><ol>" + "".join(items) + "</ol></div>")
 
 
 def top_risks(reg: list[dict[str, Any]], n: int = 5) -> str:
