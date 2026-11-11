@@ -435,7 +435,11 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
     for key in (*options.task_adjustments, *options.task_latency):
         if key not in tasks or tasks[key].get("task_type") != "sw":
             raise ValueError(f"not a SW task: {key}")
-    stage = _classify(tasks, edges, workloads, options.stage_overrides)
+    contract = judgement_contract(graph)
+    # declared role -> stage first (D-02); explicit option overrides still win
+    by_role = {str(n.get("id")): contract.stages[str(n.get("role"))] for n in graph.pipeline_nodes
+               if contract is not None and str(n.get("role") or "") in contract.stages and str(n.get("id")) in tasks}
+    stage = _classify(tasks, edges, workloads, {**by_role, **options.stage_overrides})
     profiles = {str(row["task"]): row for row in inputs.sw_task_timing}
     conditions = graph.variant.design_conditions or {}
     stabilization = conditions.get("stabilization")
@@ -587,6 +591,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         for tid in tasks
     }
     return {
+        "contract": contract,
         "explicit_resource": explicit_resource,
         "shared": shared,
         "eis_tasks": eis_tasks,
@@ -606,6 +611,14 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "warnings": warnings,
         "profiles": profiles,
     }
+
+
+def judgement_contract(graph):
+    """The scenario's declared judgement contract (``pipeline.judgement``), or None (name rules)."""
+    from scenario_db.models.definition.usecase import JudgementContract
+
+    raw = (getattr(graph.scenario, "pipeline", None) or {}).get("judgement")
+    return JudgementContract.model_validate(raw) if raw else None
 
 
 def _classify(tasks, edges, workloads, overrides) -> dict[str, Stage]:
@@ -993,6 +1006,14 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
     verdict = _verdict(stages, intervals, ips, domains, period)
+    contract = plan.get("contract")
+    if contract is not None:
+        from scenario_db.models.definition.usecase import MODELED_KPIS
+
+        missing = [k for k in contract.kpis if k not in MODELED_KPIS]
+        if missing:
+            # declared requirements the engine does not evaluate yet: stated, never counted as passed
+            verdict["notes"].append("판정 계약 KPI 미모델: " + ", ".join(missing))
     return {
         "scenario_id": graph.scenario_id,
         "variant_id": graph.variant_id,
@@ -1044,8 +1065,15 @@ def _cadence(
         if e.frame_index is not None:
             by_node.setdefault(str(e.node_id), []).append(e)
     nodes = [str(t["id"]) for t in inputs.timeline_tasks]
-    preview = next((n for n in nodes if _DISPLAY_RE.search(n)), None)
-    video = next((n for n in nodes if _ENCODER_RE.search(n)), None)
+    contract = plan.get("contract")
+    declared = [x for x in (contract.sinks if contract is not None else []) if x.node in nodes]
+    if contract is not None and contract.sinks:
+        # declared sinks (D-02): inactive ones in this variant are not judged
+        preview = next((x.node for x in declared if x.kind == "preview"), None)
+        video = next((x.node for x in declared if x.kind == "video"), None)
+    else:
+        preview = next((n for n in nodes if _DISPLAY_RE.search(n)), None)
+        video = next((n for n in nodes if _ENCODER_RE.search(n)), None)
     tol = options.interval_tolerance
 
     def series(node):
@@ -1075,8 +1103,11 @@ def _cadence(
 
     p, v = series(preview), series(video)
     # every terminal stream counts (dual / PIP / multi-encoder): the first display / encoder alone is not enough
-    extra = [n for n in nodes if n not in (preview, video) and (_DISPLAY_RE.search(n) or _ENCODER_RE.search(n))]
-    streams = [{"kind": "preview" if _DISPLAY_RE.search(n) else "video", **series(n)} for n in extra]
+    if contract is not None and contract.sinks:
+        streams = [{"kind": x.kind, **series(x.node)} for x in declared if x.node not in (preview, video)]
+    else:
+        extra = [n for n in nodes if n not in (preview, video) and (_DISPLAY_RE.search(n) or _ENCODER_RE.search(n))]
+        streams = [{"kind": "preview" if _DISPLAY_RE.search(n) else "video", **series(n)} for n in extra]
     streams = [x for x in streams if x["ok"] is not None]
     ok = (all(s["ok"] is not False for s in (p, v, *streams))
           and any(s["ok"] is not None for s in (p, v)))

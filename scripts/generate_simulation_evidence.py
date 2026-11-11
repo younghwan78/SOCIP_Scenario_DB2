@@ -64,13 +64,24 @@ def expected_params_hash(db: Path, scenario: str, evidence: dict) -> str:
     return params_hash(build_inputs(raw, evidence["variant_ref"], load_catalog(db), clock)[1])
 
 
+def declared_sinks(graph, inputs) -> set[str] | None:
+    """The scenario's judgement sinks active in this variant (None = the camera default)."""
+    from scenario_db.sim.timing_budget import judgement_contract
+
+    contract = judgement_contract(graph)
+    if contract is None or not contract.sinks:
+        return None
+    active = {str(t["id"]) for t in inputs.timeline_tasks}
+    return {x.node for x in contract.sinks if x.node in active} or None
+
+
 def simulate(raw: dict, vid: str, catalog) -> tuple:
     selected, last = None, None
     for clock in CLOCKS:
         graph, inputs = build_inputs(raw, vid, catalog, clock)
         result = run_simulation(inputs, dvfs_tables={})
         fps = float((graph.variant.design_conditions or {}).get("fps") or inputs.config.fps)
-        check = {"clock_mhz": clock, **assess(result, fps, 3.0)}
+        check = {"clock_mhz": clock, **assess(result, fps, 3.0, declared_sinks(graph, inputs))}
         last = (inputs, result, check)
         if check["accepted"]:
             selected = (deepcopy(inputs), deepcopy(result), check)

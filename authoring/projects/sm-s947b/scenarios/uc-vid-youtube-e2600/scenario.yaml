@@ -76,6 +76,23 @@ pipeline:
   - from: dpu
     to: panel
     type: OTF
+  # D-02 judgement contract: the outputs whose interval is judged at the variant fps.
+  # Screen-off playback (dpu disabled) is judged on the decoder output only.
+  judgement:
+    sinks:
+    - node: dpu
+      kind: preview
+      label: display
+    - node: mfc_dec
+      kind: video
+      label: decode
+    stages:
+      decoder: output
+      display_controller: output
+      display_output: output
+    kpis:
+    - interval
+    - latency
   buffers:
     NET_ES_BUF:
       format: BITSTREAM
