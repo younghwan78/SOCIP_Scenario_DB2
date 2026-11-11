@@ -71,8 +71,9 @@ _TRACE_INDEX = literal_column(
     "'events', count(*), "
     "'nodes', coalesce(jsonb_agg(DISTINCT x->>'node_id') FILTER (WHERE coalesce(x->>'node_id', '') <> ''), '[]'::jsonb), "
     "'frames', count(DISTINCT x->>'frame_index') FILTER (WHERE jsonb_typeof(x->'frame_index') = 'number'), "
-    "'frame_values', count(DISTINCT CASE WHEN jsonb_typeof(x->'frame_index') = 'number' THEN x->>'frame_index' END)"
-    " + max(CASE WHEN jsonb_typeof(x->'frame_index') = 'number' THEN 0 ELSE 1 END), "
+    # like a JS Set of frame_index: every distinct JSON value (an explicit null included) plus one for
+    # events without the field
+    "'frame_values', count(DISTINCT x->'frame_index') + coalesce(max(CASE WHEN x ? 'frame_index' THEN 0 ELSE 1 END), 0), "
     "'layered', coalesce(bool_or(coalesce(x->>'layer', '') <> ''), false)) "
     "FROM jsonb_array_elements(CASE WHEN jsonb_typeof(evidence.timeline_events) = 'array' "
     "THEN evidence.timeline_events ELSE '[]'::jsonb END) AS x)"
@@ -124,7 +125,7 @@ def list_evidence(
                 **{name: getattr(row, name) for name in EvidenceSummaryResponse.model_fields
                    if name not in ("heavy", "trace_index")},
                 "heavy": heavy,
-                "trace_index": {**trace, "frame_values": trace.get("frame_values") or 0},
+                "trace_index": trace,
             })
             for row, heavy, trace in rows
         ]
