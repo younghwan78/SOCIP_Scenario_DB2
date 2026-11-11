@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
 import { CandidateReview } from '../components/CandidateReview'
-import { api, type Dict, type EvidenceSummary, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
+import { api, traceIndex, type Dict, type EvidenceSummary, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { MISSING, evidenceSource, valueText, varyingKeys } from '../lib/conditions'
 import { formatItems, type CompareItem } from '../lib/projects'
@@ -76,8 +76,8 @@ function pickEvidence(items: EvidenceSummary[]): EvidenceSummary | undefined {
   return [...items].filter((e) => e.kpi && Object.keys(e.kpi).length).sort((a, b) => rank[evidenceSource(a)] - rank[evidenceSource(b)])[0]
 }
 function pickTrace(items: EvidenceSummary[]): EvidenceSummary | undefined {
-  const score = (e: EvidenceSummary) => { const t = e.timeline_events ?? []; return (t.some((x) => /^(panel|dpu|mfc)/.test(String(x.node_id ?? ''))) ? 1000 : 0) + new Set(t.map((x) => x.frame_index)).size }
-  return items.filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => score(b) - score(a))[0]
+  const score = (e: EvidenceSummary) => { const t = traceIndex(e); return (t.nodes.some((n) => /^(panel|dpu|mfc)/.test(n)) ? 1000 : 0) + t.frame_values }
+  return items.filter((e) => traceIndex(e).events > 3).sort((a, b) => score(b) - score(a))[0]
 }
 
 interface Item { id: string; section: string; label: ReactNode; sortLabel: string; values: (string | null)[]; nums: (number | null)[]; cls: string[] }
@@ -226,7 +226,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     add('perf', `${sid}-int`, `${label} interval max (ms)`, `${label} interval`, ids.map((_, i) => { const b = stream(i, sid)?.box; return b ? b.max.toFixed(2) : null }), 'none')
     add('perf', `${sid}-lat`, `${label} latency mean (ms)`, `${label} latency`, ids.map((_, i) => { const b = stream(i, sid)?.latBox; return b ? b.mean.toFixed(1) : null }), 'none')
   }
-  add('perf', 'trace', 'timing source', 'timing source', cadences.map((c) => (c ? `${evidenceSource(c.trace)} · ${new Set((c.trace.timeline_events ?? []).map((x) => x.frame_index)).size}f` : null)), 'none')
+  add('perf', 'trace', 'timing source', 'timing source', cadences.map((c) => (c ? `${evidenceSource(c.trace)} · ${traceIndex(c.trace).frame_values}f` : null)), 'none')
   const nodeKeys = (maps: Map<string, string>[]) => [...new Set(maps.flatMap((m) => [...m.keys()]))].sort()
   nodeKeys(ipMaps).filter((k) => !onlyDiff || new Set(ipMaps.map((m) => m.get(k) ?? MISSING)).size > 1)
     .forEach((k) => add('hw', `ip:${k}`, <span className="mono">{k}</span>, k, ipMaps.map((m) => m.get(k) ?? null), 'set'))

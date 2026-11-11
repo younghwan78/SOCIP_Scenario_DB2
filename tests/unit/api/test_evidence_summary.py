@@ -27,7 +27,9 @@ def test_evidence_summary_query_defers_payloads_and_computes_metadata_in_sql():
         assert f"pg_column_size(evidence.{name})" in sql
         assert f"evidence.{name} IS NOT NULL" in sql
         assert f"jsonb_typeof(evidence.{name})" in sql
-    assert "evidence.timeline_events" in entity_projection
+    # the events stay in the detail; the list gets their index (computed in SQL)
+    assert "evidence.timeline_events" not in entity_projection
+    assert "jsonb_array_elements" in sql and "'layered'" in sql
     assert "evidence.profiling_metadata" in entity_projection
 
 
@@ -35,6 +37,6 @@ def test_evidence_summary_schema_excludes_only_deferred_fields():
     full = set(EvidenceResponse.model_fields)
     summary = set(EvidenceSummaryResponse.model_fields)
     assert full - summary == set(EVIDENCE_HEAVY_FIELDS)
-    assert summary - full == {"heavy"}
+    assert summary - full == {"heavy", "trace_index"}
     assert {"kpi", "aggregation", "execution_context", "provenance", "run_info",
             "power_breakdown", "vdd_power"} <= summary

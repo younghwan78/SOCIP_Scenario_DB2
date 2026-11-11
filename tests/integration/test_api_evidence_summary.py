@@ -30,7 +30,18 @@ def test_evidence_summary_payloads_and_postgres_sizes(api_client, engine):
                     "present": original[name] is not None, "bytes": size or 0,
                 }
             assert {k: v for k, v in original.items() if k not in EVIDENCE_HEAVY_FIELDS} == {
-                k: v for k, v in item.items() if k != "heavy"
+                k: v for k, v in item.items() if k not in ("heavy", "trace_index")
+            }
+            # the list views' timeline numbers, computed in SQL from the events left out of the list
+            events = original["timeline_events"] or []
+            numeric = [e.get("frame_index") for e in events if isinstance(e.get("frame_index"), int)]
+            missing = any(not isinstance(e.get("frame_index"), int) for e in events)
+            assert item["trace_index"] == {
+                "events": len(events),
+                "nodes": sorted({str(e["node_id"]) for e in events if e.get("node_id")}),
+                "frames": len(set(numeric)),
+                "frame_values": len(set(numeric)) + (1 if missing else 0),
+                "layered": any(e.get("layer") for e in events),
             }
 
 

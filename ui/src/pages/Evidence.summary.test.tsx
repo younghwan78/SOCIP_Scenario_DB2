@@ -3,7 +3,7 @@ import { act, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Ctx } from '../App'
-import { api, type Evidence, type EvidenceSummary, type HandoffDoc, type ViewResponse } from '../lib/api'
+import { api, traceIndex, type Evidence, type EvidenceSummary, type HandoffDoc, type ViewResponse } from '../lib/api'
 import { archApi } from '../lib/archExplore'
 import { calibrationApi } from '../lib/calibration'
 import { libraryApi } from '../lib/library'
@@ -21,15 +21,18 @@ const ctx: Ctx = { project: 'p', scenario: 's', variant: 'v', params: {}, naviga
   projects: [], catalog: [], allCatalog: [{ project_id: 'p', scenario_id: 's', scenario_name: 'Test', variant_count: 2,
     category: [], domain: [], severity_counts: {}, node_count: 0, edge_count: 0, buffer_count: 0 }] }
 const heavyFields = ['calculation_trace', 'dma_breakdown', 'ip_breakdown', 'timing_breakdown', 'dvfs_breakdown', 'external_devices',
-  'cpu_breakdown', 'sw_task_timing', 'hw_task_timing', 'stage_timing', 'sw_event_latency', 'handoff_flows', 'pipeline_model'] as const
+  'cpu_breakdown', 'sw_task_timing', 'hw_task_timing', 'stage_timing', 'sw_event_latency', 'handoff_flows', 'pipeline_model',
+  'timeline_events'] as const
 const pipe = (id: string, node = 'panel', duration = 2): Evidence => ({ id, kind: 'evidence.simulation', kpi: { total_power_mw: 1234 },
   timeline_events: Array.from({ length: 4 }, (_, f) => [
     { task_id: `sensor#${f}`, node_id: 'sensor', frame_index: f, start_ms: f * 33, end_ms: f * 33 + 1 },
     { task_id: `${node}#${f}`, node_id: node, frame_index: f, start_ms: f * 33 + 1, end_ms: f * 33 + 1 + duration },
   ]).flat() })
+// the list response: no events (the server's trace index instead), heavy fields as presence + size
 const summary = (e: Evidence): EvidenceSummary => {
-  const { handoff_flows, ...rest } = e
-  return { ...rest, heavy: Object.fromEntries(heavyFields.map((f) => [f, { present: f === 'handoff_flows' && !!handoff_flows, bytes: 0 }])) as EvidenceSummary['heavy'] }
+  const { handoff_flows, timeline_events, ...rest } = e
+  return { ...rest, trace_index: traceIndex({ timeline_events }),
+    heavy: Object.fromEntries(heavyFields.map((f) => [f, { present: (f === 'handoff_flows' && !!handoff_flows) || (f === 'timeline_events' && !!timeline_events?.length), bytes: 0 }])) as EvidenceSummary['heavy'] }
 }
 const handoff = (name: string): HandoffDoc => ({ format: 'sdb.handoff/1', generator: name,
   participants: [{ id: 'hal', layer: 'hal', name: 'Audio HAL' }], cadences: [{ id: 'frame', name: 'Frame', kind: 'frame', period_ms: 33 }],

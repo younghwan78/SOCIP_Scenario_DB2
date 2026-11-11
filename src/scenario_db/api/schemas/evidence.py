@@ -11,6 +11,7 @@ EVIDENCE_HEAVY_FIELDS = (
     "calculation_trace", "dma_breakdown", "ip_breakdown", "timing_breakdown",
     "dvfs_breakdown", "external_devices", "cpu_breakdown", "sw_task_timing",
     "hw_task_timing", "stage_timing", "sw_event_latency", "handoff_flows", "pipeline_model",
+    "timeline_events",
 )
 
 
@@ -34,7 +35,6 @@ class EvidenceListFields(BaseModel):
     aggregation: dict = {}
     kpi: dict = {}
     run_info: dict | None = None
-    timeline_events: list | None = None
     topology_order: list | None = None
     vdd_power: dict | None = None
     power_breakdown: dict | None = None
@@ -52,11 +52,27 @@ class EvidenceHeavyField(BaseModel):
     bytes: int
 
 
+class TraceIndex(BaseModel):
+    """What list views read from a timeline (computed in SQL; the events stay in the detail).
+
+    ``frames``: distinct numeric frame indices; ``frame_values``: distinct frame_index values with a
+    missing one counted once (the older client-side count); ``layered``: some event has a layer
+    (full-stack trace)."""
+
+    events: int
+    nodes: list[str]
+    frames: int
+    frame_values: int
+    layered: bool
+
+
 class EvidenceSummaryResponse(EvidenceListFields):
     heavy: dict[str, EvidenceHeavyField]
+    trace_index: TraceIndex
 
 
 class EvidenceResponse(EvidenceListFields):
+    timeline_events: list | None = None
     ip_breakdown: list | None = None
     dma_breakdown: list | None = None
     timing_breakdown: list | None = None
