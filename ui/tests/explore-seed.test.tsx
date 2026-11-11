@@ -27,7 +27,10 @@ it('shows a newly created run from the summary endpoint, as before', async () =>
     summary: { variants: 0, spec_ok: 0, errors: 0, cases: 0, eligible_cases: 0, verified: 0 }, spec: {}, view: 'summary' } as unknown as RunDetail
   vi.spyOn(archApi, 'runs').mockResolvedValue([run])
   vi.spyOn(archApi, 'board').mockResolvedValue({ rows: [] } as never)
-  const create = vi.spyOn(archApi, 'createRun').mockResolvedValue(run)
+  // the run is created by a job; a job that is already complete opens its stored run
+  const create = vi.spyOn(archApi, 'createJob').mockResolvedValue({ id: 'explore-job-x', status: 'completed', completed_variants: 0,
+    total_variants: 0, current_variant: null, failed_variants: 0, run_id: 'new-run', summary: run.summary, cancel_requested: false,
+    error: null, resumable: false })
   const read = vi.spyOn(archApi, 'run').mockResolvedValue({ ...run, scenario_type: 'refreshed' })
   function Page() {
     const [params, setParams] = useState<Record<string, string>>({})
@@ -40,7 +43,7 @@ it('shows a newly created run from the summary endpoint, as before', async () =>
   expect(start.disabled).toBe(false)
   await act(async () => start.click())
   expect(create).toHaveBeenCalledTimes(1)
-  // The POST response is not reused for display: the page reads GET ?view=summary (SQL projection).
+  // The page reads GET ?view=summary (SQL projection) for the job's run.
   expect(read).toHaveBeenCalledWith('new-run')
   expect(host.querySelector('[aria-label="run 요약"]')).not.toBeNull()
   expect(host.textContent).toContain('refreshed')

@@ -1105,3 +1105,10 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .dt-pages { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px; position: sticky; left: 0; font-size: 12px; background: var(--surface, white); }
 .dt :focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .dt .col-resizer:focus-visible { background: var(--primary); }
+
+/* exploration job progress (Explore page) */
+.explore-job { padding: 10px 14px; display: grid; gap: 6px; }
+.explore-job-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.explore-job-bar { height: 6px; border-radius: 3px; background: var(--line, #e2e5ea); overflow: hidden; }
+.explore-job-bar > span { display: block; height: 100%; background: var(--accent, #2f6fde); transition: width 0.3s ease; }
+.explore-job-text { font-size: 13px; color: var(--muted, #5b6472); }

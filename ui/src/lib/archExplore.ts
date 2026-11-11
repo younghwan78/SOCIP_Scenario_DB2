@@ -3,6 +3,7 @@
 import { API_BASE, ApiError, getJson } from './api'
 import { fetchAdmitted, statParam, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
+import type { ExploreJob } from './exploreJob'
 
 export interface Quant { min: number; p25: number; median: number; p75: number; max: number }
 /** Distribution keys always present (engine rev 1+); the BW IP/CPU keys exist from rev 2. */
@@ -420,6 +421,11 @@ export const archApi = {
   runVariant: (id: string, scenarioId: string, variantId: string) =>
     send<VariantResult>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}/variants/${encodeURIComponent(scenarioId)}/${encodeURIComponent(variantId)}`),
   createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs?view=summary', body),
+  /** the same run as a server job: progress, cancel, resume; the stored run is in job.run_id */
+  createJob: (body: ReturnType<typeof runBody>) => send<ExploreJob>('POST', '/arch/exploration/jobs', body),
+  job: (id: string) => send<ExploreJob>('GET', `/arch/exploration/jobs/${encodeURIComponent(id)}`),
+  cancelJob: (id: string) => send<ExploreJob>('POST', `/arch/exploration/jobs/${encodeURIComponent(id)}/cancel`),
+  resumeJob: (id: string) => send<ExploreJob>('POST', `/arch/exploration/jobs/${encodeURIComponent(id)}/resume`),
   promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string, expectedProject?: string, expectedCurrent?: CurrentPredictionGuard[]) =>
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
       'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject, expected_current: expectedCurrent }),
