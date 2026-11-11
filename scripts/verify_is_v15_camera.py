@@ -57,10 +57,10 @@ DEFAULT_SINKS = frozenset({"mfc_enc", "panel", "storage_write"})
 def assess(result, fps: float, latency_frames: float, sinks: set[str] | frozenset[str] | None = None) -> dict:
     """Accept a run when its sink outputs keep the frame cadence and the latency budget.
 
-    ``sinks``: the scenario's declared judgement sinks (``pipeline.judgement``); the camera recording
-    outputs when the scenario declares none.
+    ``sinks``: the scenario's declared judgement sinks active in the variant (``pipeline.judgement``);
+    None = undeclared, the camera recording outputs. An empty set has no output and is never accepted.
     """
-    names = set(sinks) if sinks else DEFAULT_SINKS
+    names = set(sinks) if sinks is not None else DEFAULT_SINKS
     sinks = [e for e in result.timeline_events if e.node_id in names]
     latency = max((e.end_ms - e.frame_index * 1000 / fps for e in sinks), default=float("inf"))
     cadence = max((e.cadence_avg_interval_ms or 0 for e in sinks), default=float("inf"))

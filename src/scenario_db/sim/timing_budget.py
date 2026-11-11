@@ -322,10 +322,9 @@ def interval_distribution(
         for e in result.timeline_events:
             if e.frame_index is not None:
                 by_node.setdefault(str(e.node_id), []).append(e)
-        for t in inputs.timeline_tasks:
-            node = str(t["id"])
-            kind = "preview" if _DISPLAY_RE.search(node) else "video" if _ENCODER_RE.search(node) else None
-            if kind is None or node not in by_node:
+        # the same outputs the verdict judges (declared sinks or the name rule)
+        for node, kind in judged_outputs([str(t["id"]) for t in inputs.timeline_tasks], plan.get("contract")):
+            if node not in by_node:
                 continue
             ev = sorted(by_node[node], key=lambda e: e.frame_index)
             acc = streams.setdefault(node, {"node": node, "kind": kind, "intervals": [], "latency": []})
@@ -611,6 +610,16 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "warnings": warnings,
         "profiles": profiles,
     }
+
+
+def judged_outputs(nodes: list[str], contract) -> list[tuple[str, str]]:
+    """(node, kind) of the outputs whose interval is judged, in order: declared sinks active in this
+    variant (``pipeline.judgement``), else the name rule (DPU = preview, MFC / APV = video)."""
+    if contract is not None and contract.sinks:
+        present = set(nodes)
+        return [(x.node, x.kind) for x in contract.sinks if x.node in present]
+    return [(n, "preview" if _DISPLAY_RE.search(n) else "video") for n in nodes
+            if _DISPLAY_RE.search(n) or _ENCODER_RE.search(n)]
 
 
 def judgement_contract(graph):
@@ -1065,15 +1074,10 @@ def _cadence(
         if e.frame_index is not None:
             by_node.setdefault(str(e.node_id), []).append(e)
     nodes = [str(t["id"]) for t in inputs.timeline_tasks]
-    contract = plan.get("contract")
-    declared = [x for x in (contract.sinks if contract is not None else []) if x.node in nodes]
-    if contract is not None and contract.sinks:
-        # declared sinks (D-02): inactive ones in this variant are not judged
-        preview = next((x.node for x in declared if x.kind == "preview"), None)
-        video = next((x.node for x in declared if x.kind == "video"), None)
-    else:
-        preview = next((n for n in nodes if _DISPLAY_RE.search(n)), None)
-        video = next((n for n in nodes if _ENCODER_RE.search(n)), None)
+    # declared sinks (D-02; inactive ones in this variant are not judged) or the name rule
+    outputs = judged_outputs(nodes, plan.get("contract"))
+    preview = next((n for n, k in outputs if k == "preview"), None)
+    video = next((n for n, k in outputs if k == "video"), None)
     tol = options.interval_tolerance
 
     def series(node):
@@ -1103,11 +1107,7 @@ def _cadence(
 
     p, v = series(preview), series(video)
     # every terminal stream counts (dual / PIP / multi-encoder): the first display / encoder alone is not enough
-    if contract is not None and contract.sinks:
-        streams = [{"kind": x.kind, **series(x.node)} for x in declared if x.node not in (preview, video)]
-    else:
-        extra = [n for n in nodes if n not in (preview, video) and (_DISPLAY_RE.search(n) or _ENCODER_RE.search(n))]
-        streams = [{"kind": "preview" if _DISPLAY_RE.search(n) else "video", **series(n)} for n in extra]
+    streams = [{"kind": k, **series(n)} for n, k in outputs if n not in (preview, video)]
     streams = [x for x in streams if x["ok"] is not None]
     ok = (all(s["ok"] is not False for s in (p, v, *streams))
           and any(s["ok"] is not None for s in (p, v)))

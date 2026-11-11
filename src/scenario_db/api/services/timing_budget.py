@@ -56,6 +56,10 @@ def _condition_hash(graph, options, shim, tables) -> str:
     loads = assumed_loads(getattr(graph.variant, "design_conditions", None))
     if loads:
         payload["assumed_loads"] = {ip: a["mw"] for ip, a in loads.items()}
+    # the judgement contract decides stages and judged outputs without touching the inputs; absent = unchanged
+    contract = (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("judgement")
+    if contract:
+        payload["judgement"] = contract
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 

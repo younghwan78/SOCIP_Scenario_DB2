@@ -106,3 +106,47 @@ def test_evidence_assess_uses_the_declared_sinks(env):
     assert assess(result, 30.0, 3.0, {"mfc_dec"})["accepted"]
     # the camera default finds no sink in screen-off playback
     assert not assess(result, 30.0, 3.0)["accepted"]
+
+
+def test_condition_hash_follows_the_contract(env, monkeypatch):
+    from types import SimpleNamespace
+
+    from scenario_db.api.services import timing_budget as service
+    from scenario_db.sim.models import SimulationRunConfig
+
+    catalog, tables, raw = env
+    monkeypatch.setattr(service, "_request_hash", lambda *a, **k: "inputs")
+    shim = SimpleNamespace(config=SimulationRunConfig())
+    graph = graph_from_fixture(raw, "yt-1080p30-h264-sdr", catalog)
+    declared = service._condition_hash(graph, TimingBudgetOptions(), shim, tables)
+    assert service._condition_hash(with_contract(graph, None), TimingBudgetOptions(), shim, tables) != declared
+    other = with_contract(graph, {"sinks": [{"node": "mfc_dec", "kind": "video"}]})
+    assert service._condition_hash(other, TimingBudgetOptions(), shim, tables) != declared
+
+
+def test_no_active_declared_sink_is_never_accepted(env):
+    import generate_simulation_evidence as gen
+    from scenario_db.sim.runner import run_simulation
+
+    catalog, _, raw = env
+    raw2 = deepcopy(raw)
+    docs = raw2 if isinstance(raw2, list) else [raw2]
+    for d in docs:
+        if d.get("pipeline", {}).get("judgement"):
+            d["pipeline"]["judgement"]["sinks"] = [{"node": "dpu", "kind": "preview"}]
+    graph, inputs = gen.build_inputs(raw2, "yt-1080p-audio-bg", catalog, 300)
+    assert gen.declared_sinks(graph, inputs) == set()
+    result = run_simulation(inputs, dvfs_tables={})
+    assert not assess(result, 30.0, 3.0, set())["accepted"]
+
+
+def test_interval_distribution_uses_the_declared_sinks(env):
+    from scenario_db.sim.timing_budget import interval_distribution
+
+    catalog, tables, raw = env
+    graph = graph_from_fixture(raw, "yt-1080p30-h264-sdr", catalog)
+    named = interval_distribution(with_contract(graph, None), TimingBudgetOptions(), dvfs_tables=tables, trials=2, frames=8)
+    only = interval_distribution(with_contract(graph, {"sinks": [{"node": "mfc_dec", "kind": "video"}]}),
+                                 TimingBudgetOptions(), dvfs_tables=tables, trials=2, frames=8)
+    assert {s["node"] for s in named["streams"]} == {"dpu", "mfc_dec"}
+    assert [(s["node"], s["kind"]) for s in only["streams"]] == [("mfc_dec", "video")]
