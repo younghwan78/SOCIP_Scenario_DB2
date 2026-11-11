@@ -11,6 +11,7 @@ import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, forma
 import { AdmissionWaitPill } from './components/AdmissionWait'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { StatusToast } from './components/StatusToast'
+import { restoreExploreJob } from './lib/exploreJob'
 
 const ExplorerPage = lazy(() => import('./pages/Explorer').then((m) => ({ default: m.ExplorerPage })))
 const MatrixPage = lazy(() => import('./pages/Matrix').then((m) => ({ default: m.MatrixPage })))
@@ -101,6 +102,8 @@ export default function App() {
   const scenarioItem = catalog.find((c) => c.scenario_id === scenario)
   const variant = route.params.variant ?? (scenarioItem?.variant_count ? scenarioItem.default_variant_id ?? PREFERRED_REFERENCE[canonicalOf(scenarioItem)] ?? '' : '')
   useEffect(() => { if (project && project !== lastProject && known(project)) setLastProject(project) }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
+  // an exploration job left running on another page or before a reload keeps reporting its completion
+  useEffect(() => { restoreExploreJob() }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

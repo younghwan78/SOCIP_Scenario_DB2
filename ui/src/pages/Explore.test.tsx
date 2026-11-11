@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Ctx } from '../App'
 import { ExplorePage } from './Explore'
 import { DEFAULT_RUN, archApi, runBody, type RunDetail, type RunOptions } from '../lib/archExplore'
+import { _resetExploreJob, type ExploreJob } from '../lib/exploreJob'
 import { StatusToast } from '../components/StatusToast'
 import { dismissStatus, useStatusNotices } from '../lib/status'
 
@@ -28,14 +29,18 @@ const ctx = { project: '', scenario: 's', params: {}, navigate: vi.fn(), catalog
 ] } as unknown as Ctx
 const run: RunDetail = { id: 'new', title: 'Synthetic run', project_ref: '', scenario_type: 'Synthetic', variants: [], errors: [], spec: {},
   summary: { variants: 70, errors: 0, spec_ok: 0, cases: 0, eligible_cases: 0, verified: 0, recommended_power_mw: null } } as unknown as RunDetail
+const job = (over: Partial<ExploreJob> = {}): ExploreJob => ({ id: 'explore-job-1', status: 'queued', completed_variants: 0, total_variants: 70,
+  current_variant: null, failed_variants: 0, run_id: null, summary: null, cancel_requested: false, error: null, resumable: false, ...over })
 beforeEach(() => {
   host = document.createElement('div'); root = createRoot(host); notices = []
   vi.spyOn(archApi, 'runs').mockResolvedValue([])
   vi.spyOn(archApi, 'board').mockResolvedValue({ rows: [] })
-  vi.spyOn(archApi, 'createRun').mockResolvedValue(run)
+  vi.spyOn(archApi, 'createJob').mockResolvedValue(job())
+  vi.spyOn(archApi, 'job').mockResolvedValue(job({ status: 'running', completed_variants: 3, current_variant: 'v3' }))
 })
 afterEach(() => {
   act(() => root.unmount()); notices.forEach((notice) => dismissStatus(notice.id))
+  _resetExploreJob(); vi.useRealTimers()
   vi.restoreAllMocks(); sessionStorage.clear(); localStorage.clear()
 })
 const mount = async (context = ctx) => { await act(async () => root.render(<><ExplorePage ctx={context} /><Feedback /></>)) }
@@ -63,7 +68,7 @@ it.each([
   expect(checkbox('arch knob (bcrop, L0 skip …)').checked).toBe(expected.options.knobs)
   expect(checkbox('IP mode (대체 가능 mode · unit power별)').checked).toBe(expected.options.modes)
   await act(async () => button('탐색 실행').click())
-  expect(archApi.createRun).toHaveBeenCalledWith(runBody(['s'], '', 'Synthetic', expected, 'profile'))
+  expect(archApi.createJob).toHaveBeenCalledWith(runBody(['s'], '', 'Synthetic', expected, 'profile'))
 })
 
 it.each([
@@ -73,7 +78,7 @@ it.each([
   await mount()
   act(() => button(label).click())
   await act(async () => button('탐색 실행').click())
-  const { axes, objective } = vi.mocked(archApi.createRun).mock.calls[0][0].spec
+  const { axes, objective } = vi.mocked(archApi.createJob).mock.calls[0][0].spec
   expect(axes.statistics).toEqual(statistics)
   expect(axes.runtime_scales).toEqual(scales)
   expect(axes.statistics).toContain(objective.statistic)
@@ -84,7 +89,7 @@ it.each([
 it('preserves the standard default request snapshot', async () => {
   await mount()
   await act(async () => button('탐색 실행').click())
-  expect(vi.mocked(archApi.createRun).mock.calls[0][0]).toMatchInlineSnapshot(`
+  expect(vi.mocked(archApi.createJob).mock.calls[0][0]).toMatchInlineSnapshot(`
     {
       "config_profile_ref": "profile",
       "scenario_ids": [
@@ -165,22 +170,47 @@ it.each(['statistic', 'options'])('marks a changed advanced %s as custom and ope
   expect(form().textContent).not.toContain('사용자 설정')
 })
 
-it('shows catalog variant count and time as upper bounds and keeps the submitted estimate while busy', async () => {
-  let finish!: (created: RunDetail) => void
-  vi.mocked(archApi.createRun).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+it('shows catalog variant count and time as upper bounds and blocks a second run while the job is active', async () => {
+  let accept!: (created: ExploreJob) => void
+  vi.mocked(archApi.createJob).mockImplementation(() => new Promise((resolve) => { accept = resolve }))
   await mount()
   expect(form().textContent).toContain('variant ≤70 × 최대 34,992 조합 · 예상 최대 약 1분 31초')
   await act(async () => button('탐색 실행').click())
-  expect(button('탐색 중… (예상 최대 약 1분 31초)').disabled).toBe(true)
+  expect(button('제출 중… (예상 최대 약 1분 31초)').disabled).toBe(true)
   act(() => form().querySelector<HTMLInputElement>('.ax-scen input')!.click())
   expect(form().textContent).toContain('variant ≤0 × 최대 34,992 조합 · 예상 최대 약 0초')
-  expect(button('탐색 중… (예상 최대 약 1분 31초)').disabled).toBe(true)
-  await act(async () => finish(run))
-  expect(host.querySelector('[aria-label="작업 알림"]')?.textContent).toContain('탐색 완료: Synthetic run · variant 70개')
+  await act(async () => accept(job()))
+  expect(button('탐색 진행 중').disabled).toBe(true)
+  const progress = host.querySelector('[role="progressbar"]')!
+  expect(progress.getAttribute('aria-valuetext')).toBe('0 / 70 variant')
+})
+
+it('follows the job to completion, then opens the run and announces it', async () => {
+  vi.useFakeTimers()
+  await mount()
+  await act(async () => button('탐색 실행').click())
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  expect(host.querySelector('[role="progressbar"]')!.getAttribute('aria-valuetext')).toBe('3 / 70 variant')
+  expect(host.querySelector('[aria-label="탐색 진행"]')!.textContent).toContain('최근 완료 v3')
+  vi.mocked(archApi.job).mockResolvedValue(job({ status: 'completed', completed_variants: 70, run_id: 'new',
+    summary: { variants: 69, errors: 1, spec_ok: 60 } }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  expect(host.querySelector('[aria-label="작업 알림"]')?.textContent).toContain('탐색 완료: Synthetic exploration · variant 69개 · 실패 1')
+  expect(ctx.navigate).toHaveBeenCalledWith(undefined, { run: 'new', v: undefined })
+  expect(host.querySelector('[aria-label="새 탐색"]')).toBeNull()
+})
+
+it('cancels the running job', async () => {
+  const cancel = vi.spyOn(archApi, 'cancelJob').mockResolvedValue(job({ status: 'running', cancel_requested: true }))
+  await mount()
+  await act(async () => button('탐색 실행').click())
+  await act(async () => button('취소').click())
+  expect(cancel).toHaveBeenCalledWith('explore-job-1')
+  expect(host.querySelector('[aria-label="탐색 진행"]')!.textContent).toContain('취소 요청됨')
 })
 
 it('announces a failed run in the global alert and leaves the form available', async () => {
-  vi.mocked(archApi.createRun).mockRejectedValue(new Error('engine failed'))
+  vi.mocked(archApi.createJob).mockRejectedValue(new Error('engine failed'))
   await mount()
   await act(async () => button('탐색 실행').click())
   expect(host.querySelector('[aria-label="작업 알림"] [role="alert"]')?.textContent).toContain('engine failed')

@@ -25,6 +25,8 @@ import { VariantFailures } from '../components/VariantFailures'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
 import { notify } from '../lib/status'
+import { ExploreJobPanel } from '../components/ExploreJobPanel'
+import { isActive, trackExploreJob, useExploreJob } from '../lib/exploreJob'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
@@ -76,7 +78,8 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
         <a className="btn" href={`#/predictions?scenario=${encodeURIComponent(ctx.scenario)}`}>예측 현황 →</a>
         <a className="btn" href="#/reports">검토 보고서 →</a>
       </div>
-      {showForm && <RunForm ctx={ctx} onDone={(r) => { setTick((t) => t + 1); setShowForm(false); pick(r.id) }} />}
+      <ExploreJobPanel project={ctx.project || null} onOpen={(id) => { setTick((t) => t + 1); setShowForm(false); pick(id) }} />
+      {showForm && <RunForm ctx={ctx} />}
       {runQ.error && <div className="err">{runQ.error}</div>}
       {runQ.loading && runId && <div className="empty">run 불러오는 중…</div>}
       {runQ.data && <RunView key={runQ.data.id} run={runQ.data} ctx={ctx} />}
@@ -86,7 +89,7 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
 }
 
 // ---------------------------------------------------------------- new run
-function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) {
+function RunForm({ ctx }: { ctx: Ctx }) {
   const [o, setO] = useState<RunOptions>(DEFAULT_RUN)
   const [scenarios, setScenarios] = useState<string[]>([ctx.scenario])
   const [title, setTitle] = useState('')
@@ -107,12 +110,14 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
   const variants = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).reduce((s, c) => s + c.variant_count, 0)
   const estimate = estimatedDuration(variants)
   const typeLabel = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).map((c) => c.scenario_name).join(' + ')
+  const tracked = useExploreJob()
+  const jobActive = isActive(tracked?.job)
   const run = async () => {
     setBusy(true); setRunningEstimate(estimate)
     try {
-      const created = await archApi.createRun(runBody(scenarios, title, typeLabel, eff, sp.ref))
-      notify({ kind: 'ok', text: `탐색 완료: ${created.title} · variant ${created.summary.variants}개` })
-      onDone(created)
+      // a server job: progress / cancel here, and the completion notice follows the user to other pages
+      const job = await archApi.createJob(runBody(scenarios, title, typeLabel, eff, sp.ref))
+      trackExploreJob(job, title || `${typeLabel} exploration`, ctx.project || null)
     } catch (e) { notify({ kind: 'error', text: e instanceof Error ? e.message : String(e) }) } finally { setBusy(false) }
   }
   const byCat = useMemo(() => {
@@ -189,8 +194,9 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
         <span className="faint" style={{ fontSize: 12 }}>SW 통계·증가 = timeline sim · DVFS·compression = analytic · 추천 조합은 재시뮬레이션 검증</span>
         <span className="grow" />
         {sp.error && <span className="err" style={{ margin: 0 }}>{sp.error}</span>}
-        <button className="btn primary" disabled={busy || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}>
-          {busy ? `탐색 중… (예상 최대 약 ${runningEstimate})` : '탐색 실행'}</button>
+        <button className="btn primary" disabled={busy || jobActive || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}
+          title={jobActive ? '진행 중인 탐색이 끝나면 새로 실행할 수 있습니다' : undefined}>
+          {busy ? `제출 중… (예상 최대 약 ${runningEstimate})` : jobActive ? '탐색 진행 중' : '탐색 실행'}</button>
       </div>
     </section>
   )

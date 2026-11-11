@@ -52,6 +52,9 @@ def _record(row):
 
 
 def _owned(db, job_id, subject, *, lock=False):
+    # the table also holds exploration jobs (explore-job-*): never serve them as sweeps
+    if not str(job_id).startswith("whatif-job-"):
+        raise NotFoundError("What-if job not found")
     query = db.query(WhatIfJob).filter_by(id=job_id, created_by=subject)
     if lock:
         query = query.with_for_update()
