@@ -174,6 +174,14 @@ function RunForm({ ctx }: { ctx: Ctx }) {
               onChange={(e) => set('bw_budget_mbs', Number(e.target.value) > 0 ? Number(e.target.value) : null)} /><span className="faint" style={{ fontSize: 12 }}>MB/s</span>
             <label className="ax-check" title="variant마다 전과제 기준(review_policy power_reference) × (1 + 허용 %)를 power 상한으로 — 위 입력값과 함께 있으면 더 낮은 값. 기준이 없는 variant는 위 입력값만"><input type="checkbox" checked={!!o.budget_from_reference} onChange={() => set('budget_from_reference', !o.budget_from_reference)} />전과제 기준을 상한으로</label>
             <span className="faint" style={{ fontSize: 12 }}>넘는 조합은 추천 제외 · 미모델 IP가 있으면 판정 불가(unknown)</span></div>
+          <div className="ax-row"><span className="ax-label">메모리 한도</span>
+            {([['peak_bw_limit_mbs', 'peak BW ≤', 'MB/s', 'stage peak DRAM BW (IP별 평균 × period ÷ HW 시간, DVFS 상향 · 압축 반영) — MIF 최고 level capacity × 허용 utilisation'],
+              ['dram_footprint_limit_mb', 'DRAM ≤', 'MB', '한 frame의 DMA write × 동시 처리 frame 수 (stage SW+HW chain ÷ period)'],
+              ['llc_capacity_mb', 'LLC ≤', 'MB', 'LLC 할당 buffer의 llc_allocation_mb, allocation_owner별 한 번']] as const).map(([key, label, unit, hint]) => (
+              <label key={key} className="ax-check" title={hint}><span className="faint" style={{ fontSize: 12 }}>{label}</span>
+                <input className="input" type="number" min={0} placeholder="없음" value={o[key] ?? ''} style={{ width: 84 }} aria-label={`${label} ${unit}`}
+                  onChange={(e) => set(key, Number(e.target.value) > 0 ? Number(e.target.value) : null)} /><span className="faint" style={{ fontSize: 12 }}>{unit}</span></label>))}
+            <span className="faint" style={{ fontSize: 12 }}>넘는 조합은 추천 제외 · 사유 BW 포화 / DRAM footprint / LLC</span></div>
           <div className="ax-row"><span className="ax-label">추천 기준</span>
             <div className="seg sm">{(['max', 'mean'] as Statistic[]).map((s) => <button key={s} className={o.objective_statistic === s ? 'on' : ''} onClick={() => set('objective_statistic', s)}>SW {s}</button>)}</div>
             <span className="faint" style={{ fontSize: 12 }}>× 증가</span>

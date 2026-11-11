@@ -33,7 +33,7 @@ from dataclasses import asdict, is_dataclass, replace
 from itertools import product
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_port_transfers, build_simulation_inputs
@@ -139,6 +139,10 @@ class ExplorationAxes(BaseScenarioModel):
         return self
 
 
+MEMORY_LIMITS = ("peak_bw_limit_mbs", "dram_footprint_limit_mb", "llc_capacity_mb")
+MEMORY_REASONS = ("BW 포화", "DRAM footprint 초과", "LLC 할당 초과")
+
+
 class ExplorationConstraints(BaseScenarioModel):
     require_intervals: bool = True
     allow_clock_up: bool = True
@@ -150,6 +154,24 @@ class ExplorationConstraints(BaseScenarioModel):
     # A power budget judged on a partial model (some active IPs at 0 mW) is "unknown", not "pass".
     # True: such a variant is not spec OK; False: the budget status is reported as unknown only.
     require_complete_power_for_budget: bool = True
+    # S-04 memory limits (opt-in; unset = not judged). peak stage DRAM BW of the case (MIF top-level
+    # capacity x allowed utilisation), DRAM held by frames in flight, LLC allocation of the variant.
+    peak_bw_limit_mbs: float | None = Field(default=None, gt=0)
+    dram_footprint_limit_mb: float | None = Field(default=None, gt=0)
+    llc_capacity_mb: float | None = Field(default=None, gt=0)
+
+    @property
+    def memory_on(self) -> bool:
+        return any(getattr(self, k) is not None for k in MEMORY_LIMITS)
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_memory(self, handler):
+        # unset memory limits are left out, so specs (and input hashes) without them stay as before
+        data = handler(self)
+        for k in MEMORY_LIMITS:
+            if data.get(k) is None:
+                data.pop(k, None)
+        return data
 
 
 class ExplorationObjective(BaseScenarioModel):
@@ -211,7 +233,10 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             opts = spec.timing.model_copy(
                 update={"statistic": stat, "runtime_scale": scale, "eis": axes.eis, "include_whatif": False}
             )
-            slices.append(_slice(analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables), stat, scale))
+            report = analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables)
+            slices.append(_slice(report, stat, scale))
+            if spec.constraints.memory_on:
+                slices[-1]["memory_basis"] = _memory_basis(report, llc_allocation_mb(graph))
     obj_slice = next(s for s in slices if s["statistic"] == obj.statistic and s["runtime_scale"] == obj.runtime_scale)
 
     sw_nodes = _sw_nodes(graph, obj_slice)
@@ -221,7 +246,9 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
     elif reuse is not None and reuse[0] == compression_key(graph, config, comp_axis, sw_nodes):
         buffers = deepcopy(reuse[1])
     else:
-        buffers = compression_candidates(graph, comp_axis, config, sw_nodes)
+        # the per-DMA split only while memory limits are judged (the call is unchanged otherwise)
+        buffers = compression_candidates(graph, comp_axis, config, sw_nodes,
+                                         **({"by_node": True} if spec.constraints.memory_on else {}))
     active = [b for b in buffers if b["selectable"]][: axes.compression.max_buffers]
     explored = {b["buffer"] for b in active}
     for b in buffers:
@@ -243,6 +270,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         )
 
     comp_sets = _subset_sums(active)
+    memory_on = spec.constraints.memory_on
     dist: dict[str, list[float]] = {k: [] for k in DIST_KEYS}
     eligible_count = 0
     cases_obj: list[dict[str, Any]] = []
@@ -252,6 +280,8 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         for cset in comp_sets:
             for dset in dv_sets:
                 case = _case(s, cset, dset)
+                if memory_on:
+                    case["memory"] = _case_memory(s, case, dset, buffers)
                 case["eligible"] = ok_slice and _case_ok(case, spec.constraints)
                 for k in dist:
                     dist[k].append(case[k])
@@ -265,6 +295,10 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
     pareto = [c for c in _pareto(ranked) if recommended is None or c["key"] != recommended["key"]][: spec.top_n * 2]
     baseline = next(c for c in cases_obj if not c["compression"] and not c["dvfs_raise"])
     ok_obj, obj_reasons = _slice_ok(obj_slice, spec.constraints)
+    if recommended is None and ok_obj and memory_on and cases_obj:
+        # memory limits judged and nothing passed: say which limit stops the lowest-power combination
+        lowest = min(cases_obj, key=lambda c: c["total_mw"])
+        obj_reasons += [r for r in _case_reasons(lowest, spec.constraints) if r.startswith(MEMORY_REASONS)]
     coverage = _power_coverage(obj_slice)
     budget_status = _power_budget_status(spec.constraints, coverage["power_coverage"], recommended)
     if budget_status == "unknown" and spec.constraints.require_complete_power_for_budget:
@@ -686,7 +720,7 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
 
 
 def _slice_public(s: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in s.items() if k not in ("warnings", "domains", "ips", "cpu_by_task")} | {
+    return {k: v for k, v in s.items() if k not in ("warnings", "domains", "ips", "cpu_by_task", "memory_basis")} | {
         "stages": {k: {f: v for f, v in st.items() if f != "sw_items"} for k, st in s["stages"].items()}
     }
 
@@ -715,7 +749,102 @@ def _case_reasons(case: dict[str, Any], c: ExplorationConstraints) -> list[str]:
         reasons.append(f"power {case['total_mw']:.1f} mW > budget {c.power_budget_mw:g} mW")
     if c.bw_budget_mbs is not None and case["bw_mbs"] > c.bw_budget_mbs:
         reasons.append(f"BW {case['bw_mbs']:.1f} MB/s > budget {c.bw_budget_mbs:g} MB/s")
+    mem = case.get("memory") or {}
+    if c.memory_on and not mem:
+        reasons.append("메모리 한도 판정 불가: 이 조합의 memory 값 없음 (메모리 한도를 넣고 다시 탐색)")
+    if c.peak_bw_limit_mbs is not None and mem.get("peak_stage_mbs", 0.0) > c.peak_bw_limit_mbs:
+        reasons.append(f"BW 포화: peak {mem['peak_stage_mbs']:.0f} MB/s ({mem.get('peak_stage')}) > MIF 한도 {c.peak_bw_limit_mbs:g} MB/s")
+    if c.dram_footprint_limit_mb is not None and mem.get("dram_footprint_mb", 0.0) > c.dram_footprint_limit_mb:
+        reasons.append(f"DRAM footprint 초과: {mem['dram_footprint_mb']:.1f} MB ({mem.get('frames_held')} frame 보유) "
+                       f"> {c.dram_footprint_limit_mb:g} MB")
+    if c.llc_capacity_mb is not None and mem.get("llc_mb", 0.0) > c.llc_capacity_mb:
+        reasons.append(f"LLC 할당 초과: {mem['llc_mb']:g} MB > {c.llc_capacity_mb:g} MB")
     return reasons
+
+
+def llc_allocation_mb(graph) -> float:
+    """LLC the variant allocates: ``placement.llc_allocation_mb`` of LLC-allocated buffers whose endpoints are
+    active, once per ``allocation_owner`` (buffers of one owner share its partition; largest declared size)."""
+    buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
+    overrides = graph.variant.buffer_overrides or {}
+    active = {str(n.get("id")) for n in graph.pipeline_nodes}
+    nodes = _buffer_nodes(graph)
+    owners: dict[str, float] = {}
+    for bid, raw in buffers.items():
+        place = {**((raw or {}).get("placement") or {}), **((overrides.get(bid) or {}).get("placement") or {})}
+        if not place.get("llc_allocated") or place.get("llc_allocation_mb") is None:
+            continue
+        if not (nodes.get(str(bid), set()) & active):
+            continue
+        owner = str(place.get("allocation_owner") or f"buffer:{bid}")
+        owners[owner] = max(owners.get(owner, 0.0), float(place["llc_allocation_mb"]))
+    return round(sum(owners.values()), 3)
+
+
+def _memory_basis(report: dict[str, Any], llc_mb: float) -> dict[str, Any]:
+    """What the memory limits need from a slice's timing report (stored with the objective slice)."""
+    bw = report.get("bw") or {}
+    return {"avg_by_ip": dict(bw.get("hw_by_ip") or {}), "peak_by_ip": dict((bw.get("peak") or {}).get("by_ip") or {}),
+            "write_mb_frame": bw.get("write_mb_frame"), "llc_mb": llc_mb}
+
+
+def _frames_held(stages: dict[str, Any], period: float, hw_scale: dict[str, float] | None = None) -> int:
+    """Frames in flight: the longest stage SW + HW chain over the period (at least 1)."""
+    chains = [float(st.get("sw_ms") or 0.0) + float(st.get("hw_ms") or 0.0) * (hw_scale or {}).get(sid, 1.0)
+              for sid, st in (stages or {}).items()]
+    return max(1, max([math.ceil(c / period - 1e-9) for c in chains if c > 0 and period > 0], default=1))
+
+
+def _case_memory(s: dict[str, Any], case: dict[str, Any], dset: dict[str, Any], buffers: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Peak stage DRAM BW, DRAM held by frames in flight and LLC of one case (first order, from the slice).
+
+    Peak: an IP moves its bytes inside its HW time (peak = average x period / hw_ms, the report's
+    ``bw.peak.by_ip``). The chosen buffers change only their own DMA (``delta_by_node``), and a raised DVFS
+    level shortens the IP's HW time by the clock ratio. Footprint: one frame's DMA writes plus the chosen
+    buffers' write change, x frames in flight with the raised clocks' shorter HW time.
+    """
+    basis = s.get("memory_basis")
+    if not basis:
+        return None
+    raised: dict[str, float] = {}
+    for dom in s.get("domains") or []:
+        lvl = dset["levels"].get(dom["domain"])
+        opt = next((o for o in dom["options"] if o["level"] == lvl), None)
+        if opt and opt.get("raise"):
+            raised[dom["domain"]] = float(opt["speed_mhz"])
+    delta: dict[str, float] = {}
+    write = 0.0
+    for bid in case.get("compression") or []:
+        m = _mode_of(buffers, bid, (case.get("compression_modes") or {}).get(bid)) or {}
+        if "delta_by_node" not in m:
+            return None  # candidates priced without the per-DMA split: cannot judge
+        for node, d in m["delta_by_node"].items():
+            delta[node] = delta.get(node, 0.0) + float(d)
+        write += float(m.get("delta_write_mbs") or 0.0)
+    by_stage: dict[str, float] = {}
+    hw_old: dict[str, float] = {}
+    hw_new: dict[str, float] = {}
+    for ip in s.get("ips") or []:
+        clock = float(ip.get("set_clock_mhz") or 0.0)
+        speed = max(1.0, raised[ip["dvfs_group"]] / clock) if ip.get("dvfs_group") in raised and clock > 0 else 1.0
+        hw = ip.get("standalone_hw_ms") or ip.get("hw_ms")
+        if hw:
+            hw_old[ip["stage"]] = hw_old.get(ip["stage"], 0.0) + float(hw)
+            hw_new[ip["stage"]] = hw_new.get(ip["stage"], 0.0) + float(hw) / speed
+        avg = float(basis["avg_by_ip"].get(ip["node"]) or 0.0)
+        peak = float(basis["peak_by_ip"].get(ip["node"]) or 0.0)
+        if avg <= 0 or peak <= 0:
+            continue
+        factor = peak / avg  # period / hw_ms of this IP
+        by_stage[ip["stage"]] = by_stage.get(ip["stage"], 0.0) + max(0.0, avg + delta.get(ip["node"], 0.0)) * factor * speed
+    peak_stage = max(by_stage, key=lambda k: by_stage[k], default=None)
+    period = float(s.get("period_ms") or 0.0)
+    held = _frames_held(s.get("stages") or {}, period,
+                        {st: hw_new[st] / hw_old[st] for st in hw_old if hw_old[st] > 0})
+    frame_mb = float(basis.get("write_mb_frame") or 0.0) + write * period / 1000.0
+    return {"peak_stage_mbs": round(by_stage.get(peak_stage, 0.0), 1) if peak_stage else 0.0, "peak_stage": peak_stage,
+            "dram_footprint_mb": round(max(0.0, frame_mb) * held, 3), "frames_held": held,
+            "llc_mb": basis.get("llc_mb")}
 
 
 def _case_ok(case: dict[str, Any], c: ExplorationConstraints) -> bool:
@@ -831,7 +960,8 @@ def _with_buffer(graph, bid: str, patch: dict[str, Any]):
 
 
 def compression_candidates(
-    graph, axis: CompressionAxis, config: SimulationRunConfig, sw_nodes: set[str] | None = None
+    graph, axis: CompressionAxis, config: SimulationRunConfig, sw_nodes: set[str] | None = None,
+    *, by_node: bool = False,
 ) -> list[dict[str, Any]]:
     """Per-buffer BW/power delta when that buffer alone is compressed (split IP DMA / CPU DMA).
 
@@ -913,7 +1043,17 @@ def compression_candidates(
                 reason = f"DMA port without {mode}: {', '.join(blocked)}"
             elif -d_bw < axis.min_saving_mbs:
                 reason = f"saving {-d_bw:.1f} MB/s < {axis.min_saving_mbs} MB/s"
+            # memory limits: which DMA moves (per node, write side) — peak / footprint follow the chosen buffers
+            per_node: dict[str, float] = {}
+            for k in keys:
+                d = comp.get(k, (0.0, 0.0))[0] - base.get(k, (0.0, 0.0))[0]
+                if abs(d) > 1e-9:
+                    per_node[k[0]] = per_node.get(k[0], 0.0) + d
+            extra = ({"delta_by_node": {n: round(v, 3) for n, v in sorted(per_node.items())},
+                      "delta_write_mbs": round(sum(comp.get(k, (0.0, 0.0))[0] - base.get(k, (0.0, 0.0))[0]
+                                                   for k in keys if k[2] == "DMA_WRITE"), 3)} if by_node else {})
             modes.append({
+                **extra,
                 "mode": mode, "comp_ratio": ratio, "ratio_source": src, "lossy": m == "lossy",
                 "ports": [f"{n}.{p}" for n, p, _ in ports], "raw_mbs": round(raw, 2),
                 "delta_mbs": round(d_bw, 3), "delta_mw": round(d_pw, 4),
@@ -1218,6 +1358,14 @@ def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
     sim_slice = _slice(r, case["statistic"], case["runtime_scale"])
     timing_pass, reasons = _slice_ok(sim_slice, spec.constraints)
     sim_case = {"lossy": case["lossy"], "total_mw": sim_total, "bw_mbs": sim_bw}
+    if spec.constraints.memory_on:
+        peak = (r.get("bw") or {}).get("peak") or {}
+        by_stage = peak.get("by_stage") or {}
+        top = max(by_stage, key=lambda k: by_stage[k], default=None)
+        held = _frames_held(sim_slice.get("stages") or {}, float(sim_slice.get("period_ms") or 0.0))
+        sim_case["memory"] = {"peak_stage_mbs": float(by_stage.get(top, 0.0)) if top else 0.0, "peak_stage": top,
+                              "dram_footprint_mb": round(float((r.get("bw") or {}).get("write_mb_frame") or 0.0) * held, 3),
+                              "frames_held": held, "llc_mb": llc_allocation_mb(replace(graph, variant=variant))}
     budget_reasons = _case_reasons(sim_case, spec.constraints)
     constraints_pass = timing_pass and not budget_reasons
     if not power_match:
@@ -1442,10 +1590,15 @@ def case_from_key(summary: dict[str, Any], key: str | None) -> dict[str, Any] | 
         levels[dom] = int(lv)
         delta += opt["delta_mw"]
         raises += int(bool(opt["raise"]))
-    case = _case(obj, cset, {"levels": levels, "delta_mw": delta, "raises": raises})
+    dset = {"levels": levels, "delta_mw": delta, "raises": raises}
+    case = _case(obj, cset, dset)
     if case["key"] != key:
         return None
     constraints = ExplorationConstraints.model_validate(summary.get("constraints") or {})
+    if constraints.memory_on:
+        memory = _case_memory(obj, case, dset, summary.get("buffers") or [])
+        if memory is not None:
+            case["memory"] = memory
     case["eligible"] = _slice_ok(obj, constraints)[0] and _case_ok(case, constraints)
     return case
 

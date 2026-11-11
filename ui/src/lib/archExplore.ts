@@ -363,6 +363,8 @@ export interface RunOptions {
   cpu_model?: 'flat' | 'profile'
   /** EXP-05: customer budget — cases above it are not recommended (null = none) */
   power_budget_mw?: number | null; bw_budget_mbs?: number | null
+  /** S-04 memory limits (null = not judged): peak stage DRAM BW, DRAM held by frames in flight, LLC allocation */
+  peak_bw_limit_mbs?: number | null; dram_footprint_limit_mb?: number | null; llc_capacity_mb?: number | null
   /** per variant: previous-project reference × (1 + tolerance) from the project review policy (tighter of the two) */
   budget_from_reference?: boolean
 }
@@ -386,7 +388,10 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
         compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers, require_declared: o.require_declared },
         power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets } },
       constraints: { allow_lossy: o.allow_lossy,
-        ...(o.power_budget_mw ? { power_budget_mw: o.power_budget_mw } : {}), ...(o.bw_budget_mbs ? { bw_budget_mbs: o.bw_budget_mbs } : {}) },
+        ...(o.power_budget_mw ? { power_budget_mw: o.power_budget_mw } : {}), ...(o.bw_budget_mbs ? { bw_budget_mbs: o.bw_budget_mbs } : {}),
+        ...(o.peak_bw_limit_mbs ? { peak_bw_limit_mbs: o.peak_bw_limit_mbs } : {}),
+        ...(o.dram_footprint_limit_mb ? { dram_footprint_limit_mb: o.dram_footprint_limit_mb } : {}),
+        ...(o.llc_capacity_mb ? { llc_capacity_mb: o.llc_capacity_mb } : {}) },
       objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale },
       ...(o.cpu_model === 'profile' ? { timing: { cpu_model: 'profile' } } : {}),
     },

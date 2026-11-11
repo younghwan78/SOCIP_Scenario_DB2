@@ -234,3 +234,12 @@ it.each(['ok', 'error'])('announces a bulk registration %s in the global region'
   expect(region.textContent).toContain(outcome === 'ok' ? '1개 variant를 최저 power 조합으로 등록 (건너뜀 0)' : 'registration failed')
   expect(region.querySelector('[role="alert"]') !== null).toBe(outcome === 'error')
 })
+
+it('sends memory limits only when they are set', async () => {
+  await mount()
+  act(() => form().querySelector('summary')!.click())
+  act(() => changeInput(form().querySelector<HTMLInputElement>('[aria-label="LLC ≤ MB"]')!, '8'))
+  await act(async () => button('탐색 실행').click())
+  const { constraints } = vi.mocked(archApi.createJob).mock.calls[0][0].spec
+  expect(constraints).toEqual({ allow_lossy: true, llc_capacity_mb: 8 })
+})
