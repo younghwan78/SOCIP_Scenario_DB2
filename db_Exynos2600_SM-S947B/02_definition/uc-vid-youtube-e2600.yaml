@@ -76,6 +76,21 @@ pipeline:
   - from: dpu
     to: panel
     type: OTF
+  judgement:
+    sinks:
+    - node: dpu
+      kind: preview
+      label: display
+    - node: mfc_dec
+      kind: video
+      label: decode
+    stages:
+      decoder: output
+      display_controller: output
+      display_output: output
+    kpis:
+    - interval
+    - latency
   buffers:
     NET_ES_BUF:
       format: BITSTREAM

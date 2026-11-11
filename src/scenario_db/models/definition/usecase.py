@@ -60,6 +60,35 @@ class PipelineEdge(BaseModel):
     port_pairs: list[PortPair] = Field(default_factory=list)
 
 
+JudgementStage = Literal["rt", "nrt", "post", "output"]
+JudgementKpi = Literal["interval", "latency", "underrun", "frame_pacing", "start_time"]
+# the KPIs the Timing Budget evaluates today; the others are declared requirements without a model yet
+MODELED_KPIS = ("interval", "latency")
+
+
+class JudgementSink(BaseScenarioModel):
+    """An output the frame-cadence judgement checks (its interval at the variant fps)."""
+
+    node: str
+    kind: Literal["preview", "video"]
+    label: str | None = None
+
+
+class JudgementContract(BaseScenarioModel):
+    """What the Timing Budget judges for this scenario (D-02).
+
+    ``sinks``: the output nodes whose interval is judged (instead of the node-name rule: DPU = preview,
+    MFC / APV = video). A sink inactive in a variant is not judged there.
+    ``stages``: node role -> timing stage, applied before the name rule (explicit option overrides win).
+    ``kpis``: what the scenario requires; KPIs without a model are reported as such, never as passed.
+    Undeclared scenarios keep the name rules unchanged.
+    """
+
+    sinks: list[JudgementSink] = Field(default_factory=list)
+    stages: dict[str, JudgementStage] = Field(default_factory=dict)
+    kpis: list[JudgementKpi] = Field(default_factory=lambda: ["interval"])
+
+
 class Pipeline(BaseScenarioModel):
     nodes: list[PipelineNode] = Field(default_factory=list)
     edges: list[PipelineEdge] = Field(default_factory=list)
@@ -67,10 +96,14 @@ class Pipeline(BaseScenarioModel):
     architecture_graph: dict[str, Any] = Field(default_factory=dict)
     task_graph: dict[str, Any] = Field(default_factory=dict)
     level1_graph: dict[str, Any] = Field(default_factory=dict)
+    judgement: JudgementContract | None = None
 
     @model_validator(mode="after")
     def _validate_edge_references(self) -> Pipeline:
         node_ids = {node.id for node in self.nodes}
+        for sink in (self.judgement.sinks if self.judgement else []):
+            if sink.node not in node_ids:
+                raise ValueError(f"judgement sink '{sink.node}' not found in nodes {node_ids}")
         for edge in self.edges:
             if edge.from_ not in node_ids:
                 raise ValueError(

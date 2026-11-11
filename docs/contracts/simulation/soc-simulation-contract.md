@@ -87,6 +87,32 @@ Display/panel metadata should provide sink constraints:
 
 Missing external metadata is normally a warning, not a compute simulation block.
 
+## Judgement Contract (`pipeline.judgement`)
+
+A scenario may declare what the Timing Budget judges. Without the block the name rules apply unchanged
+(stage: sensor-synchronous → RT, `mfc|mfd|apv|dpu|panel|display` → Output, `gdc` → Post, else NRT;
+sinks: first DPU = preview, first MFC / APV = video, other displays / encoders = extra streams).
+
+```yaml
+pipeline:
+  judgement:
+    sinks:                 # outputs whose interval is judged at the variant fps
+    - {node: dpu, kind: preview, label: display}
+    - {node: mfc_dec, kind: video, label: decode}
+    stages:                # node role -> rt | nrt | post | output (before the name rule)
+      decoder: output
+    kpis: [interval, latency]   # also: underrun, frame_pacing, start_time (declared, not modeled yet)
+```
+
+| Field | Rule |
+| --- | --- |
+| `sinks[]` | `node` must be a pipeline node; `kind` is `preview` or `video`. The first of each kind is the preview / video interval, the rest are extra streams. A sink inactive in a variant (routing switch, `sim.active: false`) is not judged there; nothing judged and no RT node → `not_applicable`. |
+| `stages` | Role → stage, applied before the name rule; Timing Budget `stage_overrides` still win. |
+| `kpis` | KPIs without a model are listed in the verdict notes (`판정 계약 KPI 미모델: …`), never counted as passed. |
+
+The evidence generator (`scripts/generate_simulation_evidence.py`) accepts a run on the declared sinks
+active in the variant, so screen-off playback is judged on its decoder output.
+
 ## Readiness Severity
 
 | Condition | SoC fixture contract | Scenario readiness |
