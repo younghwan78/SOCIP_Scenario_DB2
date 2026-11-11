@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # Optional exact-input pure-result reuse. Never caches DB scope/access checks.
     whatif_case_cache_entries: int = Field(default=0, ge=0, le=256)
     whatif_case_cache_ttl_seconds: float = Field(default=60, gt=0, le=600)
+    # O-04 content-addressed compute cache (Timing Fleet rows): key = digest of every input + the engine
+    # source, shared by workers through this directory. "" = <system temp>/scenario-db-compute-cache, "off" = no cache.
+    compute_cache_dir: str = ""
+    compute_cache_max_entries: int = Field(default=4000, ge=10)
     # API authentication is deny-by-default. Prefer role-bearing principals:
     # {"architect@example.com":{"secret":"...","roles":["writer"]}}.
     api_principals: dict[str, ApiPrincipalSettings] = Field(default_factory=dict)

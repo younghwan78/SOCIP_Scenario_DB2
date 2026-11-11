@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
+from scenario_db.api.http_cache import html_response, json_response
 from scenario_db.api.resource_limits import admission_slot, enforce_request_size, enforce_timeline_frame_limit
 from scenario_db.api.schemas.arch_exploration import (
     ArchExplorationRunRequest,
@@ -85,14 +86,15 @@ def list_runs(
 
 
 @router.get("/exploration/runs/{run_id}")
-def get_run(run_id: str, view: Literal["full", "summary"] = "full", db: Session = Depends(get_db)):
-    """view=summary: per-variant list fields only (UI); a variant's full summary via /variants/{scenario}/{variant}."""
-    return svc.run_summary(db, run_id) if view == "summary" else svc.run_detail(svc.get_run(db, run_id))
+def get_run(request: Request, run_id: str, view: Literal["full", "summary"] = "full", db: Session = Depends(get_db)):
+    """view=summary: per-variant list fields only (UI); a variant's full summary via /variants/{scenario}/{variant}.
+    Content ETag: an unchanged run answers 304."""
+    return json_response(request, svc.run_summary(db, run_id) if view == "summary" else svc.run_detail(svc.get_run(db, run_id)))
 
 
 @router.get("/exploration/runs/{run_id}/variants/{scenario_id}/{variant_id}")
-def get_run_variant(run_id: str, scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
-    return svc.run_variant(db, run_id, scenario_id, variant_id)
+def get_run_variant(request: Request, run_id: str, scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
+    return json_response(request, svc.run_variant(db, run_id, scenario_id, variant_id))
 
 
 @router.get("/exploration/runs/{run_id}/manifest")
@@ -246,13 +248,14 @@ def list_reports(limit: int = Query(100, ge=1, le=500), db: Session = Depends(ge
 
 
 @router.get("/reports/{report_id}")
-def get_report(report_id: str, db: Session = Depends(get_db)):
-    return svc.report_detail(svc.get_report(db, report_id))
+def get_report(request: Request, report_id: str, db: Session = Depends(get_db)):
+    return json_response(request, svc.report_detail(svc.get_report(db, report_id)))
 
 
 @router.get("/reports/{report_id}/html", response_class=HTMLResponse)
-def get_report_html(report_id: str, db: Session = Depends(get_db)):
-    return HTMLResponse(svc.get_report(db, report_id).rendered_html)
+def get_report_html(request: Request, report_id: str, db: Session = Depends(get_db)):
+    row = svc.get_report(db, report_id)
+    return html_response(request, row.rendered_html, row.html_sha256)
 
 
 @router.get("/reports/{report_id}/xlsx")
