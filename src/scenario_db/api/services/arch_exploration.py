@@ -130,8 +130,127 @@ def _variant_budget(spec_mw: float | None, ref: dict[str, Any] | None) -> dict[s
     return {"mw": ref["mw"], "source": f"전과제 {ref['source']}", "reference_mw": ref["reference_mw"]}
 
 
+_MAX_RUN_CASES = 2_000_000
+
+
+class ExplorationCancelled(Exception):
+    """The progress callback asked to stop; nothing is stored."""
+
+
+def _load_variant(db: Session, request: ArchExplorationRunRequest, scenario: Scenario, variant_id: str,
+                  ref_budget: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Everything one variant's exploration needs from the DB (or its load failure)."""
+    tb = TimingBudgetRequest(
+        scenario_id=scenario.id, variant_id=variant_id, config=request.config,
+        config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
+        dvfs_table_ref=request.dvfs_table_ref, soc_ref=request.soc_ref,
+        dvfs_version=request.dvfs_version, use_default_dvfs=request.use_default_dvfs,
+        basis_ref=request.basis_ref, basis_overrides=request.basis_overrides,
+    )
+    selection = resolve_analysis_selection(db, tb, variant_id)
+    shim = selection.request
+    try:
+        inputs = selection.load(db)
+        graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
+        from scenario_db.api.services.cpu import with_cpu_profile
+
+        spec = request.spec.model_copy(update={"timing": with_cpu_profile(db, request.spec.timing, scenario.id, variant_id)})
+        budget = _variant_budget(request.spec.constraints.power_budget_mw, ref_budget.get(variant_id))
+        if budget["mw"] != request.spec.constraints.power_budget_mw:
+            spec = spec.model_copy(update={
+                "constraints": spec.constraints.model_copy(update={"power_budget_mw": budget["mw"]})})
+        applied: list[dict[str, Any]] = []
+        if request.apply_options:
+            graph, applied = _apply_options(graph, request.apply_options)
+            spec = spec.model_copy(update={"axes": spec.axes.model_copy(update={
+                "power_options": spec.axes.power_options.model_copy(update={"enabled": False})})})
+    except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
+        return {"scenario_id": scenario.id, "variant_id": variant_id,
+                "error": variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage="load")}
+    return {"scenario_id": scenario.id, "variant_id": variant_id, "graph": graph, "tables": tables,
+            "dvfs_ref": ref, "config": shim.config, "spec": spec, "budget": budget, "applied": applied}
+
+
+def _explore_item(item: dict[str, Any], max_cases: int, summary: dict[str, Any] | None = None) -> dict[str, Any]:
+    if summary is None:
+        spec = item["spec"].model_copy(update={"max_cases_per_variant": max_cases})
+        summary = explore_variant(item["graph"], spec, config=item["config"], dvfs_tables=item["tables"])
+    if item["applied"]:
+        summary["applied_options"] = [{k: it.get(k) for k in ("key", "label", "kind", "iq_eval", "note")}
+                                      for it in item["applied"]]
+    summary["model_lineage"] = run_model_lineage(item["config"])
+    if item["budget"]["mw"] is not None:
+        summary["power_budget"] = item["budget"]
+    return summary
+
+
+def _explore_worker(graph, spec, config, tables) -> dict[str, Any]:
+    """Process-pool entry point (top level so it pickles)."""
+    return explore_variant(graph, spec, config=config, dvfs_tables=tables)
+
+
+def _exploration_workers(n: int) -> int:
+    import os
+
+    from scenario_db.config import get_settings
+
+    configured = get_settings().exploration_workers
+    want = configured if configured > 0 else min(os.cpu_count() or 1, 8)
+    return max(1, min(want, n))
+
+
+def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick) -> dict[int, dict[str, Any]]:
+    """Variant summaries computed in the shared CPU process pool, by plan index.
+
+    Variants share no state, so each one is an independent job. A variant that fails in a
+    worker, or any pool failure, is left out: the caller recomputes it in-process, so a
+    result never depends on the deployment's process limits or pickling.
+    """
+    todo = [(i, it) for i, it in enumerate(items) if "error" not in it]
+    workers = _exploration_workers(len(todo))
+    if workers <= 1 or len(todo) < 3:
+        return {}
+    from concurrent.futures import as_completed
+
+    from scenario_db.api.services import cpu
+
+    out: dict[int, dict[str, Any]] = {}
+    pool = None
+    try:
+        with cpu._pool_batch(workers) as pool:
+            futures = {pool.submit(_explore_worker, it["graph"],
+                                   it["spec"].model_copy(update={"max_cases_per_variant": max_cases}),
+                                   it["config"], it["tables"]): i for i, it in todo}
+            try:
+                for future in as_completed(futures):
+                    i = futures[future]
+                    try:
+                        out[i] = _explore_item(items[i], max_cases, future.result())
+                    except Exception:  # noqa: BLE001 - recomputed in-process by the caller
+                        continue
+                    tick(items[i]["variant_id"])
+            except BaseException:
+                for future in futures:
+                    future.cancel()
+                raise
+    except ExplorationCancelled:
+        raise
+    except Exception:  # noqa: BLE001 - pool failure: the caller computes the rest in-process
+        if pool is not None:
+            cpu._retire_cpu_pool(pool)
+    return out
+
+
 def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None,
-                    *, commit: bool = True, release_connection: bool = False) -> dict[str, Any]:
+                    *, commit: bool = True, release_connection: bool = False,
+                    progress=None, parallel: bool = False) -> dict[str, Any]:
+    """One exploration run over the request scope, persisted.
+
+    ``progress(done, total, variant_id)`` is called as variants finish; returning False
+    stops the run with :class:`ExplorationCancelled` before anything is stored.
+    ``parallel`` explores variants in the shared process pool (the job path); the result
+    is the same as the sequential run.
+    """
     scenarios = _scenarios(db, request)
     throughput_from_policy = "throughput_model" not in request.spec.timing.model_fields_set
     # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
@@ -154,57 +273,49 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     blobs: dict[str, Any] = {}
     soc_ref = request.soc_ref
     dvfs_ref: str | None = None
-    remaining_cases = 2_000_000
     ref_budget = _reference_budgets(db, scenarios[0].project_ref) if request.power_budget_from_reference else {}
-    for scenario, variant_id in plan:
+    # 1) resolve every variant's inputs while the read transaction is open (DB work, in plan order)
+    items = [_load_variant(db, request, scenario, variant_id, ref_budget) for scenario, variant_id in plan]
+    # The public create route owns its read transaction. Registration
+    # and recomputation callers retain their locks/transaction by default.
+    if release_connection and commit:
+        release_read_connection(db)
+    # 2) explore: in worker processes when allowed; reconciled below in plan order
+    done = [0]
+
+    def tick(variant_id: str) -> None:
+        done[0] += 1
+        if progress is not None and progress(done[0], len(items), variant_id) is False:
+            raise ExplorationCancelled
+    if progress is not None and progress(0, len(items), None) is False:
+        raise ExplorationCancelled
+    pooled = _explore_parallel(items, request.spec.max_cases_per_variant, tick) if parallel else {}
+    remaining_cases = _MAX_RUN_CASES
+    for index, item in enumerate(items):
         if remaining_cases <= 0:
             raise UnprocessableError("exploration exceeds 2000000 total cases; narrow the scope")
-        tb = TimingBudgetRequest(
-            scenario_id=scenario.id, variant_id=variant_id, config=request.config,
-            config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
-            dvfs_table_ref=request.dvfs_table_ref, soc_ref=request.soc_ref,
-            dvfs_version=request.dvfs_version, use_default_dvfs=request.use_default_dvfs,
-            basis_ref=request.basis_ref, basis_overrides=request.basis_overrides,
-        )
-        selection = resolve_analysis_selection(db, tb, variant_id)
-        shim = selection.request
-        stage = "load"
-        try:
-            inputs = selection.load(db)
-            graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
-            from scenario_db.api.services.cpu import with_cpu_profile
-
-            bounded_spec = request.spec.model_copy(update={
-                "max_cases_per_variant": min(request.spec.max_cases_per_variant, remaining_cases),
-                "timing": with_cpu_profile(db, request.spec.timing, scenario.id, variant_id),
-            })
-            budget = _variant_budget(request.spec.constraints.power_budget_mw, ref_budget.get(variant_id))
-            if budget["mw"] != request.spec.constraints.power_budget_mw:
-                bounded_spec = bounded_spec.model_copy(update={
-                    "constraints": bounded_spec.constraints.model_copy(update={"power_budget_mw": budget["mw"]})})
-            applied: list[dict[str, Any]] = []
-            if request.apply_options:
-                graph, applied = _apply_options(graph, request.apply_options)
-                bounded_spec = bounded_spec.model_copy(update={"axes": bounded_spec.axes.model_copy(update={
-                    "power_options": bounded_spec.axes.power_options.model_copy(update={"enabled": False})})})
-            # The public create route owns its read transaction. Registration
-            # and recomputation callers retain their locks/transaction by default.
-            if release_connection and commit:
-                release_read_connection(db)
-            stage = "explore"
-            summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
-            if applied:
-                summary["applied_options"] = [{k: it.get(k) for k in ("key", "label", "kind", "iq_eval", "note")} for it in applied]
-            summary["model_lineage"] = run_model_lineage(shim.config)
-            if budget["mw"] is not None:
-                summary["power_budget"] = budget
-        except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
-            errors.append(variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage=stage))
+        if "error" in item:
+            errors.append(item["error"])
+            tick(item["variant_id"])
             continue
-        soc_ref = soc_ref or _graph_soc_ref(graph)
-        dvfs_ref = dvfs_ref or ref
+        cap = min(request.spec.max_cases_per_variant, remaining_cases)
+        # a parallel result is the sequential one only when its case cap was the same
+        summary = pooled.get(index) if cap == request.spec.max_cases_per_variant else None
+        if summary is None:
+            try:
+                summary = _explore_item(item, cap)
+            except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
+                errors.append(variant_failure(exc, variant_id=item["variant_id"], scenario_id=item["scenario_id"],
+                                              stage="explore"))
+                if index not in pooled:
+                    tick(item["variant_id"])
+                continue
+            if index not in pooled:
+                tick(item["variant_id"])
+        soc_ref = soc_ref or _graph_soc_ref(item["graph"])
+        dvfs_ref = dvfs_ref or item["dvfs_ref"]
         remaining_cases -= summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
-        summary["dvfs_table_ref"] = ref
+        summary["dvfs_table_ref"] = item["dvfs_ref"]
         blobs.update(summary.pop("_manifest_blobs", {}) or {})
         variants.append(summary)
     if not variants:

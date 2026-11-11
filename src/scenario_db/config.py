@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     whatif_job_checkpoint_seconds: float = Field(default=2.0, ge=0, le=60)
     # CPU growth sweep: worker processes for the per-point rebalance (0 = min(cpu_count, 8); 1 = in-process)
     cpu_sweep_workers: int = Field(default=0, ge=0)
+    # exploration job: worker processes per run (0 = min(cpu count, 8); 1 = in-process)
+    exploration_workers: int = Field(default=0, ge=0)
     simulation_max_timeline_frames: int = Field(default=120, ge=1)
     simulation_max_workloads: int = Field(default=1_000, ge=1)
     simulation_max_port_transfers: int = Field(default=5_000, ge=1)

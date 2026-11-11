@@ -19,6 +19,7 @@ from scenario_db.api.schemas.arch_exploration import (
 )
 from scenario_db.api.schemas.prediction_discussion import PredictionCommentRequest, PredictionNoteRequest
 from scenario_db.api.services import arch_exploration as svc
+from scenario_db.api.services import exploration_jobs as jobs
 from scenario_db.api.services import prediction_discussion as discussion
 from scenario_db.config import get_settings
 from scenario_db.exceptions import UnprocessableError
@@ -45,6 +46,34 @@ def create_run(
     if view == "summary":
         result = result | {"variants": [svc.variant_summary(v) for v in result["variants"]], "view": "summary"}
     return result
+
+
+@router.post("/exploration/jobs", status_code=202)
+def create_job(
+    request: ArchExplorationRunRequest,
+    db: Session = Depends(get_db),
+    principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
+):
+    """Queue an exploration run (same request as POST /exploration/runs); poll the job for progress."""
+    return jobs.submit(db, request, principal.subject)
+
+
+@router.get("/exploration/jobs/{job_id}")
+def get_job(job_id: str, db: Session = Depends(get_db),
+            principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin"))):
+    return jobs.get(db, job_id, principal.subject)
+
+
+@router.post("/exploration/jobs/{job_id}/cancel")
+def cancel_job(job_id: str, db: Session = Depends(get_db),
+               principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin"))):
+    return jobs.cancel(db, job_id, principal.subject)
+
+
+@router.post("/exploration/jobs/{job_id}/resume", status_code=202)
+def resume_job(job_id: str, db: Session = Depends(get_db),
+               principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin"))):
+    return jobs.resume(db, job_id, principal.subject)
 
 
 @router.get("/exploration/runs")
