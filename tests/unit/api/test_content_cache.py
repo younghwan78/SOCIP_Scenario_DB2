@@ -145,3 +145,29 @@ def test_html_etag_uses_the_stored_digest():
     assert r.headers["etag"] == '"' + "f" * 32 + '"'
     assert http_cache.html_response(_request(r.headers["etag"]), "<p>x</p>", "f" * 64).status_code == 304
     assert http_cache.html_response(_request(), "<p>x</p>", None).headers["etag"] != r.headers["etag"]
+
+
+def test_key_tells_explicit_from_omitted_options(env):
+    make, tables = env
+    omitted = key(make(), tables, options=TimingBudgetOptions())
+    explicit = key(make(), tables, options=TimingBudgetOptions.model_validate({"cpu": {}}))
+    assert TimingBudgetOptions().model_dump() == TimingBudgetOptions.model_validate({"cpu": {}}).model_dump()
+    assert omitted != explicit
+
+
+def test_engine_digest_covers_the_whole_package():
+    from pathlib import Path
+
+    import scenario_db
+
+    root = Path(scenario_db.__file__).resolve().parent
+    digest = result_cache.engine_source_digest()
+    assert len(digest) == 64
+    # modules outside sim/ that shape the calculation are part of it
+    assert (root / "db" / "repositories" / "scenario_graph.py").exists()
+    import hashlib
+    h = hashlib.sha256()
+    for path in sorted(root.rglob("*.py")):
+        h.update(str(path.relative_to(root)).encode())
+        h.update(path.read_bytes())
+    assert h.hexdigest() == digest

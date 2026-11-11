@@ -22,19 +22,20 @@ from typing import Any, Callable
 
 _log = logging.getLogger(__name__)
 _SOURCE_DIGEST: str | None = None
-_SOURCE_DIRS = ("sim", "models/definition", "models/capability")
-
-
 def engine_source_digest() -> str:
-    """sha256 of the engine source (sim/ and the model definitions): a code change is a new key."""
+    """sha256 of the whole scenario_db package source: any code change is a new key.
+
+    The calculation reaches beyond sim/ (the effective pipeline in db/repositories, edge helpers,
+    model validators, API-side option resolution), so the whole package is hashed rather than a list
+    of modules that could miss one.
+    """
     global _SOURCE_DIGEST
     if _SOURCE_DIGEST is None:
         root = Path(__file__).resolve().parents[1]
         h = hashlib.sha256()
-        for sub in _SOURCE_DIRS:
-            for path in sorted((root / sub).rglob("*.py")):
-                h.update(str(path.relative_to(root)).encode())
-                h.update(path.read_bytes())
+        for path in sorted(root.rglob("*.py")):
+            h.update(str(path.relative_to(root)).encode())
+            h.update(path.read_bytes())
         _SOURCE_DIGEST = h.hexdigest()
     return _SOURCE_DIGEST
 
@@ -42,7 +43,9 @@ def engine_source_digest() -> str:
 def _jsonable(value: Any) -> Any:
     dump = getattr(value, "model_dump", None)
     if callable(dump):
-        return dump(mode="json")
+        # which fields were set explicitly matters too: e.g. the timing options treat an explicit CPU
+        # block differently from an omitted one (model_fields_set), with the same dumped values
+        return {"values": dump(mode="json"), "set": dump(mode="json", exclude_unset=True)}
     if is_dataclass(value) and not isinstance(value, type):
         from dataclasses import asdict
 
