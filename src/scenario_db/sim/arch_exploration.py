@@ -36,7 +36,7 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
-from scenario_db.sim.adapter import build_simulation_inputs
+from scenario_db.sim.adapter import build_port_transfers, build_simulation_inputs
 from scenario_db.sim.bw_calc import calc_port_bw, compression_enabled, normalize_compression
 from scenario_db.sim.graph_edges import edge_source, edge_target, edge_type
 from scenario_db.sim.models import DVFSTable, SimulationRunConfig
@@ -194,7 +194,13 @@ def explore_variant(
 
 
 def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
-             tables: dict[str, DVFSTable]) -> dict[str, Any]:
+             tables: dict[str, DVFSTable], reuse: tuple[str, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
+    """One variant (or power-option graph) explored over the spec axes.
+
+    ``reuse`` = (compression key, candidates) of a graph explored before: when this graph's
+    :func:`compression_key` is the same, its compression candidates are copied instead of
+    re-priced (power-option sets that only swap an IP mode).
+    """
     axes, obj = spec.axes, spec.objective
     stats = list(dict.fromkeys([*axes.statistics, obj.statistic]))
     scales = sorted(set(axes.runtime_scales) | {obj.runtime_scale})
@@ -208,13 +214,14 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             slices.append(_slice(analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables), stat, scale))
     obj_slice = next(s for s in slices if s["statistic"] == obj.statistic and s["runtime_scale"] == obj.runtime_scale)
 
-    sw_nodes = set(obj_slice["sw_nodes"]) | {
-        str(n.get("id")) for n in graph.pipeline_nodes if str(n.get("role") or "") in ("sw_task", "sw")
-    }
-    comp_axis = axes.compression
-    if not spec.constraints.allow_lossy:
-        comp_axis = comp_axis.model_copy(update={"modes": [m for m in comp_axis.modes if m != "lossy"]})
-    buffers = compression_candidates(graph, comp_axis, config, sw_nodes) if comp_axis.enabled else []
+    sw_nodes = _sw_nodes(graph, obj_slice)
+    comp_axis = _comp_axis(spec)
+    if not comp_axis.enabled:
+        buffers = []
+    elif reuse is not None and reuse[0] == compression_key(graph, config, comp_axis, sw_nodes):
+        buffers = deepcopy(reuse[1])
+    else:
+        buffers = compression_candidates(graph, comp_axis, config, sw_nodes)
     active = [b for b in buffers if b["selectable"]][: axes.compression.max_buffers]
     explored = {b["buffer"] for b in active}
     for b in buffers:
@@ -331,6 +338,41 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
 
 
 TIER_NEAR_PCT = 3.0
+
+
+def _sw_nodes(graph, obj_slice: dict[str, Any]) -> set[str]:
+    return set(obj_slice["sw_nodes"]) | {
+        str(n.get("id")) for n in graph.pipeline_nodes if str(n.get("role") or "") in ("sw_task", "sw")
+    }
+
+
+def _comp_axis(spec: ArchExplorationSpec) -> CompressionAxis:
+    comp_axis = spec.axes.compression
+    if not spec.constraints.allow_lossy:
+        comp_axis = comp_axis.model_copy(update={"modes": [m for m in comp_axis.modes if m != "lossy"]})
+    return comp_axis
+
+
+def compression_key(graph, config: SimulationRunConfig, axis: CompressionAxis, sw_nodes: set[str]) -> str:
+    """Everything :func:`compression_candidates` reads besides the shared SoC / IP catalog.
+
+    The baseline port transfers (shapes, formats, compression, LLC, per-node fps), the
+    effective buffers, the buffer -> node map, the active nodes, the SW nodes, the axis and
+    the run config. Two graphs with the same key price every compression candidate the same.
+    """
+    fps, workloads, transfers = build_port_transfers(graph, config)
+    return _sha({
+        "fps": fps,
+        "node_fps": sorted((w.node_id, w.fps) for w in workloads),
+        "transfers": [t.model_dump(mode="json") for t in transfers],
+        "buffers": (graph.scenario.pipeline or {}).get("buffers") or {},
+        "buffer_overrides": graph.variant.buffer_overrides or {},
+        "buffer_nodes": {k: sorted(v) for k, v in _buffer_nodes(graph).items()},
+        "active": sorted(str(n.get("id")) for n in graph.pipeline_nodes),
+        "sw_nodes": sorted(sw_nodes),
+        "axis": axis.model_dump(mode="json"),
+        "config": config.model_dump(mode="json"),
+    })
 
 
 def _tiers(eligible: list[dict[str, Any]], tie_pct: float) -> dict[str, Any]:
@@ -492,6 +534,18 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
     })
     base_raw = base["baseline"]
     remaining = spec.max_cases_per_variant - base.get("counts", {}).get("cases", 0)
+    # an IP-mode swap leaves the DMA alone: reuse the variant's candidates when the key matches
+    reuse_cache: list[tuple[str, list[dict[str, Any]]] | None] = []
+
+    def reuse_for(items: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]] | None:
+        if not all(i["kind"] == "ip_mode" for i in items):
+            return None
+        if not reuse_cache:
+            comp_axis, obj_slice = _comp_axis(sub), base.get("objective_slice") or {}
+            known = comp_axis.enabled and "sw_nodes" in obj_slice and "buffers" in base
+            reuse_cache.append((compression_key(graph, config, comp_axis, _sw_nodes(graph, obj_slice)), base["buffers"])
+                               if known else None)
+        return reuse_cache[0]
     for items in po.option_sets(dims):
         key = po.set_key(items)
         if remaining <= 0:
@@ -499,7 +553,7 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
             break
         try:
             bounded = sub.model_copy(update={"max_cases_per_variant": remaining})
-            r = _explore(po.apply_option_set(graph, items), bounded, config, tables)
+            r = _explore(po.apply_option_set(graph, items), bounded, config, tables, reuse_for(items))
         except (LookupError, ValueError, po.KnobError) as exc:
             out["errors"].append({"key": key, "error": str(exc)[:300]})
             continue
@@ -748,13 +802,14 @@ def _port_unsupported(graph, ports: list[tuple[str, str, str]], mode: str) -> li
 
 
 def _dma(graph, config: SimulationRunConfig) -> dict[tuple[str, str, str], tuple[float, float]]:
-    inputs = build_simulation_inputs(graph, config)
-    fps = float(inputs.config.fps or 30.0)
-    fps_by_node = {w.node_id: w.fps for w in inputs.workloads}
+    # only the DMA part of the adapter: no timeline / clock / external-device work per candidate
+    run_fps, workloads, transfers = build_port_transfers(graph, config)
+    fps = float(run_fps or 30.0)
+    fps_by_node = {w.node_id: w.fps for w in workloads}
     model = resolve_power_model(config.power_model)
     bw_model = bw_model_from_config(config)
     out: dict[tuple[str, str, str], tuple[float, float]] = {}
-    for t in inputs.port_transfers:
+    for t in transfers:
         r = calc_port_bw(t, fps=fps_by_node.get(t.node_id, fps), bw_power_coeff=config.bw_power_coeff,
                          vbat=config.vbat, pmic_efficiency=config.pmic_efficiency, power_model=model,
                          bw_model=bw_model)
@@ -762,6 +817,17 @@ def _dma(graph, config: SimulationRunConfig) -> dict[tuple[str, str, str], tuple
         bw, pw = out.get(key, (0.0, 0.0))
         out[key] = (bw + r.bw_mbs, pw + r.bw_power_mw)
     return out
+
+
+def _with_buffer(graph, bid: str, patch: dict[str, Any]):
+    """The graph with one buffer override patched; only ``buffer_overrides`` is copied.
+
+    The adapter copies the variant before it changes anything, so the other variant
+    fields can be shared instead of deep-copying the whole variant per candidate.
+    """
+    overrides = deepcopy(graph.variant.buffer_overrides or {})
+    overrides.setdefault(bid, {}).update(patch)
+    return replace(graph, variant=replace(graph.variant, buffer_overrides=overrides))
 
 
 def compression_candidates(
@@ -804,10 +870,7 @@ def compression_candidates(
         current = row["base_compression"]
         if current is not None:
             row["base_comp_ratio"] = float(eff.get("comp_ratio") or mean.get(current) or 1.0)
-            off_variant = deepcopy(graph.variant)
-            off_variant.buffer_overrides = deepcopy(off_variant.buffer_overrides or {})
-            off_variant.buffer_overrides.setdefault(bid, {}).update({"compression": "COMP_OFF", "comp_ratio": None})
-            off = _dma(replace(graph, variant=off_variant), config)
+            off = _dma(_with_buffer(graph, bid, {"compression": "COMP_OFF", "comp_ratio": None}), config)
             row["current_saving"] = {
                 "mode": current, "comp_ratio": row["base_comp_ratio"],
                 "saving_mbs": round(sum(v[0] for v in off.values()) - sum(v[0] for v in base.values()), 3),
@@ -831,10 +894,7 @@ def compression_candidates(
                 ratio, src = DEFAULT_RATIO[m.upper()], "assumed"
             else:
                 continue
-            variant = deepcopy(graph.variant)
-            variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
-            variant.buffer_overrides.setdefault(bid, {}).update({"compression": mode, "comp_ratio": ratio})
-            comp = _dma(replace(graph, variant=variant), config)
+            comp = _dma(_with_buffer(graph, bid, {"compression": mode, "comp_ratio": ratio}), config)
             ports = sorted(k for k in comp if abs(comp[k][0] - base.get(k, (0.0, 0.0))[0]) > 1e-9)
             blocked = _port_unsupported(graph, ports, mode)
             raw = sum(base.get(k, (0.0, 0.0))[0] for k in ports)
