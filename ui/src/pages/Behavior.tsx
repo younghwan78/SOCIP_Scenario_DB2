@@ -5,7 +5,7 @@
 //   Processing flow   — each unit's cross-layer hand-off order and its loop (sdb.handoff/1 document, else the selected chain)
 import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
-import { api, useEvidenceDetail, type BehaviorEntry, type HandoffDoc } from '../lib/api'
+import { api, traceIndex, useEvidenceDetail, type BehaviorEntry, type HandoffDoc } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { buildTimeline, chainOf, FRAME_HUES, FULLSTACK_GROUPS, INDEPENDENT_STYLE, isFullStack, LAYER_COLORS, type Slice, type Timeline } from '../lib/timeline'
 import { TimelineView, type FlowMode } from '../components/TimelineView'
@@ -26,7 +26,7 @@ export function BehaviorPage({ ctx }: { ctx: Ctx }) {
   const tab: Tab = (['fullstack', 'cadence', 'flow'] as Tab[]).includes(ctx.params.tab as Tab) ? (ctx.params.tab as Tab) : 'fullstack'
   const setTab = (t: Tab) => ctx.navigate(undefined, { tab: t }, true)
   const evQ = useAsync(() => (variant ? api.evidenceList(scenario, variant, ctx.project) : Promise.resolve({ items: [], total: 0 })), [scenario, variant, ctx.project])
-  const traces = useMemo(() => (evQ.data?.items ?? []).filter((e) => isFullStack(e.timeline_events) || e.heavy.handoff_flows.present), [evQ.data])
+  const traces = useMemo(() => (evQ.data?.items ?? []).filter((e) => traceIndex(e).layered || e.heavy.handoff_flows.present), [evQ.data])
   const [traceId, setTraceId] = useState('')
   const selectedTrace = traces.find((t) => t.id === traceId) ?? traces[0]
   const detailQ = useEvidenceDetail(selectedTrace?.id)

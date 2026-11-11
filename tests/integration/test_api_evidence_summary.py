@@ -30,8 +30,11 @@ def test_evidence_summary_payloads_and_postgres_sizes(api_client, engine):
                     "present": original[name] is not None, "bytes": size or 0,
                 }
             assert {k: v for k, v in original.items() if k not in EVIDENCE_HEAVY_FIELDS} == {
-                k: v for k, v in item.items() if k != "heavy"
+                k: v for k, v in item.items() if k not in ("heavy", "trace_index")
             }
+            # the list views' timeline numbers, computed in SQL from the events left out of the list
+            events = original["timeline_events"] or []
+            assert item["trace_index"] == _expected_index(events)
 
 
 def test_evidence_full_is_still_the_default_and_detail_is_full(api_client):
@@ -110,4 +113,42 @@ def test_evidence_summary_heavy_storage_cases(api_client, engine, storage):
         finally:
             db.rollback()
             db.query(Evidence).filter(Evidence.id == evidence_id).delete(synchronize_session=False)
+            db.commit()
+
+
+def _expected_index(events):
+    """The UI's numbers from the events (JS Set semantics: null and a missing field differ)."""
+    import json
+
+    numeric = {e["frame_index"] for e in events if isinstance(e.get("frame_index"), (int, float))
+               and not isinstance(e.get("frame_index"), bool)}
+    values = {json.dumps(e["frame_index"]) if "frame_index" in e else "<missing>" for e in events}
+    return {"events": len(events), "nodes": sorted({str(e["node_id"]) for e in events if e.get("node_id")}),
+            "frames": len(numeric), "frame_values": len(values), "layered": any(e.get("layer") for e in events)}
+
+
+def test_trace_index_mixed_frame_indices(api_client, engine):
+    template = api_client.get("/api/v1/evidence", params={"limit": 1}).json()["items"][0]
+    evidence_id = "summary-trace-index-mixed"
+    events = [
+        {"node_id": "sensor", "frame_index": 0}, {"node_id": "isp", "frame_index": 1},
+        {"node_id": "isp", "frame_index": 1}, {"node_id": "dpu", "frame_index": None},
+        {"node_id": "", "task": "no frame field"}, {"node_id": "hal", "frame_index": 0, "layer": "hal"},
+    ]
+    with Session(engine) as db:
+        try:
+            db.add(Evidence(
+                id=evidence_id, schema_version=template["schema_version"], kind="evidence.simulation",
+                scenario_ref=template["scenario_ref"], variant_ref=template["variant_ref"],
+                project_ref=template["project_ref"], execution_context={}, aggregation={}, kpi={},
+                yaml_sha256="0" * 64, execution_path_id=evidence_id, timeline_events=events,
+            ))
+            db.commit()
+            item = api_client.get("/api/v1/evidence", params={"view": "summary", "execution_path_id": evidence_id}).json()["items"][0]
+            assert item["trace_index"] == _expected_index(events) == {
+                "events": 6, "nodes": ["dpu", "hal", "isp", "sensor"], "frames": 2, "frame_values": 4, "layered": True}
+            empty = _expected_index([])
+            assert empty["frame_values"] == 0
+        finally:
+            db.query(Evidence).filter_by(id=evidence_id).delete()
             db.commit()

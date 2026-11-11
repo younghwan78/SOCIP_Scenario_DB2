@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, literal_column
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session, defer
 
@@ -62,7 +62,22 @@ def _summary_query(query):
         )))
     return query.options(*(
         defer(getattr(Evidence, name), raiseload=True) for name in EVIDENCE_HEAVY_FIELDS
-    )).add_columns(func.jsonb_build_object(*metadata).label("heavy"))
+    )).add_columns(func.jsonb_build_object(*metadata).label("heavy"), _TRACE_INDEX.label("trace_index"))
+
+
+# The list views' trace ranking / labels / full-stack test, computed in SQL so the events are not transferred.
+_TRACE_INDEX = literal_column(
+    "(SELECT jsonb_build_object("
+    "'events', count(*), "
+    "'nodes', coalesce(jsonb_agg(DISTINCT x->>'node_id') FILTER (WHERE coalesce(x->>'node_id', '') <> ''), '[]'::jsonb), "
+    "'frames', count(DISTINCT x->>'frame_index') FILTER (WHERE jsonb_typeof(x->'frame_index') = 'number'), "
+    # like a JS Set of frame_index: every distinct JSON value (an explicit null included) plus one for
+    # events without the field
+    "'frame_values', count(DISTINCT x->'frame_index') + coalesce(max(CASE WHEN x ? 'frame_index' THEN 0 ELSE 1 END), 0), "
+    "'layered', coalesce(bool_or(coalesce(x->>'layer', '') <> ''), false)) "
+    "FROM jsonb_array_elements(CASE WHEN jsonb_typeof(evidence.timeline_events) = 'array' "
+    "THEN evidence.timeline_events ELSE '[]'::jsonb END) AS x)"
+)
 
 
 @router.get(
@@ -108,10 +123,11 @@ def list_evidence(
         items = [
             EvidenceSummaryResponse.model_validate({
                 **{name: getattr(row, name) for name in EvidenceSummaryResponse.model_fields
-                   if name != "heavy"},
+                   if name not in ("heavy", "trace_index")},
                 "heavy": heavy,
+                "trace_index": trace,
             })
-            for row, heavy in rows
+            for row, heavy, trace in rows
         ]
         return PagedResponse[EvidenceSummaryResponse].from_items(items, total, limit, offset)
     return PagedResponse.from_query(q, limit=limit, offset=offset)

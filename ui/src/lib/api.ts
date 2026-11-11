@@ -120,9 +120,25 @@ export interface Evidence {
 
 export type EvidenceHeavyField = 'calculation_trace' | 'dma_breakdown' | 'ip_breakdown' | 'timing_breakdown'
   | 'dvfs_breakdown' | 'external_devices' | 'cpu_breakdown' | 'sw_task_timing' | 'hw_task_timing'
-  | 'stage_timing' | 'sw_event_latency' | 'handoff_flows' | 'pipeline_model'
+  | 'stage_timing' | 'sw_event_latency' | 'handoff_flows' | 'pipeline_model' | 'timeline_events'
+/** What list views read from a timeline (server-side; the events come with the selected evidence's detail). */
+export type TraceIndex = { events: number; nodes: string[]; frames: number; frame_values: number; layered: boolean }
 export type EvidenceSummary = Omit<Evidence, EvidenceHeavyField> & {
   heavy: Record<EvidenceHeavyField, { present: boolean; bytes: number }>
+  trace_index: TraceIndex
+}
+
+/** Trace index of a list item (server) or of a full evidence (from its events): the same numbers either way. */
+export function traceIndex(e: { timeline_events?: TimelineEvent[] | null; trace_index?: TraceIndex }): TraceIndex {
+  if (e.trace_index) return e.trace_index
+  const t = e.timeline_events ?? []
+  return {
+    events: t.length,
+    nodes: [...new Set(t.map((x) => x.node_id).filter((n) => !!n).map(String))],
+    frames: new Set(t.filter((x) => x.frame_index != null).map((x) => x.frame_index)).size,
+    frame_values: new Set(t.map((x) => x.frame_index)).size,
+    layered: t.some((x) => !!x.layer),
+  }
 }
 
 /** Selected reads share cancellation, in-flight requests and the existing API cache. */

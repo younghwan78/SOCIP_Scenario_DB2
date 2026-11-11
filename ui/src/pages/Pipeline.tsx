@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
-import { api, useEvidenceDetail, type Evidence } from '../lib/api'
+import { api, traceIndex, useEvidenceDetail, type Evidence, type EvidenceSummary } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { bufferPills, buildGraph, ipPills, layoutGraph, memoryText, pipelineIdOf, type Layout } from '../lib/graph'
 import { libraryApi } from '../lib/library'
 import { compDetail, llcDetail, LEVER_COLOR } from '../lib/memLever'
 import { LeverTag, LeverTags } from '../components/LeverTag'
-import { buildTimeline, isFullStack, type Slice } from '../lib/timeline'
+import { buildTimeline, type Slice } from '../lib/timeline'
 import { evidenceSource } from '../lib/conditions'
 import { buildModel, LANE_LABEL, type BufferRow, type IpModel } from '../lib/model'
 import { sequenceLayout, sequenceOrder } from '../lib/sequence'
@@ -59,12 +59,10 @@ function TraceCondition({ ev }: { ev: Evidence }) {
 
 // default trace: reaches an output, then covers the most pipeline nodes (own-cadence IPs such as
 // ABOX included, so no used HW IP is missing), then has the most frames
-export function rankTrace(e: Evidence): number {
-  const t = e.timeline_events ?? []
-  const frames = new Set(t.filter((x) => x.frame_index != null).map((x) => x.frame_index)).size
-  const nodes = new Set(t.map((x) => x.node_id).filter(Boolean)).size
-  const outputs = t.some((x) => OUT_NODES.test(String(x.node_id ?? '')))
-  return (outputs ? 100000 : 0) + nodes * 1000 + Math.min(frames, 99) * 10 + (evidenceSource(e) === 'measured' ? 1 : 0)
+export function rankTrace(e: Evidence | EvidenceSummary): number {
+  const t = traceIndex(e)
+  const outputs = t.nodes.some((n) => OUT_NODES.test(n))
+  return (outputs ? 100000 : 0) + t.nodes.length * 1000 + Math.min(t.frames, 99) * 10 + (evidenceSource(e) === 'measured' ? 1 : 0)
 }
 
 export function PipelinePage({ ctx }: { ctx: Ctx }) {
@@ -115,11 +113,12 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
 
   // ---- timing evidence
   // full-stack traces (App … HW layers) belong to the Behavior page, not the Pipeline timing
-  const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3 && !isFullStack(e.timeline_events)).sort((a, b) => rankTrace(b) - rankTrace(a)),
+  const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => traceIndex(e).events > 3 && !traceIndex(e).layered).sort((a, b) => rankTrace(b) - rankTrace(a)),
     [evidenceQ.data])
   const selectedTrace = traces.find((t) => t.id === traceId) ?? traces[0]
-  const detailQ = useEvidenceDetail(tview === 'compare' ? undefined : selectedTrace?.id)
-  const trace = tview === 'compare' ? selectedTrace : detailQ.data
+  // the selected trace's events (also in compare mode: the stage timings of the graph side read them)
+  const detailQ = useEvidenceDetail(selectedTrace?.id)
+  const trace = detailQ.data
   const canCompare = traces.some((t) => evidenceSource(t) === 'calculated') && traces.some((t) => evidenceSource(t) !== 'calculated')
   const timeline = useMemo(() => (trace ? buildTimeline(trace.timeline_events ?? [], { maxFrames: 16 }) : null), [trace])
   const timing = useMemo(() => (timeline ? stageTimings(timeline) : undefined), [timeline])
@@ -336,7 +335,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             </div>
             {selectedTrace && tview !== 'compare' && <span className={`badge src-${evidenceSource(selectedTrace)}`}>{evidenceSource(selectedTrace)}</span>}
             {traces.length > 0 && tview !== 'compare' && <select value={selectedTrace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); setSlice(null) }} aria-label="timing evidence" style={{ minWidth: 0, flex: '0 1 300px' }}>
-              {traces.map((t) => <option key={t.id} value={t.id}>{`${evidenceSource(t)} · ${new Set((t.timeline_events ?? []).map((x) => x.frame_index)).size}f · ${t.id}`}</option>)}
+              {traces.map((t) => <option key={t.id} value={t.id}>{`${evidenceSource(t)} · ${traceIndex(t).frame_values}f · ${t.id}`}</option>)}
             </select>}
             <span className="grow" />
             {trace && <TraceCondition ev={trace} />}
