@@ -1,5 +1,6 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
+import type { Sensitivity } from '../components/Sensitivity'
 import { API_BASE, ApiError, getJson } from './api'
 import { fetchAdmitted, statParam, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
@@ -59,6 +60,8 @@ export interface SliceRow {
   power: { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number }; bw: { total_mbs: number }
 }
 export interface VariantResult {
+  /** S-03: Δ total per assumed input (variant detail endpoint only) */
+  sensitivity?: Sensitivity
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
   /** EXP-05: power budget this variant was explored with (spec value or previous-project reference) */
   power_budget?: { mw: number | null; source: string | null; reference_mw?: number } | null

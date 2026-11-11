@@ -28,6 +28,7 @@ import { notify } from '../lib/status'
 import { ExploreJobPanel } from '../components/ExploreJobPanel'
 import { isActive, trackExploreJob, useExploreJob } from '../lib/exploreJob'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
+import { SensitivityTornado } from '../components/Sensitivity'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
@@ -461,6 +462,8 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
         <div className="faint" style={{ fontSize: 11 }}>예측으로 등록하면 이 결과가 예측 현황에 함께 저장되고, 거기서 IQ 평가 상태를 관리합니다.</div>
       </div>
     </Card>}
+    {v.sensitivity && <Card id="ax-sensitivity" title="가정값 민감도 — 무엇을 먼저 실측할까" note="추천(등록) 조합에서 가정 입력 하나씩 흔들 때 total power 변화" defaultWide>
+      <SensitivityTornado data={v.sensitivity} /></Card>}
     <Card id="ax-spread" title="Power range 원인 (축별)" note="SW · compression · DVFS"><AxisSpread spread={v.axis_spread} /></Card>
     <Card id="ax-sw" title="SW timing margin · 권고" note={`${m.basis === 'pipelined' ? '(P − max(최장 SW task, 같은 CPU의 SW 합))/P · stage chain = 동시 frame' : '(P − SW − overhead − HW@set clock)/P'}${m.statistic ? ` · SW ${m.statistic} 기준` : ''}`}>
       <table className="tb-mini-table" style={{ width: '100%' }}>
