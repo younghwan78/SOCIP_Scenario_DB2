@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { ApiError } from './api'
 import { archApi } from './archExplore'
-import { _resetExploreJob, restoreExploreJob, trackExploreJob, useExploreJob, type ExploreJob } from './exploreJob'
+import { _resetExploreJob, cancelExploreJob, resumeExploreJob, restoreExploreJob, trackExploreJob, useExploreJob,
+  type ExploreJob } from './exploreJob'
 import { dismissStatus, notify } from './status'
 
 vi.mock('./status', () => ({ notify: vi.fn(), dismissStatus: vi.fn() }))
@@ -35,10 +37,43 @@ it('picks up a job left running before a reload and reports its end once', async
 })
 
 it('stops tracking a job the server no longer knows', async () => {
-  vi.spyOn(archApi, 'job').mockRejectedValue(new Error('404 Not Found'))
+  vi.spyOn(archApi, 'job').mockRejectedValue(new ApiError('404 Not Found', 404))
   trackExploreJob(job(), 'Recording', null)
   await vi.advanceTimersByTimeAsync(1000)
   expect(localStorage.getItem('sdb.explore.job')).toBeNull()
   expect(vi.mocked(notify).mock.calls[0][0].text).toContain('404 Not Found')
   void useExploreJob
+})
+
+it('keeps the job through a transient poll failure and retries with backoff', async () => {
+  const poll = vi.spyOn(archApi, 'job').mockRejectedValueOnce(new ApiError('503 Service Unavailable', 503))
+    .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    .mockResolvedValue(job({ completed_variants: 2 }))
+  trackExploreJob(job(), 'Recording', null)
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(localStorage.getItem('sdb.explore.job')).not.toBeNull()
+  expect(notify).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(2000)   // 1st retry after 2 s
+  expect(poll).toHaveBeenCalledTimes(2)
+  await vi.advanceTimersByTimeAsync(3999)   // 2nd retry after 4 s
+  expect(poll).toHaveBeenCalledTimes(2)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(poll).toHaveBeenCalledTimes(3)
+  expect(localStorage.getItem('sdb.explore.job')).not.toBeNull()
+})
+
+it('drops a poll answer that started before a cancel and resume', async () => {
+  let answer!: (j: ExploreJob) => void
+  vi.spyOn(archApi, 'job').mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+    .mockResolvedValue(job({ status: 'running', completed_variants: 0 }))
+  vi.spyOn(archApi, 'cancelJob').mockResolvedValue(job({ status: 'cancelled', resumable: true }))
+  vi.spyOn(archApi, 'resumeJob').mockResolvedValue(job({ status: 'queued', completed_variants: 0 }))
+  trackExploreJob(job(), 'Recording', null)
+  await vi.advanceTimersByTimeAsync(1000)     // poll in flight
+  await cancelExploreJob()
+  await resumeExploreJob()
+  answer(job({ status: 'cancelled', resumable: true }))  // the stale answer arrives last
+  await vi.advanceTimersByTimeAsync(0)
+  expect(JSON.parse(localStorage.getItem('sdb.explore.job')!).id).toBe('explore-job-1')
+  expect(notify).toHaveBeenCalledTimes(1)     // only the cancel notice, no second one from the stale answer
 })

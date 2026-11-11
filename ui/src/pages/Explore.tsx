@@ -78,7 +78,7 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
         <a className="btn" href={`#/predictions?scenario=${encodeURIComponent(ctx.scenario)}`}>예측 현황 →</a>
         <a className="btn" href="#/reports">검토 보고서 →</a>
       </div>
-      <ExploreJobPanel onOpen={(id) => { setTick((t) => t + 1); setShowForm(false); pick(id) }} />
+      <ExploreJobPanel project={ctx.project || null} onOpen={(id) => { setTick((t) => t + 1); setShowForm(false); pick(id) }} />
       {showForm && <RunForm ctx={ctx} />}
       {runQ.error && <div className="err">{runQ.error}</div>}
       {runQ.loading && runId && <div className="empty">run 불러오는 중…</div>}

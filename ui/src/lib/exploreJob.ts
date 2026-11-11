@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { ApiError } from './api'
 import { archApi } from './archExplore'
 import { notify } from './status'
 
@@ -17,13 +18,20 @@ export type ExploreJob = {
   resumable: boolean
 }
 
-export type TrackedJob = { job: ExploreJob; title: string; project: string | null }
+/** ``opened``: the completed run was opened once (auto-open never repeats); ``lost``: the last poll failed and is retried */
+export type TrackedJob = { job: ExploreJob; title: string; project: string | null; opened?: boolean; lost?: string }
 
 const KEY = 'sdb.explore.job'
 const POLL_MS = 1000
+const MAX_RETRY_MS = 30000
+// the job is gone for this user: stop following it (anything else is retried)
+const PERMANENT = new Set([401, 403, 404])
 const ACTIVE = new Set(['queued', 'running'])
 let tracked: TrackedJob | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
+// bumped by every submit / cancel / resume / clear: a poll answer started before it is stale
+let generation = 0
+let retries = 0
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((listener) => listener())
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
@@ -54,28 +62,38 @@ function set(value: TrackedJob | null) {
   if (value && wasActive && !isActive(value.job)) finished(value)
 }
 
-function schedule() {
+function schedule(delay = POLL_MS) {
   if (timer) clearTimeout(timer)
   timer = null
   if (!tracked || !isActive(tracked.job)) return
-  timer = setTimeout(poll, POLL_MS)
+  timer = setTimeout(poll, delay)
 }
 
 async function poll() {
   const current = tracked
   if (!current) return
+  const gen = generation
   try {
     const job = await archApi.job(current.job.id)
-    if (tracked?.job.id !== current.job.id) return
-    set({ ...current, job })
+    if (gen !== generation || !tracked || tracked.job.id !== current.job.id) return
+    retries = 0
+    set({ ...tracked, job, lost: undefined })
   } catch (e) {
-    // a lost job (server restart, other account) stops tracking with one visible message
-    if (tracked?.job.id === current.job.id) {
+    if (gen !== generation || !tracked || tracked.job.id !== current.job.id) return
+    const text = e instanceof Error ? e.message : String(e)
+    if (e instanceof ApiError && e.status !== undefined && PERMANENT.has(e.status)) {
+      // the job is gone for this user (deleted, other account): stop with one visible message
       tracked = null
       save(null)
       emit()
-      notify({ kind: 'error', text: `탐색 진행 조회 실패: ${e instanceof Error ? e.message : String(e)}` })
+      notify({ kind: 'error', text: `탐색 진행 조회 실패: ${text}` })
+      return
     }
+    // network / 5xx: keep the job (and its stored id) and retry with backoff
+    retries += 1
+    tracked = { ...tracked, lost: text }
+    emit()
+    schedule(Math.min(MAX_RETRY_MS, POLL_MS * 2 ** retries))
     return
   }
   schedule()
@@ -83,6 +101,8 @@ async function poll() {
 
 /** Start following a job (after submit / resume); survives page changes and reloads. */
 export function trackExploreJob(job: ExploreJob, title: string, project: string | null) {
+  generation += 1
+  retries = 0
   tracked = null
   set({ job, title, project })
   schedule()
@@ -106,19 +126,33 @@ export function restoreExploreJob() {
 export async function cancelExploreJob() {
   if (!tracked) return
   const current = tracked
+  generation += 1
   const job = await archApi.cancelJob(current.job.id)
-  if (tracked?.job.id === current.job.id) { set({ ...current, job }); schedule() }
+  if (tracked && tracked.job.id === current.job.id) { generation += 1; set({ ...tracked, job }); schedule() }
 }
 
 export async function resumeExploreJob() {
   if (!tracked) return
   const current = tracked
+  generation += 1
   const job = await archApi.resumeJob(current.job.id)
-  if (tracked?.job.id === current.job.id) { tracked = null; set({ ...current, job }); schedule() }
+  if (tracked?.job.id === current.job.id) {
+    generation += 1
+    tracked = null
+    set({ ...current, job, opened: false, lost: undefined })
+    schedule()
+  }
 }
 
 /** Forget a finished job (the panel's close button). */
+/** The completed run was opened (auto-open happens once per job, whatever page remounts). */
+export function markExploreJobOpened() {
+  if (tracked && !tracked.opened) { tracked = { ...tracked, opened: true }; emit() }
+}
+
 export function clearExploreJob() {
+  generation += 1
+  retries = 0
   if (timer) clearTimeout(timer)
   timer = null
   tracked = null

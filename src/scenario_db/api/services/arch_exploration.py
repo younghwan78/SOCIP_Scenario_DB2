@@ -199,18 +199,25 @@ def _exploration_workers(n: int) -> int:
     return max(1, min(want, n))
 
 
-def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick) -> dict[int, dict[str, Any]]:
+def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick,
+                      budget: int | None = None) -> dict[int, dict[str, Any]]:
     """Variant summaries computed in the shared CPU process pool, by plan index.
 
-    Variants share no state, so each one is an independent job. A variant that fails in a
-    worker, or any pool failure, is left out: the caller recomputes it in-process, so a
-    result never depends on the deployment's process limits or pickling.
+    Variants share no state, so each one is an independent job. Submission follows the plan
+    order with at most ``workers`` variants in flight, and only while the run's case budget
+    still holds one more variant at its full cap: cases of finished variants plus the cap of
+    every running one (a failed variant counts its cap). That bounds the computed cases by the
+    run budget and makes every pooled variant's cap the one the sequential run would use; the
+    variants left over (budget too small) are explored in plan order by the caller.
+    A variant that fails in a worker, or any pool failure, is left out and recomputed
+    in-process, so a result never depends on the deployment's process limits or pickling.
     """
+    budget = _MAX_RUN_CASES if budget is None else budget
     todo = [(i, it) for i, it in enumerate(items) if "error" not in it]
     workers = _exploration_workers(len(todo))
     if workers <= 1 or len(todo) < 3:
         return {}
-    from concurrent.futures import as_completed
+    from concurrent.futures import FIRST_COMPLETED, wait
 
     from scenario_db.api.services import cpu
 
@@ -218,20 +225,32 @@ def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick) -> dict
     pool = None
     try:
         with cpu._pool_batch(workers) as pool:
-            futures = {pool.submit(_explore_worker, it["graph"],
-                                   it["spec"].model_copy(update={"max_cases_per_variant": max_cases}),
-                                   it["config"], it["tables"]): i for i, it in todo}
+            queue, running, used = list(todo), {}, 0
             try:
-                for future in as_completed(futures):
-                    i = futures[future]
-                    try:
-                        out[i] = _explore_item(items[i], max_cases, future.result())
-                    except Exception:  # noqa: BLE001 - recomputed in-process by the caller
-                        continue
-                    tick(items[i]["variant_id"])
+                while queue or running:
+                    while queue and len(running) < workers and used + max_cases * (len(running) + 1) <= budget:
+                        i, it = queue.pop(0)
+                        spec = it["spec"].model_copy(update={"max_cases_per_variant": max_cases})
+                        running[pool.submit(_explore_worker, it["graph"], spec, it["config"], it["tables"])] = i
+                    if not running:
+                        break  # less than one variant cap left: the caller explores the rest in plan order
+                    done, _ = wait(running, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        i = running.pop(future)
+                        try:
+                            summary = future.result()
+                        except Exception:  # noqa: BLE001 - recomputed in-process by the caller
+                            used += max_cases
+                            continue
+                        used += summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
+                        out[i] = _explore_item(items[i], max_cases, summary)
+                        tick(items[i]["variant_id"])
             except BaseException:
-                for future in futures:
+                # cancel what has not started and let running variants finish before the lease
+                # (and the caller's admission slot) is released
+                for future in running:
                     future.cancel()
+                wait(list(running))
                 raise
     except ExplorationCancelled:
         raise

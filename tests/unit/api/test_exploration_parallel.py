@@ -110,3 +110,69 @@ def test_pooled_result_is_recomputed_when_the_run_case_cap_binds(mocked_run, mon
     request = ArchExplorationRunRequest(category="camera", spec={"max_cases_per_variant": 10})
     run = svc.run_exploration(MagicMock(), request, parallel=True)
     assert [v["variant_id"] for v in run["variants"]] == ["p0", "p1", "v1"] and mocked_run == [5]
+
+
+def _fake_pool(monkeypatch, workers=2, cases=10, delay=0.05, fail=()):
+    """A thread pool in place of the process pool; records the in-flight peak and finished variants."""
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    state = {"running": 0, "peak": 0, "finished": [], "lock": threading.Lock()}
+
+    def worker(graph, spec, config, tables):
+        with state["lock"]:
+            state["running"] += 1
+            state["peak"] = max(state["peak"], state["running"])
+        time.sleep(delay)
+        with state["lock"]:
+            state["running"] -= 1
+            state["finished"].append(graph)
+        if graph in fail:
+            raise RuntimeError("worker failure")
+        return {"variant_id": graph, "counts": {"cases": cases}}
+
+    @contextmanager
+    def batch(size):
+        with ThreadPoolExecutor(max_workers=8) as pool:  # larger than asked, like a shared pool
+            yield pool
+    monkeypatch.setattr(cpu, "_pool_batch", batch)
+    monkeypatch.setattr(svc, "_explore_worker", worker)
+    monkeypatch.setattr(svc, "_exploration_workers", lambda n: min(workers, n))
+    return state
+
+
+def _fake_items(n):
+    spec = ArchExplorationSpec()
+    return [{"scenario_id": "s", "variant_id": f"v{i}", "graph": f"v{i}", "tables": {}, "dvfs_ref": None,
+             "config": SimulationRunConfig(), "spec": spec, "budget": {"mw": None}, "applied": []} for i in range(n)]
+
+
+def test_pool_keeps_the_worker_limit_and_the_run_budget(monkeypatch):
+    state = _fake_pool(monkeypatch, workers=2)
+    out = svc._explore_parallel(_fake_items(6), 100, lambda v: None)
+    assert sorted(out) == list(range(6)) and state["peak"] <= 2
+    # budget 250 with a cap of 100: at most two variants are reserved at once; after the first two finish
+    # (10 cases each) 230 is left, so two more fit; then 210 -> the window keeps going while the cap fits
+    state = _fake_pool(monkeypatch, workers=4)
+    out = svc._explore_parallel(_fake_items(6), 100, lambda v: None, budget=250)
+    assert state["peak"] <= 2 and sorted(out) == list(range(6))
+    # less than one cap left from the start: nothing is pooled, the caller explores in plan order
+    state = _fake_pool(monkeypatch, workers=4)
+    assert svc._explore_parallel(_fake_items(4), 100, lambda v: None, budget=99) == {} and not state["finished"]
+    # a failed worker keeps its full cap reserved: v0 (failed, 100) + v1 (10) leave 90 < 100, so v2 is
+    # left to the caller's in-order path instead of being pooled
+    state = _fake_pool(monkeypatch, workers=4, fail=("v0",))
+    out = svc._explore_parallel(_fake_items(3), 100, lambda v: None, budget=200)
+    assert sorted(out) == [1] and state["peak"] <= 2 and "v2" not in state["finished"]
+
+
+def test_cancel_waits_for_running_variants(monkeypatch):
+    state = _fake_pool(monkeypatch, workers=3, delay=0.2)
+
+    def tick(variant):
+        raise svc.ExplorationCancelled
+    with pytest.raises(svc.ExplorationCancelled):
+        svc._explore_parallel(_fake_items(9), 100, tick)
+    # the three that were running finished before the call returned; nothing else started
+    assert state["running"] == 0 and len(state["finished"]) == 3
