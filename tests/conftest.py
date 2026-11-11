@@ -14,3 +14,5 @@ for path in (ROOT, ROOT / "src"):
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///test-scenariodb.db")
 os.environ.setdefault("SCENARIO_DB_MUTATION_AUTH_DISABLED", "true")
+# tests patch engine functions: a shared on-disk result cache would hide those patches
+os.environ.setdefault("SCENARIO_DB_COMPUTE_CACHE_DIR", "off")

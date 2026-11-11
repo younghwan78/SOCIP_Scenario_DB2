@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from scenario_db.sim import result_cache
 from scenario_db.api.schemas.simulation import SimulateRequest
 from scenario_db.api.services.analysis_inputs import resolve_analysis_selection
 from scenario_db.api.schemas.timing_budget import (
@@ -115,6 +116,14 @@ def analyze_timing_budget_request(
     )
 
 
+def _jsonable_row(row: Any) -> Any:
+    """A fleet row as plain JSON (what the cache stores and returns, so a hit and a miss look the same)."""
+    import json
+
+    dump = getattr(row, "model_dump", None)
+    return json.loads(json.dumps(dump(mode="json") if callable(dump) else row, default=str))
+
+
 def analyze_timing_budget_fleet(
     db: Session, request: TimingBudgetFleetRequest
 ) -> TimingBudgetFleetResponse:
@@ -144,12 +153,12 @@ def analyze_timing_budget_fleet(
             inputs = selection.load(db)
             graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
             stage = "timing_budget"
-            out.append(
-                fleet_row(
-                    analyze_timing_budget(graph, with_cpu_profile(db, options, request.scenario_id, variant_id),
-                                          config=shim.config, dvfs_tables=tables)
-                )
-            )
+            opts = with_cpu_profile(db, options, request.scenario_id, variant_id)
+            # O-04: the same resolved inputs + engine give the same row (shared content-addressed cache)
+            key = result_cache.calculation_key("timing-fleet-row", graph, config=shim.config, options=opts, tables=tables)
+            row, _ = result_cache.cached(key, lambda: _jsonable_row(
+                fleet_row(analyze_timing_budget(graph, opts, config=shim.config, dvfs_tables=tables))))
+            out.append(row)
         except Exception as exc:  # noqa: BLE001 - one variant must not abort the fleet
             errors.append(variant_failure(exc, variant_id=variant_id, stage=stage))
     return TimingBudgetFleetResponse(
