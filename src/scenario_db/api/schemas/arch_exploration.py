@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from scenario_db.api.schemas.timing_budget import _DvfsSelection
 from scenario_db.sim.arch_exploration import ArchExplorationSpec
+from scenario_db.sim.design_space import DesignSpace, spec_from_design_space
 
 
 class ArchExplorationRunRequest(_DvfsSelection):
@@ -18,6 +19,9 @@ class ArchExplorationRunRequest(_DvfsSelection):
     include_derived: bool = False
     max_variants: int = Field(default=200, ge=1, le=500)
     spec: ArchExplorationSpec = Field(default_factory=ArchExplorationSpec)
+    # the same exploration written as a design space (lever axes + constraints + objective); it is
+    # converted to ``spec`` on arrival, so send one of the two
+    design_space: DesignSpace | None = None
     # EXP-05: per-variant power budget = previous-project reference x (1 + tolerance) from the project review_policy
     # (the tighter of it and spec.constraints.power_budget_mw); variants without a reference keep the spec budget.
     power_budget_from_reference: bool = False
@@ -31,6 +35,18 @@ class ArchExplorationRunRequest(_DvfsSelection):
     def _scope(self) -> ArchExplorationRunRequest:
         if not self.scenario_ids and not self.category:
             raise ValueError("scenario_ids or category is required")
+        return self
+
+    @model_validator(mode="after")
+    def _design_space(self) -> ArchExplorationRunRequest:
+        if self.design_space is None:
+            return self
+        if "spec" in self.model_fields_set:
+            raise ValueError("send either spec or design_space, not both")
+        from scenario_db.api.services.whatif_conditions import CHANGE_KINDS
+
+        self.spec = spec_from_design_space(self.design_space, resim_levers=tuple(CHANGE_KINDS))
+        self.design_space = None
         return self
 
 
