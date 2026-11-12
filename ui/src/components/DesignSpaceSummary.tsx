@@ -1,9 +1,9 @@
 import { axisSummary, type DesignSpace } from '../lib/designSpace'
 
-/** The run's explored axes as text (no hover needed): explored levers as is, held levers muted. */
+/** What the run evaluated per lever, as text (no hover needed): explored levers as is, held levers muted. */
 export function DesignSpaceSummary({ space }: { space: DesignSpace | null | undefined }) {
   if (!space?.axes?.length) return null
-  const rows = space.axes.map(axisSummary)
+  const rows = space.axes.map((axis) => axisSummary(axis, space))
   return (
     <div className="ds-summary" aria-label="탐색 공간">
       <span className="muted">탐색 공간</span>
