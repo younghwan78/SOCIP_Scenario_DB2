@@ -77,6 +77,14 @@ def resume_job(job_id: str, db: Session = Depends(get_db),
     return jobs.resume(db, job_id, principal.subject)
 
 
+@router.get("/exploration/levers")
+def list_levers(request: Request):
+    """Lever catalog of a design space: built-in engine axes and the What-if change kinds."""
+    from scenario_db.api.services.design_space import lever_catalog
+
+    return json_response(request, lever_catalog())
+
+
 @router.get("/exploration/runs")
 def list_runs(
     scenario_type: str | None = None, project_ref: str | None = None,

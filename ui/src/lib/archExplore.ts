@@ -1,6 +1,7 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
 import type { Sensitivity } from '../components/Sensitivity'
+import type { DesignSpace } from './designSpace'
 import { API_BASE, ApiError, getJson } from './api'
 import { fetchAdmitted, statParam, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
@@ -257,7 +258,9 @@ export interface RunMeta {
   summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null
     power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null } }
 }
-export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[]; view?: 'full' | 'summary' }
+export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[]; view?: 'full' | 'summary'
+  /** the run spec as lever axes (API >= 2026-11-12); null when an old spec no longer validates */
+  design_space?: DesignSpace | null }
 export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }
 export interface BoardRow {
   id: string; scenario_id: string; variant_id: string; status: string; run_id: string; run_title: string | null; run_created_at: string | null

@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { CandidateReview } from '../components/CandidateReview'
+import { DesignSpaceSummary } from '../components/DesignSpaceSummary'
 import { experimentHref } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
 import { useRegistrationGuard } from '../lib/registration'
@@ -299,6 +300,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
         title={foreign ? '다른 과제의 run — 비교 보기 전용' : 'spec 만족 variant 전체를 최저 power 조합으로 current 등록 (대상 확인 후)'}>최저 power 조합 전체 등록…</button>
       <button className="btn primary" disabled={busy} onClick={report}>{busy ? '처리 중…' : '검토 보고서 생성'}</button>
     </div>
+    <DesignSpaceSummary space={run.design_space} />
     {foreign && <div className="err" role="status">이 run은 다른 과제({run.project_ref ?? '—'})의 결과입니다 — 비교 보기 전용이며, 현재 과제({ctx.project})의 예측으로 등록할 수 없습니다.</div>}
     {confirm && !foreign && <section className="panel" style={{ padding: 12, display: 'grid', gap: 8 }} aria-label="등록 대상 확인">
       <div><b>Project {run.project_ref}</b> · {targets.length}개 variant의 current 예측을 최저 power 조합으로 교체합니다. spec 미달 {run.variants.length - targets.length - counts.not_applicable}개는 건너뜀.{counts.not_applicable ? ` 판정 미지원 ${counts.not_applicable}건도 제외합니다.` : ''}</div>

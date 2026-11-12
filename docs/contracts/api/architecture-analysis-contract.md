@@ -40,7 +40,23 @@ their existing recorded-review behavior.
   scenario IDs or category, optionally project/variant filters. A conflicting SoC or
   mixed-project selection is rejected. The response distinguishes successful variants
   and per-variant errors; an entirely failed run is not stored.
+  The explored space is `spec` (engine axes) or, equivalently, `design_space`
+  (`sdb.designspace/1`: `axes[] = {lever, values, params}`, `constraints`, `objective`,
+  `evaluation`); sending both is rejected. A design space is converted to the spec on
+  arrival, so both forms give the same result and `input_hash`. A built-in lever that is
+  not listed is held: the objective's SW statistic and growth, EIS auto, no DVFS raise,
+  no compression search, no power-option search. Built-in levers: `sw_statistic`,
+  `sw_growth`, `eis` (one value), `dvfs_headroom` (raise steps `0..k`),
+  `buffer_compression` (modes; params = the compression axis settings), `power_options`
+  (`knob`, `ip_mode`; param `max_sets`). An axis naming a What-if change kind is rejected
+  as not evaluated yet; any other lever id is unknown.
+- `GET /arch/exploration/levers`: the lever catalog — built-in levers (`source: builtin`,
+  `explorable: true`, the default values) and every What-if change kind (`source: whatif`,
+  `evaluation: resim`, `explorable: false`). Per-variant instances of a change kind come
+  from the What-if targets of that variant.
 - `GET /arch/exploration/runs[/{id}]`: list run metadata or retrieve frozen details.
+  Run details carry `design_space`, derived from the stored spec (`null` when a spec of
+  an older engine no longer validates).
   Lists accept `project_ref`. Run creation and detail support `view=summary` for compact
   per-variant rows; `/runs/{id}/variants/{scenario_id}/{variant_id}` returns full variant details.
   `/runs/{id}/manifest` returns content-addressed resolved config, simulation inputs,

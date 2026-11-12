@@ -1118,3 +1118,7 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .sens-bar { position: relative; height: 12px; background: var(--panel-2, #f3f5f8); border-radius: 2px; }
 .sens-zero { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted, #5b6472); }
 .sens-span { position: absolute; top: 2px; bottom: 2px; background: var(--accent, #2f6fde); opacity: 0.75; border-radius: 2px; }
+/* exploration run: explored lever axes */
+.ds-summary { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.ds-summary .chip b { font-weight: 600; margin-right: 2px; }
+.ds-summary .chip.ds-held { opacity: 0.62; }

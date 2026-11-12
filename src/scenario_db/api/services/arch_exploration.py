@@ -39,6 +39,7 @@ from scenario_db.reporting.review_snapshot import ProjectEvidence, ReviewEvidenc
 from scenario_db.comparison.measurement_selection import representative_measurement
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
+from scenario_db.sim.design_space import design_space_of_stored_spec
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.api.services.calibration import data_origin, is_physical, is_synthetic, measurement_details
 from scenario_db.api.services.failures import variant_failure
@@ -449,7 +450,8 @@ def run_detail(row: ArchExplorationRun, view: str = "full") -> dict[str, Any]:
     spec = {k: v for k, v in (row.spec or {}).items() if k != "manifest"}  # blobs via /manifest only
     spec["manifest_available"] = bool(((row.spec or {}).get("manifest") or {}).get("blobs"))
     variants = row.variants if view == "full" else [variant_summary(v) for v in row.variants or []]
-    return _run_meta(row) | {"spec": spec, "variants": variants, "errors": row.errors, "view": view}
+    return _run_meta(row) | {"spec": spec, "design_space": design_space_of_stored_spec(spec), "variants": variants,
+                             "errors": row.errors, "view": view}
 
 
 _SUMMARY_SQL = text("""
@@ -488,7 +490,8 @@ def run_summary(db: Session, run_id: str) -> dict[str, Any]:
             "soc_ref": row.soc_ref, "dvfs_table_ref": row.dvfs_table_ref, "engine_rev": row.engine_rev,
             "config_profile_ref": (spec or {}).get("config_profile_ref"), "summary": row.summary,
             "created_by": row.created_by, "created_at": row.created_at.isoformat() if row.created_at else None}
-    return meta | {"spec": (spec or {}) | {"manifest_available": bool(has_blobs)}, "variants": variants,
+    return meta | {"spec": (spec or {}) | {"manifest_available": bool(has_blobs)},
+                   "design_space": design_space_of_stored_spec(spec), "variants": variants,
                    "errors": row.errors, "view": "summary"}
 
 
