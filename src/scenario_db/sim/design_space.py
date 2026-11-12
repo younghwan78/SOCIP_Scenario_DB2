@@ -1,9 +1,9 @@
 """Declarative design space of an architecture exploration.
 
 A design space names what is explored — lever axes — next to the constraints and the objective.
-The six axes of :class:`ExplorationAxes` are the *built-in* levers (the engine evaluates them);
-the What-if change kinds are *re-simulation* levers and are listed in the catalog only until the
-engine evaluates them as axes.
+The six axes of :class:`ExplorationAxes` are the *built-in* levers (the engine evaluates them on
+the variant); every other axis names a What-if change kind — a *re-simulation* lever whose value
+combinations are changed copies of the variant, each explored on its own (``axes.levers``).
 
 ``design_space_from_spec`` is lossless and ``spec_from_design_space`` is its inverse, so a request
 written either way runs the same engine with the same ``input_hash``:
@@ -29,6 +29,7 @@ from scenario_db.sim.arch_exploration import (
     ExplorationAxes,
     ExplorationConstraints,
     ExplorationObjective,
+    LeverAxis,
     PowerOptionAxis,
 )
 from scenario_db.sim.timing_budget import TimingBudgetOptions
@@ -67,17 +68,6 @@ _COMPRESSION_PARAMS = ("ratio_overrides", "buffers", "include_unsupported", "req
 _OPTION_KINDS = ("knob", "ip_mode")
 
 
-class LeverAxis(BaseScenarioModel):
-    """One explored lever: ``lever`` = a built-in lever id or a What-if change-kind target."""
-
-    lever: str = Field(min_length=1, max_length=64)
-    values: list[Any] = Field(default_factory=list, max_length=64)
-    # lever settings that are not explored values (compression: buffer cap, ratios ...; a
-    # re-simulation lever: its selector such as node_id)
-    params: dict[str, Any] = Field(default_factory=dict)
-    label: str | None = Field(default=None, max_length=120)
-
-
 class EvaluationOptions(BaseScenarioModel):
     """How a case is evaluated and reported — the non-axis fields of the exploration spec."""
 
@@ -94,6 +84,8 @@ class DesignSpace(BaseScenarioModel):
     constraints: ExplorationConstraints = Field(default_factory=ExplorationConstraints)
     objective: ExplorationObjective = Field(default_factory=ExplorationObjective)
     evaluation: EvaluationOptions = Field(default_factory=EvaluationOptions)
+    # cap on the combinations of the re-simulation axes (each one is a full exploration)
+    max_lever_sets: int = Field(default=64, ge=1, le=256)
 
     @model_validator(mode="after")
     def _unique_builtin(self) -> DesignSpace:
@@ -129,9 +121,11 @@ def design_space_from_spec(spec: ArchExplorationSpec) -> DesignSpace:
             LeverAxis(lever="dvfs_headroom", values=list(range(axes.dvfs_headroom_levels + 1))),
             LeverAxis(lever="buffer_compression", values=list(comp.modes), params=comp_params),
             LeverAxis(lever="power_options", values=kinds, params=opt_params),
+            *axes.levers,
         ],
         constraints=spec.constraints,
         objective=spec.objective,
+        max_lever_sets=axes.lever_max_sets,
         evaluation=EvaluationOptions(
             timing=spec.timing, top_n=spec.top_n, max_cases_per_variant=spec.max_cases_per_variant,
             verify=spec.verify, verify_tolerance_pct=spec.verify_tolerance_pct),
@@ -167,25 +161,28 @@ def _power_options(axis: LeverAxis) -> PowerOptionAxis:
     return PowerOptionAxis(include_knobs="knob" in axis.values, include_modes="ip_mode" in axis.values, **axis.params)
 
 
-def spec_from_design_space(space: DesignSpace, *, resim_levers: Collection[str] = ()) -> ArchExplorationSpec:
-    """The engine spec of a design space made of built-in levers.
+def spec_from_design_space(space: DesignSpace, *, explorable: Collection[str] | None = None,
+                           known: Collection[str] = ()) -> ArchExplorationSpec:
+    """The engine spec of a design space.
 
-    ``resim_levers`` = lever ids the catalog lists as re-simulation levers: such an axis is
-    reported as not evaluated yet instead of unknown.
+    ``explorable`` = the re-simulation lever ids the caller can turn into changed variants (the
+    What-if change kinds an axis may name); ``None`` skips that check. ``known`` = every lever id
+    of the catalog: an axis naming one that is not explorable is refused as such, not as unknown.
     """
     other = resim_axes(space)
-    if other:
-        names = sorted({axis.lever for axis in other})
-        unknown = [name for name in names if name not in resim_levers]
+    if explorable is not None:
+        names = sorted({axis.lever for axis in other} - set(explorable))
+        unknown = [name for name in names if name not in known]
         if unknown:
             raise ValueError(f"unknown lever: {', '.join(unknown)} (built-in: {', '.join(BUILTIN_LEVERS)})")
-        raise ValueError(f"re-simulation lever axes are not evaluated by exploration yet: {', '.join(names)}")
-    by_id = {axis.lever: axis for axis in space.axes}
+        if names:
+            raise ValueError(f"lever cannot be explored as an axis: {', '.join(names)}")
+    by_id = {axis.lever: axis for axis in space.axes if axis.lever in BUILTIN_LEVERS}
     objective = space.objective
     fields: dict[str, Any] = {
         "statistics": [objective.statistic], "runtime_scales": [objective.runtime_scale], "eis": "auto",
         "dvfs_headroom_levels": 0, "compression": CompressionAxis(enabled=False),
-        "power_options": PowerOptionAxis(enabled=False),
+        "power_options": PowerOptionAxis(enabled=False), "levers": other, "lever_max_sets": space.max_lever_sets,
     }
     for lever, key in (("sw_statistic", "statistics"), ("sw_growth", "runtime_scales")):
         if lever in by_id:

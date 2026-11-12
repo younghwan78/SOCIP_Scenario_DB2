@@ -16,6 +16,16 @@ from sqlalchemy.orm import Session
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 
 _SPEC_KEYS = ("axes", "constraints", "objective", "timing", "top_n", "max_cases_per_variant", "verify", "verify_tolerance_pct")
+
+
+def variant_spec(stored: dict) -> dict:
+    """The stored exploration spec as it is re-run for one variant's prediction. The lever axes are
+    left out: their combinations are candidates for other variant definitions, not part of this
+    variant's prediction (and not part of its ``input_hash``)."""
+    spec = {k: stored[k] for k in _SPEC_KEYS if k in stored}
+    if isinstance(spec.get("axes"), dict):
+        spec["axes"] = {k: v for k, v in spec["axes"].items() if k not in ("levers", "lever_max_sets")}
+    return spec
 _SEL_KEYS = ("config_profile_ref", "dvfs_tables", "dvfs_table_ref", "soc_ref", "dvfs_version", "use_default_dvfs", "basis_ref")
 
 
@@ -90,7 +100,7 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
             title=f"재계산 · {pred.variant_ref}", scenario_type=run.scenario_type, scenario_ids=[pred.scenario_ref],
             variant_ids=[pred.variant_ref], include_derived=True, max_variants=1, config=config,
             power_budget_from_reference=bool(spec.get("power_budget_from_reference")),
-            spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel})
+            spec=variant_spec(spec), **{k: sel[k] for k in _SEL_KEYS if k in sel})
         new_run = run_exploration(db, req, user)
         if dry_run:
             from scenario_db.api.services.arch_exploration import default_case

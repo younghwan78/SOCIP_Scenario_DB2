@@ -1,5 +1,6 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
+import type { DesignAxes } from '../components/DesignAxes'
 import type { Sensitivity } from '../components/Sensitivity'
 import type { DesignSpace } from './designSpace'
 import { API_BASE, ApiError, getJson } from './api'
@@ -63,6 +64,8 @@ export interface SliceRow {
 export interface VariantResult {
   /** S-03: Δ total per assumed input (variant detail endpoint only) */
   sensitivity?: Sensitivity
+  /** S-01: lever-axis combinations explored as changed variants (runs with lever axes only) */
+  design_axes?: DesignAxes
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
   /** EXP-05: power budget this variant was explored with (spec value or previous-project reference) */
   power_budget?: { mw: number | null; source: string | null; reference_mw?: number } | null
@@ -256,7 +259,9 @@ export interface RunMeta {
   id: string; title: string; scenario_type: string; project_ref: string | null; soc_ref: string | null; dvfs_table_ref: string | null
   engine_rev: string; created_by: string | null; created_at: string | null; config_profile_ref?: string | null
   summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null
-    power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null } }
+    power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null }
+    /** runs with lever axes: variants with at least one explored combination, explored / failed combinations */
+    design_axes?: { variants: number; sets: number; errors: number; cases: number } }
 }
 export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[]; view?: 'full' | 'summary'
   /** the run spec as lever axes (API >= 2026-11-12); null when an old spec no longer validates */

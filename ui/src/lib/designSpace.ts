@@ -11,6 +11,23 @@ const LABEL: Record<string, string> = {
   buffer_compression: 'Buffer 압축', power_options: 'Power option',
 }
 const OPTION_KIND: Record<string, string> = { knob: 'arch knob', ip_mode: 'IP mode' }
+/** labels of the What-if change kinds an axis may name (GET /arch/exploration/levers) */
+const WHATIF_LABEL: Record<string, string> = {
+  output_size: '출력 크기', anchor_size: '크기 기준점', node_size: 'IP 처리 크기', stream_size: '스트림 크기',
+  chain_size: 'IP crop · downscale', fps: 'FPS', sensor_mode: '센서 변경', history_interval: 'Previous DMA 빈도',
+  llc_alloc: 'LLC 할당', ip_mode: 'IP mode', power_knob: 'Power option', node_clock_mhz: 'IP clock 하한',
+}
+const SELECTOR_KEYS = ['anchor_id', 'node_id', 'stream_id', 'buffer_id', 'param']
+/** one value of a re-simulation axis: [w, h], a number, an option id or a change object */
+function valueText(v: unknown): string {
+  if (Array.isArray(v)) return v.join('x')
+  if (v && typeof v === 'object') {
+    const c = v as Record<string, unknown>
+    if (c.width != null) return `${c.width}x${c.height}`
+    return String(c.option ?? c.value ?? '?') + (c.option != null && c.value != null ? ` (${c.value})` : '')
+  }
+  return String(v)
+}
 const list = (values: unknown[], each: (v: unknown) => string = String) => values.map(each).join(' · ')
 /** ×1.0, ×1.2, ×1.05: one decimal at least, and every digit the request carried (1.04 is not ×1.0). */
 export const scaleText = (v: unknown) => {
@@ -48,6 +65,11 @@ export function axisSummary(axis: LeverAxis, space?: Context): { label: string; 
     case 'power_options':
       return p.enabled === false || !axis.values.length ? { label, text: '탐색 안 함', explored: false }
         : { label, text: `${list(axis.values, (v) => OPTION_KIND[String(v)] ?? String(v))}${p.max_sets != null ? ` (조합 ≤ ${p.max_sets})` : ''}`, explored: true }
-    default: return { label, text: `${axis.values.length}개 값`, explored: axis.values.length > 1 }
+    default: {
+      // a re-simulation lever (What-if change kind): its target instance and how many values are tried
+      const selector = SELECTOR_KEYS.map((k) => p[k]).find((v) => typeof v === 'string')
+      return { label: axis.label || `${WHATIF_LABEL[axis.lever] ?? axis.lever}${selector ? ` · ${selector}` : ''}`,
+        text: axis.values.map(valueText).join(' / '), explored: axis.values.length > 0 }
+    }
   }
 }

@@ -43,10 +43,20 @@ class ArchExplorationRunRequest(_DvfsSelection):
             return self
         if "spec" in self.model_fields_set:
             raise ValueError("send either spec or design_space, not both")
+        from scenario_db.api.services.design_axes import EXPLORABLE_KINDS
         from scenario_db.api.services.whatif_conditions import CHANGE_KINDS
 
-        self.spec = spec_from_design_space(self.design_space, resim_levers=tuple(CHANGE_KINDS))
+        self.spec = spec_from_design_space(self.design_space, explorable=EXPLORABLE_KINDS, known=tuple(CHANGE_KINDS))
         self.design_space = None
+        return self
+
+    @model_validator(mode="after")
+    def _levers(self) -> ArchExplorationRunRequest:
+        # after _design_space: the re-simulation axes of either request form
+        if self.spec.axes.levers:
+            from scenario_db.api.services.design_axes import validate_levers
+
+            validate_levers(self.spec.axes.levers)
         return self
 
 

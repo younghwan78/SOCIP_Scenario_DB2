@@ -48,12 +48,27 @@ their existing recorded-review behavior.
   no compression search, no power-option search. Built-in levers: `sw_statistic`,
   `sw_growth`, `eis` (one value), `dvfs_headroom` (raise steps `0..k`),
   `buffer_compression` (modes; params = the compression axis settings), `power_options`
-  (`knob`, `ip_mode`; param `max_sets`). An axis naming a What-if change kind is rejected
-  as not evaluated yet; any other lever id is unknown.
+  (`knob`, `ip_mode`; param `max_sets`).
+  Every other axis names a What-if change kind — a re-simulation lever (`spec.axes.levers`,
+  cap `lever_max_sets` / design-space `max_lever_sets`, default 64): `lever` = the change
+  kind, `params` = its selector (`node_id`, `anchor_id`, `buffer_id`, `param` ...), `values`
+  = `[width, height]`, a number, an option id, or a change object. Each axis also keeps the
+  variant's current value; every combination that changes at least one lever is a changed
+  copy of the variant, explored on its own at the objective SW point (own compression /
+  DVFS search, no power options). The variant detail carries them as `design_axes`:
+  `dimensions`, `results[]` (`key`, `labels`, `iq`, `spec_ok`, `fps`, `total_mw`, `delta_mw`
+  against the variant's recommended case, `raw_delta_mw` before compression, BW, latency),
+  and `errors[]` for combinations this variant cannot take (e.g. a node it does not have).
+  Rows are ordered by power; none is recommended and none is registered as a prediction.
+  The variant's own result and `input_hash` do not depend on the lever axes, and
+  recomputing a prediction leaves them out. The cases count against the run budget
+  (`counts.design_cases`, run summary `design_axes`). Not explorable as an axis:
+  `compression`, `dvfs_level` (searched per case by the built-in levers), `node_param`,
+  `sensor_binding`; any other lever id is unknown.
 - `GET /arch/exploration/levers`: the lever catalog — built-in levers (`source: builtin`,
-  `explorable: true`, the default values) and every What-if change kind (`source: whatif`,
-  `evaluation: resim`, `explorable: false`). Per-variant instances of a change kind come
-  from the What-if targets of that variant.
+  the default values) and every What-if change kind (`source: whatif`, `evaluation: resim`),
+  each with `explorable`. Per-variant instances of a change kind come from the What-if
+  targets of that variant.
 - `GET /arch/exploration/runs[/{id}]`: list run metadata or retrieve frozen details.
   Run details carry `design_space`, derived from the stored spec (`null` when a spec of
   an older engine no longer validates).

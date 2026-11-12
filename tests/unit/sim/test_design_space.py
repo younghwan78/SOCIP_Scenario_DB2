@@ -125,19 +125,47 @@ def test_a_builtin_lever_is_listed_once():
         DesignSpace.model_validate({"axes": [{"lever": "eis", "values": ["on"]}, {"lever": "eis", "values": ["off"]}]})
 
 
-def test_other_levers_are_unknown_or_not_evaluated_yet():
-    space = DesignSpace.model_validate({"axes": [
+def test_other_axes_become_the_re_simulation_levers_of_the_spec():
+    space = DesignSpace.model_validate({"max_lever_sets": 8, "axes": [
         {"lever": "sw_growth", "values": [1.0]},
         {"lever": "chain_size", "params": {"node_id": "mcsc"}, "values": [{"width": 1920, "height": 1080}]},
-        {"lever": "chain_size", "params": {"node_id": "gdc"}, "values": [{"width": 1920, "height": 1080}]}]})
-    assert [a.lever for a in resim_axes(space)] == ["chain_size", "chain_size"]
-    with pytest.raises(ValueError, match="unknown lever: chain_size"):
-        spec_from_design_space(space)
-    with pytest.raises(ValueError, match="not evaluated by exploration yet: chain_size"):
-        spec_from_design_space(space, resim_levers=("chain_size", "fps"))
+        {"lever": "fps", "values": [24, 60], "label": "frame rate"}]})
+    assert [a.lever for a in resim_axes(space)] == ["chain_size", "fps"]
+    spec = spec_from_design_space(space)
+    assert [a.lever for a in spec.axes.levers] == ["chain_size", "fps"] and spec.axes.lever_max_sets == 8
+    assert spec.axes.runtime_scales == [1.0]
+    # ... and back: built-in axes first, then the lever axes as written
+    back = design_space_from_spec(spec)
+    assert [a.lever for a in back.axes] == [*BUILTIN_LEVERS, "chain_size", "fps"]
+    assert back.axes[-1].label == "frame rate" and back.max_lever_sets == 8
+    assert spec_from_design_space(back).model_dump(mode="json") == spec.model_dump(mode="json")
+
+
+def test_the_caller_says_which_levers_it_can_explore():
+    space = DesignSpace.model_validate({"axes": [
+        {"lever": "fps", "values": [24]}, {"lever": "compression", "params": {"buffer_id": "b"}, "values": ["COMP_OFF"]}]})
+    spec_from_design_space(space)  # no check without a catalog
+    with pytest.raises(ValueError, match="lever cannot be explored as an axis: compression"):
+        spec_from_design_space(space, explorable=("fps",), known=("fps", "compression"))
     mixed = space.model_copy(update={"axes": [*space.axes, LeverAxis(lever="warp_drive", values=[1])]})
     with pytest.raises(ValueError, match="unknown lever: warp_drive"):
-        spec_from_design_space(mixed, resim_levers=("chain_size",))
+        spec_from_design_space(mixed, explorable=("fps",), known=("fps", "compression"))
+
+
+def test_lever_axes_are_bounded_and_do_not_change_specs_without_them():
+    from scenario_db.sim.arch_exploration import ExplorationAxes, lever_set_count
+
+    assert "levers" not in ArchExplorationSpec().model_dump(mode="json")["axes"]
+    assert "lever_max_sets" not in ExplorationAxes(lever_max_sets=10).model_dump()
+    axes = ExplorationAxes(levers=[LeverAxis(lever="fps", values=[24, 60]), LeverAxis(lever="llc_alloc", values=["off"])])
+    assert lever_set_count(axes.levers) == 5  # (2 + 1) x (1 + 1) - the unchanged variant
+    assert axes.model_dump()["lever_max_sets"] == 64
+    with pytest.raises(ValueError, match="at least one value"):
+        ExplorationAxes(levers=[LeverAxis(lever="fps", values=[])])
+    with pytest.raises(ValueError, match="at most 16 values"):
+        ExplorationAxes(levers=[LeverAxis(lever="fps", values=list(range(1, 18)))])
+    with pytest.raises(ValueError, match="5 combinations > lever_max_sets 4"):
+        ExplorationAxes(levers=axes.levers, lever_max_sets=4)
 
 
 def test_stored_run_specs_show_their_design_space():

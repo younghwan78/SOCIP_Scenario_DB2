@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { CandidateReview } from '../components/CandidateReview'
+import { DesignAxesTable } from '../components/DesignAxes'
 import { DesignSpaceSummary } from '../components/DesignSpaceSummary'
 import { experimentHref } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
@@ -251,6 +252,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     ['추천 검증', `${s.verified} / ${s.spec_ok}`, '재시뮬레이션 power·BW 일치 + 제약 재적용'],
     ['추천 power', s.recommended_power_mw ? `${fmt(s.recommended_power_mw[0], 0)}–${fmt(s.recommended_power_mw[1], 0)}` : '—', 'mW (scenario별 최저)'],
     ['Power option (절감 variant)', `${s.power_options?.variants ?? 0}`, s.power_options?.best_saving_mw ? `최대 절감 ${fmt(s.power_options.best_saving_mw[0], 1)} ~ ${fmt(s.power_options.best_saving_mw[1], 1)} mW` : `${s.power_options?.sets ?? 0} 조합 · IQ 평가 대상`],
+    ...(s.design_axes ? [['레버 축 조합', `${s.design_axes.sets}`, `${s.design_axes.variants} variant${s.design_axes.errors ? ` · 적용 불가 ${s.design_axes.errors}` : ''} · 변경한 variant 재탐색`]] : []),
   ]
   const refs = useReferences(run.project_ref ?? undefined)
   const iqKeepRun = refs?.policy.register_baseline === 'iq_keep'
@@ -461,7 +463,10 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
     </Card>
  <Card id="ax-tiers" title={`${short(v.variant_id)} — 화질·성능 유지 최적 범위 vs Power 우선 메뉴`} note="A = lossy · IQ option 없이 timing 만족 최저 + 최저 +3% 이내 평가 조합 · B = 화질을 희생할 때 항목별 단독 효과" defaultWide>
       <TiersView v={v} battery={battery} /></Card>
- {v.power_options && <Card id="ax-options" title="Power option 조합 (IQ 평가 대상)" note={`${OPTION_NOTE}${(v.power_options.fixed ?? []).length ? ' · 고정 대비 = 항상 이득인 option을 고정했을 때 나머지 option의 추가 효과' : ''}`} defaultWide>
+ {v.design_axes && <Card id="ax-design" title="레버 축 조합 (변경한 variant 재탐색)" note="크기 · fps · 센서 · LLC 같은 What-if 레버를 축으로 준 run에서, 조합마다 이 variant를 바꿔 다시 탐색한 결과" defaultWide>
+        <DesignAxesTable data={v.design_axes} baseMw={v.recommended?.total_mw ?? null} />
+      </Card>}
+      {v.power_options && <Card id="ax-options" title="Power option 조합 (IQ 평가 대상)" note={`${OPTION_NOTE}${(v.power_options.fixed ?? []).length ? ' · 고정 대비 = 항상 이득인 option을 고정했을 때 나머지 option의 추가 효과' : ''}`} defaultWide>
       <div style={{ display: 'grid', gap: 8 }}>
         <div className="faint" style={{ fontSize: 12 }}>
           {v.power_options.dimensions.map((d) => `${d.label}: ${d.current} → ${d.items.map((i) => i.value).join(' / ')}`).join(' · ') || '적용 가능한 option 없음'}
