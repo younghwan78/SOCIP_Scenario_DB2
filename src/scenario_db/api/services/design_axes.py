@@ -75,7 +75,7 @@ def validate_levers(levers: list[LeverAxis]) -> None:
         if axis.lever not in EXPLORABLE_KINDS:
             raise ValueError(f"lever cannot be explored as an axis: {axis.lever}")
         changes = axis_changes(axis)
-        keys = [json.dumps(c, sort_keys=True) for c in changes]
+        keys = [_change_key(c) for c in changes]
         if len(set(keys)) != len(keys):
             raise ValueError(f"lever {axis.lever}: values must be distinct")
         instance = json.dumps([axis.lever, axis.params], sort_keys=True)
@@ -92,7 +92,9 @@ def _value_text(change: dict[str, Any]) -> str:
     unit = CHANGE_KINDS[change["target"]].unit
     if "width" in change:
         op = f"{change['operation']} " if change.get("operation") else ""
-        return f"{op}{change['width']}x{change['height']}"
+        at = f" @({change.get('x', 0)},{change.get('y', 0)})" if change.get("x") is not None or change.get("y") is not None else ""
+        port = f" port {change['port']}" if change.get("port") else ""
+        return f"{op}{change['width']}x{change['height']}{at}{port}"
     if change.get("option") is not None:
         return str(change["option"]) + (f" ({change['value']:g})" if change.get("value") is not None else "")
     return f"{change['value']:g}{f' {unit}' if unit else ''}"
@@ -103,6 +105,10 @@ def _change_key(change: dict[str, Any]) -> str:
     value = f"{change['width']}x{change['height']}" if "width" in change else change.get("option") or f"{change['value']:g}"
     extra = f"@{change['value']:g}" if "option" in change and change.get("value") is not None else ""
     op = f":{change['operation']}" if change.get("operation") else ""
+    if change.get("x") is not None or change.get("y") is not None:
+        extra += f"@({change.get('x', 0)},{change.get('y', 0)})"
+    if change.get("port"):
+        extra += f"@port:{change['port']}"
     return f"{change['target']}{f'[{selector}]' if selector else ''}{op}={value}{extra}"
 
 
@@ -148,13 +154,22 @@ def build_design_plan(graph, config, levers: list[LeverAxis], prepare_sensor=Non
     return plan
 
 
-def explore_with_levers(graph, spec: ArchExplorationSpec, *, config, dvfs_tables, explore=explore_variant) -> dict[str, Any]:
-    """``explore_variant`` with the lever-axis plan built for this variant; without lever axes the
-    call is the plain one.
+def needs_catalog(config) -> bool:
+    """A config that pins a reviewed sensor binding: every changed copy must be re-validated against the
+    sensor catalog, which needs the DB (``prepare_sensor``)."""
+    return bool(getattr(config, "sensor_modes", None))
 
-    The plan is built where the variant is explored (also inside a pool worker), so the changed
-    graphs of all variants are never held, or pickled, at the same time."""
+
+def explore_with_levers(graph, spec: ArchExplorationSpec, *, config, dvfs_tables, explore=explore_variant,
+                        design: dict[str, Any] | None = None) -> dict[str, Any]:
+    """``explore_variant`` with the lever-axis plan of this variant; without lever axes the call is the
+    plain one.
+
+    The plan is normally built here, where the variant is explored (also inside a pool worker), so the
+    changed graphs of all variants are never held, or pickled, at the same time. ``design`` = a plan the
+    caller already built because it needed the DB (a pinned sensor binding, see :func:`needs_catalog`)."""
     if not spec.axes.levers:
         return explore(graph, spec, config=config, dvfs_tables=dvfs_tables)
-    return explore(graph, spec, config=config, dvfs_tables=dvfs_tables,
-                   design=build_design_plan(graph, config, spec.axes.levers))
+    if design is None:
+        design = build_design_plan(graph, config, spec.axes.levers)
+    return explore(graph, spec, config=config, dvfs_tables=dvfs_tables, design=design)

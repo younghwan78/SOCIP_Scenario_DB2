@@ -59,6 +59,10 @@ their existing recorded-review behavior.
   `dimensions`, `results[]` (`key`, `labels`, `iq`, `spec_ok`, `fps`, `total_mw`, `delta_mw`
   against the variant's recommended case, `raw_delta_mw` before compression, BW, latency),
   and `errors[]` for combinations this variant cannot take (e.g. a node it does not have).
+  `iq` is the worst of the levers' own class (`lever_iq`) and the combination's compression
+  pick (`lossy: true` = trade): the shown power may rest on lossy compression. A `key`
+  keeps what tells two changes apart (crop offset, port). With a pinned sensor binding
+  (`config.sensor_modes`) every changed copy is re-validated against the sensor catalog.
   Rows are ordered by power; none is recommended and none is registered as a prediction.
   The variant's own result and `input_hash` do not depend on the lever axes, and
   recomputing a prediction leaves them out. The cases count against the run budget

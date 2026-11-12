@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,12 +13,14 @@ from check_engine_equivalence import canonical_json  # noqa: E402
 from verify_is_v15_camera import FIXTURE, graph_from_fixture, read  # noqa: E402
 
 from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest  # noqa: E402
+from scenario_db.api.services import analysis_inputs, whatif_sensors  # noqa: E402
 from scenario_db.api.services import arch_exploration as svc  # noqa: E402
 from scenario_db.api.services.design_axes import (  # noqa: E402
     EXPLORABLE_KINDS,
     axis_changes,
     build_design_plan,
     explore_with_levers,
+    validate_levers,
 )
 from scenario_db.api.services.recompute import variant_spec  # noqa: E402
 from scenario_db.api.services.whatif_conditions import CHANGE_KINDS, apply_whatif_changes  # noqa: E402
@@ -176,3 +180,96 @@ def test_requests_carry_lever_axes_in_either_form_and_recompute_leaves_them_out(
     assert "levers" not in again["axes"] and "lever_max_sets" not in again["axes"] and "scenario_ids" not in again
     assert again["axes"]["statistics"] == stored["axes"]["statistics"]
     assert "levers" in stored["axes"]  # the stored run spec is not modified
+
+
+def test_a_lossy_pick_of_the_combination_shows_as_an_iq_trade(graph, explored):
+    row = next(r for r in explored["design_axes"]["results"] if r["key"] == "fps=24")
+    # the fps lever itself keeps IQ, but the power shown is with lossy compression selected
+    assert row["lever_iq"] == "neutral" and row["lossy"] is True and row["iq"] == "trade"
+    spec = _spec(LEVERS).model_copy(update={"constraints": _spec().constraints.model_copy(update={"allow_lossy": False})})
+    kept = explore_with_levers(graph, spec, config=SimulationRunConfig(), dvfs_tables={})["design_axes"]["results"]
+    assert all(r["lossy"] is False and r["iq"] == r["lever_iq"] for r in kept)
+
+
+def test_crop_position_and_port_tell_two_size_changes_apart(graph):
+    axis = LeverAxis.model_validate({"lever": "chain_size", "params": {"node_id": "byrp"}, "values": [
+        {"width": 1920, "height": 1080, "operation": "crop", "x": 0, "y": 0},
+        {"width": 1920, "height": 1080, "operation": "crop", "x": 16, "y": 0},
+        {"width": 1920, "height": 1080, "operation": "scale", "port": "out_main"},
+        [1920, 1080]]})
+    validate_levers([axis])  # four different changes of the same size
+    plan = build_design_plan(graph, SimulationRunConfig(), [axis])
+    assert [s["key"] for s in plan["sets"]] == [
+        "chain_size[byrp]:crop=1920x1080@(0,0)", "chain_size[byrp]:crop=1920x1080@(16,0)",
+        "chain_size[byrp]:scale=1920x1080@port:out_main", "chain_size[byrp]=1920x1080"]
+    assert plan["dimensions"][0]["values"] == ["crop 1920x1080 @(0,0)", "crop 1920x1080 @(16,0)",
+                                               "scale 1920x1080 port out_main", "1920x1080"]
+    assert len({s["items"][0]["label"] for s in plan["sets"]}) == 4
+    same = LeverAxis.model_validate({"lever": "chain_size", "params": {"node_id": "byrp"}, "values": [
+        {"width": 1920, "height": 1080, "operation": "crop", "x": 16}, {"width": 1920, "height": 1080, "operation": "crop", "x": 16, "y": 0}]})
+    with pytest.raises(ValueError, match="values must be distinct"):
+        validate_levers([same])
+
+
+BINDING = {"catalog_ref": "sensor-cat", "catalog_sha256": "a" * 64, "mode_label": "mode", "lineup_ref": "lineup",
+           "lineup_sha256": "b" * 64, "board_config": "board", "slot": "rear"}
+
+
+def test_the_plan_hands_the_catalog_preparation_to_every_changed_copy(monkeypatch, graph):
+    from scenario_db.api.services import design_axes
+
+    pinned = SimulationRunConfig.model_validate({"sensor_modes": {"sensor_rear": BINDING}})
+    assert design_axes.needs_catalog(pinned) and not design_axes.needs_catalog(SimulationRunConfig())
+    seen = []
+
+    def apply(base, changes, config, domains, notes, *, prepare_sensor=None, targets=None):
+        seen.append(prepare_sensor)
+        if prepare_sensor is None:
+            raise ValueError("pinned sensor binding requires authoritative catalog preparation")
+        return prepare_sensor(base, config), config, changes
+    monkeypatch.setattr(design_axes, "whatif_targets", lambda *a: {})
+    monkeypatch.setattr(design_axes, "apply_whatif_changes", apply)
+    levers = [LeverAxis(lever="fps", values=[24, 60])]
+    alone = design_axes.build_design_plan(graph, pinned, levers)
+    assert all("authoritative catalog preparation" in s["error"] for s in alone["sets"])
+
+    def prepare(candidate, config):
+        return candidate
+    prepared = design_axes.build_design_plan(graph, pinned, levers, prepare_sensor=prepare)
+    assert seen[-2:] == [prepare, prepare] and all("error" not in s and s["graph"] is graph for s in prepared["sets"])
+
+
+def test_the_run_builds_that_plan_at_load_time_with_its_session(monkeypatch, graph):
+    db, calls = MagicMock(), {}
+    monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
+    monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load",
+                        lambda selection, db: analysis_inputs.AnalysisInputs(graph, {}, "dvfs-test"))
+    monkeypatch.setattr(whatif_sensors, "prepare_sensor_graph", lambda session, candidate, config: ("prepared", session))
+    stub = {"dimensions": [], "sets": [], "notes": ["built at load"]}
+
+    def build(base, config, levers, prepare_sensor=None):
+        calls["build"] = (base, [a.lever for a in levers], prepare_sensor("candidate", config))
+        return stub
+    monkeypatch.setattr(svc, "build_design_plan", build)
+    scenario = SimpleNamespace(id="uc-cam-recording-e2600", project_ref="proj-a")
+    request = ArchExplorationRunRequest.model_validate({
+        "scenario_ids": [scenario.id], "config": {"sensor_modes": {"sensor_rear": BINDING}},
+        "spec": {"axes": NARROW | {"levers": [{"lever": "fps", "values": [24]}]}, "verify": False}})
+    item = svc._load_variant(db, request, scenario, VARIANT, {})
+    # the changed copies are re-validated through the run's own session, while it is open
+    assert item["design"] is stub and calls["build"] == (graph, ["fps"], ("prepared", db))
+
+    def explore(base, spec, **kw):
+        calls["explore"] = kw.get("design")
+        return {"counts": {"cases": 1}}
+    monkeypatch.setattr(svc, "explore_variant", explore)
+    svc._explore_item(item, 100)
+    assert calls["explore"] is stub
+    svc._explore_worker(item["graph"], item["spec"], item["config"], item["tables"], item["design"])
+    assert calls["explore"] is stub
+    # without a pinned binding nothing is built at load: the plan is made where the variant is explored
+    plain = request.model_copy(update={"config": SimulationRunConfig()})
+    assert svc._load_variant(db, plain, scenario, VARIANT, {})["design"] is None
+    # ... and without lever axes there is no plan at all, pinned or not
+    no_levers = request.model_copy(update={"spec": _spec()})
+    assert svc._load_variant(db, no_levers, scenario, VARIANT, {})["design"] is None

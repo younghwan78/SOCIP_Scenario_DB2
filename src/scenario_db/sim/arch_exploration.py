@@ -1783,11 +1783,21 @@ def explore_design_sets(spec: ArchExplorationSpec, tables: dict[str, DVFSTable],
         out["cases"] += evaluated
         remaining -= evaluated
         rec, raw = r.get("recommended"), r["baseline"]["total_mw"] - base_raw["total_mw"]
-        delta = rec["total_mw"] - base_rec["total_mw"] if rec and base_rec else None
+        delta = delta_pct = delta_bw = None
+        if rec and base_rec:
+            delta = rec["total_mw"] - base_rec["total_mw"]
+            delta_pct = round(100 * delta / base_rec["total_mw"], 2) if base_rec["total_mw"] else None
+            delta_bw = round(rec["bw_mbs"] - base_rec["bw_mbs"], 2)
         r_slice = r["objective_slice"]
+        # the shown power is the combination's own compression search: a lossy pick trades IQ
+        # whatever the levers themselves need
+        lossy = bool(rec and rec.get("lossy"))
+        lever_iq = item.get("iq", "neutral")
         out["results"].append(head | {
             "labels": [i["label"] for i in item["items"]],
-            "iq": item.get("iq", "neutral"),
+            "iq": "trade" if lossy else lever_iq,
+            "lever_iq": lever_iq,
+            "lossy": lossy,
             "lever_notes": list(item.get("notes") or [])[:6],
             "spec_ok": r["spec_ok"], "spec_reasons": r["spec_reasons"],
             "verdict": r_slice["verdict"]["status"],
@@ -1795,9 +1805,9 @@ def explore_design_sets(spec: ArchExplorationSpec, tables: dict[str, DVFSTable],
             "case_key": rec["key"] if rec else None,
             "total_mw": round(rec["total_mw"], 3) if rec else None,
             "delta_mw": round(delta, 3) if delta is not None else None,
-            "delta_pct": round(100 * delta / base_rec["total_mw"], 2) if delta is not None and base_rec["total_mw"] else None,
+            "delta_pct": delta_pct,
             "bw_mbs": round(rec["bw_mbs"], 2) if rec else None,
-            "delta_bw_mbs": round(rec["bw_mbs"] - base_rec["bw_mbs"], 2) if rec and base_rec else None,
+            "delta_bw_mbs": delta_bw,
             "raw_total_mw": round(r["baseline"]["total_mw"], 3),
             "raw_delta_mw": round(raw, 3),
             "raw_delta_pct": round(100 * raw / base_raw["total_mw"], 2) if base_raw["total_mw"] else None,

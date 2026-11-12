@@ -38,7 +38,7 @@ from scenario_db.reporting.report_package import package_zip
 from scenario_db.reporting.review_snapshot import ProjectEvidence, ReviewEvidence
 from scenario_db.comparison.measurement_selection import representative_measurement
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
-from scenario_db.api.services.design_axes import explore_with_levers
+from scenario_db.api.services.design_axes import build_design_plan, explore_with_levers, needs_catalog
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.design_space import design_space_of_stored_spec
 from scenario_db.sim.power_attribution import attribute
@@ -166,18 +166,27 @@ def _load_variant(db: Session, request: ArchExplorationRunRequest, scenario: Sce
             graph, applied = _apply_options(graph, request.apply_options)
             spec = spec.model_copy(update={"axes": spec.axes.model_copy(update={
                 "power_options": spec.axes.power_options.model_copy(update={"enabled": False})})})
+        design = None
+        if spec.axes.levers and needs_catalog(shim.config):
+            # a pinned sensor binding is re-validated against the catalog for every changed copy:
+            # that needs this DB session, so the plan is built now instead of where it is explored
+            from scenario_db.api.services.whatif_sensors import prepare_sensor_graph
+
+            design = build_design_plan(graph, shim.config, spec.axes.levers,
+                                       prepare_sensor=lambda candidate, cfg: prepare_sensor_graph(db, candidate, cfg))
     except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
         return {"scenario_id": scenario.id, "variant_id": variant_id,
                 "error": variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage="load")}
     return {"scenario_id": scenario.id, "variant_id": variant_id, "graph": graph, "tables": tables,
-            "dvfs_ref": ref, "config": shim.config, "spec": spec, "budget": budget, "applied": applied}
+            "dvfs_ref": ref, "config": shim.config, "spec": spec, "budget": budget, "applied": applied,
+            "design": design}
 
 
 def _explore_item(item: dict[str, Any], max_cases: int, summary: dict[str, Any] | None = None) -> dict[str, Any]:
     if summary is None:
         spec = item["spec"].model_copy(update={"max_cases_per_variant": max_cases})
         summary = explore_with_levers(item["graph"], spec, config=item["config"], dvfs_tables=item["tables"],
-                                      explore=explore_variant)
+                                      explore=explore_variant, design=item.get("design"))
     if item["applied"]:
         summary["applied_options"] = [{k: it.get(k) for k in ("key", "label", "kind", "iq_eval", "note")}
                                       for it in item["applied"]]
@@ -193,9 +202,10 @@ def _cases_used(summary: dict[str, Any]) -> int:
     return counts["cases"] + counts.get("option_cases", 0) + counts.get("design_cases", 0)
 
 
-def _explore_worker(graph, spec, config, tables) -> dict[str, Any]:
-    """Process-pool entry point (top level so it pickles)."""
-    return explore_with_levers(graph, spec, config=config, dvfs_tables=tables, explore=explore_variant)
+def _explore_worker(graph, spec, config, tables, design=None) -> dict[str, Any]:
+    """Process-pool entry point (top level so it pickles). ``design`` = a lever-axis plan built at load
+    time (pinned sensor binding); otherwise the worker builds the plan itself."""
+    return explore_with_levers(graph, spec, config=config, dvfs_tables=tables, explore=explore_variant, design=design)
 
 
 def _exploration_workers(n: int) -> int:
@@ -240,7 +250,8 @@ def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick,
                     while queue and len(running) < workers and used + max_cases * (len(running) + 1) <= budget:
                         i, it = queue.pop(0)
                         spec = it["spec"].model_copy(update={"max_cases_per_variant": max_cases})
-                        running[pool.submit(_explore_worker, it["graph"], spec, it["config"], it["tables"])] = i
+                        running[pool.submit(_explore_worker, it["graph"], spec, it["config"], it["tables"],
+                                            *([it["design"]] if it.get("design") is not None else []))] = i
                     if not running:
                         break  # less than one variant cap left: the caller explores the rest in plan order
                     done, _ = wait(running, return_when=FIRST_COMPLETED)

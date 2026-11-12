@@ -3,7 +3,9 @@ import { TimingVerdictBadge } from './TimingVerdictBadge'
 
 /** One lever-axis combination: the variant with these levers changed, explored on its own (API ≥ 2026-11-13). */
 export type DesignAxisResult = {
-  key: string; labels: string[]; iq: 'neutral' | 'eval' | 'trade'; lever_notes?: string[]
+  key: string; labels: string[]; lever_notes?: string[]
+  /** iq = worst of the levers' own class (`lever_iq`) and the combination's compression pick (`lossy` = trade) */
+  iq: 'neutral' | 'eval' | 'trade'; lever_iq?: 'neutral' | 'eval' | 'trade'; lossy?: boolean
   spec_ok: boolean; spec_reasons: string[]; verdict: string; fps: number
   total_mw: number | null; delta_mw: number | null; delta_pct: number | null
   bw_mbs: number | null; delta_bw_mbs: number | null
@@ -18,6 +20,12 @@ export type DesignAxes = {
 }
 
 const IQ_TEXT: Record<DesignAxisResult['iq'], string> = { neutral: '', eval: 'IQ 평가 필요', trade: '화질 trade' }
+/** what to check about image quality: the levers' own need, and a lossy pick of the combination's compression search */
+function iqCautions(r: DesignAxisResult): string[] {
+  const lever = r.lever_iq ?? r.iq
+  return [IQ_TEXT[lever] && `레버 ${IQ_TEXT[lever]}`, r.lossy ? 'lossy 압축 선택 (화질 trade) — 표시 전력은 손실 압축 기준' : '']
+    .filter((t): t is string => !!t)
+}
 const signed = (v: number | null | undefined, digits = 1) => (v == null ? '—' : `${v > 0 ? '+' : ''}${fmt(v, digits)}`)
 
 /** S-01: every combination of the lever axes as a changed variant, compared with the variant itself.
@@ -33,7 +41,7 @@ export function DesignAxesTable({ data, baseMw }: { data: DesignAxes; baseMw: nu
       <thead><tr><th>변경한 레버</th><th>판정</th><th className="n">fps</th><th className="n">total mW</th><th className="n">Δ mW</th>
         <th className="n">Δ BW MB/s</th><th className="n">압축 전 Δ mW</th><th>주의</th></tr></thead>
       <tbody>{data.results.map((r) => {
-        const cautions = [IQ_TEXT[r.iq], r.power_coverage === 'partial' ? `전력 미모델 IP ${r.zero_power_ips?.length ?? 0}개` : '',
+        const cautions = [...iqCautions(r), r.power_coverage === 'partial' ? `전력 미모델 IP ${r.zero_power_ips?.length ?? 0}개` : '',
           ...(r.spec_ok ? [] : r.spec_reasons.slice(0, 2))].filter(Boolean)
         return <tr key={r.key}>
           <td>{r.labels.join(' + ')}{(r.lever_notes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12 }}>{r.lever_notes!.join(' · ')}</div>}</td>
