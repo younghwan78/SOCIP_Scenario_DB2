@@ -21,6 +21,8 @@ globals:
       compare_keys: [resolution, fps, hdr, sensor_board]       # (선택) 조건 비교 key (없으면 해상도 · fps · HDR · sensor · IS version · bitrate 등)
       tolerance_pct: 3
     sw_growth_budget: 1.2            # (선택) 차기 SW 증가 예산 — 1쪽 요약 조건에 표시
+    objective_order: [growth, power] # (선택) 조합 탐색 추천 기준, 중요한 순서 (power · growth · iq · bw). 없으면 최저 power.
+                                     #        growth가 있으면 sw_growth_budget(> ×1.0)이 도달 목표. 요청이 order를 주면 요청이 우선
     sustained_current:               # (선택) 발열 기준 — 지속 AP + mem 전류 한도 (없으면 thermal_watch −10/−20%만)
       limit_ma: 1200                 #   초과 = 절감 검토 (High), 한도 × watch_ratio 이상 = 주의 (Medium)
       watch_ratio: 0.85

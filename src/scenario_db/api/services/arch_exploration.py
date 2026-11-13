@@ -299,11 +299,16 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     scenarios = _scenarios(db, request)
     throughput_from_policy = "throughput_model" not in request.spec.timing.model_fields_set
     # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
-    from scenario_db.api.services.review_policy import apply_throughput, project_policy
+    from scenario_db.api.services.review_policy import apply_objective, apply_throughput, project_policy
 
-    timing = apply_throughput(request.spec.timing, project_policy(db, scenarios[0].project_ref))
+    policy = project_policy(db, scenarios[0].project_ref)
+    timing = apply_throughput(request.spec.timing, policy)
     if timing is not request.spec.timing:
         request = request.model_copy(update={"spec": request.spec.model_copy(update={"timing": timing})})
+    # ... and what the recommendation prefers (stored resolved in run.spec, so a recomputation keeps it)
+    objective = apply_objective(request.spec.objective, policy)
+    if objective is not request.spec.objective:
+        request = request.model_copy(update={"spec": request.spec.model_copy(update={"objective": objective})})
     # 예측 기준: resolve once for the whole run (recorded in input_selection, applied to every variant)
     from scenario_db.api.services.model_basis import apply_basis
 
@@ -1339,11 +1344,17 @@ def option_snapshot(po: dict[str, Any] | None, case: dict[str, Any], rule: str) 
         for d in po.get("dimensions") or []
     ]
     out["results"] = po.get("results") or []
-    out["reference"] = {"rule": rule, "case_key": case.get("key"),
-                        "note": None if rule == "auto:min-power" else
-                        "option deltas are relative to the min-power (lossy allowed) case, not the registered IQ-keeping case"
-                        if rule == "auto:min-power-iq" else
-                        "option deltas are relative to the auto (min-power) case, not the selected case"}
+    reference_key = po.get("reference_key")  # set only with an objective order: the deltas' reference case
+    if reference_key is not None:
+        note = (None if reference_key == case.get("key") else
+                "option deltas are relative to the objective-order recommendation, not the registered case")
+    elif rule == "auto:min-power":
+        note = None
+    elif rule == "auto:min-power-iq":
+        note = "option deltas are relative to the min-power (lossy allowed) case, not the registered IQ-keeping case"
+    else:
+        note = "option deltas are relative to the auto (min-power) case, not the selected case"
+    out["reference"] = {"rule": rule, "case_key": case.get("key"), "note": note}
     return out
 
 

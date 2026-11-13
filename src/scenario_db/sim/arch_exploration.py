@@ -232,10 +232,47 @@ class ExplorationConstraints(BaseScenarioModel):
         return data
 
 
+ObjectiveName = Literal["power", "growth", "iq", "bw"]
+
+
+def _power_only() -> list[ObjectiveName]:
+    return ["power"]
+
+
 class ExplorationObjective(BaseScenarioModel):
     statistic: Statistic = "max"
     runtime_scale: float = Field(default=1.0, gt=0, le=10)
     tie_pct: float = Field(default=1.0, ge=0, le=10)
+    # What the recommendation prefers, most important first (lexicographic; power always decides last).
+    #   power  = lowest total power (the only objective by default: the previous recommendation)
+    #   growth = SW growth the case's own DVFS levels absorb without re-selection (robustness);
+    #            with ``growth_target`` a case that reaches the target is enough, otherwise more is better
+    #   iq     = lowest IQ risk (no compression < lossless < assumed ratio < lossy)
+    #   bw     = lowest DRAM traffic
+    order: list[ObjectiveName] = Field(default_factory=_power_only, min_length=1, max_length=4)
+    growth_target: float | None = Field(default=None, ge=1.0, le=10)
+
+    @model_validator(mode="after")
+    def _order(self) -> ExplorationObjective:
+        if len(set(self.order)) != len(self.order):
+            raise ValueError("objective order lists an objective twice")
+        if self.growth_target is not None and "growth" not in self.order:
+            raise ValueError("growth_target needs \"growth\" in the objective order")
+        return self
+
+    @property
+    def by_power_only(self) -> bool:
+        return self.order == ["power"]
+
+    @model_serializer(mode="wrap")
+    def _omit_default_order(self, handler):
+        # the default objective dumps as before, so earlier specs keep their input hash; an order the
+        # request set explicitly is kept (a job replays the request, and it must not fall back to the policy)
+        data = handler(self)
+        if self.by_power_only and "order" not in self.model_fields_set:
+            data.pop("order", None)
+            data.pop("growth_target", None)
+        return data
 
 
 class ArchExplorationSpec(BaseScenarioModel):
@@ -359,7 +396,15 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
                 if s is obj_slice:
                     cases_obj.append(case)
 
-    ranked = _rank([c for c in cases_obj if c["eligible"]], obj.tie_pct)
+    eligible_obj = [c for c in cases_obj if c["eligible"]]
+    by_power = _rank(eligible_obj, obj.tie_pct)
+    if obj.by_power_only:
+        ranked = by_power
+    else:
+        growth_of = _growth_by_dvfs(slices, obj)
+        for c in eligible_obj:
+            c["growth_fixed"] = growth_of(c)
+        ranked = _rank_by(eligible_obj, obj)
     recommended = ranked[0] if ranked else None
     alternatives = _distinct(ranked[1:], spec.top_n, seen={_sig(recommended)} if recommended else None)
     pareto = [c for c in _pareto(ranked) if recommended is None or c["key"] != recommended["key"]][: spec.top_n * 2]
@@ -381,6 +426,10 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             obj_reasons.append("recommended case failed re-simulation verification: "
                                + "; ".join(recommended["verified"].get("reasons") or ["mismatch"]))
     verified = (recommended or {}).get("verified") or {}
+    # the default registration keeps the lowest-power rule whatever the objective order recommends
+    min_power = by_power[0] if by_power and not obj.by_power_only else None
+    if min_power is not None and min_power is not recommended and spec.verify:
+        min_power["verified"] = _verify(graph, spec, config, tables, min_power, buffers)
 
     summary = {
         "engine_rev": ENGINE_REV,
@@ -435,6 +484,9 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "design_points": [_point(c) for c in cases_obj if not c["dvfs_raise"]],
         "sw_band_mw": _sw_band(slices, obj_slice),
     }
+    if not obj.by_power_only:
+        summary["objectives"] = _objectives(obj, ranked, by_power)
+        summary["min_power_case"] = _public_case(min_power)
     # compact copy for list views (the run table reads it without the whole tiers block)
     keep = (summary["tiers"].get("keep") or {}).get("best")
     summary["keep_total_mw"] = keep["total_mw"] if keep else None
@@ -606,6 +658,15 @@ def _power_budget_status(c: ExplorationConstraints, coverage: str, recommended: 
 
 
 # ------------------------------------------------------------------- power options
+def _sub_scales(spec: ArchExplorationSpec) -> list[float]:
+    """SW growth slices of a power-option / lever-set search: the objective slice alone, or every growth
+    slice when growth decides the recommendation (the set must be ranked the way the variant was)."""
+    obj = spec.objective
+    if "growth" in obj.order:
+        return sorted(set(spec.axes.runtime_scales) | {obj.runtime_scale})
+    return [obj.runtime_scale]
+
+
 def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
                           tables: dict[str, DVFSTable], base: dict[str, Any]) -> dict[str, Any]:
     """Predicted saving of every power-option set relative to the variant itself.
@@ -621,6 +682,9 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
         "sets": po.count_sets(dims), "max_sets": axis.max_sets, "cases": 0,
         "results": [], "best": None, "errors": [],
     }
+    if "objectives" in base and base.get("recommended"):
+        # with an objective order the deltas compare the objective-order recommendations
+        out["reference_key"] = base["recommended"]["key"]
     if not dims:
         out["status"] = "none"
         return out
@@ -631,7 +695,7 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
     obj = spec.objective
     sub = spec.model_copy(update={
         "axes": spec.axes.model_copy(update={
-            "statistics": [obj.statistic], "runtime_scales": [obj.runtime_scale],
+            "statistics": [obj.statistic], "runtime_scales": _sub_scales(spec),
             "power_options": axis.model_copy(update={"enabled": False}),
         }),
         "verify": False, "top_n": 1,
@@ -1271,6 +1335,69 @@ def _rank(cases: list[dict[str, Any]], tie_pct: float) -> list[dict[str, Any]]:
     return sorted(cases, key=key)
 
 
+def _growth_by_dvfs(slices: list[dict[str, Any]], obj: ExplorationObjective):
+    """case -> SW growth its DVFS levels absorb when they are held (see :func:`_fixed_growth`); 0.0 when
+    not even the objective growth holds. Depends on the DVFS levels only, so it is computed once per set."""
+    seen: dict[tuple, float] = {}
+
+    def growth(case: dict[str, Any]) -> float:
+        key = tuple(sorted(case["dvfs"].items()))
+        if key not in seen:
+            seen[key] = _fixed_growth(slices, obj, case)["growth_tolerance_fixed"] or 0.0
+        return seen[key]
+    return growth
+
+
+def _rank_by(cases: list[dict[str, Any]], obj: ExplorationObjective) -> list[dict[str, Any]]:
+    """Lexicographic order over ``obj.order``; power, then the default tie-breakers, decide last.
+    Cases carry ``growth_fixed``. Power is compared exactly here (``tie_pct`` belongs to the default rule)."""
+    target = obj.growth_target
+
+    def term(name: str, c: dict[str, Any]) -> tuple:
+        if name == "growth":
+            g = c["growth_fixed"]
+            return (0, 0.0) if target is not None and g >= target else (1, -g) if target is not None else (0, -g)
+        if name == "iq":
+            return (_iq_risk(c),)
+        if name == "bw":
+            return (c["bw_mbs"],)
+        return (c["total_mw"],)
+
+    def key(c: dict[str, Any]) -> tuple:
+        return (*[term(name, c) for name in obj.order], c["total_mw"], c["bw_mbs"], len(c["compression"]), c["dvfs_raise"])
+    return sorted(cases, key=key)
+
+
+def _objectives(obj: ExplorationObjective, ranked: list[dict[str, Any]], by_power: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the objective order chose, next to the lowest-power case and the power cost of robustness.
+
+    ``front`` = for every SW growth level some eligible case absorbs, the cheapest case that absorbs at
+    least that much (power vs growth trade-off)."""
+    def point(c: dict[str, Any], floor: float | None = None) -> dict[str, Any]:
+        base = by_power[0]["total_mw"]
+        return {"key": c["key"], "total_mw": round(c["total_mw"], 2), "growth_fixed": c["growth_fixed"],
+                "bw_mbs": round(c["bw_mbs"], 2), "iq_risk": _iq_risk(c), "dvfs_raise": c["dvfs_raise"],
+                "delta_mw": round(c["total_mw"] - base, 2), **({"growth_at_least": floor} if floor is not None else {})}
+
+    out: dict[str, Any] = {"order": list(obj.order), "growth_target": obj.growth_target,
+                           "recommended": None, "min_power": None, "front": [], "target_met": None}
+    if not ranked:
+        return out
+    out["recommended"], out["min_power"] = point(ranked[0]), point(by_power[0])
+    if obj.growth_target is not None:
+        out["target_met"] = ranked[0]["growth_fixed"] >= obj.growth_target
+    front: list[dict[str, Any]] = []
+    for level in sorted({c["growth_fixed"] for c in ranked}):
+        cheapest = min((c for c in ranked if c["growth_fixed"] >= level),
+                       key=lambda c: (c["total_mw"], c["bw_mbs"], len(c["compression"]), c["dvfs_raise"]))
+        if front and front[-1]["key"] == cheapest["key"]:
+            front[-1] = point(cheapest, level)  # the same case also covers this higher level
+        else:
+            front.append(point(cheapest, level))
+    out["front"] = front
+    return out
+
+
 def _sig(c: dict[str, Any]) -> tuple:
     """Alternative identity: equal power with a different BW or IQ risk is a different trade-off."""
     return (round(c["total_mw"], 1), round(c["bw_mbs"]), bool(c["lossy"]), bool(c["assumed_ratio"]))
@@ -1599,9 +1726,18 @@ def recommendations(m: dict[str, Any], s: dict[str, Any]) -> list[str]:
 
 # ------------------------------------------------------------------- prediction payload
 def find_case(summary: dict[str, Any], case_key: str | None) -> tuple[dict[str, Any] | None, str]:
-    """Recommended case (auto) or a listed alternative by key (user)."""
+    """Lowest-power case (auto), the objective-order recommendation or a listed alternative by key.
+
+    With an objective order (``objectives``) the recommendation may not be the lowest-power case: the
+    default (``case_key=None``) stays the lowest-power one, the recommendation is ``auto:objective``."""
     rec = summary.get("recommended")
-    if case_key is None or (rec and rec["key"] == case_key):
+    if "objectives" in summary:
+        low = summary.get("min_power_case")
+        if case_key is None or (low and low["key"] == case_key):
+            return low, "auto:min-power"
+        if rec and rec["key"] == case_key:
+            return rec, "auto:objective"
+    elif case_key is None or (rec and rec["key"] == case_key):
         return rec, "auto:min-power"
     for rank, alt in enumerate(summary.get("alternatives") or [], start=2):
         if alt["key"] == case_key:
@@ -1761,7 +1897,8 @@ def explore_design_sets(spec: ArchExplorationSpec, tables: dict[str, DVFSTable],
                         design: dict[str, Any], remaining: int) -> dict[str, Any]:
     """Every lever-axis combination explored as its own variant, compared with the variant itself.
 
-    Like a power-option set: one SW slice (the objective), own compression / DVFS search, no power
+    Like a power-option set: one SW slice (the objective; every growth slice when growth is in the
+    objective order, so the set is ranked like the variant), own compression / DVFS search, no power
     options, no re-simulation check. ``delta_mw`` compares the recommended cases, ``raw_delta_mw``
     the no-compression / resolved-DVFS baselines (the change itself). A combination is a candidate
     for a different variant definition (another fps, size, sensor mode ...): rows are ordered by
@@ -1771,7 +1908,7 @@ def explore_design_sets(spec: ArchExplorationSpec, tables: dict[str, DVFSTable],
     obj = spec.objective
     sub = spec.model_copy(update={
         "axes": spec.axes.model_copy(update={
-            "statistics": [obj.statistic], "runtime_scales": [obj.runtime_scale], "levers": [],
+            "statistics": [obj.statistic], "runtime_scales": _sub_scales(spec), "levers": [],
             "power_options": spec.axes.power_options.model_copy(update={"enabled": False}),
         }),
         "verify": False, "top_n": 1,
@@ -1780,19 +1917,24 @@ def explore_design_sets(spec: ArchExplorationSpec, tables: dict[str, DVFSTable],
     out: dict[str, Any] = {
         "status": "ok" if sets else "none", "dimensions": design.get("dimensions") or [],
         "notes": list(design.get("notes") or []), "sets": len(sets), "max_sets": spec.axes.lever_max_sets,
-        "cases": 0, "results": [], "errors": [],
+        # skipped = combinations not explored because the case budget ran out (the search is then partial)
+        "cases": 0, "results": [], "errors": [], "skipped": 0,
     }
     base_rec, base_raw, base_slice = base.get("recommended"), base["baseline"], base["objective_slice"]
     def evaluate(batch: list[dict[str, Any]]) -> bool:
         """Explore one batch of combinations; False = the case budget ran out."""
         nonlocal remaining
-        for item in batch:
+        for n, item in enumerate(batch):
             head = {"key": item["key"], "items": item["items"]}
             if item.get("error"):
                 out["errors"].append(head | {"error": str(item["error"])[:300]})
                 continue
             if remaining <= 0:
                 out["notes"].append("case budget exhausted; remaining lever combinations were skipped")
+                rest = batch[n:]
+                out["skipped"] += sum(not x.get("error") for x in rest)
+                out["errors"] += [{"key": x["key"], "items": x["items"], "error": str(x["error"])[:300]}
+                                  for x in rest if x.get("error")]
                 return False
             try:
                 r = _explore(item["graph"], sub.model_copy(update={"max_cases_per_variant": remaining}), item["config"], tables)
@@ -1869,6 +2011,9 @@ def input_hash(graph, spec, config, tables) -> str:
     spec_doc = spec.model_dump(mode="json")
     for key in LEVER_AXIS_KEYS:
         spec_doc["axes"].pop(key, None)
+    if spec.objective.by_power_only:  # an explicit power-only order ranks like no order
+        spec_doc["objective"].pop("order", None)
+        spec_doc["objective"].pop("growth_target", None)
     payload = {
         "engine": ENGINE_REV,
         "scenario": graph.scenario.id, "variant": graph.variant.id,

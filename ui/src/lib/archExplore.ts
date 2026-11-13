@@ -1,6 +1,7 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
 import type { DesignAxes } from '../components/DesignAxes'
+import type { Objectives } from '../components/ObjectiveFront'
 import type { Sensitivity } from '../components/Sensitivity'
 import type { DesignSpace } from './designSpace'
 import { API_BASE, ApiError, getJson } from './api'
@@ -66,6 +67,8 @@ export interface VariantResult {
   sensitivity?: Sensitivity
   /** S-01: lever-axis combinations explored as changed variants (runs with lever axes only) */
   design_axes?: DesignAxes
+  /** S-02: the objective order of the recommendation and the power ↔ SW growth front (runs with an order only) */
+  objectives?: Objectives
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
   /** EXP-05: power budget this variant was explored with (spec value or previous-project reference) */
   power_budget?: { mw: number | null; source: string | null; reference_mw?: number } | null
@@ -369,6 +372,9 @@ export interface RunOptions {
   options: { knobs: boolean; modes: boolean; max_sets: number }
   /** CPU term of every case: flat assumption or the variant's measured CPU profile (EAS + growth) */
   cpu_model?: 'flat' | 'profile'
+  /** S-02 recommendation rule: lowest power (default; the project policy may set another), SW growth headroom first
+   * (optionally up to a target), or IQ-keeping first */
+  prefer?: 'power' | 'growth' | 'iq'; growth_target?: number | null
   /** EXP-05: customer budget — cases above it are not recommended (null = none) */
   power_budget_mw?: number | null; bw_budget_mbs?: number | null
   /** S-04 memory limits (null = not judged): peak stage DRAM BW, DRAM held by frames in flight, LLC allocation */
@@ -400,7 +406,9 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
         ...(o.peak_bw_limit_mbs ? { peak_bw_limit_mbs: o.peak_bw_limit_mbs } : {}),
         ...(o.dram_footprint_limit_mb ? { dram_footprint_limit_mb: o.dram_footprint_limit_mb } : {}),
         ...(o.llc_capacity_mb ? { llc_capacity_mb: o.llc_capacity_mb } : {}) },
-      objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale },
+      objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale,
+        ...(o.prefer === 'growth' ? { order: ['growth', 'power'], ...(o.growth_target ? { growth_target: o.growth_target } : {}) }
+          : o.prefer === 'iq' ? { order: ['iq', 'power'] } : {}) },
       ...(o.cpu_model === 'profile' ? { timing: { cpu_model: 'profile' } } : {}),
     },
   }
