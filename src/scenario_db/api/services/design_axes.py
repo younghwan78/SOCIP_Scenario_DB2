@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from itertools import product
+from math import prod
 from typing import Any
 
 from pydantic import ValidationError
@@ -112,11 +113,22 @@ def _change_key(change: dict[str, Any]) -> str:
     return f"{change['target']}{f'[{selector}]' if selector else ''}{op}={value}{extra}"
 
 
-def build_design_plan(graph, config, levers: list[LeverAxis], prepare_sensor=None) -> dict[str, Any]:
-    """``dimensions`` (the axes as shown) and ``sets``: every combination that changes at least one lever,
-    with its changed ``graph`` / ``config`` or the ``error`` that stopped it on this variant."""
+def build_design_plan(graph, config, levers: list[LeverAxis], prepare_sensor=None, *,
+                      search: str = "exhaustive", max_sets: int = 64) -> dict[str, Any]:
+    """The lever-axis plan of one variant.
+
+    ``dimensions`` = the axes as shown; ``sets`` = combinations with their changed ``graph`` / ``config``
+    or the ``error`` that stopped the change on this variant; ``search`` = how the space is covered.
+
+    ``search="exhaustive"`` (or a space that fits ``max_sets`` anyway): every combination that changes at
+    least one lever. ``search="screen"`` on a larger space: ``sets`` holds each lever value on its own,
+    and ``expand(results, errors)`` — called by the engine once those are explored — ranks the levers by
+    the largest power change one of their values made and returns the combinations of the top levers,
+    as many levers as ``max_sets`` still allows. A value that could not be applied on its own is not
+    combined.
+    """
     dims: list[dict[str, Any]] = []
-    per_axis: list[list[tuple[dict[str, Any], str] | None]] = []
+    per_axis: list[list[tuple[dict[str, Any], str]]] = []
     for axis in levers:
         kind = CHANGE_KINDS[axis.lever]
         changes = axis_changes(axis)
@@ -124,33 +136,79 @@ def build_design_plan(graph, config, levers: list[LeverAxis], prepare_sensor=Non
         label = axis.label or (f"{kind.label} · {selector}" if selector else kind.label)
         texts = [_value_text(c) for c in changes]
         dims.append({"lever": axis.lever, "label": label, "selector": selector, "group": kind.group, "values": texts})
-        per_axis.append([None, *[(c, f"{label} {text}") for c, text in zip(changes, texts)]])
+        per_axis.append([(c, f"{label} {text}") for c, text in zip(changes, texts)])
     plan: dict[str, Any] = {"dimensions": dims, "sets": [], "notes": []}
     try:
         targets = whatif_targets(graph, config, None)
     except (LookupError, ValueError) as exc:
         plan["notes"].append(f"lever targets unavailable for this variant: {str(exc)[:200]}")
         targets = None
-    for combo in product(*per_axis):
-        chosen = [c for c in combo if c is not None]
-        if not chosen:
-            continue  # nothing changed = the variant itself
+
+    def make(chosen: list[tuple[dict[str, Any], str]]) -> dict[str, Any]:
         changes = [c for c, _ in chosen]
         items = [{"lever": c["target"], "label": text, "change": c, "iq": change_iq(c, targets)} for c, text in chosen]
-        key = " | ".join(_change_key(c) for c in changes)
-        row: dict[str, Any] = {"key": key, "items": items,
+        row: dict[str, Any] = {"key": " | ".join(_change_key(c) for c in changes), "items": items,
                                "iq": max((i["iq"] for i in items), key=lambda v: _IQ_ORDER.get(v, 0))}
         if targets is None:
             row["error"] = "lever targets unavailable for this variant"
-        else:
-            notes: list[str] = []
-            try:
-                row["graph"], row["config"], _ = apply_whatif_changes(
-                    graph, changes, config, None, notes, prepare_sensor=prepare_sensor, targets=targets)
-                row["notes"] = notes
-            except (LookupError, ValueError) as exc:
-                row["error"] = str(exc)
-        plan["sets"].append(row)
+            return row
+        notes: list[str] = []
+        try:
+            row["graph"], row["config"], _ = apply_whatif_changes(
+                graph, changes, config, None, notes, prepare_sensor=prepare_sensor, targets=targets)
+            row["notes"] = notes
+        except (LookupError, ValueError) as exc:
+            row["error"] = str(exc)
+        return row
+
+    def combos(values: list[list[tuple[dict[str, Any], str]]], at_least: int):
+        """Combinations over ``values`` (one list per axis, in axis order) that change ``at_least`` levers."""
+        for combo in product(*[[None, *axis] for axis in values]):
+            chosen = [c for c in combo if c is not None]
+            if len(chosen) >= at_least:
+                yield chosen
+
+    alone = sum(len(axis) for axis in per_axis)
+    full = prod(len(axis) + 1 for axis in per_axis) - 1
+    report: dict[str, Any] = {"mode": "exhaustive", "full_factorial": full, "one_at_a_time": alone, "combined": full - alone}
+    if search != "screen" or full <= max_sets:
+        plan["sets"] = [make(chosen) for chosen in combos(per_axis, 1)]
+        plan["search"] = report
+        return plan
+
+    plan["sets"] = [make([value]) for axis in per_axis for value in axis]
+    unranked = [{"lever": d["lever"], "label": d["label"], "impact_mw": None, "impact_pct": None, "combined": False}
+                for d in dims]
+    plan["search"] = report | {"mode": "screened", "combined": 0, "ranking": unranked}
+
+    def expand(results: list[dict[str, Any]], errors: list[dict[str, Any]]) -> dict[str, Any]:
+        by_key = {r["key"]: r for r in results}
+        # per axis: the values that could be explored on their own, and the largest change one of them made
+        usable = [[v for v in axis if _change_key(v[0]) in by_key] for axis in per_axis]
+        impact: list[tuple[float, float | None] | None] = []
+        for axis in usable:
+            rows = [by_key[_change_key(c)] for c, _ in axis]
+            pct = [abs(r["raw_delta_pct"]) for r in rows if r.get("raw_delta_pct") is not None]
+            impact.append((max(abs(r["raw_delta_mw"]) for r in rows), max(pct) if pct else None) if rows else None)
+        ranked = sorted((i for i, v in enumerate(impact) if v is not None), key=lambda i: (-impact[i][0], i))  # type: ignore[index]
+        budget, chosen = max_sets - alone, []
+        for i in ranked:
+            trial = [*chosen, i]
+            if prod(len(usable[j]) + 1 for j in trial) - 1 - sum(len(usable[j]) for j in trial) > budget:
+                break
+            chosen = trial
+        if len(chosen) < 2:
+            chosen = []  # a combination needs two levers
+        picked = [usable[i] if i in chosen else [] for i in range(len(per_axis))]
+        sets = [make(c) for c in combos(picked, 2)] if chosen else []
+        order = [*ranked, *[i for i, v in enumerate(impact) if v is None]]
+        ranking = [{"lever": dims[i]["lever"], "label": dims[i]["label"],
+                    "impact_mw": round(impact[i][0], 3) if impact[i] else None,  # type: ignore[index]
+                    "impact_pct": round(impact[i][1], 2) if impact[i] and impact[i][1] is not None else None,  # type: ignore[index]
+                    "combined": i in chosen} for i in order]
+        return {"sets": sets, "search": plan["search"] | {"combined": len(sets), "ranking": ranking}}
+
+    plan["expand"] = expand
     return plan
 
 
@@ -161,15 +219,16 @@ def needs_catalog(config) -> bool:
 
 
 def explore_with_levers(graph, spec: ArchExplorationSpec, *, config, dvfs_tables, explore=explore_variant,
-                        design: dict[str, Any] | None = None) -> dict[str, Any]:
+                        prepare_sensor=None) -> dict[str, Any]:
     """``explore_variant`` with the lever-axis plan of this variant; without lever axes the call is the
     plain one.
 
-    The plan is normally built here, where the variant is explored (also inside a pool worker), so the
-    changed graphs of all variants are never held, or pickled, at the same time. ``design`` = a plan the
-    caller already built because it needed the DB (a pinned sensor binding, see :func:`needs_catalog`)."""
+    The plan is built here, where the variant is explored (also inside a pool worker), so the changed
+    graphs of all variants are never held, or pickled, at the same time. ``prepare_sensor`` = the
+    catalog re-validation of a pinned sensor binding (see :func:`needs_catalog`); it needs the caller's
+    DB session, so such a variant is explored in the caller's process."""
     if not spec.axes.levers:
         return explore(graph, spec, config=config, dvfs_tables=dvfs_tables)
-    if design is None:
-        design = build_design_plan(graph, config, spec.axes.levers)
+    design = build_design_plan(graph, config, spec.axes.levers, prepare_sensor,
+                               search=spec.axes.lever_search, max_sets=spec.axes.lever_max_sets)
     return explore(graph, spec, config=config, dvfs_tables=dvfs_tables, design=design)

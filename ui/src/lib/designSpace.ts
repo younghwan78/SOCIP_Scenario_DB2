@@ -3,6 +3,8 @@ export interface LeverAxis { lever: string; values: unknown[]; params?: Record<s
 export interface DesignSpace {
   schema_version: string; axes: LeverAxis[]
   constraints?: Record<string, unknown>; objective?: Record<string, unknown>; evaluation?: Record<string, unknown>
+  /** re-simulation axes: cap on their combinations and what happens above it (API ≥ 2026-11-13) */
+  max_lever_sets?: number; lever_search?: 'exhaustive' | 'screen'
 }
 type Context = Pick<DesignSpace, 'constraints' | 'objective'>
 

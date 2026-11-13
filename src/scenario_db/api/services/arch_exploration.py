@@ -38,7 +38,7 @@ from scenario_db.reporting.report_package import package_zip
 from scenario_db.reporting.review_snapshot import ProjectEvidence, ReviewEvidence
 from scenario_db.comparison.measurement_selection import representative_measurement
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
-from scenario_db.api.services.design_axes import build_design_plan, explore_with_levers, needs_catalog
+from scenario_db.api.services.design_axes import explore_with_levers, needs_catalog
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.design_space import design_space_of_stored_spec
 from scenario_db.sim.power_attribution import attribute
@@ -140,8 +140,11 @@ class ExplorationCancelled(Exception):
 
 
 def _load_variant(db: Session, request: ArchExplorationRunRequest, scenario: Scenario, variant_id: str,
-                  ref_budget: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Everything one variant's exploration needs from the DB (or its load failure)."""
+                  ref_budget: dict[str, dict[str, Any]], *, release: bool = False) -> dict[str, Any]:
+    """Everything one variant's exploration needs from the DB (or its load failure).
+
+    ``release`` = the run gives its read connection back after loading: a later catalog lookup of
+    this variant (pinned sensor binding) then returns the connection again."""
     tb = TimingBudgetRequest(
         scenario_id=scenario.id, variant_id=variant_id, config=request.config,
         config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
@@ -166,27 +169,31 @@ def _load_variant(db: Session, request: ArchExplorationRunRequest, scenario: Sce
             graph, applied = _apply_options(graph, request.apply_options)
             spec = spec.model_copy(update={"axes": spec.axes.model_copy(update={
                 "power_options": spec.axes.power_options.model_copy(update={"enabled": False})})})
-        design = None
+        prepare_sensor = None
         if spec.axes.levers and needs_catalog(shim.config):
-            # a pinned sensor binding is re-validated against the catalog for every changed copy:
-            # that needs this DB session, so the plan is built now instead of where it is explored
-            from scenario_db.api.services.whatif_sensors import prepare_sensor_graph
+            # a pinned sensor binding is re-validated against the catalog for every changed copy; that
+            # needs this DB session, so the variant is explored in this process, not in a pool worker
+            from scenario_db.api.services import whatif_sensors
 
-            design = build_design_plan(graph, shim.config, spec.axes.levers,
-                                       prepare_sensor=lambda candidate, cfg: prepare_sensor_graph(db, candidate, cfg))
+            def prepare_sensor(candidate, cfg):
+                try:
+                    return whatif_sensors.prepare_sensor_graph(db, candidate, cfg)
+                finally:
+                    if release:
+                        release_read_connection(db)
     except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
         return {"scenario_id": scenario.id, "variant_id": variant_id,
                 "error": variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage="load")}
     return {"scenario_id": scenario.id, "variant_id": variant_id, "graph": graph, "tables": tables,
             "dvfs_ref": ref, "config": shim.config, "spec": spec, "budget": budget, "applied": applied,
-            "design": design}
+            "prepare_sensor": prepare_sensor}
 
 
 def _explore_item(item: dict[str, Any], max_cases: int, summary: dict[str, Any] | None = None) -> dict[str, Any]:
     if summary is None:
         spec = item["spec"].model_copy(update={"max_cases_per_variant": max_cases})
         summary = explore_with_levers(item["graph"], spec, config=item["config"], dvfs_tables=item["tables"],
-                                      explore=explore_variant, design=item.get("design"))
+                                      explore=explore_variant, prepare_sensor=item.get("prepare_sensor"))
     if item["applied"]:
         summary["applied_options"] = [{k: it.get(k) for k in ("key", "label", "kind", "iq_eval", "note")}
                                       for it in item["applied"]]
@@ -202,10 +209,9 @@ def _cases_used(summary: dict[str, Any]) -> int:
     return counts["cases"] + counts.get("option_cases", 0) + counts.get("design_cases", 0)
 
 
-def _explore_worker(graph, spec, config, tables, design=None) -> dict[str, Any]:
-    """Process-pool entry point (top level so it pickles). ``design`` = a lever-axis plan built at load
-    time (pinned sensor binding); otherwise the worker builds the plan itself."""
-    return explore_with_levers(graph, spec, config=config, dvfs_tables=tables, explore=explore_variant, design=design)
+def _explore_worker(graph, spec, config, tables) -> dict[str, Any]:
+    """Process-pool entry point (top level so it pickles); the worker builds the lever-axis plan itself."""
+    return explore_with_levers(graph, spec, config=config, dvfs_tables=tables, explore=explore_variant)
 
 
 def _exploration_workers(n: int) -> int:
@@ -232,7 +238,8 @@ def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick,
     in-process, so a result never depends on the deployment's process limits or pickling.
     """
     budget = _MAX_RUN_CASES if budget is None else budget
-    todo = [(i, it) for i, it in enumerate(items) if "error" not in it]
+    # a variant that needs the caller's DB session (pinned sensor binding + lever axes) stays in-process
+    todo = [(i, it) for i, it in enumerate(items) if "error" not in it and it.get("prepare_sensor") is None]
     workers = _exploration_workers(len(todo))
     if workers <= 1 or len(todo) < 3:
         return {}
@@ -250,8 +257,7 @@ def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick,
                     while queue and len(running) < workers and used + max_cases * (len(running) + 1) <= budget:
                         i, it = queue.pop(0)
                         spec = it["spec"].model_copy(update={"max_cases_per_variant": max_cases})
-                        running[pool.submit(_explore_worker, it["graph"], spec, it["config"], it["tables"],
-                                            *([it["design"]] if it.get("design") is not None else []))] = i
+                        running[pool.submit(_explore_worker, it["graph"], spec, it["config"], it["tables"])] = i
                     if not running:
                         break  # less than one variant cap left: the caller explores the rest in plan order
                     done, _ = wait(running, return_when=FIRST_COMPLETED)
@@ -314,7 +320,8 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     dvfs_ref: str | None = None
     ref_budget = _reference_budgets(db, scenarios[0].project_ref) if request.power_budget_from_reference else {}
     # 1) resolve every variant's inputs while the read transaction is open (DB work, in plan order)
-    items = [_load_variant(db, request, scenario, variant_id, ref_budget) for scenario, variant_id in plan]
+    items = [_load_variant(db, request, scenario, variant_id, ref_budget, release=release_connection and commit)
+             for scenario, variant_id in plan]
     # The public create route owns its read transaction. Registration
     # and recomputation callers retain their locks/transaction by default.
     if release_connection and commit:
