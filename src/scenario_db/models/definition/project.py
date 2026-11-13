@@ -89,6 +89,9 @@ class ReviewPolicy(BaseScenarioModel):
     kpi: list[KpiVariant] = Field(default_factory=list, max_length=40)
     # SW-03: SW growth the next project must absorb (shown on the summary; ×1.0 = none declared)
     sw_growth_budget: float | None = Field(default=None, ge=1.0, le=3.0)
+    # exploration recommendation: what it prefers, most important first (power / growth / iq / bw);
+    # None = lowest power (previous behaviour). With "growth", sw_growth_budget is the growth to reach.
+    objective_order: list[Literal["power", "growth", "iq", "bw"]] | None = Field(default=None, min_length=1, max_length=4)
     # sustained AP + mem battery current rule (thermal); None = previous behaviour (thermal_watch −10 / −20 % only)
     sustained_current: SustainedCurrent | None = None
     # IP node (glob, e.g. "front_*", "mfc*") -> report power group; overrides the built-in node-name rules

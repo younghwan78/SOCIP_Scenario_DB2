@@ -232,10 +232,46 @@ class ExplorationConstraints(BaseScenarioModel):
         return data
 
 
+ObjectiveName = Literal["power", "growth", "iq", "bw"]
+
+
+def _power_only() -> list[ObjectiveName]:
+    return ["power"]
+
+
 class ExplorationObjective(BaseScenarioModel):
     statistic: Statistic = "max"
     runtime_scale: float = Field(default=1.0, gt=0, le=10)
     tie_pct: float = Field(default=1.0, ge=0, le=10)
+    # What the recommendation prefers, most important first (lexicographic; power always decides last).
+    #   power  = lowest total power (the only objective by default: the previous recommendation)
+    #   growth = SW growth the case's own DVFS levels absorb without re-selection (robustness);
+    #            with ``growth_target`` a case that reaches the target is enough, otherwise more is better
+    #   iq     = lowest IQ risk (no compression < lossless < assumed ratio < lossy)
+    #   bw     = lowest DRAM traffic
+    order: list[ObjectiveName] = Field(default_factory=_power_only, min_length=1, max_length=4)
+    growth_target: float | None = Field(default=None, ge=1.0, le=10)
+
+    @model_validator(mode="after")
+    def _order(self) -> ExplorationObjective:
+        if len(set(self.order)) != len(self.order):
+            raise ValueError("objective order lists an objective twice")
+        if self.growth_target is not None and "growth" not in self.order:
+            raise ValueError("growth_target needs \"growth\" in the objective order")
+        return self
+
+    @property
+    def by_power_only(self) -> bool:
+        return self.order == ["power"]
+
+    @model_serializer(mode="wrap")
+    def _omit_default_order(self, handler):
+        # the default objective dumps as before, so earlier specs keep their input hash
+        data = handler(self)
+        if self.by_power_only:
+            data.pop("order", None)
+            data.pop("growth_target", None)
+        return data
 
 
 class ArchExplorationSpec(BaseScenarioModel):
@@ -359,7 +395,15 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
                 if s is obj_slice:
                     cases_obj.append(case)
 
-    ranked = _rank([c for c in cases_obj if c["eligible"]], obj.tie_pct)
+    eligible_obj = [c for c in cases_obj if c["eligible"]]
+    by_power = _rank(eligible_obj, obj.tie_pct)
+    if obj.by_power_only:
+        ranked = by_power
+    else:
+        growth_of = _growth_by_dvfs(slices, obj)
+        for c in eligible_obj:
+            c["growth_fixed"] = growth_of(c)
+        ranked = _rank_by(eligible_obj, obj)
     recommended = ranked[0] if ranked else None
     alternatives = _distinct(ranked[1:], spec.top_n, seen={_sig(recommended)} if recommended else None)
     pareto = [c for c in _pareto(ranked) if recommended is None or c["key"] != recommended["key"]][: spec.top_n * 2]
@@ -435,6 +479,8 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "design_points": [_point(c) for c in cases_obj if not c["dvfs_raise"]],
         "sw_band_mw": _sw_band(slices, obj_slice),
     }
+    if not obj.by_power_only:
+        summary["objectives"] = _objectives(obj, ranked, by_power)
     # compact copy for list views (the run table reads it without the whole tiers block)
     keep = (summary["tiers"].get("keep") or {}).get("best")
     summary["keep_total_mw"] = keep["total_mw"] if keep else None
@@ -1269,6 +1315,69 @@ def _rank(cases: list[dict[str, Any]], tie_pct: float) -> list[dict[str, Any]]:
                 len(c["compression"]), c["dvfs_raise"], c["total_mw"])
 
     return sorted(cases, key=key)
+
+
+def _growth_by_dvfs(slices: list[dict[str, Any]], obj: ExplorationObjective):
+    """case -> SW growth its DVFS levels absorb when they are held (see :func:`_fixed_growth`); 0.0 when
+    not even the objective growth holds. Depends on the DVFS levels only, so it is computed once per set."""
+    seen: dict[tuple, float] = {}
+
+    def growth(case: dict[str, Any]) -> float:
+        key = tuple(sorted(case["dvfs"].items()))
+        if key not in seen:
+            seen[key] = _fixed_growth(slices, obj, case)["growth_tolerance_fixed"] or 0.0
+        return seen[key]
+    return growth
+
+
+def _rank_by(cases: list[dict[str, Any]], obj: ExplorationObjective) -> list[dict[str, Any]]:
+    """Lexicographic order over ``obj.order``; power, then the default tie-breakers, decide last.
+    Cases carry ``growth_fixed``. Power is compared exactly here (``tie_pct`` belongs to the default rule)."""
+    target = obj.growth_target
+
+    def term(name: str, c: dict[str, Any]) -> tuple:
+        if name == "growth":
+            g = c["growth_fixed"]
+            return (0, 0.0) if target is not None and g >= target else (1, -g) if target is not None else (0, -g)
+        if name == "iq":
+            return (_iq_risk(c),)
+        if name == "bw":
+            return (c["bw_mbs"],)
+        return (c["total_mw"],)
+
+    def key(c: dict[str, Any]) -> tuple:
+        return (*[term(name, c) for name in obj.order], c["total_mw"], c["bw_mbs"], len(c["compression"]), c["dvfs_raise"])
+    return sorted(cases, key=key)
+
+
+def _objectives(obj: ExplorationObjective, ranked: list[dict[str, Any]], by_power: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the objective order chose, next to the lowest-power case and the power cost of robustness.
+
+    ``front`` = for every SW growth level some eligible case absorbs, the cheapest case that absorbs at
+    least that much (power vs growth trade-off)."""
+    def point(c: dict[str, Any], floor: float | None = None) -> dict[str, Any]:
+        base = by_power[0]["total_mw"]
+        return {"key": c["key"], "total_mw": round(c["total_mw"], 2), "growth_fixed": c["growth_fixed"],
+                "bw_mbs": round(c["bw_mbs"], 2), "iq_risk": _iq_risk(c), "dvfs_raise": c["dvfs_raise"],
+                "delta_mw": round(c["total_mw"] - base, 2), **({"growth_at_least": floor} if floor is not None else {})}
+
+    out: dict[str, Any] = {"order": list(obj.order), "growth_target": obj.growth_target,
+                           "recommended": None, "min_power": None, "front": [], "target_met": None}
+    if not ranked:
+        return out
+    out["recommended"], out["min_power"] = point(ranked[0]), point(by_power[0])
+    if obj.growth_target is not None:
+        out["target_met"] = ranked[0]["growth_fixed"] >= obj.growth_target
+    front: list[dict[str, Any]] = []
+    for level in sorted({c["growth_fixed"] for c in ranked}):
+        cheapest = min((c for c in ranked if c["growth_fixed"] >= level),
+                       key=lambda c: (c["total_mw"], c["bw_mbs"], len(c["compression"]), c["dvfs_raise"]))
+        if front and front[-1]["key"] == cheapest["key"]:
+            front[-1] = point(cheapest, level)  # the same case also covers this higher level
+        else:
+            front.append(point(cheapest, level))
+    out["front"] = front
+    return out
 
 
 def _sig(c: dict[str, Any]) -> tuple:

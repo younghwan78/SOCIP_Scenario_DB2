@@ -28,6 +28,19 @@ describe('customer budget (EXP-05)', () => {
   })
 })
 
+describe('recommendation rule', () => {
+  type Body = { spec: { objective: Record<string, unknown> } }
+  it('sends no order by default, so the project policy can decide', () => {
+    expect((runBody(['s'], '', '', DEFAULT_RUN) as Body).spec.objective).toEqual({ statistic: 'max', runtime_scale: 1.0 })
+    expect((runBody(['s'], '', '', { ...DEFAULT_RUN, prefer: 'power', growth_target: 1.2 }) as Body).spec.objective).toEqual({ statistic: 'max', runtime_scale: 1.0 })
+  })
+  it('sends the order for growth-first (with an optional target) and IQ-first', () => {
+    expect((runBody(['s'], '', '', { ...DEFAULT_RUN, prefer: 'growth' }) as Body).spec.objective).toEqual({ statistic: 'max', runtime_scale: 1.0, order: ['growth', 'power'] })
+    expect((runBody(['s'], '', '', { ...DEFAULT_RUN, prefer: 'growth', growth_target: 1.2 }) as Body).spec.objective).toEqual({ statistic: 'max', runtime_scale: 1.0, order: ['growth', 'power'], growth_target: 1.2 })
+    expect((runBody(['s'], '', '', { ...DEFAULT_RUN, prefer: 'iq', growth_target: 1.2 }) as Body).spec.objective).toEqual({ statistic: 'max', runtime_scale: 1.0, order: ['iq', 'power'] })
+  })
+})
+
 describe('compression defaults', () => {
   it('explores lossless and lossy like the backend and counts off + each mode per buffer', () => {
     const body = runBody(['s'], '', '', DEFAULT_RUN) as { spec: { axes: { compression: { modes: string[] } } } }

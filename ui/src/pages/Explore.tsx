@@ -2,6 +2,7 @@ import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { CandidateReview } from '../components/CandidateReview'
 import { DesignAxesTable } from '../components/DesignAxes'
+import { ObjectiveFront } from '../components/ObjectiveFront'
 import { DesignSpaceSummary } from '../components/DesignSpaceSummary'
 import { experimentHref } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
@@ -188,7 +189,14 @@ function RunForm({ ctx }: { ctx: Ctx }) {
             <div className="seg sm">{(['max', 'mean'] as Statistic[]).map((s) => <button key={s} className={o.objective_statistic === s ? 'on' : ''} onClick={() => set('objective_statistic', s)}>SW {s}</button>)}</div>
             <span className="faint" style={{ fontSize: 12 }}>× 증가</span>
             <div className="seg sm">{[1.0, 1.1, 1.2].map((s) => <button key={s} className={o.objective_scale === s ? 'on' : ''} onClick={() => set('objective_scale', s)}>×{s.toFixed(1)}</button>)}</div>
-            <span className="faint" style={{ fontSize: 12 }}>= eligible 중 최저 total power</span></div>
+            <span className="faint" style={{ fontSize: 12 }}>에서</span>
+            <div className="seg sm" role="group" aria-label="추천 우선순위">{([['power', '최저 power'], ['growth', 'SW 증가 여유 우선'], ['iq', 'IQ 유지 우선']] as const).map(([k, label]) =>
+              <button key={k} className={(o.prefer ?? 'power') === k ? 'on' : ''} onClick={() => set('prefer', k)}>{label}</button>)}</div>
+            {o.prefer === 'growth' && <label className="faint" style={{ fontSize: 12 }}>목표 ×<input className="input" type="number" min={1} max={3} step={0.1} placeholder="최대"
+              aria-label="목표 SW 증가 배율" value={o.growth_target ?? ''} style={{ width: 70, marginLeft: 4 }}
+              onChange={(e) => set('growth_target', Number(e.target.value) >= 1 ? Number(e.target.value) : null)} /></label>}
+            <span className="faint" style={{ fontSize: 12 }}>{(o.prefer ?? 'power') === 'power' ? 'eligible 중 최저 total power (과제 정책에 추천 기준이 있으면 그 기준)'
+              : o.prefer === 'growth' ? 'DVFS level을 고정한 채 흡수하는 SW 증가가 큰 조합 먼저, 같으면 최저 power' : '압축 없음 → lossless → lossy 순, 같으면 최저 power'}</span></div>
           <div className="ax-row"><span className="ax-label">Power option</span>
             <label className="ax-check"><input type="checkbox" checked={o.options.knobs} onChange={() => set('options', { ...o.options, knobs: !o.options.knobs })} />arch knob (bcrop, L0 skip …)</label>
             <label className="ax-check" title="IP catalog sim.modes 중 현재 mode를 대체(substitutes)할 수 있는 mode를 unit power·ppc로 재시뮬레이션"><input type="checkbox" checked={o.options.modes} onChange={() => set('options', { ...o.options, modes: !o.options.modes })} />IP mode (대체 가능 mode · unit power별)</label>
@@ -463,7 +471,10 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
     </Card>
  <Card id="ax-tiers" title={`${short(v.variant_id)} — 화질·성능 유지 최적 범위 vs Power 우선 메뉴`} note="A = lossy · IQ option 없이 timing 만족 최저 + 최저 +3% 이내 평가 조합 · B = 화질을 희생할 때 항목별 단독 효과" defaultWide>
       <TiersView v={v} battery={battery} /></Card>
- {v.design_axes && <Card id="ax-design" title="레버 축 조합 (변경한 variant 재탐색)" note="크기 · fps · 센서 · LLC 같은 What-if 레버를 축으로 준 run에서, 조합마다 이 variant를 바꿔 다시 탐색한 결과" defaultWide>
+ {v.objectives && <Card id="ax-objectives" title="추천 기준과 power ↔ SW 증가 여유" note="추천이 최저 power가 아닌 기준으로 정해진 run: 무엇을 우선했고 그 대가가 몇 mW인지" defaultWide>
+        <ObjectiveFront data={v.objectives} />
+      </Card>}
+      {v.design_axes && <Card id="ax-design" title="레버 축 조합 (변경한 variant 재탐색)" note="크기 · fps · 센서 · LLC 같은 What-if 레버를 축으로 준 run에서, 조합마다 이 variant를 바꿔 다시 탐색한 결과" defaultWide>
         <DesignAxesTable data={v.design_axes} baseMw={v.recommended?.total_mw ?? null} />
       </Card>}
       {v.power_options && <Card id="ax-options" title="Power option 조합 (IQ 평가 대상)" note={`${OPTION_NOTE}${(v.power_options.fixed ?? []).length ? ' · 고정 대비 = 항상 이득인 option을 고정했을 때 나머지 option의 추가 효과' : ''}`} defaultWide>

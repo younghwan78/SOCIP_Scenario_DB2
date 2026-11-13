@@ -78,6 +78,20 @@ their existing recorded-review behavior.
   (`counts.design_cases`, run summary `design_axes`). Not explorable as an axis:
   `compression`, `dvfs_level` (searched per case by the built-in levers), `node_param`,
   `sensor_binding`; any other lever id is unknown.
+  `spec.objective.order` says what the recommendation prefers, most important first:
+  `power` (default, the only objective: lowest total power), `growth` (SW growth the
+  case's own DVFS levels absorb without re-selection; with `growth_target` a case that
+  reaches it is enough, otherwise more is better), `iq` (no compression < lossless <
+  assumed ratio < lossy), `bw`. Power always decides last. Without an order in the
+  request the project policy `review_policy.objective_order` applies (its
+  `sw_growth_budget` is the growth target); the resolved order is stored in the run spec.
+  The default order is left out of the spec dump, so earlier requests keep their
+  `input_hash`; another order is part of it. With a non-default order the variant
+  carries `objectives`: `order`, `growth_target`, `target_met`, `recommended` and
+  `min_power` (`key`, `total_mw`, `growth_fixed`, `bw_mbs`, `iq_risk`, `dvfs_raise`,
+  `delta_mw` over the lowest power) and `front[]` — per SW growth level the cheapest
+  eligible case that absorbs at least that much (`growth_at_least`). Eligible cases
+  then also carry `growth_fixed`. Default registration (`register_baseline`) is unchanged.
 - `GET /arch/exploration/levers`: the lever catalog — built-in levers (`source: builtin`,
   the default values) and every What-if change kind (`source: whatif`, `evaluation: resim`),
   each with `explorable`. Per-variant instances of a change kind come from the What-if

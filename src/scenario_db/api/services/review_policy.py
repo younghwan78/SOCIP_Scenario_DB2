@@ -38,6 +38,18 @@ def apply_throughput(options: T, policy: ReviewPolicy | None) -> T:
     return options.model_copy(update={"throughput_model": policy.throughput_model})
 
 
+def apply_objective(objective: T, policy: ReviewPolicy | None) -> T:
+    """Fill the recommendation order from the project policy unless the request set one. With "growth"
+    in the order the project's ``sw_growth_budget`` (> x1.0) is the growth to reach."""
+    if policy is None or not policy.objective_order or "order" in objective.model_fields_set:
+        return objective
+    update: dict[str, Any] = {"order": list(policy.objective_order)}
+    budget = policy.sw_growth_budget
+    if "growth" in policy.objective_order and "growth_target" not in objective.model_fields_set and budget and budget > 1.0:
+        update["growth_target"] = budget
+    return type(objective).model_validate(objective.model_dump() | update)
+
+
 def policy_view(policy: ReviewPolicy | None) -> dict[str, Any]:
     if policy is None:
         return {"declared": False, "throughput_model": "stage", "max_latency_frames": None,
