@@ -1344,11 +1344,17 @@ def option_snapshot(po: dict[str, Any] | None, case: dict[str, Any], rule: str) 
         for d in po.get("dimensions") or []
     ]
     out["results"] = po.get("results") or []
-    out["reference"] = {"rule": rule, "case_key": case.get("key"),
-                        "note": None if rule == "auto:min-power" else
-                        "option deltas are relative to the min-power (lossy allowed) case, not the registered IQ-keeping case"
-                        if rule == "auto:min-power-iq" else
-                        "option deltas are relative to the auto (min-power) case, not the selected case"}
+    reference_key = po.get("reference_key")  # set only with an objective order: the deltas' reference case
+    if reference_key is not None:
+        note = (None if reference_key == case.get("key") else
+                "option deltas are relative to the objective-order recommendation, not the registered case")
+    elif rule == "auto:min-power":
+        note = None
+    elif rule == "auto:min-power-iq":
+        note = "option deltas are relative to the min-power (lossy allowed) case, not the registered IQ-keeping case"
+    else:
+        note = "option deltas are relative to the auto (min-power) case, not the selected case"
+    out["reference"] = {"rule": rule, "case_key": case.get("key"), "note": note}
     return out
 
 

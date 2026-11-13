@@ -86,6 +86,15 @@ it('says whether every combination was explored, and which levers were only trie
   table.done()
 })
 
+it('never reads as the full search when the case budget stopped it', () => {
+  const cut = render(<DesignAxesTable data={{ ...data, skipped: 5, search: { mode: 'exhaustive', full_factorial: 5, one_at_a_time: 5, combined: 0 } }} baseMw={758.44} />)
+  const text = cut.host.querySelector('.dax-search')!.textContent!
+  expect(text).toContain('부분 탐색')
+  expect(text).not.toContain('전수 탐색')
+  expect(text).toContain('case 예산 소진으로 5개 조합은 탐색하지 못했습니다')
+  cut.done()
+})
+
 it('says so when the variant has no recommended case to compare with, or nothing applied', () => {
   const none = render(<DesignAxesTable data={{ ...data, results: [], status: 'failed' }} baseMw={null} />)
   expect(none.host.querySelector('table')).toBeNull()

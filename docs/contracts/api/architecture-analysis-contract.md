@@ -85,13 +85,22 @@ their existing recorded-review behavior.
   assumed ratio < lossy), `bw`. Power always decides last. Without an order in the
   request the project policy `review_policy.objective_order` applies (its
   `sw_growth_budget` is the growth target); the resolved order is stored in the run spec.
-  The default order is left out of the spec dump, so earlier requests keep their
-  `input_hash`; another order is part of it. With a non-default order the variant
-  carries `objectives`: `order`, `growth_target`, `target_met`, `recommended` and
-  `min_power` (`key`, `total_mw`, `growth_fixed`, `bw_mbs`, `iq_risk`, `dvfs_raise`,
-  `delta_mw` over the lowest power) and `front[]` — per SW growth level the cheapest
-  eligible case that absorbs at least that much (`growth_at_least`). Eligible cases
-  then also carry `growth_fixed`. Default registration (`register_baseline`) is unchanged.
+  The default order is left out of the input hash (and of the spec dump unless the
+  request set it, so a queued job replays an explicit `["power"]` instead of falling back
+  to the policy), so earlier requests keep their `input_hash`; another order is part of
+  it. With a non-default order the variant carries `objectives`: `order`,
+  `growth_target`, `target_met`, `recommended` and `min_power` (`key`, `total_mw`,
+  `growth_fixed`, `bw_mbs`, `iq_risk`, `dvfs_raise`, `delta_mw` over the lowest power)
+  and `front[]` — per SW growth level the cheapest eligible case that absorbs at least
+  that much (`growth_at_least`), plus the full `min_power_case` (re-simulated when
+  `verify`). Eligible cases then also carry `growth_fixed`. Power-option and lever-axis
+  sets keep every growth slice when `growth` is in the order, so their deltas compare
+  recommendations ranked the same way (`power_options.reference_key` = the variant's
+  recommendation). Default registration (`register_baseline`) is unchanged: without a
+  `case_key` it registers the lowest-power case (`auto:min-power`) or the IQ-keeping one;
+  the objective-order recommendation is registered by its key (`auto:objective`).
+  Lever-axis results carry `skipped` = combinations the case budget left unexplored
+  (the search is then partial whatever `search.mode` says).
 - `GET /arch/exploration/levers`: the lever catalog — built-in levers (`source: builtin`,
   the default values) and every What-if change kind (`source: whatif`, `evaluation: resim`),
   each with `explorable`. Per-variant instances of a change kind come from the What-if

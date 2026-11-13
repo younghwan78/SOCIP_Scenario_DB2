@@ -48,6 +48,7 @@ export function ObjectiveFront({ data }: { data: Objectives }) {
     <div className="faint" style={{ fontSize: 12 }}>
       SW 증가 여유 = 그 조합의 DVFS level을 그대로 둔 채 흡수하는 SW runtime 증가 (탐색한 증가 배율 단위). 행 = 그 여유를 내는 가장 싼 조합.
       {rec.key !== low.key && !data.front.some((p) => p.key === rec.key) ? ' 추천 조합은 다른 기준(IQ · BW)이 앞서 이 표의 행과 다를 수 있습니다.' : ''}
+      {same ? '' : ' 일괄 등록은 최저 power 조합(또는 과제 정책의 IQ 유지 조합)을 등록합니다 — 추천 조합은 조합을 골라 등록 (규칙 auto:objective).'}
     </div>
   </div>
 }

@@ -61,7 +61,8 @@ def test_the_default_objective_is_power_only_and_dumps_as_before(graph, tables, 
     assert "objectives" not in plain and "growth_fixed" not in plain["recommended"]
     # writing the default order out changes neither the result nor the input hash
     explicit = _run(graph, tables, order=["power"])
-    assert canonical_json(explicit) == canonical_json(plain)
+    assert canonical_json({k: v for k, v in explicit.items() if k != "objective"}) == canonical_json(
+        {k: v for k, v in plain.items() if k != "objective"})
     config = SimulationRunConfig()
     assert input_hash(graph, _spec(order=["power"]), config, tables) == input_hash(graph, _spec(), config, tables)
     # ... and a different order is part of what decides the result
@@ -146,6 +147,43 @@ def test_rank_by_is_lexicographic_with_the_target_as_a_threshold():
     assert order(order=["iq", "power"]) == ["cheap", "mid", "robust", "lossy"]
     assert order(order=["iq", "growth"]) == ["robust", "mid", "cheap", "lossy"]
     assert order(order=["power", "growth"]) == ["lossy", "cheap", "mid", "robust"]
+
+
+def test_an_explicit_power_order_survives_a_request_replay():
+    # a job stores the request with exclude_unset and validates it again in the worker: an explicit
+    # ["power"] must stay set there, or the project policy would replace it
+    explicit = ExplorationObjective.model_validate({"order": ["power"]})
+    replayed = ExplorationObjective.model_validate(explicit.model_dump(mode="json", exclude_unset=True))
+    assert replayed.order == ["power"] and "order" in replayed.model_fields_set
+    assert "order" not in ExplorationObjective().model_dump()
+
+
+def test_the_default_registration_stays_the_lowest_power_case(plain, robust):
+    low, rule = ax.find_case(robust, None)
+    assert rule == "auto:min-power" and low["key"] == plain["recommended"]["key"]
+    assert low["key"] != robust["recommended"]["key"]
+    rec, rule = ax.find_case(robust, robust["recommended"]["key"])
+    assert rule == "auto:objective" and rec["key"] == robust["recommended"]["key"]
+    assert ax.find_case(plain, None) == (plain["recommended"], "auto:min-power")
+
+
+def _same_variant_set(graph):
+    return {"dimensions": [], "sets": [{"key": "fps=60", "items": [{"key": "fps=60", "label": "fps 60"}],
+                                        "graph": graph, "config": SimulationRunConfig()}]}
+
+
+def test_a_lever_set_is_ranked_by_the_same_objective(graph, tables, robust):
+    # re-applying what the variant already is must not read as a saving: the set is ranked by growth as well
+    spec = _spec(order=["growth", "power"])
+    out = ax.explore_design_sets(spec, tables, robust, _same_variant_set(graph), spec.max_cases_per_variant)
+    row = out["results"][0]
+    assert row["raw_delta_mw"] == pytest.approx(0, abs=0.01) and row["delta_mw"] == pytest.approx(0, abs=0.01)
+    assert out["skipped"] == 0
+
+
+def test_lever_sets_left_by_the_case_budget_are_counted(graph, tables, plain):
+    out = ax.explore_design_sets(_spec(), tables, plain, _same_variant_set(graph), 0)
+    assert out["results"] == [] and out["skipped"] == 1
 
 
 def test_the_order_travels_through_the_design_space():
