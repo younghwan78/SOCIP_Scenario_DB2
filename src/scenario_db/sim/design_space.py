@@ -84,8 +84,10 @@ class DesignSpace(BaseScenarioModel):
     constraints: ExplorationConstraints = Field(default_factory=ExplorationConstraints)
     objective: ExplorationObjective = Field(default_factory=ExplorationObjective)
     evaluation: EvaluationOptions = Field(default_factory=EvaluationOptions)
-    # cap on the combinations of the re-simulation axes (each one is a full exploration)
+    # cap on the combinations of the re-simulation axes (each one is a full exploration), and what to
+    # do with a larger space: refuse it ("exhaustive") or screen the levers and combine the top ones
     max_lever_sets: int = Field(default=64, ge=1, le=256)
+    lever_search: Literal["exhaustive", "screen"] = "exhaustive"
 
     @model_validator(mode="after")
     def _unique_builtin(self) -> DesignSpace:
@@ -126,6 +128,7 @@ def design_space_from_spec(spec: ArchExplorationSpec) -> DesignSpace:
         constraints=spec.constraints,
         objective=spec.objective,
         max_lever_sets=axes.lever_max_sets,
+        lever_search=axes.lever_search,
         evaluation=EvaluationOptions(
             timing=spec.timing, top_n=spec.top_n, max_cases_per_variant=spec.max_cases_per_variant,
             verify=spec.verify, verify_tolerance_pct=spec.verify_tolerance_pct),
@@ -183,6 +186,7 @@ def spec_from_design_space(space: DesignSpace, *, explorable: Collection[str] | 
         "statistics": [objective.statistic], "runtime_scales": [objective.runtime_scale], "eis": "auto",
         "dvfs_headroom_levels": 0, "compression": CompressionAxis(enabled=False),
         "power_options": PowerOptionAxis(enabled=False), "levers": other, "lever_max_sets": space.max_lever_sets,
+        "lever_search": space.lever_search,
     }
     for lever, key in (("sw_statistic", "statistics"), ("sw_growth", "runtime_scales")):
         if lever in by_id:

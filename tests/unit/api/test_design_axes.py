@@ -239,37 +239,119 @@ def test_the_plan_hands_the_catalog_preparation_to_every_changed_copy(monkeypatc
     assert seen[-2:] == [prepare, prepare] and all("error" not in s and s["graph"] is graph for s in prepared["sets"])
 
 
-def test_the_run_builds_that_plan_at_load_time_with_its_session(monkeypatch, graph):
-    db, calls = MagicMock(), {}
+def test_a_pinned_variant_is_explored_in_process_with_the_runs_session(monkeypatch, graph):
+    db, calls = MagicMock(), {"released": 0}
     monkeypatch.setattr(analysis_inputs, "_apply_config_profile", lambda *a: None)
     monkeypatch.setattr(analysis_inputs.AnalysisSelection, "load",
                         lambda selection, db: analysis_inputs.AnalysisInputs(graph, {}, "dvfs-test"))
     monkeypatch.setattr(whatif_sensors, "prepare_sensor_graph", lambda session, candidate, config: ("prepared", session))
-    stub = {"dimensions": [], "sets": [], "notes": ["built at load"]}
-
-    def build(base, config, levers, prepare_sensor=None):
-        calls["build"] = (base, [a.lever for a in levers], prepare_sensor("candidate", config))
-        return stub
-    monkeypatch.setattr(svc, "build_design_plan", build)
+    monkeypatch.setattr(svc, "release_read_connection", lambda session: calls.__setitem__("released", calls["released"] + 1))
     scenario = SimpleNamespace(id="uc-cam-recording-e2600", project_ref="proj-a")
     request = ArchExplorationRunRequest.model_validate({
         "scenario_ids": [scenario.id], "config": {"sensor_modes": {"sensor_rear": BINDING}},
         "spec": {"axes": NARROW | {"levers": [{"lever": "fps", "values": [24]}]}, "verify": False}})
-    item = svc._load_variant(db, request, scenario, VARIANT, {})
-    # the changed copies are re-validated through the run's own session, while it is open
-    assert item["design"] is stub and calls["build"] == (graph, ["fps"], ("prepared", db))
+    item = svc._load_variant(db, request, scenario, VARIANT, {}, release=True)
+    # a changed copy is re-validated through the run's own session, which is given back afterwards
+    assert item["prepare_sensor"]("candidate", item["config"]) == ("prepared", db) and calls["released"] == 1
+    kept = svc._load_variant(db, request, scenario, VARIANT, {})  # registration callers keep their transaction
+    assert kept["prepare_sensor"]("candidate", kept["config"]) == ("prepared", db) and calls["released"] == 1
+
+    seen = {}
 
     def explore(base, spec, **kw):
-        calls["explore"] = kw.get("design")
+        seen.update(kw)
         return {"counts": {"cases": 1}}
-    monkeypatch.setattr(svc, "explore_variant", explore)
+    monkeypatch.setattr(svc, "explore_with_levers", explore)
     svc._explore_item(item, 100)
-    assert calls["explore"] is stub
-    svc._explore_worker(item["graph"], item["spec"], item["config"], item["tables"], item["design"])
-    assert calls["explore"] is stub
-    # without a pinned binding nothing is built at load: the plan is made where the variant is explored
+    assert seen["prepare_sensor"] is item["prepare_sensor"]
+    # the closure holds the session: such a variant is never sent to a pool worker
+    assert svc._explore_parallel([item, item, item, item], 100, lambda variant_id: None) == {}
+    # without a pinned binding, or without lever axes, nothing needs the session
     plain = request.model_copy(update={"config": SimulationRunConfig()})
-    assert svc._load_variant(db, plain, scenario, VARIANT, {})["design"] is None
-    # ... and without lever axes there is no plan at all, pinned or not
+    assert svc._load_variant(db, plain, scenario, VARIANT, {})["prepare_sensor"] is None
     no_levers = request.model_copy(update={"spec": _spec()})
-    assert svc._load_variant(db, no_levers, scenario, VARIANT, {})["design"] is None
+    assert svc._load_variant(db, no_levers, scenario, VARIANT, {})["prepare_sensor"] is None
+
+
+# ------------------------------------------------------------------- screening
+WIDE = [
+    {"lever": "fps", "values": [24, 60]},
+    {"lever": "llc_alloc", "params": {"buffer_id": "PYRAMID_L0"}, "values": ["off"]},
+    {"lever": "history_interval", "params": {"buffer_id": "TNR_PREV_L0"}, "values": [2]},
+    {"lever": "power_knob", "params": {"param": "pyramid_l0"}, "values": ["skip"]},
+]  # 3 x 2 x 2 x 2 - 1 = 23 combinations, 5 single values
+
+
+def _screen(levers, cap):
+    return _spec(levers, lever_search="screen", lever_max_sets=cap)
+
+
+@pytest.fixture(scope="module")
+def screened(graph):
+    return explore_with_levers(graph, _screen(WIDE, 9), config=SimulationRunConfig(), dvfs_tables={})["design_axes"]
+
+
+def test_screening_tries_every_value_alone_then_combines_the_top_levers(graph, screened):
+    search = screened["search"]
+    assert search["mode"] == "screened" and search["full_factorial"] == 23 and search["one_at_a_time"] == 5
+    ranking = search["ranking"]
+    # ordered by the largest power change one value of the lever made on its own
+    impacts = [r["impact_mw"] for r in ranking]
+    assert impacts == sorted(impacts, reverse=True) and ranking[0]["lever"] == "fps"
+    alone = {r["key"]: r for r in screened["results"] if " | " not in r["key"]}
+    assert len(alone) == 5
+    assert ranking[0]["impact_mw"] == pytest.approx(max(abs(alone["fps=24"]["raw_delta_mw"]), abs(alone["fps=60"]["raw_delta_mw"])))
+    # 9 - 5 = 4 combinations left: the top two levers give 2, a third lever would need 7
+    assert [r["combined"] for r in ranking] == [True, True, False, False] and search["combined"] == 2
+    second = ranking[1]["lever"]
+    combined = [r["key"] for r in screened["results"] if " | " in r["key"]]
+    assert len(combined) == 2 and all(k.startswith("fps=") and second in k for k in combined)
+    assert screened["sets"] == 7 and len(screened["results"]) == 7 and not screened["errors"]
+
+
+def test_a_screened_row_is_the_same_row_the_exhaustive_search_gives(graph, screened):
+    full = explore_with_levers(graph, _spec(WIDE), config=SimulationRunConfig(), dvfs_tables={})["design_axes"]
+    assert full["search"] == {"mode": "exhaustive", "full_factorial": 23, "one_at_a_time": 5, "combined": 18}
+    assert full["sets"] == 23
+    by_key = {r["key"]: r for r in full["results"]}
+    assert all(canonical_json(by_key[r["key"]]) == canonical_json(r) for r in screened["results"])
+
+
+def test_screening_a_space_that_fits_is_the_exhaustive_search(graph, explored):
+    fits = explore_with_levers(graph, _screen(LEVERS, 64), config=SimulationRunConfig(), dvfs_tables={})["design_axes"]
+    assert fits["search"]["mode"] == "exhaustive" and "ranking" not in fits["search"]
+    assert canonical_json(fits) == canonical_json(explored["design_axes"])
+
+
+def test_a_value_that_fails_alone_is_ranked_last_and_not_combined(graph):
+    levers = [*WIDE[:2], {"lever": "chain_size", "params": {"node_id": "no_such_node"}, "values": [[1920, 1080], [1280, 720]]},
+              WIDE[2]]  # 3 x 2 x 3 x 2 - 1 = 35
+    design = explore_with_levers(graph, _screen(levers, 9), config=SimulationRunConfig(), dvfs_tables={})["design_axes"]
+    ranking = design["search"]["ranking"]
+    assert ranking[-1] == {"lever": "chain_size", "label": "IP crop · downscale · no_such_node", "impact_mw": None,
+                           "impact_pct": None, "combined": False}
+    assert len(design["errors"]) == 2 and all("no_such_node" in e["key"] and " | " not in e["key"] for e in design["errors"])
+    assert all("no_such_node" not in r["key"] for r in design["results"])
+
+
+def test_nothing_is_combined_when_the_cap_only_holds_the_single_values(graph):
+    design = explore_with_levers(graph, _screen(WIDE, 5), config=SimulationRunConfig(), dvfs_tables={})["design_axes"]
+    assert design["sets"] == 5 and design["search"]["combined"] == 0
+    assert [r["combined"] for r in design["search"]["ranking"]] == [False] * 4
+    assert all(r["impact_mw"] is not None for r in design["search"]["ranking"])
+
+
+def test_a_case_budget_that_ends_during_the_single_values_leaves_the_levers_unranked(graph):
+    own = explore_variant(graph, _spec(), config=SimulationRunConfig())["counts"]["cases"]
+    spec = _screen(WIDE, 9).model_copy(update={"max_cases_per_variant": own + 1})
+    design = explore_with_levers(graph, spec, config=SimulationRunConfig(), dvfs_tables={})["design_axes"]
+    search = design["search"]
+    assert search["mode"] == "screened" and search["combined"] == 0
+    assert all(r["impact_mw"] is None and not r["combined"] for r in search["ranking"])
+    assert design["sets"] == 5
+
+
+def test_the_search_mode_does_not_change_the_variant_or_its_hash(graph):
+    config = SimulationRunConfig()
+    assert input_hash(graph, _screen(WIDE, 9), config, {}) == input_hash(graph, _spec(), config, {})
+    assert variant_spec(_screen(WIDE, 9).model_dump(mode="json"))["axes"].keys() == _spec().model_dump(mode="json")["axes"].keys()

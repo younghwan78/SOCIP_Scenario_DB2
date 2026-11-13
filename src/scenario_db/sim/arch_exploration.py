@@ -135,6 +135,11 @@ class LeverAxis(BaseScenarioModel):
     label: str | None = Field(default=None, max_length=120)
 
 
+# spec.axes fields of the re-simulation lever axes: left out of the dump without lever axes, of a
+# variant's input hash, and of a recomputation of its prediction
+LEVER_AXIS_KEYS = ("levers", "lever_max_sets", "lever_search")
+
+
 def lever_set_count(levers: list[LeverAxis]) -> int:
     """Re-simulated combinations of the lever axes: every axis also keeps its current value, and the
     combination that changes nothing is the variant itself."""
@@ -153,6 +158,9 @@ class ExplorationAxes(BaseScenarioModel):
     # are prepared by the caller (see ``explore_variant(design=...)``).
     levers: list[LeverAxis] = Field(default_factory=list, max_length=8)
     lever_max_sets: int = Field(default=64, ge=1, le=256)
+    # "exhaustive": every combination (must fit lever_max_sets). "screen": each lever value on its own
+    # first, then combinations of the levers with the largest effect only, as many as the cap allows.
+    lever_search: Literal["exhaustive", "screen"] = "exhaustive"
 
     @model_validator(mode="after")
     def _scales(self) -> ExplorationAxes:
@@ -167,9 +175,16 @@ class ExplorationAxes(BaseScenarioModel):
                 raise ValueError(f"lever {axis.lever}: at least one value")
             if len(axis.values) > 16:
                 raise ValueError(f"lever {axis.lever}: at most 16 values")
-        if self.levers and lever_set_count(self.levers) > self.lever_max_sets:
+        if not self.levers:
+            return self
+        alone = sum(len(axis.values) for axis in self.levers)
+        if self.lever_search == "screen":
+            if alone > self.lever_max_sets:
+                raise ValueError(f"lever axes list {alone} values > lever_max_sets {self.lever_max_sets}; "
+                                 "screening tries every value on its own first — narrow the values")
+        elif lever_set_count(self.levers) > self.lever_max_sets:
             raise ValueError(f"lever axes give {lever_set_count(self.levers)} combinations > lever_max_sets "
-                             f"{self.lever_max_sets}; narrow the values")
+                             f"{self.lever_max_sets}; narrow the values or set lever_search to \"screen\"")
         return self
 
     @model_serializer(mode="wrap")
@@ -177,8 +192,8 @@ class ExplorationAxes(BaseScenarioModel):
         # without lever axes the dump (and so the input hash of every earlier request) is unchanged
         data = handler(self)
         if not self.levers:
-            data.pop("levers", None)
-            data.pop("lever_max_sets", None)
+            for key in LEVER_AXIS_KEYS:
+                data.pop(key, None)
         return data
 
 
@@ -246,7 +261,9 @@ def explore_variant(
 ) -> dict[str, Any]:
     """``design`` = the prepared lever-axis plan when ``spec.axes.levers`` is set: ``dimensions`` (the
     axes as shown) and ``sets``, each a combination with its changed ``graph`` / ``config`` or the
-    ``error`` that stopped the change. The engine does not know how a lever rewrites a variant."""
+    ``error`` that stopped the change. The engine does not know how a lever rewrites a variant.
+    A screened plan also has ``expand(results, errors)``: called once after ``sets`` are explored, it
+    returns the further ``sets`` to explore and the ``search`` report."""
     spec = spec or ArchExplorationSpec()
     tables = dvfs_tables or {}
     config = config or SimulationRunConfig()
@@ -1766,60 +1783,75 @@ def explore_design_sets(spec: ArchExplorationSpec, tables: dict[str, DVFSTable],
         "cases": 0, "results": [], "errors": [],
     }
     base_rec, base_raw, base_slice = base.get("recommended"), base["baseline"], base["objective_slice"]
-    for item in sets:
-        head = {"key": item["key"], "items": item["items"]}
-        if item.get("error"):
-            out["errors"].append(head | {"error": str(item["error"])[:300]})
-            continue
-        if remaining <= 0:
-            out["notes"].append("case budget exhausted; remaining lever combinations were skipped")
-            break
-        try:
-            r = _explore(item["graph"], sub.model_copy(update={"max_cases_per_variant": remaining}), item["config"], tables)
-        except (LookupError, ValueError) as exc:
-            out["errors"].append(head | {"error": str(exc)[:300]})
-            continue
-        evaluated = r.get("counts", {}).get("cases", 0)
-        out["cases"] += evaluated
-        remaining -= evaluated
-        rec, raw = r.get("recommended"), r["baseline"]["total_mw"] - base_raw["total_mw"]
-        delta = delta_pct = delta_bw = None
-        if rec and base_rec:
-            delta = rec["total_mw"] - base_rec["total_mw"]
-            delta_pct = round(100 * delta / base_rec["total_mw"], 2) if base_rec["total_mw"] else None
-            delta_bw = round(rec["bw_mbs"] - base_rec["bw_mbs"], 2)
-        r_slice = r["objective_slice"]
-        # the shown power is the combination's own compression search: a lossy pick trades IQ
-        # whatever the levers themselves need
-        lossy = bool(rec and rec.get("lossy"))
-        lever_iq = item.get("iq", "neutral")
-        out["results"].append(head | {
-            "labels": [i["label"] for i in item["items"]],
-            "iq": "trade" if lossy else lever_iq,
-            "lever_iq": lever_iq,
-            "lossy": lossy,
-            "lever_notes": list(item.get("notes") or [])[:6],
-            "spec_ok": r["spec_ok"], "spec_reasons": r["spec_reasons"],
-            "verdict": r_slice["verdict"]["status"],
-            "fps": r["fps"],
-            "case_key": rec["key"] if rec else None,
-            "total_mw": round(rec["total_mw"], 3) if rec else None,
-            "delta_mw": round(delta, 3) if delta is not None else None,
-            "delta_pct": delta_pct,
-            "bw_mbs": round(rec["bw_mbs"], 2) if rec else None,
-            "delta_bw_mbs": delta_bw,
-            "raw_total_mw": round(r["baseline"]["total_mw"], 3),
-            "raw_delta_mw": round(raw, 3),
-            "raw_delta_pct": round(100 * raw / base_raw["total_mw"], 2) if base_raw["total_mw"] else None,
-            "raw_bw_mbs": round(r["baseline"]["bw_mbs"], 2),
-            "compression": rec["compression"] if rec else [],
-            "dvfs": rec["dvfs"] if rec else {},
-            "fill_pct": {k: v["fill_pct"] for k, v in r_slice["stages"].items()},
-            "latency": r_slice.get("latency"),
-            "delta_latency_ms": _latency_delta(base_slice.get("latency"), r_slice.get("latency")),
-            "zero_power_ips": r_slice["zero_power_ips"],
-            "power_coverage": r["status"]["power_coverage"],
-        })
+    def evaluate(batch: list[dict[str, Any]]) -> bool:
+        """Explore one batch of combinations; False = the case budget ran out."""
+        nonlocal remaining
+        for item in batch:
+            head = {"key": item["key"], "items": item["items"]}
+            if item.get("error"):
+                out["errors"].append(head | {"error": str(item["error"])[:300]})
+                continue
+            if remaining <= 0:
+                out["notes"].append("case budget exhausted; remaining lever combinations were skipped")
+                return False
+            try:
+                r = _explore(item["graph"], sub.model_copy(update={"max_cases_per_variant": remaining}), item["config"], tables)
+            except (LookupError, ValueError) as exc:
+                out["errors"].append(head | {"error": str(exc)[:300]})
+                continue
+            evaluated = r.get("counts", {}).get("cases", 0)
+            out["cases"] += evaluated
+            remaining -= evaluated
+            rec, raw = r.get("recommended"), r["baseline"]["total_mw"] - base_raw["total_mw"]
+            delta = delta_pct = delta_bw = None
+            if rec and base_rec:
+                delta = rec["total_mw"] - base_rec["total_mw"]
+                delta_pct = round(100 * delta / base_rec["total_mw"], 2) if base_rec["total_mw"] else None
+                delta_bw = round(rec["bw_mbs"] - base_rec["bw_mbs"], 2)
+            r_slice = r["objective_slice"]
+            # the shown power is the combination's own compression search: a lossy pick trades IQ
+            # whatever the levers themselves need
+            lossy = bool(rec and rec.get("lossy"))
+            lever_iq = item.get("iq", "neutral")
+            out["results"].append(head | {
+                "labels": [i["label"] for i in item["items"]],
+                "iq": "trade" if lossy else lever_iq,
+                "lever_iq": lever_iq,
+                "lossy": lossy,
+                "lever_notes": list(item.get("notes") or [])[:6],
+                "spec_ok": r["spec_ok"], "spec_reasons": r["spec_reasons"],
+                "verdict": r_slice["verdict"]["status"],
+                "fps": r["fps"],
+                "case_key": rec["key"] if rec else None,
+                "total_mw": round(rec["total_mw"], 3) if rec else None,
+                "delta_mw": round(delta, 3) if delta is not None else None,
+                "delta_pct": delta_pct,
+                "bw_mbs": round(rec["bw_mbs"], 2) if rec else None,
+                "delta_bw_mbs": delta_bw,
+                "raw_total_mw": round(r["baseline"]["total_mw"], 3),
+                "raw_delta_mw": round(raw, 3),
+                "raw_delta_pct": round(100 * raw / base_raw["total_mw"], 2) if base_raw["total_mw"] else None,
+                "raw_bw_mbs": round(r["baseline"]["bw_mbs"], 2),
+                "compression": rec["compression"] if rec else [],
+                "dvfs": rec["dvfs"] if rec else {},
+                "fill_pct": {k: v["fill_pct"] for k, v in r_slice["stages"].items()},
+                "latency": r_slice.get("latency"),
+                "delta_latency_ms": _latency_delta(base_slice.get("latency"), r_slice.get("latency")),
+                "zero_power_ips": r_slice["zero_power_ips"],
+                "power_coverage": r["status"]["power_coverage"],
+            })
+        return True
+
+    search = design.get("search")
+    if evaluate(sets) and callable(design.get("expand")):
+        # screening: the caller picks the combinations to add from what the single-lever sets gave
+        more = design["expand"](out["results"], out["errors"])
+        extra = more.get("sets") or []
+        out["sets"] += len(extra)
+        search = more.get("search", search)
+        evaluate(extra)
+    if search is not None:
+        out["search"] = search
     if not out["results"] and out["errors"]:
         out["status"] = "failed"
 
@@ -1835,7 +1867,7 @@ def input_hash(graph, spec, config, tables) -> str:
     are reported next to the variant and do not change its cases, so a prediction registered from a
     run with lever axes and its recomputation without them carry the same hash."""
     spec_doc = spec.model_dump(mode="json")
-    for key in ("levers", "lever_max_sets"):
+    for key in LEVER_AXIS_KEYS:
         spec_doc["axes"].pop(key, None)
     payload = {
         "engine": ENGINE_REV,

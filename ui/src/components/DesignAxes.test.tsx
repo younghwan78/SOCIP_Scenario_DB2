@@ -2,7 +2,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { expect, it } from 'vitest'
-import { DesignAxesTable, type DesignAxes, type DesignAxisResult } from './DesignAxes'
+import { DesignAxesTable, SearchCoverage, type DesignAxes, type DesignAxisResult } from './DesignAxes'
 
 const row = (over: Partial<DesignAxisResult>): DesignAxisResult => ({
   key: 'fps=24', labels: ['FPS 24 fps'], iq: 'neutral', spec_ok: true, spec_reasons: [], verdict: 'ok', fps: 24,
@@ -58,6 +58,32 @@ it('warns when the shown power rests on lossy compression, whatever the levers n
     '레버 IQ 평가 필요 · lossy 압축 선택 (화질 trade) — 표시 전력은 손실 압축 기준',
     '레버 화질 trade', '—'])
   done()
+})
+
+it('says whether every combination was explored, and which levers were only tried alone', () => {
+  const full = render(<SearchCoverage search={{ mode: 'exhaustive', full_factorial: 23, one_at_a_time: 5, combined: 18 }} evaluated={23} />)
+  expect(full.host.textContent).toBe('전수 탐색 레버 조합 23개를 모두 탐색')
+  full.done()
+  const part = render(<SearchCoverage evaluated={7} search={{ mode: 'screened', full_factorial: 23, one_at_a_time: 5, combined: 2, ranking: [
+    { lever: 'fps', label: 'FPS', impact_mw: 790.66, impact_pct: 104.2, combined: true },
+    { lever: 'llc_alloc', label: 'LLC 할당 · PYRAMID_L0', impact_mw: 26.98, impact_pct: 3.6, combined: true },
+    { lever: 'history_interval', label: 'Previous DMA 빈도 · TNR_PREV_L0', impact_mw: 20.2, impact_pct: null, combined: false },
+    { lever: 'chain_size', label: 'IP crop · downscale · nope', impact_mw: null, impact_pct: null, combined: false }] }} />)
+  expect(part.host.textContent).toContain('부분 탐색 전체 23 조합 중 7개 탐색 — 값 하나씩 5개 + 영향이 큰 레버끼리 조합 2개. 탐색하지 않은 조합에 더 낮은 전력이 있을 수 있습니다.')
+  expect([...part.host.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+    'FPS 단독 영향 최대 ±790.7 mW (104.2%)조합 포함', 'LLC 할당 · PYRAMID_L0 단독 영향 최대 ±27.0 mW (3.6%)조합 포함',
+    'Previous DMA 빈도 · TNR_PREV_L0 단독 영향 최대 ±20.2 mW단독만', 'IP crop · downscale · nope 단독 결과 없음단독만'])
+  part.done()
+  const none = render(<SearchCoverage evaluated={5} search={{ mode: 'screened', full_factorial: 23, one_at_a_time: 5, combined: 0, ranking: [
+    { lever: 'fps', label: 'FPS', impact_mw: null, impact_pct: null, combined: false }] }} />)
+  expect(none.host.textContent).toContain('(조합은 탐색하지 않음)')
+  expect(none.host.textContent).toContain('순위를 매기지 못했습니다 (이 variant에 적용할 수 없거나 case 예산 소진')
+  expect(none.host.querySelector('ol')).toBeNull()
+  none.done()
+  // the table shows it above the rows
+  const table = render(<DesignAxesTable data={{ ...data, search: { mode: 'exhaustive', full_factorial: 3, one_at_a_time: 3, combined: 0 } }} baseMw={758.44} />)
+  expect(table.host.querySelector('.dax-search')!.textContent).toContain('전수 탐색')
+  table.done()
 })
 
 it('says so when the variant has no recommended case to compare with, or nothing applied', () => {

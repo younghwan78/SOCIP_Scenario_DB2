@@ -63,6 +63,15 @@ their existing recorded-review behavior.
   pick (`lossy: true` = trade): the shown power may rest on lossy compression. A `key`
   keeps what tells two changes apart (crop offset, port). With a pinned sensor binding
   (`config.sensor_modes`) every changed copy is re-validated against the sensor catalog.
+  `lever_search` says what happens when the combinations exceed the cap. `exhaustive`
+  (default): the request is rejected. `screen`: every lever value is explored on its own
+  first (those alone must fit the cap), the levers are ranked by the largest power change
+  one of their values made before compression, and the top-ranked levers are combined, as
+  many levers as the cap still allows; a value that could not be applied alone is not
+  combined. `design_axes.search` reports the coverage: `mode` (`exhaustive` | `screened`),
+  `full_factorial`, `one_at_a_time`, `combined`, and for a screened search `ranking[]`
+  (`lever`, `label`, `impact_mw`, `impact_pct`, `combined`). A screened row is the row the
+  exhaustive search would give; combinations that were not explored may hold a lower power.
   Rows are ordered by power; none is recommended and none is registered as a prediction.
   The variant's own result and `input_hash` do not depend on the lever axes, and
   recomputing a prediction leaves them out. The cases count against the run budget

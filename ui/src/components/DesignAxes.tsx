@@ -17,6 +17,28 @@ export type DesignAxes = {
   dimensions: { lever: string; label: string; selector: string | null; group: string; values: string[] }[]
   notes: string[]; sets: number; max_sets: number; cases: number
   results: DesignAxisResult[]; errors: { key: string; error: string }[]
+  /** API ≥ 2026-11-13: exhaustive = every combination; screened = each value alone, then the top levers combined */
+  search?: DesignSearch
+}
+export type DesignSearch = {
+  mode: 'exhaustive' | 'screened'; full_factorial: number; one_at_a_time: number; combined: number
+  ranking?: { lever: string; label: string; impact_mw: number | null; impact_pct: number | null; combined: boolean }[]
+}
+
+/** How much of the lever space the rows cover — a screened search must never read as the full one. */
+export function SearchCoverage({ search, evaluated }: { search: DesignSearch; evaluated: number }) {
+  if (search.mode === 'exhaustive') return <div className="dax-search"><span className="badge v-ok">전수 탐색</span> 레버 조합 {search.full_factorial}개를 모두 탐색</div>
+  const ranking = search.ranking ?? []
+  const ranked = ranking.some((r) => r.impact_mw != null)
+  return <div className="dax-search">
+    <div><span className="badge v-warn">부분 탐색</span> 전체 {search.full_factorial} 조합 중 {evaluated}개 탐색 — 값 하나씩 {search.one_at_a_time}개
+      {search.combined ? ` + 영향이 큰 레버끼리 조합 ${search.combined}개` : ' (조합은 탐색하지 않음)'}. 탐색하지 않은 조합에 더 낮은 전력이 있을 수 있습니다.</div>
+    {ranked
+      ? <ol className="dax-rank">{ranking.map((r, i) => <li key={i}>
+        <b>{r.label}</b> {r.impact_mw == null ? '단독 결과 없음' : `단독 영향 최대 ±${fmt(r.impact_mw, 1)} mW${r.impact_pct != null ? ` (${fmt(r.impact_pct, 1)}%)` : ''}`}
+        <span className={r.combined ? 'badge v-ok' : 'badge'}>{r.combined ? '조합 포함' : '단독만'}</span></li>)}</ol>
+      : <div className="faint">단독으로 탐색된 레버 값이 없어 순위를 매기지 못했습니다 (이 variant에 적용할 수 없거나 case 예산 소진 — 아래 사유 참고).</div>}
+  </div>
 }
 
 const IQ_TEXT: Record<DesignAxisResult['iq'], string> = { neutral: '', eval: 'IQ 평가 필요', trade: '화질 trade' }
@@ -37,6 +59,7 @@ export function DesignAxesTable({ data, baseMw }: { data: DesignAxes; baseMw: nu
       {data.dimensions.map((d) => `${d.label}: ${d.values.join(' / ')}`).join(' · ')} · {data.sets} 조합
       {baseMw != null ? ` · 기준 = 이 variant의 추천 조합 ${fmt(baseMw, 1)} mW` : ' · 이 variant에 추천 조합이 없어 Δ는 압축 전 기준만 표시'}
     </div>
+    {data.search && <SearchCoverage search={data.search} evaluated={data.results.length + data.errors.length} />}
     {data.results.length > 0 && <table className="tb-mini-table" style={{ width: '100%' }}>
       <thead><tr><th>변경한 레버</th><th>판정</th><th className="n">fps</th><th className="n">total mW</th><th className="n">Δ mW</th>
         <th className="n">Δ BW MB/s</th><th className="n">압축 전 Δ mW</th><th>주의</th></tr></thead>

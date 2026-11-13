@@ -164,8 +164,30 @@ def test_lever_axes_are_bounded_and_do_not_change_specs_without_them():
         ExplorationAxes(levers=[LeverAxis(lever="fps", values=[])])
     with pytest.raises(ValueError, match="at most 16 values"):
         ExplorationAxes(levers=[LeverAxis(lever="fps", values=list(range(1, 18)))])
-    with pytest.raises(ValueError, match="5 combinations > lever_max_sets 4"):
+    with pytest.raises(ValueError, match="5 combinations > lever_max_sets 4.*lever_search"):
         ExplorationAxes(levers=axes.levers, lever_max_sets=4)
+
+
+def test_screening_takes_a_space_larger_than_the_cap():
+    from scenario_db.sim.arch_exploration import ExplorationAxes
+
+    levers = [LeverAxis(lever="fps", values=[24, 48, 60]), LeverAxis(lever="llc_alloc", values=["off", "on"]),
+              LeverAxis(lever="history_interval", values=[2, 4])]  # 4 x 3 x 3 - 1 = 35 combinations, 7 values
+    with pytest.raises(ValueError, match="35 combinations > lever_max_sets 12"):
+        ExplorationAxes(levers=levers, lever_max_sets=12)
+    axes = ExplorationAxes(levers=levers, lever_max_sets=12, lever_search="screen")
+    assert axes.model_dump()["lever_search"] == "screen"
+    # every value is tried on its own first, so those alone must fit the cap
+    with pytest.raises(ValueError, match="7 values > lever_max_sets 6"):
+        ExplorationAxes(levers=levers, lever_max_sets=6, lever_search="screen")
+    # without lever axes the setting is not part of the spec at all
+    assert "lever_search" not in ExplorationAxes(lever_search="screen").model_dump()
+    # ... and it travels through the design space
+    spec = ArchExplorationSpec(axes=axes)
+    space = design_space_from_spec(spec)
+    assert space.lever_search == "screen" and space.max_lever_sets == 12
+    assert spec_from_design_space(space).model_dump(mode="json") == spec.model_dump(mode="json")
+    assert DesignSpace().lever_search == "exhaustive"
 
 
 def test_stored_run_specs_show_their_design_space():

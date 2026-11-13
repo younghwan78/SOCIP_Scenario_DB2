@@ -24,7 +24,9 @@ def variant_spec(stored: dict) -> dict:
     variant's prediction (and not part of its ``input_hash``)."""
     spec = {k: stored[k] for k in _SPEC_KEYS if k in stored}
     if isinstance(spec.get("axes"), dict):
-        spec["axes"] = {k: v for k, v in spec["axes"].items() if k not in ("levers", "lever_max_sets")}
+        from scenario_db.sim.arch_exploration import LEVER_AXIS_KEYS
+
+        spec["axes"] = {k: v for k, v in spec["axes"].items() if k not in LEVER_AXIS_KEYS}
     return spec
 _SEL_KEYS = ("config_profile_ref", "dvfs_tables", "dvfs_table_ref", "soc_ref", "dvfs_version", "use_default_dvfs", "basis_ref")
 
