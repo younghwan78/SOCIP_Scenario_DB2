@@ -72,12 +72,12 @@ it('says whether every combination was explored, and which levers were only trie
   expect(part.host.textContent).toContain('부분 탐색 전체 23 조합 중 7개 탐색 — 값 하나씩 5개 + 영향이 큰 레버끼리 조합 2개. 탐색하지 않은 조합에 더 낮은 전력이 있을 수 있습니다.')
   expect([...part.host.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
     'FPS 단독 영향 최대 ±790.7 mW (104.2%)조합 포함', 'LLC 할당 · PYRAMID_L0 단독 영향 최대 ±27.0 mW (3.6%)조합 포함',
-    'Previous DMA 빈도 · TNR_PREV_L0 단독 영향 최대 ±20.2 mW단독만', 'IP crop · downscale · nope 단독 적용 불가단독만'])
+    'Previous DMA 빈도 · TNR_PREV_L0 단독 영향 최대 ±20.2 mW단독만', 'IP crop · downscale · nope 단독 결과 없음단독만'])
   part.done()
   const none = render(<SearchCoverage evaluated={5} search={{ mode: 'screened', full_factorial: 23, one_at_a_time: 5, combined: 0, ranking: [
     { lever: 'fps', label: 'FPS', impact_mw: null, impact_pct: null, combined: false }] }} />)
   expect(none.host.textContent).toContain('(조합은 탐색하지 않음)')
-  expect(none.host.textContent).toContain('레버 순위를 매기지 못했습니다')
+  expect(none.host.textContent).toContain('순위를 매기지 못했습니다 (이 variant에 적용할 수 없거나 case 예산 소진')
   expect(none.host.querySelector('ol')).toBeNull()
   none.done()
   // the table shows it above the rows

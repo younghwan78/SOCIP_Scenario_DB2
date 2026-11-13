@@ -34,10 +34,10 @@ export function SearchCoverage({ search, evaluated }: { search: DesignSearch; ev
     <div><span className="badge v-warn">부분 탐색</span> 전체 {search.full_factorial} 조합 중 {evaluated}개 탐색 — 값 하나씩 {search.one_at_a_time}개
       {search.combined ? ` + 영향이 큰 레버끼리 조합 ${search.combined}개` : ' (조합은 탐색하지 않음)'}. 탐색하지 않은 조합에 더 낮은 전력이 있을 수 있습니다.</div>
     {ranked
-      ? <ol className="dax-rank">{ranking.map((r) => <li key={`${r.lever}-${r.label}`}>
-        <b>{r.label}</b> {r.impact_mw == null ? '단독 적용 불가' : `단독 영향 최대 ±${fmt(r.impact_mw, 1)} mW${r.impact_pct != null ? ` (${fmt(r.impact_pct, 1)}%)` : ''}`}
+      ? <ol className="dax-rank">{ranking.map((r, i) => <li key={i}>
+        <b>{r.label}</b> {r.impact_mw == null ? '단독 결과 없음' : `단독 영향 최대 ±${fmt(r.impact_mw, 1)} mW${r.impact_pct != null ? ` (${fmt(r.impact_pct, 1)}%)` : ''}`}
         <span className={r.combined ? 'badge v-ok' : 'badge'}>{r.combined ? '조합 포함' : '단독만'}</span></li>)}</ol>
-      : <div className="faint">case 예산이 값 하나씩 탐색하는 중에 소진되어 레버 순위를 매기지 못했습니다.</div>}
+      : <div className="faint">단독으로 탐색된 레버 값이 없어 순위를 매기지 못했습니다 (이 variant에 적용할 수 없거나 case 예산 소진 — 아래 사유 참고).</div>}
   </div>
 }
 
