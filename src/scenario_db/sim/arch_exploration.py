@@ -124,6 +124,23 @@ class PowerOptionAxis(BaseScenarioModel):
     max_sets: int = Field(default=64, ge=1, le=256)  # full factorial above the cap is skipped
 
 
+class LeverAxis(BaseScenarioModel):
+    """One explored lever: ``lever`` = a built-in lever id or a What-if change-kind target."""
+
+    lever: str = Field(min_length=1, max_length=64)
+    values: list[Any] = Field(default_factory=list, max_length=64)
+    # lever settings that are not explored values (compression: buffer cap, ratios ...; a
+    # re-simulation lever: its selector such as node_id)
+    params: dict[str, Any] = Field(default_factory=dict)
+    label: str | None = Field(default=None, max_length=120)
+
+
+def lever_set_count(levers: list[LeverAxis]) -> int:
+    """Re-simulated combinations of the lever axes: every axis also keeps its current value, and the
+    combination that changes nothing is the variant itself."""
+    return math.prod(len(axis.values) + 1 for axis in levers) - 1
+
+
 class ExplorationAxes(BaseScenarioModel):
     statistics: list[Statistic] = Field(default_factory=_mean_max, min_length=1)
     runtime_scales: list[float] = Field(default_factory=lambda: [1.0, 1.1, 1.2], min_length=1, max_length=8)
@@ -131,12 +148,38 @@ class ExplorationAxes(BaseScenarioModel):
     dvfs_headroom_levels: int = Field(default=1, ge=0, le=3)
     compression: CompressionAxis = Field(default_factory=CompressionAxis)
     power_options: PowerOptionAxis = Field(default_factory=PowerOptionAxis)
+    # Re-simulation lever axes (What-if change kinds: size, fps, sensor mode, LLC ...). Each combination
+    # of their values is a changed copy of the variant that is explored on its own; the changed copies
+    # are prepared by the caller (see ``explore_variant(design=...)``).
+    levers: list[LeverAxis] = Field(default_factory=list, max_length=8)
+    lever_max_sets: int = Field(default=64, ge=1, le=256)
 
     @model_validator(mode="after")
     def _scales(self) -> ExplorationAxes:
         if any(not math.isfinite(v) or v <= 0 or v > 10 for v in self.runtime_scales):
             raise ValueError("runtime_scales must be in (0, 10]")
         return self
+
+    @model_validator(mode="after")
+    def _levers(self) -> ExplorationAxes:
+        for axis in self.levers:
+            if not axis.values:
+                raise ValueError(f"lever {axis.lever}: at least one value")
+            if len(axis.values) > 16:
+                raise ValueError(f"lever {axis.lever}: at most 16 values")
+        if self.levers and lever_set_count(self.levers) > self.lever_max_sets:
+            raise ValueError(f"lever axes give {lever_set_count(self.levers)} combinations > lever_max_sets "
+                             f"{self.lever_max_sets}; narrow the values")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _omit_unused_levers(self, handler):
+        # without lever axes the dump (and so the input hash of every earlier request) is unchanged
+        data = handler(self)
+        if not self.levers:
+            data.pop("levers", None)
+            data.pop("lever_max_sets", None)
+        return data
 
 
 MEMORY_LIMITS = ("peak_bw_limit_mbs", "dram_footprint_limit_mb", "llc_capacity_mb")
@@ -199,14 +242,24 @@ def explore_variant(
     *,
     config: SimulationRunConfig | None = None,
     dvfs_tables: dict[str, DVFSTable] | None = None,
+    design: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """``design`` = the prepared lever-axis plan when ``spec.axes.levers`` is set: ``dimensions`` (the
+    axes as shown) and ``sets``, each a combination with its changed ``graph`` / ``config`` or the
+    ``error`` that stopped the change. The engine does not know how a lever rewrites a variant."""
     spec = spec or ArchExplorationSpec()
     tables = dvfs_tables or {}
     config = config or SimulationRunConfig()
+    if spec.axes.levers and design is None:
+        raise ValueError("lever axes need the prepared design sets (explore through the exploration service)")
     summary = _explore(graph, spec, config, tables)
     if spec.axes.power_options.enabled:
         summary["power_options"] = explore_power_options(graph, spec, config, tables, summary)
         summary["counts"]["option_cases"] = summary["power_options"]["cases"]
+    if spec.axes.levers and design is not None:
+        used = summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
+        summary["design_axes"] = explore_design_sets(spec, tables, summary, design, spec.max_cases_per_variant - used)
+        summary["counts"]["design_cases"] = summary["design_axes"]["cases"]
     summary["levers"] = lever_analysis(summary)
     summary["input_hash"] = input_hash(graph, spec, config, tables)
     sections, blobs = input_manifest(graph, config, tables, timing=spec.timing)
@@ -1687,12 +1740,108 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
     }
 
 
+def explore_design_sets(spec: ArchExplorationSpec, tables: dict[str, DVFSTable], base: dict[str, Any],
+                        design: dict[str, Any], remaining: int) -> dict[str, Any]:
+    """Every lever-axis combination explored as its own variant, compared with the variant itself.
+
+    Like a power-option set: one SW slice (the objective), own compression / DVFS search, no power
+    options, no re-simulation check. ``delta_mw`` compares the recommended cases, ``raw_delta_mw``
+    the no-compression / resolved-DVFS baselines (the change itself). A combination is a candidate
+    for a different variant definition (another fps, size, sensor mode ...): rows are ordered by
+    power, but none is recommended — power alone cannot judge a changed requirement — and none is
+    registered from this list.
+    """
+    obj = spec.objective
+    sub = spec.model_copy(update={
+        "axes": spec.axes.model_copy(update={
+            "statistics": [obj.statistic], "runtime_scales": [obj.runtime_scale], "levers": [],
+            "power_options": spec.axes.power_options.model_copy(update={"enabled": False}),
+        }),
+        "verify": False, "top_n": 1,
+    })
+    sets = design.get("sets") or []
+    out: dict[str, Any] = {
+        "status": "ok" if sets else "none", "dimensions": design.get("dimensions") or [],
+        "notes": list(design.get("notes") or []), "sets": len(sets), "max_sets": spec.axes.lever_max_sets,
+        "cases": 0, "results": [], "errors": [],
+    }
+    base_rec, base_raw, base_slice = base.get("recommended"), base["baseline"], base["objective_slice"]
+    for item in sets:
+        head = {"key": item["key"], "items": item["items"]}
+        if item.get("error"):
+            out["errors"].append(head | {"error": str(item["error"])[:300]})
+            continue
+        if remaining <= 0:
+            out["notes"].append("case budget exhausted; remaining lever combinations were skipped")
+            break
+        try:
+            r = _explore(item["graph"], sub.model_copy(update={"max_cases_per_variant": remaining}), item["config"], tables)
+        except (LookupError, ValueError) as exc:
+            out["errors"].append(head | {"error": str(exc)[:300]})
+            continue
+        evaluated = r.get("counts", {}).get("cases", 0)
+        out["cases"] += evaluated
+        remaining -= evaluated
+        rec, raw = r.get("recommended"), r["baseline"]["total_mw"] - base_raw["total_mw"]
+        delta = delta_pct = delta_bw = None
+        if rec and base_rec:
+            delta = rec["total_mw"] - base_rec["total_mw"]
+            delta_pct = round(100 * delta / base_rec["total_mw"], 2) if base_rec["total_mw"] else None
+            delta_bw = round(rec["bw_mbs"] - base_rec["bw_mbs"], 2)
+        r_slice = r["objective_slice"]
+        # the shown power is the combination's own compression search: a lossy pick trades IQ
+        # whatever the levers themselves need
+        lossy = bool(rec and rec.get("lossy"))
+        lever_iq = item.get("iq", "neutral")
+        out["results"].append(head | {
+            "labels": [i["label"] for i in item["items"]],
+            "iq": "trade" if lossy else lever_iq,
+            "lever_iq": lever_iq,
+            "lossy": lossy,
+            "lever_notes": list(item.get("notes") or [])[:6],
+            "spec_ok": r["spec_ok"], "spec_reasons": r["spec_reasons"],
+            "verdict": r_slice["verdict"]["status"],
+            "fps": r["fps"],
+            "case_key": rec["key"] if rec else None,
+            "total_mw": round(rec["total_mw"], 3) if rec else None,
+            "delta_mw": round(delta, 3) if delta is not None else None,
+            "delta_pct": delta_pct,
+            "bw_mbs": round(rec["bw_mbs"], 2) if rec else None,
+            "delta_bw_mbs": delta_bw,
+            "raw_total_mw": round(r["baseline"]["total_mw"], 3),
+            "raw_delta_mw": round(raw, 3),
+            "raw_delta_pct": round(100 * raw / base_raw["total_mw"], 2) if base_raw["total_mw"] else None,
+            "raw_bw_mbs": round(r["baseline"]["bw_mbs"], 2),
+            "compression": rec["compression"] if rec else [],
+            "dvfs": rec["dvfs"] if rec else {},
+            "fill_pct": {k: v["fill_pct"] for k, v in r_slice["stages"].items()},
+            "latency": r_slice.get("latency"),
+            "delta_latency_ms": _latency_delta(base_slice.get("latency"), r_slice.get("latency")),
+            "zero_power_ips": r_slice["zero_power_ips"],
+            "power_coverage": r["status"]["power_coverage"],
+        })
+    if not out["results"] and out["errors"]:
+        out["status"] = "failed"
+
+    def rank(x: dict[str, Any]) -> tuple:
+        d = x["delta_mw"] if x["delta_mw"] is not None else x["raw_delta_mw"]
+        return (not x["spec_ok"], d, len(x["items"]))
+    out["results"].sort(key=rank)
+    return out
+
+
 def input_hash(graph, spec, config, tables) -> str:
+    """Hash of what decides this variant's own result. The lever axes are left out: their combinations
+    are reported next to the variant and do not change its cases, so a prediction registered from a
+    run with lever axes and its recomputation without them carry the same hash."""
+    spec_doc = spec.model_dump(mode="json")
+    for key in ("levers", "lever_max_sets"):
+        spec_doc["axes"].pop(key, None)
     payload = {
         "engine": ENGINE_REV,
         "scenario": graph.scenario.id, "variant": graph.variant.id,
         "pipeline": graph.scenario.pipeline, "variant_doc": _variant_doc(graph.variant),
-        "spec": spec.model_dump(mode="json"), "config": config.model_dump(mode="json"),
+        "spec": spec_doc, "config": config.model_dump(mode="json"),
         "dvfs": {k: t.model_dump(mode="json") for k, t in sorted(tables.items())},
         "simulation_inputs": build_simulation_inputs(graph, config).model_dump(mode="json"),
         "ip_capabilities": {key: row.capabilities for key, row in sorted(graph.ip_catalog.items())},

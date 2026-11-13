@@ -60,9 +60,18 @@ it('shows the compression modes the constraints leave', () => {
   expect(axisSummary({ lever: 'buffer_compression', values: ['lossless'], params: { max_buffers: 0 } }).explored).toBe(false)
 })
 
-it('summarises single values, no DVFS raise and levers it does not know', () => {
+it('summarises single values and no DVFS raise', () => {
   expect(axisSummary({ lever: 'sw_growth', values: [1.2] })).toEqual({ label: 'SW 증가', text: '×1.2', explored: false })
   expect(axisSummary({ lever: 'dvfs_headroom', values: [0] })).toEqual({ label: 'DVFS headroom', text: '올리지 않음', explored: false })
   expect(axisSummary({ lever: 'power_options', values: ['ip_mode'], params: { max_sets: 16 } }).text).toBe('IP mode (조합 ≤ 16)')
-  expect(axisSummary({ lever: 'chain_size', values: [{}, {}], label: 'MCSC 출력' })).toEqual({ label: 'MCSC 출력', text: '2개 값', explored: true })
+})
+
+it('shows a re-simulation lever with its target and the values tried', () => {
+  expect(axisSummary({ lever: 'fps', values: [24, 60] })).toEqual({ label: 'FPS', text: '24 / 60', explored: true })
+  expect(axisSummary({ lever: 'chain_size', params: { node_id: 'byrp' }, values: [[3840, 2160], { width: 1920, height: 1080, operation: 'scale' }] }))
+    .toEqual({ label: 'IP crop · downscale · byrp', text: '3840x2160 / 1920x1080', explored: true })
+  expect(axisSummary({ lever: 'llc_alloc', params: { buffer_id: 'PYRAMID_L0' }, values: ['off', { option: 'on', value: 0.5 }] }).text).toBe('off / on (0.5)')
+  // one value is still explored (against the variant's current value); an own label wins; unknown ids are shown as is
+  expect(axisSummary({ lever: 'fps', values: [24], label: 'frame rate' })).toEqual({ label: 'frame rate', text: '24', explored: true })
+  expect(axisSummary({ lever: 'new_lever', values: [1] }).label).toBe('new_lever')
 })

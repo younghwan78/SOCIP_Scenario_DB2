@@ -38,6 +38,7 @@ from scenario_db.reporting.report_package import package_zip
 from scenario_db.reporting.review_snapshot import ProjectEvidence, ReviewEvidence
 from scenario_db.comparison.measurement_selection import representative_measurement
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
+from scenario_db.api.services.design_axes import build_design_plan, explore_with_levers, needs_catalog
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.design_space import design_space_of_stored_spec
 from scenario_db.sim.power_attribution import attribute
@@ -165,17 +166,27 @@ def _load_variant(db: Session, request: ArchExplorationRunRequest, scenario: Sce
             graph, applied = _apply_options(graph, request.apply_options)
             spec = spec.model_copy(update={"axes": spec.axes.model_copy(update={
                 "power_options": spec.axes.power_options.model_copy(update={"enabled": False})})})
+        design = None
+        if spec.axes.levers and needs_catalog(shim.config):
+            # a pinned sensor binding is re-validated against the catalog for every changed copy:
+            # that needs this DB session, so the plan is built now instead of where it is explored
+            from scenario_db.api.services.whatif_sensors import prepare_sensor_graph
+
+            design = build_design_plan(graph, shim.config, spec.axes.levers,
+                                       prepare_sensor=lambda candidate, cfg: prepare_sensor_graph(db, candidate, cfg))
     except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
         return {"scenario_id": scenario.id, "variant_id": variant_id,
                 "error": variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage="load")}
     return {"scenario_id": scenario.id, "variant_id": variant_id, "graph": graph, "tables": tables,
-            "dvfs_ref": ref, "config": shim.config, "spec": spec, "budget": budget, "applied": applied}
+            "dvfs_ref": ref, "config": shim.config, "spec": spec, "budget": budget, "applied": applied,
+            "design": design}
 
 
 def _explore_item(item: dict[str, Any], max_cases: int, summary: dict[str, Any] | None = None) -> dict[str, Any]:
     if summary is None:
         spec = item["spec"].model_copy(update={"max_cases_per_variant": max_cases})
-        summary = explore_variant(item["graph"], spec, config=item["config"], dvfs_tables=item["tables"])
+        summary = explore_with_levers(item["graph"], spec, config=item["config"], dvfs_tables=item["tables"],
+                                      explore=explore_variant, design=item.get("design"))
     if item["applied"]:
         summary["applied_options"] = [{k: it.get(k) for k in ("key", "label", "kind", "iq_eval", "note")}
                                       for it in item["applied"]]
@@ -185,9 +196,16 @@ def _explore_item(item: dict[str, Any], max_cases: int, summary: dict[str, Any] 
     return summary
 
 
-def _explore_worker(graph, spec, config, tables) -> dict[str, Any]:
-    """Process-pool entry point (top level so it pickles)."""
-    return explore_variant(graph, spec, config=config, dvfs_tables=tables)
+def _cases_used(summary: dict[str, Any]) -> int:
+    """Cases one variant spent of the run budget: its own, its power-option sets and its lever-axis sets."""
+    counts = summary["counts"]
+    return counts["cases"] + counts.get("option_cases", 0) + counts.get("design_cases", 0)
+
+
+def _explore_worker(graph, spec, config, tables, design=None) -> dict[str, Any]:
+    """Process-pool entry point (top level so it pickles). ``design`` = a lever-axis plan built at load
+    time (pinned sensor binding); otherwise the worker builds the plan itself."""
+    return explore_with_levers(graph, spec, config=config, dvfs_tables=tables, explore=explore_variant, design=design)
 
 
 def _exploration_workers(n: int) -> int:
@@ -232,7 +250,8 @@ def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick,
                     while queue and len(running) < workers and used + max_cases * (len(running) + 1) <= budget:
                         i, it = queue.pop(0)
                         spec = it["spec"].model_copy(update={"max_cases_per_variant": max_cases})
-                        running[pool.submit(_explore_worker, it["graph"], spec, it["config"], it["tables"])] = i
+                        running[pool.submit(_explore_worker, it["graph"], spec, it["config"], it["tables"],
+                                            *([it["design"]] if it.get("design") is not None else []))] = i
                     if not running:
                         break  # less than one variant cap left: the caller explores the rest in plan order
                     done, _ = wait(running, return_when=FIRST_COMPLETED)
@@ -243,7 +262,7 @@ def _explore_parallel(items: list[dict[str, Any]], max_cases: int, tick,
                         except Exception:  # noqa: BLE001 - recomputed in-process by the caller
                             used += max_cases
                             continue
-                        used += summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
+                        used += _cases_used(summary)
                         out[i] = _explore_item(items[i], max_cases, summary)
                         tick(items[i]["variant_id"])
             except BaseException:
@@ -334,7 +353,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                 tick(item["variant_id"])
         soc_ref = soc_ref or _graph_soc_ref(item["graph"])
         dvfs_ref = dvfs_ref or item["dvfs_ref"]
-        remaining_cases -= summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
+        remaining_cases -= _cases_used(summary)
         summary["dvfs_table_ref"] = item["dvfs_ref"]
         blobs.update(summary.pop("_manifest_blobs", {}) or {})
         variants.append(summary)
@@ -360,6 +379,12 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     counts["power_options"] = {"variants": len(best), "sets": sum(len(o["results"]) for o in opt),
                                "cases": sum(o.get("cases", 0) for o in opt),
                                "best_saving_mw": [min(best), max(best)] if best else None}
+    dax = [v["design_axes"] for v in variants if v.get("design_axes")]
+    if dax:  # only for runs with lever axes: other run summaries keep their shape
+        counts["design_axes"] = {"variants": sum(1 for d in dax if d["results"]),
+                                 "sets": sum(len(d["results"]) for d in dax),
+                                 "errors": sum(len(d["errors"]) for d in dax),
+                                 "cases": sum(d.get("cases", 0) for d in dax)}
     ihash = hashlib.sha256(json.dumps(sorted(v["input_hash"] for v in variants)).encode()).hexdigest()
     row = ArchExplorationRun(
         id=f"EXP-{uuid4().hex}",
@@ -1660,7 +1685,7 @@ def _register_lever(db: Session, request: Any, user: str | None = None, *, commi
       (rule ``lever:iq-adopted``). The prediction keeps the selection and the IQ notes (``metrics.lever_selection``).
     """
     from scenario_db.api.schemas.arch_exploration import PowerOptionReviewRequest
-    from scenario_db.api.services.recompute import _SEL_KEYS, _SPEC_KEYS
+    from scenario_db.api.services.recompute import _SEL_KEYS, variant_spec
     from scenario_db.sim.arch_exploration import case_from_selection
 
     run = get_run(db, request.run_id)
@@ -1706,7 +1731,7 @@ def _register_lever(db: Session, request: Any, user: str | None = None, *, commi
             # an empty explicit config would mask the run's config profile -> pass it only when the run set one
             **({"config": sel["config"]} if sel.get("config") else {}), apply_options=options, project_ref=run.project_ref,
             power_budget_from_reference=bool(spec.get("power_budget_from_reference")),
-            spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel}), user,
+            spec=variant_spec(spec), **{k: sel[k] for k in _SEL_KEYS if k in sel}), user,
             commit=commit)
         target_run, summary = new_run["id"], new_run["variants"][0]
         rule = "lever:iq-adopted"

@@ -65,8 +65,20 @@ def test_design_space_request_survives_the_job_queue_round_trip():
 @pytest.mark.parametrize("body, message", [
     ({"spec": {}, "design_space": {}}, "either spec or design_space"),
     ({"design_space": {"axes": [{"lever": "warp_drive", "values": [1]}]}}, "unknown lever: warp_drive"),
-    ({"design_space": {"axes": [{"lever": "chain_size", "params": {"node_id": "mcsc"},
-                                 "values": [{"width": 1920, "height": 1080}]}]}}, "not evaluated by exploration yet"),
+    ({"design_space": {"axes": [{"lever": "compression", "params": {"buffer_id": "b"}, "values": ["COMP_OFF"]}]}},
+     "lever cannot be explored as an axis: compression"),
+    ({"spec": {"axes": {"levers": [{"lever": "dvfs_level", "params": {"domain": "CAM"}, "values": [{"level": 3}]}]}}},
+     "lever cannot be explored as an axis: dvfs_level"),
+    ({"spec": {"axes": {"levers": [{"lever": "eis", "values": ["on"]}]}}}, "built-in axis"),
+    ({"spec": {"axes": {"levers": [{"lever": "warp_drive", "values": [1]}]}}}, "unknown lever: warp_drive"),
+    ({"spec": {"axes": {"levers": [{"lever": "fps", "values": ["fast"]}]}}}, "must be a number"),
+    ({"spec": {"axes": {"levers": [{"lever": "fps", "values": [24, 24.0]}]}}}, "values must be distinct"),
+    ({"spec": {"axes": {"levers": [{"lever": "fps", "values": [24]}, {"lever": "fps", "values": [60]}]}}},
+     "more than once for the same target"),
+    ({"spec": {"axes": {"levers": [{"lever": "chain_size", "values": [[1920, 1080]]}]}}}, "node changes require node_id"),
+    ({"spec": {"axes": {"levers": [{"lever": "chain_size", "params": {"node_id": "a", "width": 64},
+                                    "values": [[1920, 1080]]}]}}}, "width is set twice"),
+    ({"spec": {"axes": {"lever_max_sets": 2, "levers": [{"lever": "fps", "values": [24, 48, 60]}]}}}, "3 combinations"),
     ({"design_space": {"axes": [{"lever": "dvfs_headroom", "values": [2]}]}}, "raise steps"),
     ({"design_space": {"schema_version": "sdb.designspace/9"}}, "sdb.designspace/1"),
 ])
@@ -87,9 +99,11 @@ def test_lever_catalog_lists_builtin_axes_and_every_whatif_kind(monkeypatch):
     by_id = {row["id"]: row for row in catalog["levers"]}
     assert by_id["chain_size"] | {"description": ""} == {
         "id": "chain_size", "label": "IP crop · downscale", "group": "size", "shape": "size", "unit": "",
-        "description": "", "source": "whatif", "evaluation": "resim", "explorable": False, "selector": "node_id",
+        "description": "", "source": "whatif", "evaluation": "resim", "explorable": True, "selector": "node_id",
         "selector_optional": False, "needs_param": False, "max_value": None, "iq": "required", "value_optional": False}
     assert by_id["buffer_compression"]["explorable"] and by_id["compression"]["source"] == "whatif"
+    assert {row["id"] for row in catalog["levers"] if row["source"] == "whatif" and not row["explorable"]} == {
+        "compression", "dvfs_level", "node_param", "sensor_binding"}
 
     c = _client(monkeypatch)
     res = c.get("/api/v1/arch/exploration/levers")
