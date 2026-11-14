@@ -12,9 +12,11 @@ export function useRegistrationGuard(targets: { scenario_id: string; variant_id:
   const [tick, setTick] = useState(0)
   const [conflict, setConflict] = useState(false)
   const key = targets.map((target) => `${target.scenario_id}|${target.variant_id}`).join(',')
-  const q = useAsync(() => archApi.board(undefined, project || undefined).then((board) => currentGuards(targets, board.rows)), [project, key, reviewKey, tick])
+  // a refresh after a registration keeps the previous ids shown (stale) until the new ones arrive
+  const q = useAsync(() => archApi.board(undefined, project || undefined).then((board) => currentGuards(targets, board.rows)), [project, key, reviewKey, tick], { keep: [project, key, reviewKey] })
   return {
-    expected: q.data, ready: !!q.data && !conflict, error: q.error, conflict,
+    // the previous ids stay shown while refreshing (stale), but are not usable: ready waits for the ids just read
+    expected: q.data, ready: !!q.data && !q.stale && !conflict, error: q.error, conflict, stale: !!q.stale,
     refresh: () => { setConflict(false); setTick((n) => n + 1) },
     fail: (error: unknown) => {
       if (error instanceof ApiError && error.status === 409) {

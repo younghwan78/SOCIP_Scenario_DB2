@@ -61,18 +61,29 @@ export function useRoute(): [Route, (next: NavTarget, replace?: boolean) => void
   return [route, navigate]
 }
 
-export function useAsync<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[]): { data: T | undefined; error: string | undefined; loading: boolean } {
+const sameList = (a: unknown[] | undefined, b: unknown[] | undefined) =>
+  !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]))
+
+/** ``keep`` (U-08) = the identity of what is fetched (project, variant …) without refresh ticks. When the deps
+ * change but ``keep`` is the same — a refresh of the same target — the previous data stays shown with
+ * ``stale: true`` until the new result arrives. A different target still hides the old result at once, so a
+ * value of another variant is never shown, not even for one render. */
+export function useAsync<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[], opts?: { keep?: unknown[] }): { data: T | undefined; error: string | undefined; loading: boolean; stale?: boolean } {
   const pending = { data: undefined, error: undefined, loading: true }
-  const [state, setState] = useState<{ data: T | undefined; error: string | undefined; loading: boolean; deps: unknown[] }>({ ...pending, deps })
+  const keep = opts?.keep
+  const [state, setState] = useState<{ data: T | undefined; error: string | undefined; loading: boolean; deps: unknown[]; keep?: unknown[] }>({ ...pending, deps, keep })
   useEffect(() => {
     let alive = true
     const controller = new AbortController()
-    setState({ ...pending, deps })
-    Promise.resolve().then(() => withReadSignal(controller.signal, () => fn(controller.signal))).then((data) => { if (alive) setState({ data, error: undefined, loading: false, deps }) })
-      .catch((e: unknown) => { if (alive) setState({ data: undefined, error: e instanceof Error ? e.message : String(e), loading: false, deps }) })
+    setState((prev) => (prev.data !== undefined && sameList(prev.keep, keep)
+      ? { data: prev.data, error: undefined, loading: true, deps, keep }
+      : { ...pending, deps, keep }))
+    Promise.resolve().then(() => withReadSignal(controller.signal, () => fn(controller.signal))).then((data) => { if (alive) setState({ data, error: undefined, loading: false, deps, keep }) })
+      .catch((e: unknown) => { if (alive) setState({ data: undefined, error: e instanceof Error ? e.message : String(e), loading: false, deps, keep }) })
     return () => { alive = false; controller.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
-  // Hide the old result during the render before the new effect runs as well.
-  return deps.length === state.deps.length && deps.every((v, i) => Object.is(v, state.deps[i])) ? state : pending
+  if (sameList(deps, state.deps)) return state.loading && state.data !== undefined ? { ...state, stale: true } : state
+  // Hide the old result during the render before the new effect runs as well, unless the target is the same.
+  return state.data !== undefined && sameList(state.keep, keep) ? { ...state, loading: true, stale: true } : pending
 }

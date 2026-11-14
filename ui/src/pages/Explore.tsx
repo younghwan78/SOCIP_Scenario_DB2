@@ -33,6 +33,7 @@ import { isActive, trackExploreJob, useExploreJob } from '../lib/exploreJob'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 import { SensitivityTornado } from '../components/Sensitivity'
 import { Hint } from '../components/Hint'
+import { RunDeltaView, RunList } from '../components/RunCompare'
 import { ExplorationDecision } from '../components/DecisionCard'
 import { ParetoScatter } from '../components/ParetoScatter'
 import { conclusion, defaultCase, lowestPowerCase } from '../lib/conclusion'
@@ -61,11 +62,14 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
   const [tick, setTick] = useState(0)
   // default: runs of the selected 과제 only; other projects are an explicit, read-only comparison mode
   const [allProjects, setAllProjects] = useState(false)
-  const runsQ = useAsync(() => archApi.runs(allProjects ? undefined : ctx.project || undefined), [tick, ctx.project, allProjects])
+  // U-08: a refresh (tick) keeps the list shown; another project / scope hides it
+  const runsQ = useAsync(() => archApi.runs(allProjects ? undefined : ctx.project || undefined), [tick, ctx.project, allProjects], { keep: [ctx.project, allProjects] })
   const runs = runsQ.data ?? []
   const runQ = useAsync(() => (runId ? archApi.run(runId) : Promise.resolve(null)), [runId])
   const [showForm, setShowForm] = useState(!runId)
-  const pick = (id: string | undefined) => ctx.navigate(undefined, { run: id, v: undefined })
+  const pick = (id: string | undefined) => ctx.navigate(undefined, { run: id, v: undefined, cmp: undefined })
+  const compareId = runId && ctx.params.cmp && ctx.params.cmp !== runId ? ctx.params.cmp : undefined
+  const [listOpen, setListOpen] = useState(!runId)
 
   return (
     <div className="page tb-page">
@@ -73,7 +77,7 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
       <CandidateReview scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} />
       <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>탐색 run</span>
-        <select className="input" value={runId ?? ''} onChange={(e) => pick(e.target.value || undefined)} aria-label="탐색 run" style={{ minWidth: 360 }}
+        <select className={`input${runsQ.stale ? ' is-stale' : ''}`} value={runId ?? ''} onChange={(e) => pick(e.target.value || undefined)} aria-label="탐색 run" style={{ minWidth: 360 }}
           disabled={runsQ.loading && !runsQ.data}>
           <option value="">{runsQ.loading && !runsQ.data ? '조회 중…' : runsQ.error ? '조회 실패' : runs.length ? '— 선택 —' : '탐색 run 없음'}</option>
           {runs.map((r) => <option key={r.id} value={r.id}>{allProjects ? `[${r.project_ref ?? '—'}] ` : ''}{r.title} · {r.summary.spec_ok}/{r.summary.variants} · {r.created_at?.slice(0, 16).replace('T', ' ')}</option>)}
@@ -86,10 +90,16 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
         <a className="btn" href={`#/predictions?scenario=${encodeURIComponent(ctx.scenario)}`}>예측 현황 →</a>
         <a className="btn" href="#/reports">검토 보고서 →</a>
       </div>
+      {runs.length > 0 && <details className="run-list-box" open={listOpen} onToggle={(e) => setListOpen((e.target as HTMLDetailsElement).open)}>
+        <summary>run 목록 {runs.length}개 — profile · engine · DVFS · spec · 조합 · 추천 power{runId ? ' · 다른 run과 비교' : ''}</summary>
+        <RunList runs={runs} selected={runId} compare={compareId} showProject={allProjects} onPick={(id) => pick(id)}
+          onCompare={(id) => ctx.navigate(undefined, { cmp: id })} />
+      </details>}
       <ExploreJobPanel project={ctx.project || null} onOpen={(id) => { setTick((t) => t + 1); setShowForm(false); pick(id) }} />
       {showForm && <RunForm ctx={ctx} />}
       {runQ.error && <div className="err">{runQ.error}</div>}
       {runQ.loading && runId && <div className="empty">run 불러오는 중…</div>}
+      {runQ.data && compareId && <RunDeltaView a={runQ.data} compareId={compareId} onClose={() => ctx.navigate(undefined, { cmp: undefined })} />}
       {runQ.data && <RunView key={runQ.data.id} run={runQ.data} ctx={ctx} />}
       {!runId && !showForm && <div className="empty">탐색 run을 선택하거나 새 탐색을 실행하세요.</div>}
     </div>
