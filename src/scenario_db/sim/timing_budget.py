@@ -972,6 +972,8 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "feasible": res.feasible,
                 "infeasible_reason": res.infeasible_reason,
                 "clock_reason": res.clock_correction_reason,
+                # D-03: the codec / bitrate load model that set this workload's ppc (node opt-in only)
+                **({"load_model": workloads[node].load_model} if node in workloads and workloads[node].load_model else {}),
             }
         )
     # IPs lifted by a shared DVFS domain: name the domain member that sets the level.

@@ -29,6 +29,21 @@ pipeline:
     ip_ref: ip-mfc-s5e9965
     role: decoder
     instance_index: 0
+    load_model:
+      ref: codec-throughput-v1
+      value_source: assumed
+      note: Fixture assumption (2026-11-14), not a measurement. Per-codec decode throughput (pixels per MFC clock) and entropy-decoding
+        cycles per bit; replace with the MFC team's per-codec rates.
+      cycles_per_bit: 1.0
+      codecs:
+        H264_DEC:
+          ppc: 2.0
+        HEVC_DEC:
+          ppc: 2.0
+        VP9_DEC:
+          ppc: 1.0
+        AV1_DEC:
+          ppc: 1.0
   - id: gpu
     ip_ref: ip-gpu-s5e9965
     role: composer

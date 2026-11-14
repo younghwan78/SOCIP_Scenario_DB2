@@ -28,6 +28,9 @@ class PipelineNode(BaseScenarioModel):
     # Explicit operation facts (crop/scale/rotate/...) consumed by the view
     # projection's OperationSummary; shape mirrors variant node_configs.
     operations: dict[str, Any] | None = None
+    # D-03 workload load model of this node with scenario-local coefficients ({ref, codecs, ...}),
+    # see sim/load_models.py; kept on the scenario so the shared IP catalog stays unchanged
+    load_model: dict[str, Any] | None = None
 
 
 class EdgeType(StrEnum):
