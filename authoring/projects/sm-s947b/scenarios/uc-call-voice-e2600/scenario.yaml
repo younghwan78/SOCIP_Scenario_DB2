@@ -13,9 +13,15 @@ metadata:
   - voice_call
 pipeline:
   nodes:
+  # Downlink (modem -> audio_hal -> speaker) and uplink (mic -> audio_hal -> modem_tx) are two
+  # paths of the same 20 ms voice frame; one modem node for both made a cycle (not a DAG).
   - id: modem
     ip_ref: ip-cpu-s5e9965
     role: modem
+    instance_index: 0
+  - id: modem_tx
+    ip_ref: ip-cpu-s5e9965
+    role: modem_tx
     instance_index: 0
   - id: audio_hal
     ip_ref: ip-abox-s5e9965
@@ -44,7 +50,7 @@ pipeline:
     to: audio_hal
     type: control
   - from: audio_hal
-    to: modem
+    to: modem_tx
     type: control
   buffers: {}
 variants:
