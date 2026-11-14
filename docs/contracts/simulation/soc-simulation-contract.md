@@ -60,6 +60,41 @@ Role-level mappings are allowed and are preferred for composite catalog entries
 where one `ip_ref` represents multiple pipeline roles, for example `csispdp`,
 `byrp`, `rgbp`, `yuvp`, and `mtnr` under a shared ISP catalog.
 
+### Workload load models (`sim/load_models.py`)
+
+A load model turns a workload's conditions into its effective `ppc`. The clock rule, timing and power
+then run the same calculation. Models are registered in `LOAD_MODELS` (like `POWER_MODELS`), and a
+node opts in with `node_configs.<node>.sim.load_model: <id>`. Without it the mode `ppc` applies, as
+before.
+
+`codec-throughput-v1` (decoder / encoder):
+
+```
+cycles / frame = pixels / ppc_codec + bitrate_mbps x 1e6 / fps x cycles_per_bit
+ppc_effective  = pixels / (cycles / frame)
+```
+
+```yaml
+capabilities:
+  sim:
+    load_models:
+      codec-throughput-v1:
+        codecs:                        # per <CODEC>_<DEC|ENC> of properties.codecs
+          AV1_DEC: {ppc: 1.0, cycles_per_bit: 0.5}
+        derive: codec_limits           # or ppc_codec = max_resolution x max_fps / clock_mhz
+        clock_mhz: 664                 # the clock the declared codec limits are reached at
+```
+
+- The codec is `sim.codec`, else the node's `codec`, else `design_conditions.codec` / `codec_mfc`
+  (`H264`, `h.264`, `AV1_DEC` …; a `_DEC` / `_ENC` suffix sets the direction, else the node role).
+  The bitrate is `sim.bitrate_mbps`, else `design_conditions.bitrate_mbps`; with no bitrate there is
+  no entropy term.
+- A node that opts in without the coefficients it needs is refused, naming the node and the codec key.
+  There is no silent fallback to the mode `ppc`.
+- The Timing Budget IP row carries `load_model` (`codec`, `direction`, `ppc_codec`, `ppc_source`,
+  `bitrate_mbps`, `cycles_per_bit`, `entropy_cycles_per_frame`, `ppc_effective`, `ppc_mode`) when the
+  node opts in.
+
 ## External Device Requirements
 
 Sensors and panels are not compute workloads. They should not require `ppc` or
