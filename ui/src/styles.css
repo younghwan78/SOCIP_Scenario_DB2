@@ -1102,6 +1102,15 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .experiment-entry small { white-space: normal; color: var(--muted); font-size: 10px; }
 .home-recent { display: grid; gap: 7px; margin-top: 18px; font-size: 12px; }
 .dt-sort { border: 0; padding: 0; width: 100%; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: inherit; }
+/* U-09 shared table tools */
+.dt-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; position: sticky; left: 0; font-size: var(--fs-caption); }
+.dt-filter { min-width: 180px; padding: 4px 8px; font-size: var(--fs-caption); border: 1px solid var(--line, #D9D3C8); border-radius: 6px; }
+.dt-presets button { font-size: var(--fs-caption); padding: 4px 9px; }
+.dt-cols { position: relative; }
+.dt-cols > summary { cursor: pointer; padding: 4px 8px; border: 1px solid var(--line, #D9D3C8); border-radius: 6px; list-style: none; }
+.dt-cols-menu { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; display: grid; gap: 4px; min-width: 180px; max-height: 320px; overflow: auto;
+  padding: 8px 10px; background: var(--surface, white); border: 1px solid var(--line, #D9D3C8); border-radius: 8px; box-shadow: 0 4px 12px rgba(31,36,48,.14); }
+.dt-cols-menu label { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
 .dt-pages { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px; position: sticky; left: 0; font-size: 12px; background: var(--surface, white); }
 .dt :focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .dt .col-resizer:focus-visible { background: var(--primary); }

@@ -47,7 +47,7 @@ function IpTab({ ctx }: { ctx: Ctx }) {
   return <div className="tb-grid">
     {q.error && <div className="err">{q.error}</div>}
     <Card id="lib-ip" title={`IP catalog (${rows.length})`} note="행 클릭 = 상세" defaultWide minHeight={200}>
-      <div className="table-x"><DataTable id="lib.ip" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => ctx.navigate(undefined, { sel: r.id }, true)} rowClass={(r) => (r.id === sel?.id ? 'selected' : '')} defaultSort={{ key: 'cat', dir: 1 }} /></div>
+      <div className="table-x"><DataTable id="lib.ip" tools columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => ctx.navigate(undefined, { sel: r.id }, true)} rowClass={(r) => (r.id === sel?.id ? 'selected' : '')} defaultSort={{ key: 'cat', dir: 1 }} /></div>
     </Card>
     {sel && <Card id="lib-ip-detail" title={sel.id} note={ipSummary(sel).note} defaultWide>
       <div className="workflow-actions">{[['ip_mode', 'Mode'], ['chain_size', 'Crop · scale']].map(([target, label]) => <button key={target} className="btn" onClick={() => ctx.navigate('whatif', { whatif_target: target, whatif_ip: sel.id })}>{label} 실험에서 지원 확인</button>)}</div>
@@ -112,7 +112,7 @@ function SensorTab({ ctx }: { ctx: Ctx }) {
   return <div className="tb-grid">
     {c.error && <div className="err">{c.error}</div>}
     <Card id="lib-sensor" title={`Sensor catalog (${c.data?.total ?? 0})`} note="board별 DT mode set">
-      <div className="table-x"><DataTable id="lib.sensor" columns={cols} rows={c.data?.items ?? []} rowKey={(r) => r.id} defaultSort={{ key: 'sensor', dir: 1 }} /></div>
+      <div className="table-x"><DataTable id="lib.sensor" tools columns={cols} rows={c.data?.items ?? []} rowKey={(r) => r.id} defaultSort={{ key: 'sensor', dir: 1 }} /></div>
     </Card>
     <Card id="lib-sensor-timing" title={`CIS timing profile (${t.data?.items.length ?? 0})`} note="readout · line timing">
       <table className="tb-mini-table" style={{ width: '100%' }}>
@@ -160,7 +160,7 @@ function SwTab({ ctx }: { ctx: Ctx }) {
     </div>
     {q.error && <div className="err">{q.error}</div>}
     <Card id="lib-sw" title={`SW timing 가정 (${q.data?.tasks.length ?? 0})`} note="variant 간 범위 · Timing Budget·조합 탐색 입력" defaultWide>
-      <div className="table-x"><DataTable id="lib.sw" columns={cols} rows={q.data?.tasks ?? []} rowKey={(r) => `${r.scenario_id}:${r.task}`} defaultSort={{ key: 'max', dir: -1 }} /></div>
+      <div className="table-x"><DataTable id="lib.sw" tools columns={cols} rows={q.data?.tasks ?? []} rowKey={(r) => `${r.scenario_id}:${r.task}`} defaultSort={{ key: 'max', dir: -1 }} /></div>
     </Card>
     {!all && ctx.scenario && ctx.variant && <SwSetsCard scenario={ctx.scenario} variant={ctx.variant} />}
     <Card id="lib-sw-meas" title={`SW task 실측 (${q.data?.measured.length ?? 0})`} note="measurement evidence (Perfetto)" defaultWide>

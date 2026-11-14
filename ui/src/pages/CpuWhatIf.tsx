@@ -520,7 +520,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
           <RtChainCard coupling={result.timing_coupling} sched={sweepSched} rtPlacement={result.scheduler.rt_placement} />
           <Card id="cpu-others" title="나머지 조합" note="전력 증가 또는 조건 미충족 · 정렬 가능" defaultWide minHeight={120} help={CPU_HELP.others}>
             <details><summary className="faint" style={{ fontSize: 12 }}>{result.other_count}개 중 {result.others.length}개 펼치기</summary>
-              <div className="table-x"><DataTable id="cpu.others" columns={otherCols} rows={result.others} rowKey={(c) => caseLabel(c) + c.total_mw}
+              <div className="table-x"><DataTable id="cpu.others" tools columns={otherCols} rows={result.others} rowKey={(c) => caseLabel(c) + c.total_mw}
                 onRowClick={(c) => setSel(`o${result.others.indexOf(c)}`)} rowClass={(c) => (sel === `o${result.others.indexOf(c)}` ? 'selected' : '')} /></div></details>
           </Card>
         </div>

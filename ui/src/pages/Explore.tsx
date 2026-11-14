@@ -284,6 +284,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
     // U-05: the verdict reason is on the row (first line), the rest behind a focusable hint — not hover-only
     { key: 'spec', label: 'spec', width: 180, sort: (r) => (r.spec_ok ? 1 : 0),
+      text: (r) => [r.baseline.verdict === 'not_applicable' ? '해당 없음' : r.spec_ok ? 'OK' : 'Fail', coverageOf(r) === 'partial' ? '부분' : '', r.spec_ok ? '' : (r.spec_reasons[0] ?? '')].filter(Boolean).join(' · '),
       render: (r) => { const notes = specNotes(r)
         return <span className="stack-1" style={{ minWidth: 0 }}><span className="row-1"><TimingVerdictBadge status={r.baseline.verdict === 'not_applicable' ? 'not_applicable' : r.spec_ok ? 'ok' : 'fail'} />
           {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}
@@ -310,7 +311,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'margin', label: 'SW margin', width: 90, align: 'right', firstDir: 1, sort: (r) => r.sw_margin.worst?.margin_pct ?? 999, title: (r) => r.sw_margin.recommendations.join('\n'), render: (r) => <span className="mono" style={{ color: (r.sw_margin.worst?.margin_pct ?? 1) < 0 ? 'var(--del-text)' : undefined }}>{fmt(r.sw_margin.worst?.margin_pct, 1)}%</span> },
     { key: 'grow', label: 'SW 증가 허용', width: 110, align: 'right', firstDir: -1, sort: (r) => r.sw_margin.growth_tolerance_fixed ?? r.sw_margin.growth_tolerance ?? 0,
       title: () => '추천 DVFS 고정 / DVFS 재선택', render: (r) => `${r.sw_margin.growth_tolerance_fixed ? `×${fmt(r.sw_margin.growth_tolerance_fixed, 1)}` : '—'} / ${r.sw_margin.growth_tolerance ? `×${fmt(r.sw_margin.growth_tolerance, 1)}` : '—'}` },
-    { key: 'ver', label: '검증', width: 96, align: 'right', sort: (r) => Math.abs(r.recommended?.verified?.delta_pct ?? 99), render: (r) => { const v = r.recommended?.verified
+    { key: 'ver', label: '검증', width: 96, align: 'right', text: (r) => { const v = r.recommended?.verified; return v ? `${v.ok ? 'ok' : 'fail'} ${fmt(v.delta_pct, 2)}%` : '' }, sort: (r) => Math.abs(r.recommended?.verified?.delta_pct ?? 99), render: (r) => { const v = r.recommended?.verified
       return v ? <Hint label={`${short(r.variant_id)} 검증 수치`} text={[`sim ${fmt(v.sim_total_mw, 2)} / analytic ${fmt(v.analytic_total_mw, 2)} mW`, ...(v.sim_bw_mbs !== undefined ? [`BW sim ${fmt(v.sim_bw_mbs, 0)} / analytic ${fmt(v.analytic_bw_mbs, 0)} MB/s`] : []), ...(v.reasons ?? [])].join('\n')}>
         <span style={{ color: v.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{v.ok ? '✓' : '✗'} {fmt(v.delta_pct, 2)}%</span></Hint> : '—' } },
   ]
@@ -360,7 +361,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
         <SplitLegend />
         <div className="table-x">
           <DataTable id="arch.variants" columns={cols} rows={rows} rowKey={variantKey} onRowClick={(r) => choose(variantKey(r))} defaultSort={{ key: 'tot', dir: -1 }}
-            rowClass={(r) => (variantKey(r) === ctx.params.v ? 'selected' : '')} />
+            rowClass={(r) => (variantKey(r) === ctx.params.v ? 'selected' : '')} tools={{ presets: VARIANT_PRESETS, filename: `explore-${run.id ?? 'run'}` }} />
         </div>
       </Card>
     </div>
@@ -572,6 +573,13 @@ function TabPanel({ id, tab, children }: { id: EvidenceTab; tab: EvidenceTab; ch
 }
 
 /** Every reason behind a variant's spec verdict (spec reasons + the partial-model note). */
+/** U-09 column bundles of the variant table (18 columns otherwise need a horizontal scroll). */
+export const VARIANT_PRESETS = [
+  { id: 'power', label: 'Power', keys: ['tot', 'cpu', 'hw', 'bwip', 'bwcpu', 'bw', 'ref', 'save', 'opt', 'range', 'comp'] },
+  { id: 'timing', label: 'Timing', keys: ['fps', 'spec', 'dvfs', 'margin', 'grow', 'tot'] },
+  { id: 'verify', label: '검증', keys: ['spec', 'ver', 'tot', 'range'] },
+]
+
 export function specNotes(r: VariantResult): string[] {
   return [...r.spec_reasons, ...(coverageOf(r) === 'partial' ? [`전력 미모델 IP: ${(r.coverage?.zero_power_ips ?? []).join(', ')} — power는 모델된 IP 합계`] : [])]
 }

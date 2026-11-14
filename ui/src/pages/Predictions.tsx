@@ -159,7 +159,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           <Card id="pr-table" title="예측 현황 (current)" note="header 클릭 = 정렬 · 행 클릭 = 변경 원인" defaultWide minHeight={260}>
             <SplitLegend />
             <div className="table-x">
-              <DataTable id="arch.board" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => choose(r.id)} defaultSort={{ key: 'tot', dir: -1 }}
+              <DataTable id="arch.board" tools columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => choose(r.id)} defaultSort={{ key: 'tot', dir: -1 }}
                 rowClass={(r) => (r.id === ctx.params.v ? 'selected' : '')} />
             </div>
           </Card>

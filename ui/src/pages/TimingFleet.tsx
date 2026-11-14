@@ -93,7 +93,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
         </Card>
         <Card id="fleet-table" title="Scenario 표" note="header 클릭 = 정렬 · 행 클릭 = 상세" defaultWide minHeight={300}>
           <div className="table-x">
-            <DataTable id="timing.fleet" columns={cols} rows={shown} rowKey={(r) => r.variant_id} onRowClick={(r) => open(r.variant_id)} defaultSort={{ key: 'nrtclk', dir: -1 }} />
+            <DataTable id="timing.fleet" tools columns={cols} rows={shown} rowKey={(r) => r.variant_id} onRowClick={(r) => open(r.variant_id)} defaultSort={{ key: 'nrtclk', dir: -1 }} />
           </div>
         </Card>
       </div>}

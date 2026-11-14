@@ -1,9 +1,11 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { usePref } from './Layout'
+import { downloadText, filterRows, presetHidden, toDelimited, type ColumnPreset } from './tableTools'
 
 // ---------------------------------------------------------------------------
 // DataTable: sortable (click header: ▲ → ▼ → off) and resizable columns
 // (drag header edge, double-click = default). Widths + sort persist per table id.
+// `tools` (U-09) adds the shared quick filter, column choice (+ presets) and copy / CSV.
 // ---------------------------------------------------------------------------
 
 export type SortValue = string | number | null | undefined
@@ -24,8 +26,19 @@ export interface Column<T> {
   title?: (row: T) => string | undefined
   headTitle?: string
   headClass?: string
-  /** sticky first column */
+  /** sticky first column (always shown, also with tools) */
   sticky?: boolean
+  /** cell text for the quick filter and copy / CSV; default: the text inside the rendered cell */
+  text?: (row: T) => string
+  /** header text in copy / CSV when the label is not plain text */
+  exportLabel?: string
+}
+
+export interface TableTools {
+  /** column bundles, e.g. Power / Timing / 검증 */
+  presets?: ColumnPreset[]
+  /** CSV file name without extension (default: the table id) */
+  filename?: string
 }
 
 export interface RowGroup<T> {
@@ -54,6 +67,8 @@ interface Props<T> {
   empty?: ReactNode
   /** Bound mounted data rows. Sticky reference rows remain visible on every page. */
   pageSize?: number
+  /** U-09 shared tools: quick filter, column choice, copy / CSV */
+  tools?: boolean | TableTools
 }
 
 export function compareValues(a: SortValue, b: SortValue): number {
@@ -79,14 +94,28 @@ export function sortRows<T>(rows: T[], get: ((r: T) => SortValue) | undefined, d
   return idx.map((x) => x.r)
 }
 
-export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRowClick, pinTop, stickyTop, defaultSort, className = '', empty, pageSize = 100 }: Props<T>) {
+export function DataTable<T>({ id, columns: allColumns, rows: allRows, groups: allGroups, rowKey, rowClass, onRowClick, pinTop, stickyTop, defaultSort, className = '', empty, pageSize = 100, tools }: Props<T>) {
+  const toolOpts: TableTools | null = tools ? (tools === true ? {} : tools) : null
+  const [hidden, setHidden] = usePref<string[]>(`table.${id}.hidden`, [])
+  const [query, setQuery] = useState('')
+  const [copied, setCopied] = useState(false)
+  const columns = toolOpts ? allColumns.filter((c) => c.sticky || !hidden.includes(c.key)) : allColumns
+  const q = toolOpts ? query : ''
+  // the reference rows (stickyTop) stay whatever the filter
+  const keepOrMatch = (list: T[]) => {
+    if (!q.trim()) return list
+    const hit = new Set(filterRows(list, columns, q))
+    return list.filter((r) => hit.has(r) || !!stickyTop?.(r))
+  }
+  const rows = useMemo(() => (allRows ? keepOrMatch(allRows) : allRows), [allRows, q, columns.length, hidden]) // eslint-disable-line react-hooks/exhaustive-deps
+  const groups = allGroups && q.trim() ? allGroups.map((g) => ({ ...g, rows: keepOrMatch(g.rows) })).filter((g) => g.rows.length) : allGroups
   const [widths, setWidths] = usePref<Record<string, number>>(`table.${id}.w`, {})
   const [sort, setSort] = usePref<{ key: string; dir: 1 | -1 } | null>(`table.${id}.sort`, defaultSort ?? null)
   const drag = useRef<{ key: string; x: number; w: number } | null>(null)
   const [page, setPage] = useState(0)
   const widthOf = (c: Column<T>) => Math.max(c.minWidth ?? 48, widths[c.key] ?? c.width ?? 140)
   const total = columns.reduce((s, c) => s + widthOf(c), 0)
-  const sortCol = columns.find((c) => c.key === sort?.key && c.sort)
+  const sortCol = allColumns.find((c) => c.key === sort?.key && c.sort) // a hidden column keeps its sort
   // pinned rows (reference) only while no explicit sort is active
   const order = (list: T[]) => {
     const sorted = sortRows(stickyTop ? list.filter((r) => !stickyTop(r)) : list, sortCol?.sort, sort?.dir ?? 1, sortCol ? undefined : pinTop)
@@ -157,8 +186,38 @@ export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRo
     const start = groupOffset; groupOffset += g.ordered.length
     return { ...g, visible: g.ordered.slice(Math.max(0, currentPage * limit - start), Math.max(0, (currentPage + 1) * limit - start)) }
   }).filter((g) => g.open === false || g.visible.length)
+  const totalRows = allGroups ? allGroups.reduce((s, g) => s + g.rows.length, 0) : (allRows?.length ?? 0)
+  // copy / CSV: every filtered row in the shown order (all pages, closed groups included), shown columns
+  const exportRows = () => (groups ? groups.flatMap((g) => order(g.rows)) : sortedRows)
+  const copy = () => {
+    const text = toDelimited(exportRows(), columns, 'tsv')
+    try { void navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) } catch { /* clipboard unavailable */ }
+  }
+  const activePreset = toolOpts?.presets?.find((p) => { const h = presetHidden(allColumns, p); return h.length === hidden.length && h.every((k) => hidden.includes(k)) })
+  const hideable = allColumns.filter((c) => !c.sticky)
   return (
     <>
+      {toolOpts && <div className="dt-tools" role="toolbar" aria-label={`${id} 표 도구`}>
+        <input type="search" className="dt-filter" value={query} placeholder="표 안에서 찾기" aria-label="표 안에서 찾기 (공백 = 그리고)"
+          onChange={(e) => { setQuery(e.target.value); setPage(0) }} />
+        <span className="faint dt-count" aria-live="polite">{q.trim() ? `${count} / ${totalRows}행` : `${totalRows}행`}</span>
+        {toolOpts.presets && toolOpts.presets.length > 0 && <span className="seg dt-presets" role="group" aria-label="열 묶음">
+          <button type="button" className={hidden.length === 0 ? 'on' : ''} aria-pressed={hidden.length === 0} onClick={() => setHidden([])}>전체</button>
+          {toolOpts.presets.map((p) => <button key={p.id} type="button" className={activePreset?.id === p.id ? 'on' : ''} aria-pressed={activePreset?.id === p.id}
+            onClick={() => setHidden(presetHidden(allColumns, p))}>{p.label}</button>)}
+        </span>}
+        <details className="dt-cols">
+          <summary>열 {columns.length} / {allColumns.length}</summary>
+          <div className="dt-cols-menu">
+            {hideable.map((c) => <label key={c.key}><input type="checkbox" checked={!hidden.includes(c.key)}
+              onChange={(e) => setHidden((h) => (e.target.checked ? h.filter((k) => k !== c.key) : [...h, c.key]))} /> {c.exportLabel ?? (typeof c.label === 'string' && c.label ? c.label : c.key)}</label>)}
+            <button type="button" className="link-btn" onClick={() => setHidden([])}>모두 보기</button>
+          </div>
+        </details>
+        <button type="button" className="btn tb-mini" onClick={copy} title="보이는 열 · 필터된 모든 행을 표 형식(TSV)으로 복사">{copied ? '복사됨' : '복사'}</button>
+        <button type="button" className="btn tb-mini" onClick={() => downloadText(`${toolOpts.filename ?? id}.csv`, toDelimited(exportRows(), columns, 'csv'))}
+          title="보이는 열 · 필터된 모든 행을 CSV로 저장">CSV</button>
+      </div>}
       <table ref={tableRef} className={`grid dt ${className}`} style={{ width: total, minWidth: '100%' }}>
         <colgroup>{columns.map((c) => <col key={c.key} style={{ width: widthOf(c) }} />)}</colgroup>
         <thead>
