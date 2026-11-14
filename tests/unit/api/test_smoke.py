@@ -216,6 +216,18 @@ def test_explorer_scenario_catalog_200(client):
     assert r.json()["items"] == []
 
 
+def test_explorer_catalog_and_matrix_answer_304_when_unchanged(client):
+    # O-05: content ETag on the scenario catalog and the variant matrix
+    for path in ("/api/v1/explorer/scenario-catalog", "/api/v1/explorer/variant-matrix"):
+        first = client.get(path)
+        etag = first.headers.get("etag")
+        assert first.status_code == 200 and etag and first.headers["cache-control"] == "private, no-cache"
+        again = client.get(path, headers={"If-None-Match": etag})
+        assert again.status_code == 304 and again.content == b""
+        # another query is another body (its filters), so the old tag does not match
+        assert client.get(path, params={"project_ref": "other"}, headers={"If-None-Match": etag}).status_code == 200
+
+
 def test_explorer_variant_matrix_200(client):
     r = client.get("/api/v1/explorer/variant-matrix")
     assert r.status_code == 200
