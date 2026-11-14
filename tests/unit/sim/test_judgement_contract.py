@@ -150,3 +150,21 @@ def test_interval_distribution_uses_the_declared_sinks(env):
                                  TimingBudgetOptions(), dvfs_tables=tables, trials=2, frames=8)
     assert {s["node"] for s in named["streams"]} == {"dpu", "mfc_dec"}
     assert [(s["node"], s["kind"]) for s in only["streams"]] == [("mfc_dec", "video")]
+
+
+def test_youtube_abox_is_judged_by_its_own_period(env):
+    # D-04: the ABOX period IRQ declares cadence: period, so it is judged against its own 10 ms deadline
+    catalog, tables, raw = env
+    graph = graph_from_fixture(raw, "yt-1080p30-h264-sdr", catalog)
+    report = run(graph, tables)
+    assert report["own_cadence"] == [{"node": "abox", "cadence": "period", "period_ms": 10.0, "deadline_ms": 10.0,
+                                      "releases": report["own_cadence"][0]["releases"], "worst_response_ms": 0.6,
+                                      "worst_slack_ms": 9.4, "ok": True}]
+    assert report["own_cadence"][0]["releases"] >= 3
+    # without the declaration the same period is still outside the frame path and not judged
+    plain = deepcopy(graph.variant)
+    plain.node_configs = {**plain.node_configs, "abox": {**plain.node_configs["abox"],
+                          "timeline": {k: v for k, v in plain.node_configs["abox"]["timeline"].items() if k != "cadence"}}}
+    undeclared = run(replace(graph, variant=plain), tables)
+    assert "own_cadence" not in undeclared
+    assert undeclared["verdict"] == report["verdict"] and undeclared["stages"] == report["stages"]

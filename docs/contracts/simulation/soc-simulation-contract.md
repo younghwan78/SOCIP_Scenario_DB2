@@ -113,6 +113,43 @@ pipeline:
 The evidence generator (`scripts/generate_simulation_evidence.py`) accepts a run on the declared sinks
 active in the variant, so screen-off playback is judged on its decoder output.
 
+## Task Cadence (`node_configs.<node>.timeline`)
+
+The hand-off cadence vocabulary (`sdb.handoff/1`) is also the simulation task model. A node released on
+its own cadence runs outside the frame DAG and the frame stages; with `cadence` declared it is judged
+against its own deadline.
+
+```yaml
+node_configs:
+  abox:
+    timeline:
+      cadence: period      # frame | period | chunk | vsync | divided | event
+      period_ms: 10.0      # period / chunk
+      duration_ms: 0.6     # when no calculated HW time exists for the node
+      # deadline_ms: 10.0  # default: its own period (event: judged only with deadline_ms)
+      # phase_ms: 0.0      # first release
+```
+
+| `cadence` | Release | Default deadline |
+| --- | --- | --- |
+| `frame` | with the variant frame (the default; part of the frame DAG) | — (frame stages) |
+| `period` | every `period_ms` | `period_ms` |
+| `chunk` | every `period_ms` (one chunk: writer flush, network segment) | `period_ms` |
+| `vsync` | every 1000 / `refresh_hz` ms (else the panel's selected refresh) | the refresh period |
+| `divided` | every `every`-th frame (`every` ≥ 2) | `every` × frame period |
+| `event` | once at `phase_ms` | only `deadline_ms` |
+
+- Without `cadence`, a `period_ms` keeps its earlier meaning: an own period outside the frame path, not
+  judged. Undeclared tasks give the same results as before.
+- The Timing Budget report carries `own_cadence[]` for declared tasks: `node`, `cadence`, `period_ms`,
+  `deadline_ms`, `releases`, `worst_response_ms` (end − release, resource waits included),
+  `worst_slack_ms` and `ok`. A missed deadline fails the verdict
+  (`<node> (<cadence> <period> ms): 응답 … ms > 자체 deadline … ms`).
+- Timeline events of own-cadence tasks have `frame_index: null`, `independent_period_ms` (0 for an
+  event) and the declared `cadence`.
+- CPU power still uses the SW task's `rate_hz`. Keep it equal to 1000 / period for a SW task on an own
+  cadence.
+
 ## Readiness Severity
 
 | Condition | SoC fixture contract | Scenario readiness |

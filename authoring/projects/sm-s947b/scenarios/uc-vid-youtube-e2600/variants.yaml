@@ -140,10 +140,12 @@
         note: YouTube audio (AAC/Opus) is decoded on the CPU and mixed by AudioFlinger, so ABOX plays PCM (not offload).
           AUD operating point is assumed, same mid level as the CPU-fed streaming path.
       timeline:
+        cadence: period
         period_ms: 10.0
         duration_ms: 0.6
         value_source: assumed
-        note: ABOX playback period IRQ (48 kHz, 480 samples). Runs on its own cadence, outside the video frame path.
+        note: ABOX playback period IRQ (48 kHz, 480 samples). Own cadence outside the video frame path, judged against
+          its own 10 ms period (the next IRQ).
       model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
 - id: yt-1080p60-h264-sdr
   extends: yt-1080p30-h264-sdr

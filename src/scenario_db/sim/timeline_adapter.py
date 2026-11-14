@@ -45,25 +45,92 @@ def timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
         if node.get("id") and str(node["id"]) not in owners
     ]
     for task in tasks:
-        _apply_independent_cadence(task, (graph.variant.node_configs or {}).get(str(task["id"])) or {})
-    return apply_source_sink_constraints(graph, tasks, graph.pipeline_nodes)
+        _apply_cadence(task, (graph.variant.node_configs or {}).get(str(task["id"])) or {})
+    out = apply_source_sink_constraints(graph, tasks, graph.pipeline_nodes)
+    _resolve_vsync(out)
+    return out
 
 
-def _apply_independent_cadence(task: dict[str, Any], config: dict[str, Any]) -> None:
-    """Opt-in own cadence from ``node_configs.<node>.timeline`` (e.g. ABOX period IRQ).
+# D-04: the hand-off cadence vocabulary (sdb.handoff/1) as the simulation task model.
+#   frame   = released with the variant frame (the default; part of the frame DAG)
+#   period  = own fixed period (ABOX period IRQ, ExoPlayer work loop …)
+#   chunk   = released once per chunk (writer flush, network segment …); like period, named for what it is
+#   vsync   = the display refresh (``refresh_hz``, else the panel's selected refresh)
+#   divided = every N-th frame (``every``): a 6 fps M2M on a 30 fps stream
+#   event   = released once (``phase_ms``): capture, a one-off request
+CADENCE_KINDS = ("frame", "period", "chunk", "vsync", "divided", "event")
 
-    The node then repeats every ``period_ms`` outside the frame DAG; ``duration_ms``
-    is used when no calculated HW time exists for it.
+
+def own_cadence(task: dict[str, Any]) -> bool:
+    """A task released on its own cadence, outside the frame DAG and the frame stages."""
+    return bool(task.get("independent_period_ms") or task.get("independent_every") or task.get("independent_once")
+                or task.get("independent_vsync"))
+
+
+def _apply_cadence(task: dict[str, Any], config: dict[str, Any]) -> None:
+    """Own cadence from ``node_configs.<node>.timeline``.
+
+    Without ``cadence`` a ``period_ms`` keeps the previous meaning: an own period outside the frame DAG,
+    not judged. With ``cadence`` (one of :data:`CADENCE_KINDS`) the task is also judged against its own
+    deadline: ``deadline_ms``, else its period (event: only when ``deadline_ms`` is given).
+    ``duration_ms`` is used when no calculated HW time exists for the node.
     """
     timeline = config.get("timeline") or {}
+    kind = timeline.get("cadence")
     period = float(timeline.get("period_ms") or 0.0)
-    if period <= 0:
-        return
-    task["independent_period_ms"] = period
+    node = task.get("id")
+    if kind is None:
+        if period <= 0:
+            return
+        task["independent_period_ms"] = period
+    else:
+        if kind not in CADENCE_KINDS:
+            raise ValueError(f"{node}: timeline.cadence {kind!r} is not one of {', '.join(CADENCE_KINDS)}")
+        if kind == "frame":
+            return
+        task["cadence"] = kind
+        if kind in ("period", "chunk"):
+            if period <= 0:
+                raise ValueError(f"{node}: timeline.cadence {kind} needs period_ms > 0")
+            task["independent_period_ms"] = period
+        elif kind == "vsync":
+            hz = float(timeline.get("refresh_hz") or 0.0)
+            if hz > 0:
+                task["independent_period_ms"] = 1000.0 / hz
+            else:
+                task["independent_vsync"] = True  # the panel's refresh, resolved after the sink constraints
+        elif kind == "divided":
+            every = int(timeline.get("every") or 0)
+            if every < 2:
+                raise ValueError(f"{node}: timeline.cadence divided needs every >= 2 (frames per release)")
+            task["independent_every"] = every
+        else:  # event
+            task["independent_once"] = True
+        if timeline.get("deadline_ms") is not None:
+            deadline = float(timeline["deadline_ms"])
+            if deadline <= 0:
+                raise ValueError(f"{node}: timeline.deadline_ms must be > 0")
+            task["deadline_ms"] = deadline
+        elif kind in ("period", "chunk") or (kind == "vsync" and task.get("independent_period_ms")):
+            task["deadline_ms"] = task["independent_period_ms"]
+        # divided / vsync from the panel: the deadline is the resolved period (timeline / _resolve_vsync)
     if timeline.get("phase_ms") is not None:
         task["independent_phase_ms"] = float(timeline["phase_ms"])
     if not float(task.get("duration_ms") or 0.0) and timeline.get("duration_ms") is not None:
         task["duration_ms"] = float(timeline["duration_ms"])
+
+
+def _resolve_vsync(tasks: list[dict[str, Any]]) -> None:
+    pending = [t for t in tasks if t.get("independent_vsync")]
+    if not pending:
+        return
+    refresh = next((float(t["refresh_hz"]) for t in tasks if t.get("refresh_hz")), 0.0)
+    for task in pending:
+        if refresh <= 0:
+            raise ValueError(f"{task.get('id')}: timeline.cadence vsync needs refresh_hz (no panel refresh in this variant)")
+        task.pop("independent_vsync")
+        task["independent_period_ms"] = 1000.0 / refresh
+        task.setdefault("deadline_ms", task["independent_period_ms"])
 
 
 def timeline_edges(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
