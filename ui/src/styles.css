@@ -1145,3 +1145,13 @@ div.decision-cautions { padding-left: 0; color: var(--faint); }
 .pareto-scatter svg .pt { fill: var(--line); stroke: var(--muted); stroke-width: 1; }
 .pareto-scatter svg .pt.mark { fill: var(--primary); stroke: var(--primary-strong); }
 .pareto-scatter svg .lbl { font-size: 11px; fill: var(--primary-strong); }
+
+/* U-08: a refresh of the same target keeps the previous value, dimmed */
+.is-stale { opacity: .6; transition: opacity .15s; }
+/* U-10: run list + run delta */
+.run-list-box > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.run-list tr.selected td { background: var(--primary-soft); }
+.run-list tr.compare td { background: var(--warn-soft); }
+.link-btn { border: 0; background: transparent; padding: 0; color: var(--primary-strong); cursor: pointer; font: inherit; text-align: left; }
+.link-btn:hover { text-decoration: underline; }
+.run-delta { display: grid; gap: 6px; padding: 10px 12px; }
