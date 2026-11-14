@@ -283,6 +283,10 @@ class UsecaseMetadata(BaseScenarioModel):
     # projection/comparison across projects joins on this key + variant
     # design_conditions instead of the id string.
     canonical_usecase: str | None = None
+    # D-06: what the scenario is for and what its review looks at, shown by the UI (Explorer, Matrix).
+    # Data, not code: a scenario without them gets the UI's generic text.
+    purpose: str | None = None
+    review_focus: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

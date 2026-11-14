@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-game-streaming
   name: Game Streaming
+  purpose: "게임 스트리밍: 원격 렌더링 영상의 수신·decode·표시가 중심입니다. 로컬 게임의 GPU 부하와 구분하고 bitrate, low latency 설정, 디코딩 fps와 패널 Hz를 대조합니다."
+  review_focus:
+  - "수신 · decode · 표시"
+  - "low latency 설정"
+  - "decode fps ↔ 패널 Hz"
   category:
   - game
   - game

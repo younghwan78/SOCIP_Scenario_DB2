@@ -6,6 +6,12 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-call-voice
   name: Voice Call
+  purpose: '음성 통화: call_type별 송수신 오디오와 ABOX 경로를 비교합니다. camera_active=false와 함께 등록된 VT flag는 카메라 부하를 증명하지 않으며 modem RF는 별도
+    검토 대상입니다.'
+  review_focus:
+  - 송수신 오디오 경로
+  - ABOX
+  - call_type별 차이
   category:
   - voice_call
   - audio

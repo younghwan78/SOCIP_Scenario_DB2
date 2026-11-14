@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-aud-mp3-playback
   name: Audio MP3 Playback
+  purpose: "로컬 오디오 재생: UFS 파일 읽기, CPU decode와 DSP offload, speaker/Bluetooth 출력을 비교합니다. 시나리오 이름보다 variant의 실제 format과 offload 조건을 우선하세요."
+  review_focus:
+  - "CPU decode ↔ DSP offload"
+  - "출력 장치"
+  - "사용 시간 (mW)"
   category:
   - audio
   - audio

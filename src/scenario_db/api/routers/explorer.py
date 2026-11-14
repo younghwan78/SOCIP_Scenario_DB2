@@ -150,6 +150,8 @@ def scenario_catalog(
                 scenario_id=scenario.id,
                 scenario_name=str(_scenario_meta(scenario, "name") or scenario.id),
                 canonical_usecase=str(_scenario_meta(scenario, "canonical_usecase") or scenario.id),
+                purpose=(str(_scenario_meta(scenario, "purpose")) if _scenario_meta(scenario, "purpose") else None),
+                review_focus=_scenario_list_meta(scenario, "review_focus"),
                 category=categories,
                 domain=_scenario_list_meta(scenario, "domain"),
                 variant_count=stats["count"],

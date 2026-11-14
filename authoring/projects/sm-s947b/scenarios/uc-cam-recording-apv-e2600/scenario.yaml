@@ -6,6 +6,7 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-cam-recording-apv
   name: Camera Recording APV
+  purpose: "동영상 녹화 (APV) · 기본 KPI와 Pro video의 지속 성능을 비교합니다."
   category:
   - camera
   domain:

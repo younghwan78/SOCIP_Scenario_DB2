@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-call-video
   name: Video Call
+  purpose: "영상 통화: 전면/후면 Sensor 입력, 인코딩 송신과 디코딩 수신이 동시에 진행되는 조건입니다. VT DVFS 값과 해상도·fps를 대조하고 음성·네트워크·패널 조건의 누락을 확인하세요."
+  review_focus:
+  - "Sensor 입력 · 인코딩 송신"
+  - "디코딩 수신"
+  - "VT DVFS ↔ 해상도 · fps"
   category:
   - voice_call
   - video

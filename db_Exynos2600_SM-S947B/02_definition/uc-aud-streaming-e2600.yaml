@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-aud-streaming
   name: Audio Streaming
+  purpose: '오디오 스트리밍: 네트워크 입력과 압축 오디오 decode, ABOX 출력을 검토합니다. 화면 상태와 출력 장치별 지속 동작을 비교하며 네트워크 비용을 PCM BW로 대체하지 않습니다.'
+  review_focus:
+  - 네트워크 입력
+  - decode · ABOX 출력
+  - 화면 상태별 지속 동작
   category:
   - audio
   - audio

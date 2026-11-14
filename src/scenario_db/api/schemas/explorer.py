@@ -44,6 +44,9 @@ class ScenarioCatalogItem(BaseModel):
     scenario_name: str
     # Cross-project join key (metadata.canonical_usecase, falls back to scenario_id).
     canonical_usecase: str | None = None
+    # D-06 scenario metadata: purpose text and review focus (empty when the scenario declares none)
+    purpose: str | None = None
+    review_focus: list[str] = Field(default_factory=list)
     category: list[str] = Field(default_factory=list)
     domain: list[str] = Field(default_factory=list)
     variant_count: int

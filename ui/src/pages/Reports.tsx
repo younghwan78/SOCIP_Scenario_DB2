@@ -7,6 +7,7 @@ import { reportsForProject } from '../lib/provenance'
 import { RiskRegisterCard } from '../components/RiskRegister'
 import { latestProjectReports } from '../lib/reportPortfolio'
 import { EngineChanges } from '../components/EngineChanges'
+import { shortVariantIds } from '../lib/guides'
 
 export function ReportsPage({ ctx }: { ctx: Ctx }) {
   const [tick, setTick] = useState(0)
@@ -100,7 +101,7 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
         </>}
       </div>
       {cur && showStale && stale.data && (stale.data.stale || (stale.data.old_engine?.length ?? 0) > 0) && <div className="lib-note warn">
-        {stale.data.changed.length > 0 && <div>보고서 이후 바뀐 예측: {stale.data.changed.slice(0, 12).map((c) => `${c.variant_id.replace(/^cam-rec-/, '')}${c.snapshot ? '' : ' (신규 등록)'}${c.current ? '' : ' (등록 해제)'}`).join(', ')}{stale.data.changed.length > 12 ? ` 외 ${stale.data.changed.length - 12}` : ''} — “재생성”으로 새 snapshot을 만드세요.</div>}
+        {stale.data.changed.length > 0 && <div>보고서 이후 바뀐 예측: {stale.data.changed.slice(0, 12).map((c, _i, arr) => `${shortVariantIds(arr.map((x) => x.variant_id)).get(c.variant_id)}${c.snapshot ? '' : ' (신규 등록)'}${c.current ? '' : ' (등록 해제)'}`).join(', ')}{stale.data.changed.length > 12 ? ` 외 ${stale.data.changed.length - 12}` : ''} — “재생성”으로 새 snapshot을 만드세요.</div>}
         {(stale.data.old_engine?.length ?? 0) > 0 && <div>이전 engine 예측 {stale.data.old_engine!.length}건 ({[...new Set(stale.data.old_engine!.map((o) => o.engine_rev))].join(', ')} → {stale.data.engine_rev}) — 조합 탐색 · 재등록 후 재생성해야 현재 계산 방식이 반영됩니다.<EngineChanges changes={stale.data.engine_changes} /></div>}
       </div>}
       {cur && review && <div className="panel" style={{ padding: '10px 12px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>

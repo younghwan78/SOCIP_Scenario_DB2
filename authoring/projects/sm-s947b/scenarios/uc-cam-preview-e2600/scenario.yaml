@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-cam-preview
   name: Camera Preview
+  purpose: "미리보기 · 촬영 전 화면 응답성과 상시 Sensor / ISP / 화면 표시 부하를 확인합니다."
+  review_focus:
+  - "Sensor / ISP 상시 부하"
+  - "화면 표시 응답"
+  - "메모리 대역폭"
   category:
   - camera
   domain:

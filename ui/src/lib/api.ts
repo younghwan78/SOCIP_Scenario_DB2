@@ -27,6 +27,9 @@ export interface CatalogItem {
   board_name?: string | null
   project_name?: string | null
   canonical_usecase?: string | null
+  /** D-06 scenario metadata (data, not code): what the scenario is for / what its review looks at */
+  purpose?: string | null
+  review_focus?: string[]
   default_sw_profile_ref?: string | null
 }
 
