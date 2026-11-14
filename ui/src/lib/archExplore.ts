@@ -69,6 +69,8 @@ export interface VariantResult {
   design_axes?: DesignAxes
   /** S-02: the objective order of the recommendation and the power ↔ SW growth front (runs with an order only) */
   objectives?: Objectives
+  /** with an objective order: the lowest-power case the default registration takes (verified like the recommendation) */
+  min_power_case?: ExpCase | null
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
   /** EXP-05: power budget this variant was explored with (spec value or previous-project reference) */
   power_budget?: { mw: number | null; source: string | null; reference_mw?: number } | null

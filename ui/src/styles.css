@@ -1128,3 +1128,20 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .dax-rank .badge { margin-left: 6px; }
 /* recommendation rule and the power / SW growth front */
 .obj-front { display: grid; gap: 6px; font-size: 13px; }
+
+/* U-03: decision card on top of a result, evidence tabs, power-vs-axis scatter */
+.decision { display: grid; gap: 8px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--primary-line); border-left: 4px solid var(--primary); border-radius: var(--radius); font-size: 13px; }
+.decision-head { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.decision-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+.decision-facts dt { color: var(--muted); font-size: 12px; padding-top: 1px; }
+.decision-facts dd { margin: 0; }
+.decision-cautions { margin: 0; padding-left: 18px; color: var(--warn-text); font-size: 13px; }
+div.decision-cautions { padding-left: 0; color: var(--faint); }
+.decision-action { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.evidence-tabs { justify-self: start; }
+.pareto-scatter { display: grid; gap: 6px; }
+.pareto-scatter svg .axis { stroke: var(--line); }
+.pareto-scatter svg .tick { font-size: 10px; fill: var(--faint); }
+.pareto-scatter svg .pt { fill: var(--line); stroke: var(--muted); stroke-width: 1; }
+.pareto-scatter svg .pt.mark { fill: var(--primary); stroke: var(--primary-strong); }
+.pareto-scatter svg .lbl { font-size: 11px; fill: var(--primary-strong); }
