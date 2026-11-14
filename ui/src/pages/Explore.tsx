@@ -32,6 +32,7 @@ import { ExploreJobPanel } from '../components/ExploreJobPanel'
 import { isActive, trackExploreJob, useExploreJob } from '../lib/exploreJob'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 import { SensitivityTornado } from '../components/Sensitivity'
+import { Hint } from '../components/Hint'
 import { ExplorationDecision } from '../components/DecisionCard'
 import { ParetoScatter } from '../components/ParetoScatter'
 import { conclusion, defaultCase, lowestPowerCase } from '../lib/conclusion'
@@ -271,9 +272,13 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const cols: Column<VariantResult>[] = [
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
-    { key: 'spec', label: 'spec', width: 96, sort: (r) => (r.spec_ok ? 1 : 0), title: (r) => [...r.spec_reasons, ...(coverageOf(r) === 'partial' ? [`전력 미모델 IP: ${(r.coverage?.zero_power_ips ?? []).join(', ')} — power는 모델된 IP 합계`] : [])].join('\n'),
-      render: (r) => <span style={{ display: 'inline-flex', gap: 4 }}><TimingVerdictBadge status={r.baseline.verdict === 'not_applicable' ? 'not_applicable' : r.spec_ok ? 'ok' : 'fail'} />
-        {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}</span> },
+    // U-05: the verdict reason is on the row (first line), the rest behind a focusable hint — not hover-only
+    { key: 'spec', label: 'spec', width: 180, sort: (r) => (r.spec_ok ? 1 : 0),
+      render: (r) => { const notes = specNotes(r)
+        return <span className="stack-1" style={{ minWidth: 0 }}><span className="row-1"><TimingVerdictBadge status={r.baseline.verdict === 'not_applicable' ? 'not_applicable' : r.spec_ok ? 'ok' : 'fail'} />
+          {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}
+          <Hint label={`${short(r.variant_id)} 판정 근거`} text={notes.length ? notes.join('\n') : null} /></span>
+          {!r.spec_ok && r.spec_reasons[0] && <span className="reason-line">{r.spec_reasons[0]}</span>}</span> } },
     { key: 'tot', label: '추천 mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.recommended?.total_mw ?? -1, render: (r) => r.recommended ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.recommended} width={70} /><b className="mono">{fmt(r.recommended.total_mw, 1)}</b></span> : '—' },
     { key: 'cpu', label: 'CPU', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.cpu_mw ?? -1, render: (r) => fmt(r.recommended?.cpu_mw, 0) },
     { key: 'hw', label: 'HW', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.hw_mw ?? -1, render: (r) => fmt(r.recommended?.hw_mw, 0) },
@@ -295,7 +300,9 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'margin', label: 'SW margin', width: 90, align: 'right', firstDir: 1, sort: (r) => r.sw_margin.worst?.margin_pct ?? 999, title: (r) => r.sw_margin.recommendations.join('\n'), render: (r) => <span className="mono" style={{ color: (r.sw_margin.worst?.margin_pct ?? 1) < 0 ? 'var(--del-text)' : undefined }}>{fmt(r.sw_margin.worst?.margin_pct, 1)}%</span> },
     { key: 'grow', label: 'SW 증가 허용', width: 110, align: 'right', firstDir: -1, sort: (r) => r.sw_margin.growth_tolerance_fixed ?? r.sw_margin.growth_tolerance ?? 0,
       title: () => '추천 DVFS 고정 / DVFS 재선택', render: (r) => `${r.sw_margin.growth_tolerance_fixed ? `×${fmt(r.sw_margin.growth_tolerance_fixed, 1)}` : '—'} / ${r.sw_margin.growth_tolerance ? `×${fmt(r.sw_margin.growth_tolerance, 1)}` : '—'}` },
-    { key: 'ver', label: '검증', width: 70, align: 'right', sort: (r) => Math.abs(r.recommended?.verified?.delta_pct ?? 99), render: (r) => { const v = r.recommended?.verified; return v ? <span title={[`sim ${fmt(v.sim_total_mw, 2)} / analytic ${fmt(v.analytic_total_mw, 2)} mW`, ...(v.sim_bw_mbs !== undefined ? [`BW sim ${fmt(v.sim_bw_mbs, 0)} / analytic ${fmt(v.analytic_bw_mbs, 0)} MB/s`] : []), ...(v.reasons ?? [])].join('\n')} style={{ color: v.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{v.ok ? '✓' : '✗'} {fmt(v.delta_pct, 2)}%</span> : '—' } },
+    { key: 'ver', label: '검증', width: 96, align: 'right', sort: (r) => Math.abs(r.recommended?.verified?.delta_pct ?? 99), render: (r) => { const v = r.recommended?.verified
+      return v ? <Hint label={`${short(r.variant_id)} 검증 수치`} text={[`sim ${fmt(v.sim_total_mw, 2)} / analytic ${fmt(v.analytic_total_mw, 2)} mW`, ...(v.sim_bw_mbs !== undefined ? [`BW sim ${fmt(v.sim_bw_mbs, 0)} / analytic ${fmt(v.analytic_bw_mbs, 0)} MB/s`] : []), ...(v.reasons ?? [])].join('\n')}>
+        <span style={{ color: v.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{v.ok ? '✓' : '✗'} {fmt(v.delta_pct, 2)}%</span></Hint> : '—' } },
   ]
   return <>
     <section className="tb-kpis" aria-label="run 요약">
@@ -552,6 +559,11 @@ export function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }:
  * evidence); ``display: contents`` keeps them items of the page grid. */
 function TabPanel({ id, tab, children }: { id: EvidenceTab; tab: EvidenceTab; children: ReactNode }) {
   return <div role="tabpanel" aria-label={id} hidden={tab !== id} style={{ display: tab === id ? 'contents' : 'none' }}>{children}</div>
+}
+
+/** Every reason behind a variant's spec verdict (spec reasons + the partial-model note). */
+export function specNotes(r: VariantResult): string[] {
+  return [...r.spec_reasons, ...(coverageOf(r) === 'partial' ? [`전력 미모델 IP: ${(r.coverage?.zero_power_ips ?? []).join(', ')} — power는 모델된 IP 합계`] : [])]
 }
 
 type EvidenceTab = 'power' | 'timing' | 'memory' | 'dvfs'
