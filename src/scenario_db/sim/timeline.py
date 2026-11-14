@@ -344,7 +344,8 @@ def _expand_task_runs(
     frame_period_ms: float,
 ) -> dict[str, _TaskRun]:
     runs: dict[str, _TaskRun] = {}
-    independent = {task_id for task_id, task in tasks.items() if _independent_period(task) > 0}
+    independent = {task_id for task_id, task in tasks.items()
+                   if _independent_period(task) > 0 or task.get("independent_every") or task.get("independent_once")}
     for frame_index in range(frame_count):
         for task_id, task in tasks.items():
             if task_id in independent:
@@ -367,8 +368,20 @@ def _expand_task_runs(
     horizon_ms = frame_count * frame_period_ms
     for task_id in independent:
         task = tasks[task_id]
-        period = _independent_period(task)
         phase = float(task.get("independent_phase_ms") or 0.0)
+        if task.get("independent_once"):
+            # event cadence: one release at its phase
+            runs[task_id] = _TaskRun(instance_id=task_id, base_id=task_id, frame_index=None, task=task,
+                                     release_ms=phase, independent_period_ms=0.0)
+            continue
+        if task.get("independent_every"):
+            if frame_period_ms <= 0:
+                raise ValueError(f"{task_id}: divided cadence needs the frame period")
+            # divided cadence: every N-th frame (N x the frame period); its deadline defaults to that period
+            task = tasks[task_id] = {**task, "independent_period_ms": int(task["independent_every"]) * frame_period_ms}
+            if task.get("cadence") and task.get("deadline_ms") is None:
+                task["deadline_ms"] = task["independent_period_ms"]
+        period = _independent_period(task)
         count = max(1, math.ceil((horizon_ms - phase) / period - 1e-9)) if horizon_ms > 0 else frame_count
         for index in range(count):
             instance_id = task_id if count == 1 else f"{task_id}#c{index}"
@@ -587,6 +600,7 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
                 critical_path_rank=run.critical_path_rank,
                 predecessors=list(graph.predecessors(run.instance_id)),
                 independent_period_ms=run.independent_period_ms,
+                cadence=task.get("cadence"),
             )
         )
     return result

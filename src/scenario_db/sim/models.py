@@ -450,6 +450,8 @@ class TimelineEvent(BaseScenarioModel):
     predecessors: list[str] = Field(default_factory=list)
     # Own-cadence task (ABOX period IRQ …): frame_index is None; omitted for frame tasks
     independent_period_ms: float | None = Field(default=None, exclude_if=lambda value: value is None)
+    # declared cadence kind of an own-cadence task (D-04: period · chunk · vsync · divided · event); judged by its deadline
+    cadence: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class SimRunResult(BaseScenarioModel):

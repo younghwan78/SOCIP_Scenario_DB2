@@ -37,6 +37,7 @@ from scenario_db.sim.cpu_power import PROFILER_COEFF as _CPU_PROFILER_COEFF
 from scenario_db.sim.models import CpuProfile, DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.power_params import effective_power_params
 from scenario_db.sim.runner import run_simulation
+from scenario_db.sim.timeline_adapter import own_cadence
 
 Statistic = Literal["min", "mean", "max"]
 Stage = Literal["rt", "nrt", "post", "output"]
@@ -471,9 +472,18 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         src, dst = _edge_pair(edge)
         if edge.get("latency_ms"):
             edge_latency[dst] = max(edge_latency.get(dst, 0.0), float(edge["latency_ms"]))
+    # own-cadence SW (timeline cadence / period): outside the frame budget, but CPU work all the same —
+    # its runtime per frame period = runtime x frame period / own period (an event releases once: no rate)
+    own_sw: dict[str, dict[str, float]] = {}
+    for task_id, task in tasks.items():
+        if task.get("task_type") == "sw" and task_id not in stage and own_cadence(task) and not task.get("independent_once"):
+            own = float(task.get("independent_period_ms") or 0.0) or float(task.get("independent_every") or 0) * period
+            if own > 0:
+                runtime = _task_runtime(task_id, task, profiles, options)
+                own_sw[task_id] = {"runtime_ms": runtime, "per_period_ms": runtime * period / own}
     for task_id, task in tasks.items():
         if task.get("task_type") != "sw" or task_id not in stage:
-            continue  # own-cadence SW (independent_period_ms) is outside the frame budget
+            continue  # own-cadence SW is outside the frame budget (its CPU power: own_sw above)
         st = stage[task_id]
         if task_id in eis_tasks and not eis_on:
             continue
@@ -599,6 +609,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "stage": stage,
         "tasks": tasks,
         "sw_items": sw_items,
+        "own_sw": own_sw,
         "sw_order": sw_order,
         "stage_paths": stage_paths,
         "budgets": budgets,
@@ -647,7 +658,7 @@ def _classify(tasks, edges, workloads, overrides) -> dict[str, Stage]:
                 (workloads.get(tid).ip_ref if tid in workloads else "") or task.get("hw_name") or ""
             )
         )
-        if task.get("independent_period_ms"):
+        if own_cadence(task):
             continue  # own cadence (ABOX …): outside the frame stages
         if tid in rt:
             stage[tid] = "rt"
@@ -665,7 +676,7 @@ def _classify(tasks, edges, workloads, overrides) -> dict[str, Stage]:
     ancestors = _closure(nrt_hw, pred)
     descendants = _closure(nrt_hw, succ)
     for tid, task in tasks.items():
-        if tid in stage or task.get("independent_period_ms"):
+        if tid in stage or own_cadence(task):
             continue
         if _downstream_of(tid, pred, stage, "output"):
             stage[tid] = "output"
@@ -891,6 +902,10 @@ def _apply_sw(inputs: SimulationInputs, plan: dict, options: TimingBudgetOptions
                 task["resource_id"] = f"CPU_{tid}" if pipelined else f"CPU_{plan['stage'].get(tid, 'nrt').upper()}"
             if tid in items:
                 task["duration_ms"] = max(_MIN_TASK_MS, items[tid]["runtime_ms"])
+            elif tid in plan["own_sw"]:  # own cadence: its own loop thread, its own runtime per release
+                task["duration_ms"] = max(_MIN_TASK_MS, plan["own_sw"][tid]["runtime_ms"])
+                if not plan["explicit_resource"].get(tid):
+                    task["resource_id"] = f"CPU_{tid}"
             else:  # EIS off
                 task["duration_ms"] = _MIN_TASK_MS
             task["measured_duration"] = True
@@ -1014,7 +1029,8 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions))
     bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
-    verdict = _verdict(stages, intervals, ips, domains, period)
+    own = own_cadence_rows(result.timeline_events)
+    verdict = _verdict(stages, intervals, ips, domains, period, own)
     contract = plan.get("contract")
     if contract is not None:
         from scenario_db.models.definition.usecase import MODELED_KPIS
@@ -1049,6 +1065,8 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         "bw": bw,
         "verdict": verdict,
         "stage_domains": domains,
+        # D-04: tasks on a declared own cadence, each judged by its own deadline (only when declared)
+        **({"own_cadence": own} if own else {}),
         "timeline": [
             {
                 "node": str(e.node_id),
@@ -1177,6 +1195,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     for tid, task in tasks.items():  # output-side SW (writer, storage) is CPU work too
         if task.get("task_type") == "sw" and tid not in busy and stage.get(tid) == "output":
             busy[tid] = float(task.get("duration_ms") or 0.0)
+    for tid, own in (plan.get("own_sw") or {}).items():  # own-cadence SW: runtime per frame period
+        busy.setdefault(tid, own["per_period_ms"])
     cpu_by_task = {t: options.cpu.power_mw(ms, period) for t, ms in busy.items()}
     sw_nodes = {t for t, task in tasks.items() if task.get("task_type") == "sw"}
     bw_hw: dict[str, float] = {}
@@ -1236,9 +1256,45 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     return power, bw
 
 
-def _verdict(stages, intervals, ips, domains=None, period: float | None = None) -> dict[str, Any]:
+def own_cadence_rows(events) -> list[dict[str, Any]]:
+    """Per task on a declared own cadence: its releases in the simulated window and the worst response
+    against its own deadline (release + ``deadline_ms``). Undeclared own periods are not judged."""
+    by_node: dict[str, list[Any]] = {}
+    for e in events:
+        if e.frame_index is None and getattr(e, "cadence", None):
+            by_node.setdefault(str(e.node_id), []).append(e)
+    rows = []
+    for node, evs in sorted(by_node.items()):
+        first = evs[0]
+        judged = [e for e in evs if e.deadline_ms is not None and e.slack_ms is not None]
+        relative = (judged[0].deadline_ms - _release(judged[0])) if judged else None
+        worst = max(evs, key=lambda e: e.end_ms - _release(e))
+        min_slack = min((e.slack_ms for e in judged), default=None)
+        rows.append({
+            "node": node, "cadence": first.cadence,
+            "period_ms": round(first.independent_period_ms, 4) if first.independent_period_ms else None,
+            "deadline_ms": round(relative, 4) if relative is not None else None,
+            "releases": len(evs),
+            "worst_response_ms": round(worst.end_ms - _release(worst), 4),
+            "worst_slack_ms": round(min_slack, 4) if min_slack is not None else None,
+            "ok": None if min_slack is None else min_slack >= -1e-9,
+        })
+    return rows
+
+
+def _release(event) -> float:
+    """Release time of an own-cadence instance: it has no predecessors, so it is ready when released."""
+    return float(event.ready_ms if event.ready_ms is not None else event.start_ms)
+
+
+def _verdict(stages, intervals, ips, domains=None, period: float | None = None,
+             own: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     limit = period if period else float("inf")
     reasons = []
+    for row in own or []:
+        if row["ok"] is False:
+            reasons.append(f"{row['node']} ({row['cadence']} {row['period_ms'] or ''} ms): 응답 {row['worst_response_ms']:.3f} ms > "
+                           f"자체 deadline {row['deadline_ms']:.3f} ms")
     for s in stages:
         if not s["feasible"] and s.get("throughput") == "pipelined":
             over = [g for g in s.get("cpu_groups") or [] if g["load_ms"] > limit]
