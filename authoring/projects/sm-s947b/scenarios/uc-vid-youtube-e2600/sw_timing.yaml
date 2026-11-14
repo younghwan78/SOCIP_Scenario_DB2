@@ -21,35 +21,31 @@ tasks:
     - id: network-a
       variants: '*'
       timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
+        # one HTTP media chunk read per 100 ms (cadence: chunk in variants.yaml); same CPU time per second
+        # as the earlier per-frame assumption (1 ms x 30 Hz = 3 ms x 10 Hz)
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
         start_latency_ref: packet_arrival
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 10.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
-    - id: network-b
-      variants:
-      - yt-1080p60-h264-sdr
-      - yt-1080p60-vp9-hdr10
-      - yt-4k60-vp9-hdr10
-      - yt-4k60-av1-hdr10
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+  exo_loop:
+    groups:
+    - id: exo_loop-a
+      variants: '*'
       timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 60.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
   sw_demux:
     groups:
     - id: sw_demux-a

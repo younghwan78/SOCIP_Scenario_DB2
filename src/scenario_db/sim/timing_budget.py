@@ -472,9 +472,18 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         src, dst = _edge_pair(edge)
         if edge.get("latency_ms"):
             edge_latency[dst] = max(edge_latency.get(dst, 0.0), float(edge["latency_ms"]))
+    # own-cadence SW (timeline cadence / period): outside the frame budget, but CPU work all the same —
+    # its runtime per frame period = runtime x frame period / own period (an event releases once: no rate)
+    own_sw: dict[str, dict[str, float]] = {}
+    for task_id, task in tasks.items():
+        if task.get("task_type") == "sw" and task_id not in stage and own_cadence(task) and not task.get("independent_once"):
+            own = float(task.get("independent_period_ms") or 0.0) or float(task.get("independent_every") or 0) * period
+            if own > 0:
+                runtime = _task_runtime(task_id, task, profiles, options)
+                own_sw[task_id] = {"runtime_ms": runtime, "per_period_ms": runtime * period / own}
     for task_id, task in tasks.items():
         if task.get("task_type") != "sw" or task_id not in stage:
-            continue  # own-cadence SW (timeline cadence / period) is outside the frame budget
+            continue  # own-cadence SW is outside the frame budget (its CPU power: own_sw above)
         st = stage[task_id]
         if task_id in eis_tasks and not eis_on:
             continue
@@ -600,6 +609,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "stage": stage,
         "tasks": tasks,
         "sw_items": sw_items,
+        "own_sw": own_sw,
         "sw_order": sw_order,
         "stage_paths": stage_paths,
         "budgets": budgets,
@@ -892,6 +902,10 @@ def _apply_sw(inputs: SimulationInputs, plan: dict, options: TimingBudgetOptions
                 task["resource_id"] = f"CPU_{tid}" if pipelined else f"CPU_{plan['stage'].get(tid, 'nrt').upper()}"
             if tid in items:
                 task["duration_ms"] = max(_MIN_TASK_MS, items[tid]["runtime_ms"])
+            elif tid in plan["own_sw"]:  # own cadence: its own loop thread, its own runtime per release
+                task["duration_ms"] = max(_MIN_TASK_MS, plan["own_sw"][tid]["runtime_ms"])
+                if not plan["explicit_resource"].get(tid):
+                    task["resource_id"] = f"CPU_{tid}"
             else:  # EIS off
                 task["duration_ms"] = _MIN_TASK_MS
             task["measured_duration"] = True
@@ -1181,6 +1195,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     for tid, task in tasks.items():  # output-side SW (writer, storage) is CPU work too
         if task.get("task_type") == "sw" and tid not in busy and stage.get(tid) == "output":
             busy[tid] = float(task.get("duration_ms") or 0.0)
+    for tid, own in (plan.get("own_sw") or {}).items():  # own-cadence SW: runtime per frame period
+        busy.setdefault(tid, own["per_period_ms"])
     cpu_by_task = {t: options.cpu.power_mw(ms, period) for t, ms in busy.items()}
     sw_nodes = {t for t, task in tasks.items() if task.get("task_type") == "sw"}
     bw_hw: dict[str, float] = {}

@@ -21,6 +21,11 @@ pipeline:
     ip_ref: ip-cpu-s5e9965
     role: demux
     instance_index: 0
+  # ExoPlayer playback work loop (doSomeWork every 10 ms): own cadence, outside the frame path
+  - id: exo_loop
+    ip_ref: ip-cpu-s5e9965
+    role: player_loop
+    instance_index: 0
   - id: mfc_dec
     ip_ref: ip-mfc-s5e9965
     role: decoder

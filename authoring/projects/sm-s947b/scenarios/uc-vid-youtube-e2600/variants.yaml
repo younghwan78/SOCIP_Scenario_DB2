@@ -119,6 +119,18 @@
       bw_kb_s:
         write: 1250
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
     abox:

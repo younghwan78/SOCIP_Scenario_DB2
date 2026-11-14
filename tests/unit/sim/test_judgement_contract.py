@@ -152,19 +152,34 @@ def test_interval_distribution_uses_the_declared_sinks(env):
     assert [(s["node"], s["kind"]) for s in only["streams"]] == [("mfc_dec", "video")]
 
 
-def test_youtube_abox_is_judged_by_its_own_period(env):
-    # D-04: the ABOX period IRQ declares cadence: period, so it is judged against its own 10 ms deadline
+def test_youtube_own_cadences_are_judged_and_their_cpu_work_counts(env):
+    # D-04 (assumed fixture values): ABOX period IRQ 10 ms, network one chunk per 100 ms, ExoPlayer loop 10 ms
     catalog, tables, raw = env
     graph = graph_from_fixture(raw, "yt-1080p30-h264-sdr", catalog)
     report = run(graph, tables)
-    assert report["own_cadence"] == [{"node": "abox", "cadence": "period", "period_ms": 10.0, "deadline_ms": 10.0,
-                                      "releases": report["own_cadence"][0]["releases"], "worst_response_ms": 0.6,
-                                      "worst_slack_ms": 9.4, "ok": True}]
-    assert report["own_cadence"][0]["releases"] >= 3
-    # without the declaration the same period is still outside the frame path and not judged
+    rows = {r["node"]: r for r in report["own_cadence"]}
+    assert set(rows) == {"abox", "exo_loop", "network"}
+    assert rows["abox"] | {"releases": 0} == {"node": "abox", "cadence": "period", "period_ms": 10.0, "deadline_ms": 10.0,
+                                               "releases": 0, "worst_response_ms": 0.6, "worst_slack_ms": 9.4, "ok": True}
+    # SW on its own cadence runs on its own thread with its own runtime (statistic max: 9.0 / 0.5 ms)
+    assert rows["network"]["cadence"] == "chunk" and rows["network"]["worst_response_ms"] == 9.0 and rows["network"]["ok"]
+    assert rows["exo_loop"]["worst_response_ms"] == 0.5 and rows["exo_loop"]["releases"] >= 3
+    # ... and is CPU work: runtime x frame period / own period
+    period = report["period_ms"]
+    cpu = report["power"]["cpu_by_task"]
+    assert set(cpu) >= {"network", "exo_loop", "sw_demux"}
+    assert cpu["network"] == pytest.approx(cpu["exo_loop"] * (9.0 * period / 100) / (0.5 * period / 10), rel=0.01)
+    # outside the frame stages, as before
+    assert not any(i["task"] in ("network", "exo_loop") for s in report["stages"] for i in s["sw_items"])
+
+
+def test_an_undeclared_own_period_is_still_not_judged(env):
+    catalog, tables, raw = env
+    graph = graph_from_fixture(raw, "yt-1080p30-h264-sdr", catalog)
+    report = run(graph, tables)
     plain = deepcopy(graph.variant)
     plain.node_configs = {**plain.node_configs, "abox": {**plain.node_configs["abox"],
                           "timeline": {k: v for k, v in plain.node_configs["abox"]["timeline"].items() if k != "cadence"}}}
     undeclared = run(replace(graph, variant=plain), tables)
-    assert "own_cadence" not in undeclared
+    assert "abox" not in {r["node"] for r in undeclared["own_cadence"]}
     assert undeclared["verdict"] == report["verdict"] and undeclared["stages"] == report["stages"]

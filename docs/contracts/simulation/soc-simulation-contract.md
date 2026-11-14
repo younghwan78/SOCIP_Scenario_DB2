@@ -147,8 +147,10 @@ node_configs:
   (`<node> (<cadence> <period> ms): 응답 … ms > 자체 deadline … ms`).
 - Timeline events of own-cadence tasks have `frame_index: null`, `independent_period_ms` (0 for an
   event) and the declared `cadence`.
-- CPU power still uses the SW task's `rate_hz`. Keep it equal to 1000 / period for a SW task on an own
-  cadence.
+- A SW task on an own cadence runs on its own thread (`CPU_<node>`) with its own runtime per release
+  (the Timing Budget statistic and growth apply). Its Timing Budget CPU power counts
+  runtime × frame period / own period (an event releases once: no rate). The evidence CPU energy still
+  uses the SW task's `rate_hz`, so keep `rate_hz` = 1000 / period.
 
 ## Readiness Severity
 

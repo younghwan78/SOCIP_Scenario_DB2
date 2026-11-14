@@ -21,6 +21,10 @@ pipeline:
     ip_ref: ip-cpu-s5e9965
     role: demux
     instance_index: 0
+  - id: exo_loop
+    ip_ref: ip-cpu-s5e9965
+    role: player_loop
+    instance_index: 0
   - id: mfc_dec
     ip_ref: ip-mfc-s5e9965
     role: decoder
@@ -234,20 +238,42 @@ variants:
       bw_kb_s:
         write: 1250
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -405,20 +431,42 @@ variants:
       bw_kb_s:
         write: 2000
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 60.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -576,20 +624,42 @@ variants:
       bw_kb_s:
         write: 1250
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -749,20 +819,42 @@ variants:
       bw_kb_s:
         write: 2000
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 60.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -927,20 +1019,42 @@ variants:
       bw_kb_s:
         write: 4375
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -1105,20 +1219,42 @@ variants:
       bw_kb_s:
         write: 7500
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 60.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -1281,20 +1417,42 @@ variants:
       bw_kb_s:
         write: 1250
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -1452,20 +1610,42 @@ variants:
       bw_kb_s:
         write: 4375
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -1625,20 +1805,42 @@ variants:
       bw_kb_s:
         write: 4375
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -1803,20 +2005,42 @@ variants:
       bw_kb_s:
         write: 7500
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 60.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -1943,20 +2167,42 @@ variants:
       bw_kb_s:
         write: 1250
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -2110,20 +2356,42 @@ variants:
       bw_kb_s:
         write: 1250
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
@@ -2299,20 +2567,42 @@ variants:
       bw_kb_s:
         write: 4375
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: chunk
+        period_ms: 100.0
+        value_source: assumed
+        note: One media chunk read per 100 ms on its own cadence (not per video frame); judged against the next chunk.
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 9.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 10.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
+    exo_loop:
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      timeline:
+        cadence: period
+        period_ms: 10.0
+        value_source: assumed
+        note: ExoPlayer doSomeWork loop every 10 ms (render / feed decisions), outside the frame path.
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
       sw_timing:
-        min_ms: 0.5
-        mean_ms: 1.0
-        max_ms: 3.0
-        start_latency_ref: packet_arrival
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        start_latency_ref: loop_tick
         start_latency_mean_ms: 0.0
-        rate_hz: 30.0
+        rate_hz: 100.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the measured chunk period / work-loop
+          interval and per-run execution time; CPU energy = ip-cpu power_model x exec_ms x rate_hz.
     abox:
       selected_mode: Normal
       sim:
