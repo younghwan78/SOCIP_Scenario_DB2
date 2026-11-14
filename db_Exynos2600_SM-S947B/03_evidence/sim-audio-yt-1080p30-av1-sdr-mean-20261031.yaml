@@ -33,7 +33,7 @@ kpi:
   core_power_mw: 4.1472
   bw_power_mw: 19.90656
   total_bw_mbs: 248.832
-  hw_time_max_ms: 1.8144
+  hw_time_max_ms: 8.424376088218223
   timeline_end_ms: 260.6
   critical_path_ms: 0.0
   critical_path_task_count: 0
@@ -106,7 +106,7 @@ timing_breakdown:
   ip_ref: ip-mfc-s5e9965
   hw_name: MFC
   task_type: hw
-  hw_time_ms: 1.8144
+  hw_time_ms: 8.424376088218223
   required_clock_mhz: 300.0
   set_clock_mhz: 300.0
   set_voltage_mv: 710.0
@@ -116,7 +116,7 @@ timing_breakdown:
   hw_name: DPU
   task_type: hw
   hw_time_ms: 1.8144
-  required_clock_mhz: 18.296470588235298
+  required_clock_mhz: 84.95169164589807
   set_clock_mhz: 300.0
   set_voltage_mv: 710.0
   feasible: true
@@ -127,7 +127,7 @@ dvfs_breakdown:
   hw_name: MFC
   mode: Normal
   required_clock_mhz: 300.0
-  base_required_clock_mhz: 18.296470588235298
+  base_required_clock_mhz: 84.95169164589807
   manual_clock_mhz: 300.0
   clock_correction_mhz: 0.0
   set_clock_mhz: 300.0
@@ -139,7 +139,7 @@ dvfs_breakdown:
   height: 1080
   format: BITSTREAM
   unit_power_mw_mp: 1.0
-  ppc: 4.0
+  ppc: 0.8615
   input_resolution_mp: 2.0736
   fps: 30.0
   active_power_mw: 2.0736
@@ -148,7 +148,7 @@ dvfs_breakdown:
   vdd_leader: dpu,mfc_dec
   feasible: true
   clock_ledger:
-    throughput_required_mhz: 18.296470588235298
+    throughput_required_mhz: 84.95169164589807
     constraints:
     - kind: manual
       mhz: 300.0
@@ -160,9 +160,9 @@ dvfs_breakdown:
     basis: calculated
     basis_used: calculated
     gap:
-      calculated_over_throughput_pct: 1539.66
+      calculated_over_throughput_pct: 253.14
       cause: manual
-  clock_ref_mhz: 18.296470588235298
+  clock_ref_mhz: 72.20893789901334
   clock_overhead_mw: 0.0
   leakage_power_mw: 0.0
 - node_id: dpu
@@ -170,7 +170,7 @@ dvfs_breakdown:
   ip_ref: ip-dpu-s5e9965
   hw_name: DPU
   mode: Normal
-  required_clock_mhz: 18.296470588235298
+  required_clock_mhz: 84.95169164589807
   base_required_clock_mhz: 18.296470588235298
   clock_correction_mhz: 0.0
   set_clock_mhz: 300.0
@@ -192,52 +192,39 @@ dvfs_breakdown:
   feasible: true
   clock_ledger:
     throughput_required_mhz: 18.296470588235298
-    constraints: []
-    binding_kind: throughput
-    calculated_required_mhz: 18.296470588235298
+    constraints:
+    - kind: dvfs_group_align
+      mhz: 84.95169164589807
+      reason: dvfs_group_align(INT)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 84.95169164589807
     calculated_mhz: 300.0
     basis: calculated
     basis_used: calculated
     gap:
       calculated_over_throughput_pct: 1539.66
-  clock_ref_mhz: 18.296470588235298
+      cause: dvfs_group_align
+  clock_ref_mhz: 15.552
   clock_overhead_mw: 0.0
   leakage_power_mw: 0.0
 timeline_events:
-- task_id: network#f0
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 0
-  resource_id: network
-  bottleneck: false
-  start_ms: 0.0
-  end_ms: 1.0
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 0.0
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f0
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 0
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 1.0
-  end_ms: 1.6
-  duration_ms: 0.6000000000000001
+  start_ms: 0.0
+  end_ms: 0.6
+  duration_ms: 0.6
   cadence_violation: false
-  ready_ms: 1.0
+  ready_ms: 0.0
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f0
+  predecessors: []
 - task_id: mfc_dec#f0
   node_id: mfc_dec
   hw_name: MFC
@@ -246,11 +233,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 1.6
-  end_ms: 3.4144
-  duration_ms: 1.8144
+  start_ms: 0.6
+  end_ms: 9.024376088218222
+  duration_ms: 8.424376088218223
   cadence_violation: false
-  ready_ms: 1.6
+  ready_ms: 0.6
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -270,16 +257,16 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 3.4144
-  end_ms: 5.2288
-  duration_ms: 1.8143999999999996
+  start_ms: 9.024376088218222
+  end_ms: 10.838776088218221
+  duration_ms: 1.8143999999999991
   deadline_ms: 33.333333333333336
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115114
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 3.4144
+  ready_ms: 9.024376088218222
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -298,55 +285,37 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 3.4144
-  end_ms: 5.2288
-  duration_ms: 1.8143999999999996
+  start_ms: 9.024376088218222
+  end_ms: 10.838776088218221
+  duration_ms: 1.8143999999999991
   deadline_ms: 33.333333333333336
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115114
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 3.4144
+  ready_ms: 9.024376088218222
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
   - dpu#f0
-- task_id: network#f1
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 1
-  resource_id: network
-  bottleneck: false
-  start_ms: 33.333333333333336
-  end_ms: 34.333333333333336
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 33.333333333333336
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f1
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 1
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 34.333333333333336
-  end_ms: 34.93333333333334
+  start_ms: 33.333333333333336
+  end_ms: 33.93333333333334
   duration_ms: 0.6000000000000014
   cadence_violation: false
-  ready_ms: 34.333333333333336
+  ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f1
+  predecessors: []
 - task_id: mfc_dec#f1
   node_id: mfc_dec
   hw_name: MFC
@@ -355,11 +324,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 34.93333333333334
-  end_ms: 36.747733333333336
-  duration_ms: 1.8143999999999991
+  start_ms: 33.93333333333334
+  end_ms: 42.35770942155156
+  duration_ms: 8.424376088218224
   cadence_violation: false
-  ready_ms: 34.93333333333334
+  ready_ms: 33.93333333333334
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -379,17 +348,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 36.747733333333336
-  end_ms: 38.562133333333335
+  start_ms: 42.35770942155156
+  end_ms: 44.17210942155156
   duration_ms: 1.8143999999999991
   deadline_ms: 66.66666666666667
-  slack_ms: 28.104533333333336
-  cadence_interval_ms: 33.333333333333336
+  slack_ms: 22.49455724511511
+  cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 36.747733333333336
+  ready_ms: 42.35770942155156
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -408,56 +377,38 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 36.747733333333336
-  end_ms: 38.562133333333335
+  start_ms: 42.35770942155156
+  end_ms: 44.17210942155156
   duration_ms: 1.8143999999999991
   deadline_ms: 66.66666666666667
-  slack_ms: 28.104533333333336
-  cadence_interval_ms: 33.333333333333336
+  slack_ms: 22.49455724511511
+  cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 36.747733333333336
+  ready_ms: 42.35770942155156
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
   - dpu#f1
-- task_id: network#f2
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 2
-  resource_id: network
-  bottleneck: false
-  start_ms: 66.66666666666667
-  end_ms: 67.66666666666667
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 66.66666666666667
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f2
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 2
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 67.66666666666667
-  end_ms: 68.26666666666667
+  start_ms: 66.66666666666667
+  end_ms: 67.26666666666667
   duration_ms: 0.5999999999999943
   cadence_violation: false
-  ready_ms: 67.66666666666667
+  ready_ms: 66.66666666666667
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f2
+  predecessors: []
 - task_id: mfc_dec#f2
   node_id: mfc_dec
   hw_name: MFC
@@ -466,11 +417,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 68.26666666666667
-  end_ms: 70.08106666666667
-  duration_ms: 1.8144000000000062
+  start_ms: 67.26666666666667
+  end_ms: 75.69104275488489
+  duration_ms: 8.424376088218224
   cadence_violation: false
-  ready_ms: 68.26666666666667
+  ready_ms: 67.26666666666667
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -490,17 +441,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 70.08106666666667
-  end_ms: 71.89546666666668
+  start_ms: 75.69104275488489
+  end_ms: 77.5054427548849
   duration_ms: 1.8144000000000062
   deadline_ms: 100.0
-  slack_ms: 28.104533333333322
-  cadence_interval_ms: 33.33333333333334
+  slack_ms: 22.494557245115104
+  cadence_interval_ms: 33.333333333333336
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 70.08106666666667
+  ready_ms: 75.69104275488489
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -519,56 +470,38 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 70.08106666666667
-  end_ms: 71.89546666666668
+  start_ms: 75.69104275488489
+  end_ms: 77.5054427548849
   duration_ms: 1.8144000000000062
   deadline_ms: 100.0
-  slack_ms: 28.104533333333322
-  cadence_interval_ms: 33.33333333333334
+  slack_ms: 22.494557245115104
+  cadence_interval_ms: 33.333333333333336
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 70.08106666666667
+  ready_ms: 75.69104275488489
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
   - dpu#f2
-- task_id: network#f3
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 3
-  resource_id: network
-  bottleneck: false
-  start_ms: 100.0
-  end_ms: 101.0
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 100.0
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f3
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 3
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 101.0
-  end_ms: 101.6
+  start_ms: 100.0
+  end_ms: 100.6
   duration_ms: 0.5999999999999943
   cadence_violation: false
-  ready_ms: 101.0
+  ready_ms: 100.0
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f3
+  predecessors: []
 - task_id: mfc_dec#f3
   node_id: mfc_dec
   hw_name: MFC
@@ -577,11 +510,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 101.6
-  end_ms: 103.4144
-  duration_ms: 1.8144000000000062
+  start_ms: 100.6
+  end_ms: 109.02437608821822
+  duration_ms: 8.424376088218224
   cadence_violation: false
-  ready_ms: 101.6
+  ready_ms: 100.6
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -601,17 +534,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 103.4144
-  end_ms: 105.2288
+  start_ms: 109.02437608821822
+  end_ms: 110.83877608821822
   duration_ms: 1.8144000000000062
   deadline_ms: 133.33333333333334
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333333
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 103.4144
+  ready_ms: 109.02437608821822
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -630,56 +563,38 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 103.4144
-  end_ms: 105.2288
+  start_ms: 109.02437608821822
+  end_ms: 110.83877608821822
   duration_ms: 1.8144000000000062
   deadline_ms: 133.33333333333334
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333333
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 103.4144
+  ready_ms: 109.02437608821822
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
   - dpu#f3
-- task_id: network#f4
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 4
-  resource_id: network
-  bottleneck: false
-  start_ms: 133.33333333333334
-  end_ms: 134.33333333333334
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 133.33333333333334
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f4
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 4
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 134.33333333333334
-  end_ms: 134.93333333333334
+  start_ms: 133.33333333333334
+  end_ms: 133.93333333333334
   duration_ms: 0.5999999999999943
   cadence_violation: false
-  ready_ms: 134.33333333333334
+  ready_ms: 133.33333333333334
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f4
+  predecessors: []
 - task_id: mfc_dec#f4
   node_id: mfc_dec
   hw_name: MFC
@@ -688,11 +603,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 134.93333333333334
-  end_ms: 136.74773333333334
-  duration_ms: 1.8144000000000062
+  start_ms: 133.93333333333334
+  end_ms: 142.35770942155156
+  duration_ms: 8.424376088218224
   cadence_violation: false
-  ready_ms: 134.93333333333334
+  ready_ms: 133.93333333333334
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -712,17 +627,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 136.74773333333334
-  end_ms: 138.56213333333335
+  start_ms: 142.35770942155156
+  end_ms: 144.17210942155157
   duration_ms: 1.8144000000000062
   deadline_ms: 166.66666666666669
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 136.74773333333334
+  ready_ms: 142.35770942155156
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -741,56 +656,38 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 136.74773333333334
-  end_ms: 138.56213333333335
+  start_ms: 142.35770942155156
+  end_ms: 144.17210942155157
   duration_ms: 1.8144000000000062
   deadline_ms: 166.66666666666669
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 136.74773333333334
+  ready_ms: 142.35770942155156
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
   - dpu#f4
-- task_id: network#f5
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 5
-  resource_id: network
-  bottleneck: false
-  start_ms: 166.66666666666669
-  end_ms: 167.66666666666669
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 166.66666666666669
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f5
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 5
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 167.66666666666669
-  end_ms: 168.26666666666668
+  start_ms: 166.66666666666669
+  end_ms: 167.26666666666668
   duration_ms: 0.5999999999999943
   cadence_violation: false
-  ready_ms: 167.66666666666669
+  ready_ms: 166.66666666666669
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f5
+  predecessors: []
 - task_id: mfc_dec#f5
   node_id: mfc_dec
   hw_name: MFC
@@ -799,11 +696,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 168.26666666666668
-  end_ms: 170.0810666666667
-  duration_ms: 1.8144000000000062
+  start_ms: 167.26666666666668
+  end_ms: 175.6910427548849
+  duration_ms: 8.424376088218224
   cadence_violation: false
-  ready_ms: 168.26666666666668
+  ready_ms: 167.26666666666668
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -823,17 +720,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 170.0810666666667
-  end_ms: 171.8954666666667
+  start_ms: 175.6910427548849
+  end_ms: 177.5054427548849
   duration_ms: 1.8144000000000062
   deadline_ms: 200.00000000000003
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 170.0810666666667
+  ready_ms: 175.6910427548849
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -852,56 +749,38 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 170.0810666666667
-  end_ms: 171.8954666666667
+  start_ms: 175.6910427548849
+  end_ms: 177.5054427548849
   duration_ms: 1.8144000000000062
   deadline_ms: 200.00000000000003
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 170.0810666666667
+  ready_ms: 175.6910427548849
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
   - dpu#f5
-- task_id: network#f6
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 6
-  resource_id: network
-  bottleneck: false
-  start_ms: 200.0
-  end_ms: 201.0
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 200.0
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f6
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 6
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 201.0
-  end_ms: 201.6
+  start_ms: 200.0
+  end_ms: 200.6
   duration_ms: 0.5999999999999943
   cadence_violation: false
-  ready_ms: 201.0
+  ready_ms: 200.0
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f6
+  predecessors: []
 - task_id: mfc_dec#f6
   node_id: mfc_dec
   hw_name: MFC
@@ -910,11 +789,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 201.6
-  end_ms: 203.4144
-  duration_ms: 1.8144000000000062
+  start_ms: 200.6
+  end_ms: 209.02437608821822
+  duration_ms: 8.424376088218224
   cadence_violation: false
-  ready_ms: 201.6
+  ready_ms: 200.6
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -934,17 +813,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 203.4144
-  end_ms: 205.2288
+  start_ms: 209.02437608821822
+  end_ms: 210.83877608821822
   duration_ms: 1.8144000000000062
   deadline_ms: 233.33333333333334
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.333333333333314
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 203.4144
+  ready_ms: 209.02437608821822
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -963,56 +842,38 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 203.4144
-  end_ms: 205.2288
+  start_ms: 209.02437608821822
+  end_ms: 210.83877608821822
   duration_ms: 1.8144000000000062
   deadline_ms: 233.33333333333334
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.333333333333314
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 203.4144
+  ready_ms: 209.02437608821822
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
   - dpu#f6
-- task_id: network#f7
-  node_id: network
-  hw_name: CPU
-  task_type: sw
-  frame_index: 7
-  resource_id: network
-  bottleneck: false
-  start_ms: 233.33333333333334
-  end_ms: 234.33333333333334
-  duration_ms: 1.0
-  cadence_violation: false
-  ready_ms: 233.33333333333334
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors: []
 - task_id: sw_demux#f7
   node_id: sw_demux
   hw_name: CPU
   task_type: sw
   frame_index: 7
   resource_id: sw_demux
-  edge_type: control
   bottleneck: false
-  start_ms: 234.33333333333334
-  end_ms: 234.93333333333334
+  start_ms: 233.33333333333334
+  end_ms: 233.93333333333334
   duration_ms: 0.5999999999999943
   cadence_violation: false
-  ready_ms: 234.33333333333334
+  ready_ms: 233.33333333333334
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
-  predecessors:
-  - network#f7
+  predecessors: []
 - task_id: mfc_dec#f7
   node_id: mfc_dec
   hw_name: MFC
@@ -1021,11 +882,11 @@ timeline_events:
   resource_id: mfc_dec
   edge_type: M2M
   bottleneck: false
-  start_ms: 234.93333333333334
-  end_ms: 236.74773333333334
-  duration_ms: 1.8144000000000062
+  start_ms: 233.93333333333334
+  end_ms: 242.35770942155156
+  duration_ms: 8.424376088218224
   cadence_violation: false
-  ready_ms: 234.93333333333334
+  ready_ms: 233.93333333333334
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -1045,17 +906,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 236.74773333333334
-  end_ms: 238.56213333333335
+  start_ms: 242.35770942155156
+  end_ms: 244.17210942155157
   duration_ms: 1.8144000000000062
   deadline_ms: 266.6666666666667
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 236.74773333333334
+  ready_ms: 242.35770942155156
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -1074,17 +935,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 30.0
   scanout_ms: 33.333333333333336
-  start_ms: 236.74773333333334
-  end_ms: 238.56213333333335
+  start_ms: 242.35770942155156
+  end_ms: 244.17210942155157
   duration_ms: 1.8144000000000062
   deadline_ms: 266.6666666666667
-  slack_ms: 28.104533333333336
+  slack_ms: 22.494557245115118
   cadence_interval_ms: 33.33333333333334
   cadence_avg_interval_ms: 33.333333333333336
   cadence_budget_ms: 33.333333333333336
   cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 236.74773333333334
+  ready_ms: 242.35770942155156
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -1099,6 +960,8 @@ timeline_events:
   start_ms: 0.0
   end_ms: 0.6
   duration_ms: 0.6
+  deadline_ms: 10.0
+  slack_ms: 9.4
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1106,6 +969,45 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: network#c0
+  node_id: network
+  hw_name: CPU
+  task_type: sw
+  resource_id: network
+  bottleneck: false
+  start_ms: 0.0
+  end_ms: 3.0
+  duration_ms: 3.0
+  deadline_ms: 100.0
+  slack_ms: 97.0
+  cadence_violation: false
+  ready_ms: 0.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 100.0
+  cadence: chunk
+- task_id: exo_loop#c0
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 0.0
+  end_ms: 0.2
+  duration_ms: 0.2
+  deadline_ms: 10.0
+  slack_ms: 9.8
+  cadence_violation: false
+  ready_ms: 0.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c1
   node_id: abox
   hw_name: ABOX
@@ -1115,6 +1017,8 @@ timeline_events:
   start_ms: 10.0
   end_ms: 10.6
   duration_ms: 0.5999999999999996
+  deadline_ms: 20.0
+  slack_ms: 9.4
   cadence_violation: false
   ready_ms: 10.0
   resource_wait_ms: 0.0
@@ -1122,6 +1026,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c1
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 10.0
+  end_ms: 10.2
+  duration_ms: 0.1999999999999993
+  deadline_ms: 20.0
+  slack_ms: 9.8
+  cadence_violation: false
+  ready_ms: 10.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c2
   node_id: abox
   hw_name: ABOX
@@ -1131,6 +1055,8 @@ timeline_events:
   start_ms: 20.0
   end_ms: 20.6
   duration_ms: 0.6000000000000014
+  deadline_ms: 30.0
+  slack_ms: 9.399999999999999
   cadence_violation: false
   ready_ms: 20.0
   resource_wait_ms: 0.0
@@ -1138,6 +1064,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c2
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 20.0
+  end_ms: 20.2
+  duration_ms: 0.1999999999999993
+  deadline_ms: 30.0
+  slack_ms: 9.8
+  cadence_violation: false
+  ready_ms: 20.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c3
   node_id: abox
   hw_name: ABOX
@@ -1147,6 +1093,8 @@ timeline_events:
   start_ms: 30.0
   end_ms: 30.6
   duration_ms: 0.6000000000000014
+  deadline_ms: 40.0
+  slack_ms: 9.399999999999999
   cadence_violation: false
   ready_ms: 30.0
   resource_wait_ms: 0.0
@@ -1154,6 +1102,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c3
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 30.0
+  end_ms: 30.2
+  duration_ms: 0.1999999999999993
+  deadline_ms: 40.0
+  slack_ms: 9.8
+  cadence_violation: false
+  ready_ms: 30.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c4
   node_id: abox
   hw_name: ABOX
@@ -1163,6 +1131,8 @@ timeline_events:
   start_ms: 40.0
   end_ms: 40.6
   duration_ms: 0.6000000000000014
+  deadline_ms: 50.0
+  slack_ms: 9.399999999999999
   cadence_violation: false
   ready_ms: 40.0
   resource_wait_ms: 0.0
@@ -1170,6 +1140,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c4
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 40.0
+  end_ms: 40.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 50.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 40.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c5
   node_id: abox
   hw_name: ABOX
@@ -1179,6 +1169,8 @@ timeline_events:
   start_ms: 50.0
   end_ms: 50.6
   duration_ms: 0.6000000000000014
+  deadline_ms: 60.0
+  slack_ms: 9.399999999999999
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -1186,6 +1178,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c5
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 50.0
+  end_ms: 50.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 60.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 50.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c6
   node_id: abox
   hw_name: ABOX
@@ -1195,6 +1207,8 @@ timeline_events:
   start_ms: 60.0
   end_ms: 60.6
   duration_ms: 0.6000000000000014
+  deadline_ms: 70.0
+  slack_ms: 9.399999999999999
   cadence_violation: false
   ready_ms: 60.0
   resource_wait_ms: 0.0
@@ -1202,6 +1216,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c6
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 60.0
+  end_ms: 60.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 70.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 60.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c7
   node_id: abox
   hw_name: ABOX
@@ -1211,6 +1245,8 @@ timeline_events:
   start_ms: 70.0
   end_ms: 70.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 80.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 70.0
   resource_wait_ms: 0.0
@@ -1218,6 +1254,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c7
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 70.0
+  end_ms: 70.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 80.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 70.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c8
   node_id: abox
   hw_name: ABOX
@@ -1227,6 +1283,8 @@ timeline_events:
   start_ms: 80.0
   end_ms: 80.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 90.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 80.0
   resource_wait_ms: 0.0
@@ -1234,6 +1292,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c8
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 80.0
+  end_ms: 80.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 90.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 80.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c9
   node_id: abox
   hw_name: ABOX
@@ -1243,6 +1321,8 @@ timeline_events:
   start_ms: 90.0
   end_ms: 90.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 100.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 90.0
   resource_wait_ms: 0.0
@@ -1250,6 +1330,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c9
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 90.0
+  end_ms: 90.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 100.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 90.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c10
   node_id: abox
   hw_name: ABOX
@@ -1259,6 +1359,8 @@ timeline_events:
   start_ms: 100.0
   end_ms: 100.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 110.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 100.0
   resource_wait_ms: 0.0
@@ -1266,6 +1368,45 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: network#c1
+  node_id: network
+  hw_name: CPU
+  task_type: sw
+  resource_id: network
+  bottleneck: false
+  start_ms: 100.0
+  end_ms: 103.0
+  duration_ms: 3.0
+  deadline_ms: 200.0
+  slack_ms: 97.0
+  cadence_violation: false
+  ready_ms: 100.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 100.0
+  cadence: chunk
+- task_id: exo_loop#c10
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 100.0
+  end_ms: 100.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 110.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 100.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c11
   node_id: abox
   hw_name: ABOX
@@ -1275,6 +1416,8 @@ timeline_events:
   start_ms: 110.0
   end_ms: 110.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 120.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 110.0
   resource_wait_ms: 0.0
@@ -1282,6 +1425,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c11
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 110.0
+  end_ms: 110.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 120.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 110.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c12
   node_id: abox
   hw_name: ABOX
@@ -1291,6 +1454,8 @@ timeline_events:
   start_ms: 120.0
   end_ms: 120.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 130.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 120.0
   resource_wait_ms: 0.0
@@ -1298,6 +1463,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c12
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 120.0
+  end_ms: 120.2
+  duration_ms: 0.20000000000000284
+  deadline_ms: 130.0
+  slack_ms: 9.799999999999997
+  cadence_violation: false
+  ready_ms: 120.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c13
   node_id: abox
   hw_name: ABOX
@@ -1307,6 +1492,8 @@ timeline_events:
   start_ms: 130.0
   end_ms: 130.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 140.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 130.0
   resource_wait_ms: 0.0
@@ -1314,6 +1501,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c13
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 130.0
+  end_ms: 130.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 140.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 130.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c14
   node_id: abox
   hw_name: ABOX
@@ -1323,6 +1530,8 @@ timeline_events:
   start_ms: 140.0
   end_ms: 140.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 150.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 140.0
   resource_wait_ms: 0.0
@@ -1330,6 +1539,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c14
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 140.0
+  end_ms: 140.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 150.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 140.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c15
   node_id: abox
   hw_name: ABOX
@@ -1339,6 +1568,8 @@ timeline_events:
   start_ms: 150.0
   end_ms: 150.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 160.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 150.0
   resource_wait_ms: 0.0
@@ -1346,6 +1577,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c15
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 150.0
+  end_ms: 150.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 160.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 150.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c16
   node_id: abox
   hw_name: ABOX
@@ -1355,6 +1606,8 @@ timeline_events:
   start_ms: 160.0
   end_ms: 160.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 170.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 160.0
   resource_wait_ms: 0.0
@@ -1362,6 +1615,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c16
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 160.0
+  end_ms: 160.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 170.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 160.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c17
   node_id: abox
   hw_name: ABOX
@@ -1371,6 +1644,8 @@ timeline_events:
   start_ms: 170.0
   end_ms: 170.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 180.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 170.0
   resource_wait_ms: 0.0
@@ -1378,6 +1653,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c17
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 170.0
+  end_ms: 170.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 180.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 170.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c18
   node_id: abox
   hw_name: ABOX
@@ -1387,6 +1682,8 @@ timeline_events:
   start_ms: 180.0
   end_ms: 180.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 190.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 180.0
   resource_wait_ms: 0.0
@@ -1394,6 +1691,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c18
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 180.0
+  end_ms: 180.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 190.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 180.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c19
   node_id: abox
   hw_name: ABOX
@@ -1403,6 +1720,8 @@ timeline_events:
   start_ms: 190.0
   end_ms: 190.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 200.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 190.0
   resource_wait_ms: 0.0
@@ -1410,6 +1729,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c19
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 190.0
+  end_ms: 190.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 200.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 190.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c20
   node_id: abox
   hw_name: ABOX
@@ -1419,6 +1758,8 @@ timeline_events:
   start_ms: 200.0
   end_ms: 200.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 210.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 200.0
   resource_wait_ms: 0.0
@@ -1426,6 +1767,45 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: network#c2
+  node_id: network
+  hw_name: CPU
+  task_type: sw
+  resource_id: network
+  bottleneck: false
+  start_ms: 200.0
+  end_ms: 203.0
+  duration_ms: 3.0
+  deadline_ms: 300.0
+  slack_ms: 97.0
+  cadence_violation: false
+  ready_ms: 200.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 100.0
+  cadence: chunk
+- task_id: exo_loop#c20
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 200.0
+  end_ms: 200.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 210.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 200.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c21
   node_id: abox
   hw_name: ABOX
@@ -1435,6 +1815,8 @@ timeline_events:
   start_ms: 210.0
   end_ms: 210.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 220.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 210.0
   resource_wait_ms: 0.0
@@ -1442,6 +1824,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c21
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 210.0
+  end_ms: 210.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 220.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 210.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c22
   node_id: abox
   hw_name: ABOX
@@ -1451,6 +1853,8 @@ timeline_events:
   start_ms: 220.0
   end_ms: 220.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 230.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 220.0
   resource_wait_ms: 0.0
@@ -1458,6 +1862,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c22
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 220.0
+  end_ms: 220.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 230.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 220.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c23
   node_id: abox
   hw_name: ABOX
@@ -1467,6 +1891,8 @@ timeline_events:
   start_ms: 230.0
   end_ms: 230.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 240.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 230.0
   resource_wait_ms: 0.0
@@ -1474,6 +1900,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c23
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 230.0
+  end_ms: 230.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 240.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 230.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c24
   node_id: abox
   hw_name: ABOX
@@ -1483,6 +1929,8 @@ timeline_events:
   start_ms: 240.0
   end_ms: 240.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 250.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 240.0
   resource_wait_ms: 0.0
@@ -1490,6 +1938,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c24
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 240.0
+  end_ms: 240.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 250.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 240.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c25
   node_id: abox
   hw_name: ABOX
@@ -1499,6 +1967,8 @@ timeline_events:
   start_ms: 250.0
   end_ms: 250.6
   duration_ms: 0.5999999999999943
+  deadline_ms: 260.0
+  slack_ms: 9.400000000000006
   cadence_violation: false
   ready_ms: 250.0
   resource_wait_ms: 0.0
@@ -1506,6 +1976,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c25
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 250.0
+  end_ms: 250.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 260.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 250.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 - task_id: abox#c26
   node_id: abox
   hw_name: ABOX
@@ -1515,6 +2005,8 @@ timeline_events:
   start_ms: 260.0
   end_ms: 260.6
   duration_ms: 0.6000000000000227
+  deadline_ms: 270.0
+  slack_ms: 9.399999999999977
   cadence_violation: false
   ready_ms: 260.0
   resource_wait_ms: 0.0
@@ -1522,6 +2014,26 @@ timeline_events:
   critical: false
   predecessors: []
   independent_period_ms: 10.0
+  cadence: period
+- task_id: exo_loop#c26
+  node_id: exo_loop
+  hw_name: CPU
+  task_type: sw
+  resource_id: exo_loop
+  bottleneck: false
+  start_ms: 260.0
+  end_ms: 260.2
+  duration_ms: 0.19999999999998863
+  deadline_ms: 270.0
+  slack_ms: 9.800000000000011
+  cadence_violation: false
+  ready_ms: 260.0
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors: []
+  independent_period_ms: 10.0
+  cadence: period
 external_devices:
 - device_type: display
   node_id: panel
@@ -1569,18 +2081,32 @@ sw_task_timing:
 - task: network
   includes_task_ids: []
   sample_unit: invocation
-  min_ms: 0.5
-  mean_ms: 1.0
-  max_ms: 3.0
+  min_ms: 1.5
+  mean_ms: 3.0
+  max_ms: 9.0
   includes_hw_nodes: []
   value_source: assumed
-  source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16),
-    not measurements. Replace with internal per-task avg/min/max and the cluster the
-    task actually ran on; CPU energy = ip-cpu power_model at that cluster/frequency
-    x exec_ms x rate_hz.
+  source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the
+    measured chunk period / work-loop interval and per-run execution time; CPU energy
+    = ip-cpu power_model x exec_ms x rate_hz.
   start_latency_ref: packet_arrival
   start_latency_mean_ms: 0.0
-  rate_hz: 30.0
+  rate_hz: 10.0
+  cpu_affinity: CPUCL0
+- task: exo_loop
+  includes_task_ids: []
+  sample_unit: invocation
+  min_ms: 0.1
+  mean_ms: 0.2
+  max_ms: 0.5
+  includes_hw_nodes: []
+  value_source: assumed
+  source_note: Fixture assumption (2026-11-14), not a measurement. Replace with the
+    measured chunk period / work-loop interval and per-run execution time; CPU energy
+    = ip-cpu power_model x exec_ms x rate_hz.
+  start_latency_ref: loop_tick
+  start_latency_mean_ms: 0.0
+  rate_hz: 100.0
   cpu_affinity: CPUCL0
 - task: sw_demux
   includes_task_ids: []
@@ -1599,7 +2125,7 @@ sw_task_timing:
   rate_hz: 30.0
   cpu_affinity: CPUCL0
 metric_observations: []
-params_hash: 6015672839f127bd
+params_hash: f0d1159e2ff6cfdf
 calculation_trace:
   schema_version: '1.0'
   trace_level: formula
@@ -1636,7 +2162,7 @@ calculation_trace:
       result: 248.832
     hw_time_max_ms:
       formula: max(timing_breakdown[].hw_time_ms)
-      result: 1.8144
+      result: 8.424376088218223
     timeline_end_ms:
       formula: max(timeline_events[].end_ms)
       result: 260.6
@@ -1665,13 +2191,13 @@ calculation_trace:
         pixels: 2073600
         fps: 30.0
         sw_margin: 0.15
-        ppc: 4.0
+        ppc: 0.8615
         manual_clock_mhz: 300.0
         clock_correction_mhz: 0.0
         clock_correction_reason: null
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
-      initial_required_mhz: 18.296470588235298
-      before_group_align_mhz: 18.296470588235298
+      initial_required_mhz: 84.95169164589807
+      before_group_align_mhz: 84.95169164589807
       manual_clock_mhz: 300.0
       after_manual_clock_mhz: 300.0
       clock_correction_mhz: 0.0
@@ -1721,9 +2247,9 @@ calculation_trace:
       inputs:
         pixels: 2073600
         set_clock_mhz: 300.0
-        ppc: 4.0
+        ppc: 0.8615
         h_blank_margin: 0.05
-      result_ms: 1.8144
+      result_ms: 8.424376088218223
       feasible: true
       infeasible_reason: null
   - node_id: dpu
@@ -1758,12 +2284,12 @@ calculation_trace:
       initial_required_mhz: 18.296470588235298
       before_group_align_mhz: 18.296470588235298
       manual_clock_mhz: null
-      after_manual_clock_mhz: 18.296470588235298
+      after_manual_clock_mhz: 84.95169164589807
       clock_correction_mhz: 0.0
       clock_correction_reason: null
       sensor_otf_clock_correction_mhz: 0.0
       sensor_otf_clock_correction_reason: null
-      after_group_align_mhz: 18.296470588235298
+      after_group_align_mhz: 84.95169164589807
     dvfs:
       dvfs_group: INT
       asv_group: 4
@@ -1935,9 +2461,9 @@ calculation_trace:
   - dpu
   timeline:
     summary:
-      task_count: 6
+      task_count: 7
       edge_count: 4
-      event_count: 67
+      event_count: 89
       otf_group_count: 8
       m2m_edge_count: 2
       critical_path_task_count: 0
@@ -1960,17 +2486,17 @@ calculation_trace:
       - panel#f0
       bottleneck_tasks:
       - dpu#f0
-      start_ms: 3.4144
-      end_ms: 5.2288
-      span_ms: 1.8143999999999996
+      start_ms: 9.024376088218222
+      end_ms: 10.838776088218221
+      span_ms: 1.8143999999999991
     - group_id: otf-0#f1
       tasks:
       - dpu#f1
       - panel#f1
       bottleneck_tasks:
       - dpu#f1
-      start_ms: 36.747733333333336
-      end_ms: 38.562133333333335
+      start_ms: 42.35770942155156
+      end_ms: 44.17210942155156
       span_ms: 1.8143999999999991
     - group_id: otf-0#f2
       tasks:
@@ -1978,8 +2504,8 @@ calculation_trace:
       - panel#f2
       bottleneck_tasks:
       - dpu#f2
-      start_ms: 70.08106666666667
-      end_ms: 71.89546666666668
+      start_ms: 75.69104275488489
+      end_ms: 77.5054427548849
       span_ms: 1.8144000000000062
     - group_id: otf-0#f3
       tasks:
@@ -1987,8 +2513,8 @@ calculation_trace:
       - panel#f3
       bottleneck_tasks:
       - dpu#f3
-      start_ms: 103.4144
-      end_ms: 105.2288
+      start_ms: 109.02437608821822
+      end_ms: 110.83877608821822
       span_ms: 1.8144000000000062
     - group_id: otf-0#f4
       tasks:
@@ -1996,8 +2522,8 @@ calculation_trace:
       - panel#f4
       bottleneck_tasks:
       - dpu#f4
-      start_ms: 136.74773333333334
-      end_ms: 138.56213333333335
+      start_ms: 142.35770942155156
+      end_ms: 144.17210942155157
       span_ms: 1.8144000000000062
     - group_id: otf-0#f5
       tasks:
@@ -2005,8 +2531,8 @@ calculation_trace:
       - panel#f5
       bottleneck_tasks:
       - dpu#f5
-      start_ms: 170.0810666666667
-      end_ms: 171.8954666666667
+      start_ms: 175.6910427548849
+      end_ms: 177.5054427548849
       span_ms: 1.8144000000000062
     - group_id: otf-0#f6
       tasks:
@@ -2014,8 +2540,8 @@ calculation_trace:
       - panel#f6
       bottleneck_tasks:
       - dpu#f6
-      start_ms: 203.4144
-      end_ms: 205.2288
+      start_ms: 209.02437608821822
+      end_ms: 210.83877608821822
       span_ms: 1.8144000000000062
     - group_id: otf-0#f7
       tasks:
@@ -2023,8 +2549,8 @@ calculation_trace:
       - panel#f7
       bottleneck_tasks:
       - dpu#f7
-      start_ms: 236.74773333333334
-      end_ms: 238.56213333333335
+      start_ms: 242.35770942155156
+      end_ms: 244.17210942155157
       span_ms: 1.8144000000000062
     critical_path: []
     top_waits: []
@@ -2037,14 +2563,14 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f0
-      start_ms: 3.4144
-      end_ms: 5.2288
-      duration_ms: 1.8143999999999996
-      ready_ms: 3.4144
+      start_ms: 9.024376088218222
+      end_ms: 10.838776088218221
+      duration_ms: 1.8143999999999991
+      ready_ms: 9.024376088218222
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115114
       cadence_interval_ms: null
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2064,14 +2590,14 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f0
-      start_ms: 3.4144
-      end_ms: 5.2288
-      duration_ms: 1.8143999999999996
-      ready_ms: 3.4144
+      start_ms: 9.024376088218222
+      end_ms: 10.838776088218221
+      duration_ms: 1.8143999999999991
+      ready_ms: 9.024376088218222
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115114
       cadence_interval_ms: null
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2091,15 +2617,15 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f1
-      start_ms: 36.747733333333336
-      end_ms: 38.562133333333335
+      start_ms: 42.35770942155156
+      end_ms: 44.17210942155156
       duration_ms: 1.8143999999999991
-      ready_ms: 36.747733333333336
+      ready_ms: 42.35770942155156
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: 28.104533333333336
-      cadence_interval_ms: 33.333333333333336
+      slack_ms: 22.49455724511511
+      cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
       cadence_slack_ms: 0.0
@@ -2118,15 +2644,15 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f1
-      start_ms: 36.747733333333336
-      end_ms: 38.562133333333335
+      start_ms: 42.35770942155156
+      end_ms: 44.17210942155156
       duration_ms: 1.8143999999999991
-      ready_ms: 36.747733333333336
+      ready_ms: 42.35770942155156
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: 28.104533333333336
-      cadence_interval_ms: 33.333333333333336
+      slack_ms: 22.49455724511511
+      cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
       cadence_slack_ms: 0.0
@@ -2145,15 +2671,15 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f2
-      start_ms: 70.08106666666667
-      end_ms: 71.89546666666668
+      start_ms: 75.69104275488489
+      end_ms: 77.5054427548849
       duration_ms: 1.8144000000000062
-      ready_ms: 70.08106666666667
+      ready_ms: 75.69104275488489
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 100.0
-      slack_ms: 28.104533333333322
-      cadence_interval_ms: 33.33333333333334
+      slack_ms: 22.494557245115104
+      cadence_interval_ms: 33.333333333333336
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
       cadence_slack_ms: 0.0
@@ -2172,15 +2698,15 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f2
-      start_ms: 70.08106666666667
-      end_ms: 71.89546666666668
+      start_ms: 75.69104275488489
+      end_ms: 77.5054427548849
       duration_ms: 1.8144000000000062
-      ready_ms: 70.08106666666667
+      ready_ms: 75.69104275488489
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 100.0
-      slack_ms: 28.104533333333322
-      cadence_interval_ms: 33.33333333333334
+      slack_ms: 22.494557245115104
+      cadence_interval_ms: 33.333333333333336
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
       cadence_slack_ms: 0.0
@@ -2199,14 +2725,14 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f3
-      start_ms: 103.4144
-      end_ms: 105.2288
+      start_ms: 109.02437608821822
+      end_ms: 110.83877608821822
       duration_ms: 1.8144000000000062
-      ready_ms: 103.4144
+      ready_ms: 109.02437608821822
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 133.33333333333334
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333333
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2226,14 +2752,14 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f3
-      start_ms: 103.4144
-      end_ms: 105.2288
+      start_ms: 109.02437608821822
+      end_ms: 110.83877608821822
       duration_ms: 1.8144000000000062
-      ready_ms: 103.4144
+      ready_ms: 109.02437608821822
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 133.33333333333334
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333333
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2253,14 +2779,14 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f4
-      start_ms: 136.74773333333334
-      end_ms: 138.56213333333335
+      start_ms: 142.35770942155156
+      end_ms: 144.17210942155157
       duration_ms: 1.8144000000000062
-      ready_ms: 136.74773333333334
+      ready_ms: 142.35770942155156
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 166.66666666666669
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2280,14 +2806,14 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f4
-      start_ms: 136.74773333333334
-      end_ms: 138.56213333333335
+      start_ms: 142.35770942155156
+      end_ms: 144.17210942155157
       duration_ms: 1.8144000000000062
-      ready_ms: 136.74773333333334
+      ready_ms: 142.35770942155156
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 166.66666666666669
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2307,14 +2833,14 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f5
-      start_ms: 170.0810666666667
-      end_ms: 171.8954666666667
+      start_ms: 175.6910427548849
+      end_ms: 177.5054427548849
       duration_ms: 1.8144000000000062
-      ready_ms: 170.0810666666667
+      ready_ms: 175.6910427548849
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 200.00000000000003
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2334,14 +2860,14 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f5
-      start_ms: 170.0810666666667
-      end_ms: 171.8954666666667
+      start_ms: 175.6910427548849
+      end_ms: 177.5054427548849
       duration_ms: 1.8144000000000062
-      ready_ms: 170.0810666666667
+      ready_ms: 175.6910427548849
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 200.00000000000003
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2361,14 +2887,14 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f6
-      start_ms: 203.4144
-      end_ms: 205.2288
+      start_ms: 209.02437608821822
+      end_ms: 210.83877608821822
       duration_ms: 1.8144000000000062
-      ready_ms: 203.4144
+      ready_ms: 209.02437608821822
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 233.33333333333334
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.333333333333314
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2388,14 +2914,14 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f6
-      start_ms: 203.4144
-      end_ms: 205.2288
+      start_ms: 209.02437608821822
+      end_ms: 210.83877608821822
       duration_ms: 1.8144000000000062
-      ready_ms: 203.4144
+      ready_ms: 209.02437608821822
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 233.33333333333334
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.333333333333314
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2415,14 +2941,14 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-0#f7
-      start_ms: 236.74773333333334
-      end_ms: 238.56213333333335
+      start_ms: 242.35770942155156
+      end_ms: 244.17210942155157
       duration_ms: 1.8144000000000062
-      ready_ms: 236.74773333333334
+      ready_ms: 242.35770942155156
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 266.6666666666667
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2442,14 +2968,14 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-0#f7
-      start_ms: 236.74773333333334
-      end_ms: 238.56213333333335
+      start_ms: 242.35770942155156
+      end_ms: 244.17210942155157
       duration_ms: 1.8144000000000062
-      ready_ms: 236.74773333333334
+      ready_ms: 242.35770942155156
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 266.6666666666667
-      slack_ms: 28.104533333333336
+      slack_ms: 22.494557245115118
       cadence_interval_ms: 33.33333333333334
       cadence_avg_interval_ms: 33.333333333333336
       cadence_budget_ms: 33.333333333333336
@@ -2483,9 +3009,14 @@ calculation_trace:
     does not evaluate model_ref formulas.'
   - 'network: imported driver BW/DVFS model metadata is reference-only; simulation
     does not evaluate model_ref formulas.'
+  - 'exo_loop: imported driver BW/DVFS model metadata is reference-only; simulation
+    does not evaluate model_ref formulas.'
   - 'network: named event packet_arrival is metadata only; select an explicitly mapped
     measured timing profile to apply its latency.'
   - 'network: assumed wall time; not a measured CPU active-time/power value.'
+  - 'exo_loop: named event loop_tick is metadata only; select an explicitly mapped
+    measured timing profile to apply its latency.'
+  - 'exo_loop: assumed wall time; not a measured CPU active-time/power value.'
   - 'sw_demux: named event bitstream_available is metadata only; select an explicitly
     mapped measured timing profile to apply its latency.'
   - 'sw_demux: assumed wall time; not a measured CPU active-time/power value.'
@@ -2745,7 +3276,7 @@ calculation_trace:
   priority_verification:
     clock_mhz: 300
     accepted: true
-    max_frame_latency_ms: 5.2288
+    max_frame_latency_ms: 10.838776
     average_sink_interval_ms: 33.333333
     latency_budget_ms: 100.0
     cadence_ok: true
