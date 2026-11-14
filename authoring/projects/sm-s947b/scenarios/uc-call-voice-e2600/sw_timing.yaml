@@ -11,14 +11,30 @@ tasks:
     - id: modem-a
       variants: '*'
       timing:
-        min_ms: 0.2
-        mean_ms: 0.4
-        max_ms: 1.0
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
         start_latency_ref: modem_irq
         start_latency_mean_ms: 0.0
         rate_hz: 50.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+        source_note: Downlink half (receive / depacketize) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split
+          when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+  modem_tx:
+    groups:
+    - id: modem-tx-a
+      variants: '*'
+      timing:
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Uplink half (encode-side packetize / send) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split
+          when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.

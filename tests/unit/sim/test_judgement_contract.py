@@ -183,3 +183,16 @@ def test_an_undeclared_own_period_is_still_not_judged(env):
     undeclared = run(replace(graph, variant=plain), tables)
     assert "abox" not in {r["node"] for r in undeclared["own_cadence"]}
     assert undeclared["verdict"] == report["verdict"] and undeclared["stages"] == report["stages"]
+
+
+def test_voice_call_uplink_and_downlink_are_two_paths_not_a_cycle(env):
+    # downlink modem -> audio_hal -> speaker, uplink mic -> audio_hal -> modem_tx (one modem node made a cycle)
+    catalog, tables, _ = env
+    raw = read(FIXTURE / "02_definition" / "uc-call-voice-e2600.yaml")
+    edges = {(e["from"], e["to"]) for e in raw["pipeline"]["edges"]}
+    assert edges == {("modem", "audio_hal"), ("audio_hal", "speaker"), ("mic", "audio_hal"), ("audio_hal", "modem_tx")}
+    for v in raw["variants"]:
+        report = run(graph_from_fixture(raw, v["id"], catalog), tables)
+        # no RT output to judge: the verdict says so instead of failing to build the timeline
+        assert report["verdict"]["status"] == "not_applicable"
+        assert {"modem", "modem_tx"} <= set(report["power"]["cpu_by_task"])

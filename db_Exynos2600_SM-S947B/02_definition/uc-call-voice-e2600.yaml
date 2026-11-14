@@ -17,6 +17,10 @@ pipeline:
     ip_ref: ip-cpu-s5e9965
     role: modem
     instance_index: 0
+  - id: modem_tx
+    ip_ref: ip-cpu-s5e9965
+    role: modem_tx
+    instance_index: 0
   - id: audio_hal
     ip_ref: ip-abox-s5e9965
     role: audio_hal
@@ -44,7 +48,7 @@ pipeline:
     to: audio_hal
     type: control
   - from: audio_hal
-    to: modem
+    to: modem_tx
     type: control
   buffers: {}
 variants:
@@ -85,17 +89,30 @@ variants:
       executes_on: ip-abox-s5e9965
     modem:
       sw_timing:
-        min_ms: 0.2
-        mean_ms: 0.4
-        max_ms: 1.0
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
         start_latency_ref: modem_irq
         start_latency_mean_ms: 0.0
         rate_hz: 50.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Downlink half (receive / depacketize) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split when
+          uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16), not
+          measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy =
+          ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
+    modem_tx:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Uplink half (encode-side packetize / send) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split
+          when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16),
+          not measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy
+          = ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
 - id: voice-call-vowifi
   severity: light
   design_conditions:
@@ -132,17 +149,30 @@ variants:
       executes_on: ip-abox-s5e9965
     modem:
       sw_timing:
-        min_ms: 0.2
-        mean_ms: 0.4
-        max_ms: 1.0
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
         start_latency_ref: modem_irq
         start_latency_mean_ms: 0.0
         rate_hz: 50.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Downlink half (receive / depacketize) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split when
+          uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16), not
+          measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy =
+          ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
+    modem_tx:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Uplink half (encode-side packetize / send) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split
+          when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16),
+          not measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy
+          = ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
 - id: voice-call-vonr
   severity: light
   design_conditions:
@@ -179,17 +209,30 @@ variants:
       executes_on: ip-abox-s5e9965
     modem:
       sw_timing:
-        min_ms: 0.2
-        mean_ms: 0.4
-        max_ms: 1.0
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
         start_latency_ref: modem_irq
         start_latency_mean_ms: 0.0
         rate_hz: 50.0
         cpu_affinity: CPUCL0
         value_source: assumed
-        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
-          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
-          cluster/frequency x exec_ms x rate_hz.
+        source_note: Downlink half (receive / depacketize) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split when
+          uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16), not
+          measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy =
+          ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
+    modem_tx:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.2
+        max_ms: 0.5
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Uplink half (encode-side packetize / send) of the earlier single modem task (0.2 / 0.4 / 1.0 ms), split
+          when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16),
+          not measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy
+          = ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
 provenance:
   platform_review: S5E9965 platform (non-camera) driver review 2026-09-16
   note: Node ip_refs, per-variant sim shapes, bw_kb_s, dvfs steps and sw_timing are generated by tools/build_platform_fixture.py
