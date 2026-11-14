@@ -1,0 +1,58 @@
+/* U-05 · U-06: type / spacing / chart-color tokens and layout utilities.
+ * New and touched screens use these instead of inline font sizes, gaps and colour literals; a dark theme
+ * (or the in-house design system) redefines the tokens instead of a thousand call sites. */
+:root {
+  /* type scale: body 13 px and auxiliary 12 px are the floor (nothing that carries meaning below 12) */
+  --fs-caption: 12px;
+  --fs-body: 13px;
+  --fs-lead: 14px;
+  --fs-title: 16px;
+  --fs-kpi: 20px;
+  /* spacing scale (4 px grid) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  /* chart colours: power components (colour-blind safe) */
+  --chart-total: #4A5160;
+  --chart-cpu: #0072B2;
+  --chart-cpu-bw: #56B4E9;
+  --chart-ip: #009E73;
+  --chart-ip-bw: #E69F00;
+  /* image-quality classes */
+  --iq-neutral: #2F6F68;
+  --iq-eval: #B45309;
+  --iq-trade: #9B1C1C;
+  /* scenario categories */
+  --cat-camera: #C23B22;
+  --cat-video: #0A8391;
+  --cat-display: #6E7F10;
+  --cat-audio: #5B6770;
+  --cat-voice-call: #4338CA;
+  --cat-game: #D9730D;
+  --cat-other: #8A8274;
+}
+
+/* layout utilities */
+.stack { display: grid; gap: var(--sp-2); }
+.stack-1 { display: grid; gap: var(--sp-1); }
+.stack-3 { display: grid; gap: var(--sp-3); }
+.row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.row-1 { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; }
+.row-end { justify-content: flex-end; }
+.t-caption { font-size: var(--fs-caption); }
+.t-body { font-size: var(--fs-body); }
+
+/* Hint: an explanation that keyboard and touch can reach (focusable trigger, aria-describedby) */
+.hint { position: relative; display: inline-flex; align-items: center; gap: var(--sp-1); }
+.hint-trigger { border: 0; background: transparent; padding: 0 2px; color: var(--muted); cursor: help; font: inherit;
+  font-size: var(--fs-caption); line-height: 1; border-radius: 4px; }
+.hint-trigger:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.hint-pop { position: absolute; z-index: 40; left: 0; top: calc(100% + 4px); min-width: 180px; max-width: 360px;
+  padding: var(--sp-2) var(--sp-3); background: var(--surface); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; box-shadow: 0 4px 14px rgba(31, 36, 48, .14); font-size: var(--fs-caption); font-weight: 400;
+  white-space: pre-line; text-align: left; visibility: hidden; opacity: 0; transition: opacity .1s; }
+.hint:hover .hint-pop, .hint:focus-within .hint-pop, .hint.open .hint-pop { visibility: visible; opacity: 1; }
+.reason-line { display: block; font-size: var(--fs-caption); color: var(--del-text); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; max-width: 100%; }

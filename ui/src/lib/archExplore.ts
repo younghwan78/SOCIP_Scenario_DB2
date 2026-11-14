@@ -193,7 +193,8 @@ export function caseGroups(v: VariantResult, withRaise: boolean): { keep: ExpCas
 }
 
 export const IQ_LABEL: Record<IqClass, string> = { neutral: '화질 무손실', eval: 'IQ 평가 필요', trade: '화질 trade (lossy)' }
-export const IQ_COLOR: Record<IqClass, string> = { neutral: '#2F6F68', eval: '#B45309', trade: '#9B1C1C' }
+/** CSS tokens (tokens.css): a theme redefines the variables, not these call sites */
+export const IQ_COLOR: Record<IqClass, string> = { neutral: 'var(--iq-neutral)', eval: 'var(--iq-eval)', trade: 'var(--iq-trade)' }
 
 export interface IpModeAlt { mode: string; unit_power_mw_mp: number | null; ppc: number | null; explorable: boolean; label?: string | null; note?: string | null }
 export interface IpModeRow {
@@ -486,7 +487,7 @@ export const archApi = {
 
 // ---------------------------------------------------------------- helpers
 // Power components: blue / green / orange (Okabe-Ito — separable incl. color-vision deficiency)
-export const PCOL = { cpu: '#0072B2', bwcpu: '#56B4E9', hw: '#009E73', bw: '#E69F00', total: '#4A5160' } as const
+export const PCOL = { cpu: 'var(--chart-cpu)', bwcpu: 'var(--chart-cpu-bw)', hw: 'var(--chart-ip)', bw: 'var(--chart-ip-bw)', total: 'var(--chart-total)' } as const
 export const METRIC_COLOR: Record<DistKey, string> = {
   total_mw: PCOL.total, cpu_mw: PCOL.cpu, hw_mw: PCOL.hw, bw_mw: PCOL.bw, bw_ip_mw: PCOL.bw, bw_cpu_mw: PCOL.bwcpu,
   bw_mbs: PCOL.bw, bw_ip_mbs: PCOL.bw, bw_cpu_mbs: PCOL.bwcpu,

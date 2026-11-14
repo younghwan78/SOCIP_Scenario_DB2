@@ -51,7 +51,8 @@ const CATEGORY_PRIORITY = ['camera', 'voice_call', 'video', 'audio', 'game', 'di
 export const CATEGORY_ORDER = ['camera', 'video', 'display', 'audio', 'voice_call', 'game'] as const
 /** One hue per scenario type — kept clear of the Explorer facet hues (blue/green/purple/amber/pink) and the teal primary. */
 export const CATEGORY_COLOR: Record<string, string> = {
-  camera: '#C23B22', video: '#0A8391', display: '#6E7F10', audio: '#5B6770', voice_call: '#4338CA', game: '#D9730D', other: '#8A8274',
+  // CSS tokens (tokens.css --cat-*)
+  camera: 'var(--cat-camera)', video: 'var(--cat-video)', display: 'var(--cat-display)', audio: 'var(--cat-audio)', voice_call: 'var(--cat-voice-call)', game: 'var(--cat-game)', other: 'var(--cat-other)',
 }
 export const CATEGORY_LABEL: Record<string, string> = {
   camera: 'Camera', video: 'Video', video_playback: 'Video', audio: 'Audio', game: 'Game', voice_call: 'Call (Voice · Video)', display: 'Display', other: 'Other',
