@@ -87,13 +87,12 @@ variants:
         note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
           the CPU-fed path.
       model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
-    audio_hal:
-      executes_on: ip-abox-s5e9965
-    speaker:
-      executes_on: ip-abox-s5e9965
-    mic:
-      executes_on: ip-abox-s5e9965
     modem:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Downlink voice frame (AMR-WB / EVS) every 20 ms, outside the video frame path; judged against the next frame.
       sw_timing:
         min_ms: 0.1
         mean_ms: 0.2
@@ -108,6 +107,11 @@ variants:
           measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy =
           ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
     modem_tx:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Uplink voice frame every 20 ms; judged against the next frame.
       sw_timing:
         min_ms: 0.1
         mean_ms: 0.2
@@ -119,6 +123,12 @@ variants:
           when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16),
           not measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy
           = ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    mic:
+      executes_on: ip-abox-s5e9965
 - id: voice-call-vowifi
   severity: light
   design_conditions:
@@ -147,13 +157,12 @@ variants:
         note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
           the CPU-fed path.
       model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
-    audio_hal:
-      executes_on: ip-abox-s5e9965
-    speaker:
-      executes_on: ip-abox-s5e9965
-    mic:
-      executes_on: ip-abox-s5e9965
     modem:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Downlink voice frame (AMR-WB / EVS) every 20 ms, outside the video frame path; judged against the next frame.
       sw_timing:
         min_ms: 0.1
         mean_ms: 0.2
@@ -168,6 +177,11 @@ variants:
           measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy =
           ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
     modem_tx:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Uplink voice frame every 20 ms; judged against the next frame.
       sw_timing:
         min_ms: 0.1
         mean_ms: 0.2
@@ -179,6 +193,12 @@ variants:
           when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16),
           not measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy
           = ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    mic:
+      executes_on: ip-abox-s5e9965
 - id: voice-call-vonr
   severity: light
   design_conditions:
@@ -207,13 +227,12 @@ variants:
         note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
           the CPU-fed path.
       model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
-    audio_hal:
-      executes_on: ip-abox-s5e9965
-    speaker:
-      executes_on: ip-abox-s5e9965
-    mic:
-      executes_on: ip-abox-s5e9965
     modem:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Downlink voice frame (AMR-WB / EVS) every 20 ms, outside the video frame path; judged against the next frame.
       sw_timing:
         min_ms: 0.1
         mean_ms: 0.2
@@ -228,6 +247,11 @@ variants:
           measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy =
           ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
     modem_tx:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Uplink voice frame every 20 ms; judged against the next frame.
       sw_timing:
         min_ms: 0.1
         mean_ms: 0.2
@@ -239,6 +263,12 @@ variants:
           when uplink got its own node (2026-11-14). Execution time and CPU affinity are fixture assumptions (2026-09-16),
           not measurements. Replace with internal per-task avg/min/max and the cluster the task actually ran on; CPU energy
           = ip-cpu power_model at that cluster/frequency x exec_ms x rate_hz.
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    mic:
+      executes_on: ip-abox-s5e9965
 provenance:
   platform_review: S5E9965 platform (non-camera) driver review 2026-09-16
   note: Node ip_refs, per-variant sim shapes, bw_kb_s, dvfs steps and sw_timing are generated by tools/build_platform_fixture.py

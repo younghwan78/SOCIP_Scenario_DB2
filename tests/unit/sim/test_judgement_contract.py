@@ -196,3 +196,12 @@ def test_voice_call_uplink_and_downlink_are_two_paths_not_a_cycle(env):
         # no RT output to judge: the verdict says so instead of failing to build the timeline
         assert report["verdict"]["status"] == "not_applicable"
         assert {"modem", "modem_tx"} <= set(report["power"]["cpu_by_task"])
+        # the 20 ms voice frame on both paths is an own cadence judged by its own deadline (assumed fixture data)
+        rows = {r["node"]: r for r in report["own_cadence"]}
+        assert set(rows) == {"modem", "modem_tx"}
+        assert all(r["cadence"] == "period" and r["period_ms"] == 20.0 and r["deadline_ms"] == 20.0 and r["ok"]
+                   for r in rows.values())
+        # its CPU work counts at the voice rate (50 / s), not at the default 30 fps frame rate
+        period = report["period_ms"]
+        assert report["power"]["cpu_by_task"]["modem"] > 0
+        assert rows["modem"]["releases"] >= int(6 * period / 20)
