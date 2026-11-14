@@ -63,9 +63,14 @@ where one `ip_ref` represents multiple pipeline roles, for example `csispdp`,
 ### Workload load models (`sim/load_models.py`)
 
 A load model turns a workload's conditions into its effective `ppc`. The clock rule, timing and power
-then run the same calculation. Models are registered in `LOAD_MODELS` (like `POWER_MODELS`), and a
-node opts in with `node_configs.<node>.sim.load_model: <id>`. Without it the mode `ppc` applies, as
-before.
+then run the same calculation. Models are registered in `LOAD_MODELS` (like `POWER_MODELS`). The mode
+`ppc` applies, as before, unless a node opts in, in this order:
+
+1. the variant's `node_configs.<node>.sim.load_model: <id>` (`none` opts out);
+2. the scenario pipeline node's `load_model: {ref: <id>, ...coefficients}`. These are scenario-local
+   coefficients, so the shared IP catalog, and every other scenario's input hash, stays unchanged.
+   E2600 decoders use this with assumed values;
+3. a catalog model whose `roles` lists the node's role (e.g. `roles: [decoder]`).
 
 `codec-throughput-v1` (decoder / encoder):
 

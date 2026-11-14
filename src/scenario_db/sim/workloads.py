@@ -43,15 +43,16 @@ def build_workload_for_node(
     workload_format = workload_format_for_node(graph, node_id, sim_block, shape=shape)
     workload_fps = float(sim_block.get("fps") or fps)
     load_trace = None
-    if sim_block.get("load_model"):
-        # D-03: the codec / bitrate set the effective ppc (opt-in per node; same clock / timing / power rule)
-        from scenario_db.sim.load_models import resolve_load_model
+    from scenario_db.sim.load_models import load_model_for, resolve_load_model
 
-        model = resolve_load_model(str(sim_block["load_model"]), node_id)
+    model_id, model_params = load_model_for(ip_row.capabilities or {}, sim_block, role, node)
+    if model_id:
+        # D-03: the codec / bitrate set the effective ppc (node or catalog-role opt-in; same clock / timing / power rule)
+        model = resolve_load_model(model_id, node_id)
         sim_hint = {**sim_block, "codec": sim_block.get("codec") or node_config.get("codec")}
         load_trace = model.effective(caps=ip_row.capabilities or {}, node_id=node_id, role=role, sim=sim_hint,
                                      design=graph.variant.design_conditions or {}, width=width, height=height,
-                                     fps=workload_fps, base_ppc=sim_params.ppc)
+                                     fps=workload_fps, base_ppc=sim_params.ppc, params=model_params)
         sim_params = sim_params.model_copy(update={"ppc": load_trace["ppc_effective"]})
     return IPWorkload(
         node_id=node_id,

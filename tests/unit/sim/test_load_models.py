@@ -56,7 +56,7 @@ def test_the_codec_limit_derives_the_ppc_when_no_coefficient_is_declared():
 
 
 @pytest.mark.parametrize("caps, sim, message", [
-    ({}, {"codec": "AV1"}, "needs capabilities.sim.load_models"),
+    ({}, {"codec": "AV1"}, "needs coefficients"),
     (CAPS, {"codec": "MPEG2"}, "needs a known codec"),
     (CAPS, {}, "needs a known codec"),
     (CAPS, {"codec": "VP9"}, "no coefficient for VP9_DEC"),
@@ -92,9 +92,18 @@ def _opt_in(graph, catalog, coefficients):
     return replace(graph, variant=variant, ip_catalog={**graph.ip_catalog, mfc.id: ip})
 
 
+def _undeclared(graph):
+    scenario = deepcopy(graph.scenario)
+    pipeline = deepcopy(scenario.pipeline)
+    for n in pipeline["nodes"]:
+        n.pop("load_model", None)
+    scenario.pipeline = pipeline
+    return replace(graph, scenario=scenario)
+
+
 def test_youtube_decoder_takes_the_codec_rate_only_when_it_opts_in(youtube):
     catalog, tables, raw = youtube
-    graph = graph_from_fixture(raw, "yt-4k30-av1-sdr", catalog)
+    graph = _undeclared(graph_from_fixture(raw, "yt-4k30-av1-sdr", catalog))
     plain = analyze_timing_budget(graph, TimingBudgetOptions(), dvfs_tables=tables)
     mfc = next(ip for ip in plain["ips"] if ip["node"] == "mfc_dec")
     assert "load_model" not in mfc  # undeclared: the mode ppc, as before
@@ -109,3 +118,31 @@ def test_youtube_decoder_takes_the_codec_rate_only_when_it_opts_in(youtube):
     # the other IPs' own need is untouched (a DVFS domain shared with the MFC can still lift their set clock)
     others = {ip["node"]: ip["own_required_mhz"] for ip in plain["ips"] if ip["node"] != "mfc_dec"}
     assert {ip["node"]: ip["own_required_mhz"] for ip in slow["ips"] if ip["node"] != "mfc_dec"} == others
+
+
+def test_where_a_node_takes_its_model_and_coefficients():
+    from scenario_db.sim.load_models import load_model_for
+
+    node = {"id": "mfc_dec", "load_model": {"ref": MODEL, "codecs": {"AV1_DEC": {"ppc": 1.0}}}}
+    catalog_role = {"sim": {"load_models": {MODEL: {"roles": ["decoder"], "codecs": {}}}}}
+    # the scenario node declares it with its own coefficients (the shared catalog is left as it is)
+    assert load_model_for({}, {}, "decoder", node) == (MODEL, node["load_model"])
+    # a catalog model listing the role applies to every node of that role, with the catalog coefficients
+    assert load_model_for(catalog_role, {}, "decoder", {"id": "x"}) == (MODEL, None)
+    assert load_model_for(catalog_role, {}, "encoder", {"id": "x"}) == (None, None)
+    # the variant can opt out (none) or name the model itself
+    assert load_model_for(catalog_role, {"load_model": "none"}, "decoder", node) == (None, None)
+    assert load_model_for({}, {"load_model": MODEL}, "decoder", node) == (MODEL, node["load_model"])
+    assert load_model_for({}, {}, "decoder", {"id": "x"}) == (None, None)
+
+
+def test_e2600_decoders_use_the_scenario_coefficients_and_the_encoders_do_not(youtube):
+    catalog, tables, raw = youtube
+    node = next(n for n in raw["pipeline"]["nodes"] if n["id"] == "mfc_dec")
+    assert node["load_model"]["ref"] == MODEL and node["load_model"]["value_source"] == "assumed"
+    # the shared MFC catalog carries no load model: camera recording (encoder) inputs are unchanged
+    assert "load_models" not in (catalog["ip-mfc-s5e9965"].capabilities.get("sim") or {})
+    report = analyze_timing_budget(graph_from_fixture(raw, "yt-4k60-av1-hdr10", catalog), TimingBudgetOptions(), dvfs_tables=tables)
+    mfc = next(ip for ip in report["ips"] if ip["node"] == "mfc_dec")
+    assert mfc["load_model"]["codec"] == "AV1_DEC" and mfc["load_model"]["ppc_codec"] == 1.0
+    assert report["verdict"]["status"] == "ok"
