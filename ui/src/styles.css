@@ -1164,3 +1164,6 @@ div.decision-cautions { padding-left: 0; color: var(--faint); }
 .link-btn { border: 0; background: transparent; padding: 0; color: var(--primary-strong); cursor: pointer; font: inherit; text-align: left; }
 .link-btn:hover { text-decoration: underline; }
 .run-delta { display: grid; gap: 6px; padding: 10px 12px; }
+/* S-10 engine revisions between a result's engine and today's */
+.engine-changes { margin-top: 4px; font-size: var(--fs-caption); }
+.engine-changes ul { margin: 4px 0 0 16px; padding: 0; }

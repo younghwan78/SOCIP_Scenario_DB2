@@ -486,6 +486,7 @@ def basis_detail(db: Session, basis_id: str) -> dict[str, Any]:
     """Everything a viewer needs to judge a basis: components with their content, input drift, trial, predictions."""
     from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
     from scenario_db.sim.arch_exploration import ENGINE_REV
+    from scenario_db.sim.engine_revisions import changes_since
 
     row = get_basis(db, basis_id)
     pp_id = (row.power_params_ref or "").split("@", 1)[0] or None
@@ -510,7 +511,8 @@ def basis_detail(db: Session, basis_id: str) -> dict[str, Any]:
     return {
         "basis": basis_dict(row) | {"trial": trial_summary(row)},
         "parent": {"id": parent.id, "code": parent.code, "status": parent.status} if parent is not None else None,
-        "inputs": {"current": not drift, "changed": drift, "engine_now": ENGINE_REV},
+        "inputs": {"current": not drift, "changed": drift, "engine_now": ENGINE_REV,
+                   "engine_changes": changes_since(row.engine_rev, ENGINE_REV) if row.engine_rev != ENGINE_REV else []},
         "profile": _profile_detail(db.get(SimConfigProfile, row.config_profile_ref) if row.config_profile_ref else None,
                                    row.config_profile_ref),
         "power_params": _power_params_detail(db.get(PowerModelParams, pp_id) if pp_id else None, row.power_params_ref),
