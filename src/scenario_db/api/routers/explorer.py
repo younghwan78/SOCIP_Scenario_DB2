@@ -3,11 +3,12 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from scenario_db.api.deps import get_db
+from scenario_db.api.http_cache import json_response
 from scenario_db.api.schemas.explorer import (
     ExplorerCount,
     ExplorerSummaryResponse,
@@ -100,8 +101,14 @@ def explorer_summary(
     )
 
 
+def _with_etag(request: Request | None, payload: Any) -> Any:
+    """O-05: a content ETag (304 when unchanged) for a route; the model itself for a direct call."""
+    return payload if request is None else json_response(request, payload)
+
+
 @router.get("/scenario-catalog", response_model=ScenarioCatalogResponse)
 def scenario_catalog(
+    request: Request = None,  # type: ignore[assignment]  # injected by FastAPI; None when called directly
     soc_ref: str | None = Query(None),
     board_type: str | None = Query(None),
     project_ref: str | None = Query(None),
@@ -166,15 +173,17 @@ def scenario_catalog(
                 viewer_query=_viewer_query(project, scenario.id, default_variant_id),
             )
         )
-    return ScenarioCatalogResponse(
+    # O-05: content ETag — the UI reloads the catalog on every start; an unchanged DB answers 304
+    return _with_etag(request, ScenarioCatalogResponse(
         filters=_filters(soc_ref, board_type, project_ref, category=category, domain=domain, scenario_id=scenario_id, severity=severity),
         total=total,
         items=items,
-    )
+    ))
 
 
 @router.get("/variant-matrix", response_model=VariantMatrixResponse)
 def variant_matrix(
+    request: Request = None,  # type: ignore[assignment]  # injected by FastAPI; None when called directly
     soc_ref: str | None = Query(None),
     board_type: str | None = Query(None),
     project_ref: str | None = Query(None),
@@ -265,12 +274,12 @@ def variant_matrix(
                 viewer_query=_viewer_query(project, scenario.id, variant.id),
             )
         )
-    return VariantMatrixResponse(
+    return _with_etag(request, VariantMatrixResponse(
         filters=_filters(soc_ref, board_type, project_ref, category=category, domain=domain, scenario_id=scenario_id, severity=severity),
         total=total,
         axis_keys=_sorted_axis_keys(axis_keys),
         items=items,
-    )
+    ))
 
 
 @router.get("/import-health", response_model=ImportHealthResponse)
