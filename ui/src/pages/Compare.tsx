@@ -366,7 +366,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     <div className="panel table-x fit cmp-table">
       {orient === 'items'
         ? <DataTable id={`compare.items.${ids.length}`} columns={itemCols} groups={groups} rowKey={(it) => it.id} />
-        : <DataTable id="compare.variants" columns={varCols} rows={vrows} rowKey={(r) => r.id} rowClass={(r) => (r.i === 0 ? 'sel' : '')} />}
+        : <DataTable id="compare.variants" tools columns={varCols} rows={vrows} rowKey={(r) => r.id} rowClass={(r) => (r.i === 0 ? 'sel' : '')} />}
       {viewsQ.loading && <div className="empty">view 불러오는 중…</div>}
     </div>
   )

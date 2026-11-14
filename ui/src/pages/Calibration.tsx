@@ -118,7 +118,7 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
           note={allCaptures ? '행 클릭 = 상세' : `대표 = total 있음 > 실측 > 합성 아님 > 최신 · 행 클릭 = 상세${hiddenCaptures > 0 ? ` · 나머지 ${hiddenCaptures}건 숨김` : ''}`}
           actions={summary.data ? <button className="btn tb-mini" onClick={() => ctx.navigate(undefined, { caps: allCaptures ? undefined : '1' }, true)}>{allCaptures ? '대표만' : '모든 capture'}</button> : undefined}>
           <div className="table-x">
-            <DataTable id="cal.list" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => pick(r.id)}
+            <DataTable id="cal.list" tools columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => pick(r.id)}
               rowClass={(r) => (r.id === selId ? 'selected' : '')} defaultSort={{ key: 'at', dir: -1 }} />
           </div>
         </Card>
