@@ -41,6 +41,7 @@ from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 from scenario_db.api.services.design_axes import explore_with_levers, needs_catalog
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.design_space import design_space_of_stored_spec
+from scenario_db.sim.engine_revisions import changes_since, rev_number
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.api.services.calibration import data_origin, is_physical, is_synthetic, measurement_details
 from scenario_db.api.services.failures import variant_failure
@@ -1325,8 +1326,10 @@ def report_stale(db: Session, report_id: str) -> dict[str, Any]:
     # Regenerating does not fix these (re-exploration + registration does), so they are not ``stale``.
     old_engine = [{"variant_id": row["variant_id"], "engine_rev": row["engine_rev"]} for row in snap_rows
                   if row.get("prediction_id") and row.get("engine_rev") and row["engine_rev"] != ENGINE_REV]
+    oldest = min((o["engine_rev"] for o in old_engine), key=lambda rev: rev_number(rev) or 0, default=None)
     return {"report_id": r.id, "stale": bool(changed), "changed": changed,
-            "engine_rev": ENGINE_REV, "old_engine": old_engine}
+            "engine_rev": ENGINE_REV, "old_engine": old_engine,
+            "engine_changes": changes_since(oldest, ENGINE_REV) if old_engine else []}
 
 
 # ------------------------------------------------------------------- power options

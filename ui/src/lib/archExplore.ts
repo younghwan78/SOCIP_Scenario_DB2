@@ -8,6 +8,7 @@ import { API_BASE, ApiError, getJson } from './api'
 import { fetchAdmitted, statParam, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
 import type { ExploreJob } from './exploreJob'
+import type { EngineChange } from '../components/EngineChanges'
 
 export interface Quant { min: number; p25: number; median: number; p75: number; max: number }
 /** Distribution keys always present (engine rev 1+); the BW IP/CPU keys exist from rev 2. */
@@ -481,7 +482,7 @@ export const archApi = {
   reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string; snapshot?: string | null; current?: string | null }[]
     /** rows computed by an older exploration engine (API ≥ arch-exploration/15) — not part of ``stale``: regenerating
      *  does not fix them, re-exploration + registration does */
-    engine_rev?: string; old_engine?: { variant_id: string; engine_rev: string }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
+    engine_rev?: string; old_engine?: { variant_id: string; engine_rev: string }[]; engine_changes?: EngineChange[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
   reportHtmlUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/html`,
 }
 

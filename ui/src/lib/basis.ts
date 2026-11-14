@@ -1,5 +1,6 @@
 // 예측 기준 (model basis): config profile · power params · DVFS · engine bundle per 과제 (P1 registry, P2 promotion).
 import { getJson, postJson } from './api'
+import type { EngineChange } from '../components/EngineChanges'
 
 export interface ModelBasis {
   id: string; project_ref: string; seq: number; code: string; title: string | null; status: 'draft' | 'active' | 'retired'
@@ -24,7 +25,7 @@ export interface PromoteResult { basis: ModelBasis; promoted: { prediction_id: s
 export interface BasisDetail {
   basis: ModelBasis & { input_stamp?: Record<string, unknown> | null }
   parent: { id: string; code: string; status: string } | null
-  inputs: { current: boolean; changed: string[]; engine_now: string }
+  inputs: { current: boolean; changed: string[]; engine_now: string; engine_changes?: EngineChange[] }
   profile: null | { id: string; missing?: boolean; version?: number; status?: string; approved_by?: string | null; description?: string | null
     notes?: string | null; run_config?: Record<string, unknown>; rail_domains?: string[]; synthetic?: boolean }
   power_params: null | { ref: string; missing?: boolean; id?: string; version?: number; status?: string; soc_ref?: string; description?: string | null

@@ -6,6 +6,7 @@ import { basisApi, OVERRIDE_LABEL, type BasisDetail } from '../lib/basis'
 import { useAsync } from '../lib/route'
 import { POWER_MODEL_LABEL } from '../lib/simProfile'
 import { fmt } from '../lib/timingBudget'
+import { EngineChanges } from './EngineChanges'
 
 const STATUS: Record<string, [string, string]> = { active: ['v-ok', 'active · 과제 기본'], draft: ['v-warn', 'draft'], retired: ['', 'retired'] }
 const RUN_CONFIG_LABEL: [string, string, (v: unknown) => string][] = [
@@ -99,6 +100,7 @@ export function BasisDetailBody({ d, overrides }: { d: BasisDetail; overrides?: 
     </Sec>
     <Sec title="Engine">
       <KV k="기준 / 현재"><span className="mono">{b.engine_rev} / {d.inputs.engine_now}</span>{b.engine_rev !== d.inputs.engine_now ? <span className="err-text"> — 코드가 바뀜</span> : null}</KV>
+      <EngineChanges changes={d.inputs.engine_changes} />
     </Sec>
     <div className="faint" style={{ fontSize: 11, marginTop: 6 }}>SW timing과 variant 데이터는 기준에 포함되지 않습니다 (SW는 버전 · 실측/정의값별로 따로 비교).</div>
   </>
