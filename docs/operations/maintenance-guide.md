@@ -113,6 +113,11 @@ The repository cleanup helper is dry-run by default:
 .\scripts\cleanup_runtime_outputs.ps1 -Apply
 ```
 
+It lists `runtime_logs/`, the legacy log folders, `.coverage`, `test-scenariodb.db` and every
+root-level `*.log` (review / check logs). `-IncludeBuild` adds `ui/dist`: the build goes stale as
+the source moves on, so a static deployment always rebuilds it (`npm run build`) instead of
+copying an old `dist`.
+
 Permission-locked `pytest-cache-files-*` directories are excluded by default. They can be listed
 with `-IncludePytestTemp`, but ownership/ACL repair is an administrator decision and is not
 performed by the cleanup helper.

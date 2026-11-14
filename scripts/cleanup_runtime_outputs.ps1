@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [switch]$Apply,
-    [switch]$IncludePytestTemp
+    [switch]$IncludePytestTemp,
+    # ui/dist is a stale build once the source moves on; a static deployment always rebuilds it.
+    [switch]$IncludeBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,6 +58,20 @@ foreach ($name in $directoryNames) {
 foreach ($name in $fileNames) {
     $candidate = Assert-RepositoryChild (Join-Path $repoRoot $name)
     if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        $targets += Get-Item -LiteralPath $candidate -Force
+    }
+}
+
+# Root-level logs (review / check runs). The policy keeps logs under runtime_logs/ only.
+$rootLogs = Get-ChildItem -LiteralPath $repoRoot -File -Force -Filter "*.log" -ErrorAction SilentlyContinue
+foreach ($file in $rootLogs) {
+    [void](Assert-RepositoryChild $file.FullName)
+    $targets += $file
+}
+
+if ($IncludeBuild) {
+    $candidate = Assert-RepositoryChild (Join-Path $repoRoot "ui\dist")
+    if (Test-Path -LiteralPath $candidate -PathType Container) {
         $targets += Get-Item -LiteralPath $candidate -Force
     }
 }
