@@ -99,7 +99,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   return (
     <div className="page tb-page">
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: 14 }}>
-        <button className="btn" disabled={!r || !!experimentBlocked} title={experimentBlocked ?? '현재 SW·DVFS·power 설정을 조건 실험의 기준으로 전달'} onClick={startExperiment}>이 계산 조건으로 실험 →</button>
+        <button className="btn" disabled={!r || !!experimentBlocked} title={experimentBlocked ?? '현재 SW·DVFS·power 설정을 한 조건 바꿔보기의 기준으로 전달'} onClick={startExperiment}>이 조건으로 한 조건 바꿔보기 →</button>
         <span title={STAT_TIP}><Seg label="SW 통계" value={statistic} options={[['mean', 'mean (기본)'], ['max', 'max']]} onPick={(v) => set('stat', v === DEFAULT_STATISTIC ? undefined : v)} /></span>
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
