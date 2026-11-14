@@ -32,6 +32,9 @@ import { ExploreJobPanel } from '../components/ExploreJobPanel'
 import { isActive, trackExploreJob, useExploreJob } from '../lib/exploreJob'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 import { SensitivityTornado } from '../components/Sensitivity'
+import { ExplorationDecision } from '../components/DecisionCard'
+import { ParetoScatter } from '../components/ParetoScatter'
+import { conclusion, defaultCase, lowestPowerCase } from '../lib/conclusion'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
@@ -359,7 +362,7 @@ function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail;
   return <VariantDetailBody key={JSON.stringify([run.id, v.scenario_id, v.variant_id, readOnly])} v={fullQ.data} run={run} readOnly={readOnly} battery={battery} iqKeep={refs?.policy.register_baseline === 'iq_keep'} />
 }
 
-function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: VariantResult; run: RunDetail; readOnly: boolean; battery: Battery; iqKeep?: boolean }) {
+export function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: VariantResult; run: RunDetail; readOnly: boolean; battery: Battery; iqKeep?: boolean }) {
   const rec = v.recommended
   const listed = new Set([rec?.key, ...v.alternatives.map((c) => c.key), v.baseline.key])
   const pareto = (v.pareto ?? []).filter((c) => !listed.has(c.key))
@@ -368,17 +371,21 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
   const keepRow = keepCase && keepCase.key !== rec?.key ? [{ rank: '기본 등록 · 화질 유지', c: keepCase }] : []
   // default selection = 화질 무손실 최적 (tier keep) whenever it exists; the server default follows the project policy
   const keepBest = v.tiers?.keep?.best ?? null
-  const serverDefault = iqKeep ? keepCase?.key : rec?.key
+  // the case the server registers without a case_key (with an objective order: the lowest-power case, not the recommendation)
+  const serverDefault = defaultCase(v, iqKeep)?.key
+  const low = lowestPowerCase(v)
   const defaultKey = keepBest?.key ?? serverDefault
+  const lowRow = v.objectives && low && low.key !== rec?.key ? [{ rank: '최저 power', c: low }] : []
   const cands: { rank: string; c: ExpCase }[] = rec
-    ? [...keepRow, { rank: keepRow.length ? '최저 power (lossy)' : '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
+    ? [...keepRow, ...lowRow, { rank: v.objectives ? '추천 (추천 기준)' : keepRow.length ? '최저 power (lossy)' : '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
     : [{ rank: 'baseline', c: v.baseline }]
   const seenKeys = new Set<string>()
   const candRows = cands.filter((x) => (seenKeys.has(x.c.key) ? false : (seenKeys.add(x.c.key), true)))
   const [withRaise, setWithRaise] = useState(false)
   const [open, setOpen] = useState<Record<'keep' | 'trade', boolean>>({ keep: false, trade: false })
   const groups = v.design_points?.length ? caseGroups(v, withRaise) : null
-  const tagOf = (c: ExpCase): string[] => [c.key === defaultKey ? '기본 등록' : '', c.key === rec?.key ? '최저 power' : '',
+  const tagOf = (c: ExpCase): string[] => [c.key === defaultKey ? '기본 등록' : '', c.key === low?.key ? '최저 power' : '',
+    v.objectives && c.key === rec?.key && c.key !== low?.key ? '추천 기준' : '',
     c.key === v.baseline.key ? 'baseline' : '', c.dvfs_raise ? `DVFS +${c.dvfs_raise}` : ''].filter(Boolean)
   const grouped: { group: 'keep' | 'trade'; rank: string; c: ExpCase }[] = groups
     ? (['keep', 'trade'] as const).flatMap((g) => groups[g].slice(0, open[g] ? undefined : 5).map((c, i) => ({ group: g, rank: `#${i + 1}`, c })))
@@ -411,6 +418,23 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       notify({ kind: r.promoted.length ? 'ok' : 'info', text: r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}` })
     } catch (e) { notify({ kind: 'error', text: guard.fail(e) }) } finally { registering.current = false; setBusy(false) }
   }
+  // U-03: the decision first — what the default registration takes, its verdict, Δ and three cautions
+  const decision = conclusion(v, iqKeep)
+  const promoteDefault = async () => {
+    if (registering.current || readOnly || !decision.target?.eligible || !guard.ready || !guard.expected) return
+    registering.current = true
+    setBusy(true)
+    try {
+      const r = await archApi.promote(run.id, [v.variant_id], undefined, undefined, v.scenario_id, run.project_ref ?? undefined, guard.expected)
+      guard.refresh()
+      notify({ kind: r.promoted.length ? 'ok' : 'info', text: r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW · ${decision.rule})` : `건너뜀: ${r.skipped[0]?.reason}` })
+    } catch (e) { notify({ kind: 'error', text: guard.fail(e) }) } finally { registering.current = false; setBusy(false) }
+  }
+  const [tab, setTab] = useState<EvidenceTab>('power')
+  const marks: Record<string, string> = Object.fromEntries([
+    [v.baseline.key, 'baseline'], ...(rec ? [[rec.key, v.objectives ? '추천' : '최저 power']] : []),
+    ...(low && low.key !== rec?.key ? [[low.key, '최저 power']] : []),
+    ...(decision.target ? [[decision.target.key, '기본 등록']] : [])])
   const m = v.sw_margin
   const tip = useTip()
   const leverMin = v.levers?.milestones?.trade?.total_mw ?? null
@@ -419,12 +443,24 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
   const meas = (covQ.data?.[v.variant_id]?.measurements ?? []).find((x) => x.shown && x.total_mw != null)
   const measured: Measured | null = meas ? { total_mw: meas.total_mw!, label: `${meas.synthetic ? 'synthetic' : meas.origin} · ${meas.silicon_rev ?? ''} ${meas.sw_baseline_ref ?? ''}`.trim() } : null
   return <>
+    <div style={{ gridColumn: '1 / -1' }}>
+      <ExplorationDecision c={decision} action={<>
+        <RegistrationBasis guard={guard} />
+        <button className="btn primary" disabled={busy || !guard.ready || readOnly || !v.spec_ok || !decision.target?.eligible} onClick={promoteDefault}
+          title={readOnly ? '다른 과제의 run — 비교 보기 전용' : '사유 없이 기본 규칙으로 등록 — 다른 조합은 아래 표에서 골라 등록'}>{busy ? '등록 중…' : '이 조합을 예측으로 등록 (current)'}</button></>} />
+    </div>
+    <div style={{ gridColumn: '1 / -1' }} className="seg evidence-tabs" role="tablist" aria-label="근거">
+      {EVIDENCE_TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>)}
+    </div>
+    {tab === 'power' && <>
+    <Card id="ax-pareto" title={`${short(v.variant_id)} — Power vs 다른 축`} note="나열된 조합의 trade-off · 점에 마우스 = 값" defaultWide>
+      <ParetoScatter v={v} marks={marks} /></Card>
     <Card id="ax-levers" title={`${short(v.variant_id)} — Lever 분석: 화질 손해 없이 무엇이 가장 효과적인가`}
       note="baseline → 화질 무손실 lever → IQ 평가 필요 lever → lossy 순으로 가장 큰 절감부터 · 점 분포 = 모든 설계 조합" defaultWide>
       <LeverAnalysisView la={v.levers} battery={battery} measured={measured}
         reg={{ runId: run.id, scenarioId: v.scenario_id, variantId: v.variant_id, projectRef: run.project_ref, readOnly }} />
     </Card>
-    <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''} · 판정 ${v.throughput_model === 'pipelined' ? 'pipeline buffering' : 'stage 1 frame'}${keepRow.length ? ' · 기본 등록 = 화질 유지 최적 (과제 기준)' : ''}`} defaultWide>
+    <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합 (다른 조합 골라 등록)`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''} · 판정 ${v.throughput_model === 'pipelined' ? 'pipeline buffering' : 'stage 1 frame'}${keepRow.length ? ' · 기본 등록 = 화질 유지 최적 (과제 기준)' : ''}`} defaultWide>
       {(v.ip_modes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         IP mode (모든 조합 공통): {(v.ip_modes ?? []).map((m) => `${m.node.toUpperCase()} ${m.mode}${m.unit_power_mw_mp !== null ? ` ${fmt(m.unit_power_mw_mp, 2)}` : ''}`).join(' · ')} <span className="mono">mW/MP</span>
         {(v.ip_modes ?? []).some((m) => m.alternatives.some((a) => a.explorable)) && <> · 대체 mode 결과는 아래 Power option / IP mode 카드</>}</div>}
@@ -466,7 +502,7 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
         <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={needsReason ? (picked?.lossy ? 'lossy(화질 trade) 선택 사유 (필수)' : '기본 외 조합 선택 사유 (필수)') : '사유 (선택)'} value={reason} onChange={(e) => setReason(e.target.value)} />
         <RegistrationBasis guard={guard} />
         <button className="btn primary" disabled={busy || !guard.ready || readOnly || !v.spec_ok || !picked?.eligible || (needsReason && !reason.trim())} onClick={promote}
-          title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '예측으로 등록 (current)'}</button>
+          title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '선택한 조합을 예측으로 등록 (current)'}</button>
       </div>
     </Card>
  <Card id="ax-tiers" title={`${short(v.variant_id)} — 화질·성능 유지 최적 범위 vs Power 우선 메뉴`} note="A = lossy · IQ option 없이 timing 만족 최저 + 최저 +3% 이내 평가 조합 · B = 화질을 희생할 때 항목별 단독 효과" defaultWide>
@@ -491,7 +527,10 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
     {v.sensitivity && <Card id="ax-sensitivity" title="가정값 민감도 — 무엇을 먼저 실측할까" note="추천(등록) 조합에서 가정 입력 하나씩 흔들 때 total power 변화" defaultWide>
       <SensitivityTornado data={v.sensitivity} /></Card>}
     <Card id="ax-spread" title="Power range 원인 (축별)" note="SW · compression · DVFS"><AxisSpread spread={v.axis_spread} /></Card>
-    <Card id="ax-sw" title="SW timing margin · 권고" note={`${m.basis === 'pipelined' ? '(P − max(최장 SW task, 같은 CPU의 SW 합))/P · stage chain = 동시 frame' : '(P − SW − overhead − HW@set clock)/P'}${m.statistic ? ` · SW ${m.statistic} 기준` : ''}`}>
+    <Card id="ax-modes" title="IP mode · unit power" note="IP별 현재 mode와 대안 mode · mode마다 unit power가 다름" defaultWide>
+      <IpModes rows={v.ip_modes ?? []} results={v.power_options?.results} /></Card>
+    </>}
+    {tab === 'timing' && <Card id="ax-sw" title="SW timing margin · 권고" note={`${m.basis === 'pipelined' ? '(P − max(최장 SW task, 같은 CPU의 SW 합))/P · stage chain = 동시 frame' : '(P − SW − overhead − HW@set clock)/P'}${m.statistic ? ` · SW ${m.statistic} 기준` : ''}`}>
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th>stage</th><th>margin</th><th>SW / P</th><th>병목</th>{m.basis === 'pipelined' ? <th>chain (동시 frame)</th> : <th>latency 비중</th>}</tr></thead>
         <tbody>{m.stages.map((s) => <tr key={s.stage}><td>{s.stage.toUpperCase()}</td>
@@ -503,10 +542,11 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
         SW 증가 허용 — DVFS 재선택 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} · <b>추천 DVFS 고정 {m.growth_tolerance_fixed ? `×${fmt(m.growth_tolerance_fixed, 1)}` : '—'}</b> (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms
         {(m.growth_fixed_rows ?? []).some((r) => !r.ok && r.short_domains.length) && <> · 고정 시 부족 domain: {(m.growth_fixed_rows ?? []).filter((r) => !r.ok).map((r) => `×${fmt(r.runtime_scale, 1)} ${r.short_domains.join('/') || 'timing'}`).join(', ')}</>}</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>{m.recommendations.map((r) => <li key={r}>{r}</li>)}</ul>
-    </Card>
-    <Card id="ax-modes" title="IP mode · unit power" note="IP별 현재 mode와 대안 mode · mode마다 unit power가 다름" defaultWide>
-      <IpModes rows={v.ip_modes ?? []} results={v.power_options?.results} /></Card>
-    <Card id="ax-comp" title="Compression BW 절감 (buffer별)" note="지원 DMA만 탐색 · 단독 적용 시 Δ · 합산 가능(port 독립)"><BufferSavings buffers={v.buffers} selected={rec?.compression ?? []} /></Card>
-    <Card id="ax-dvfs" title="DVFS domain level" note="scenario별 level · +level은 전압↑ → power↑"><DomainLevels domains={v.domains} chosen={rec?.dvfs ?? {}} /></Card>
+    </Card>}
+    {tab === 'memory' && <Card id="ax-comp" title="Compression BW 절감 (buffer별)" note="지원 DMA만 탐색 · 단독 적용 시 Δ · 합산 가능(port 독립)"><BufferSavings buffers={v.buffers} selected={decision.target?.compression ?? []} /></Card>}
+    {tab === 'dvfs' && <Card id="ax-dvfs" title="DVFS domain level" note="scenario별 level · +level은 전압↑ → power↑"><DomainLevels domains={v.domains} chosen={decision.target?.dvfs ?? {}} /></Card>}
   </>
 }
+
+type EvidenceTab = 'power' | 'timing' | 'memory' | 'dvfs'
+const EVIDENCE_TABS: [EvidenceTab, string][] = [['power', 'Power'], ['timing', 'Timing'], ['memory', 'Memory'], ['dvfs', 'DVFS']]

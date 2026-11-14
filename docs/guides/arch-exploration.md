@@ -48,6 +48,10 @@ v3 제안(2026-09-24)의 구현 내용이다. Stage timing budget([timing-budget
 - `POST /arch/predictions/promote {run_id, scenario_id?, variant_ids?, case_key?, reason?}`
   - 기본값: run의 spec 만족 variant 전체를 **최저 power 조합**(`auto:min-power`)으로 등록한다.
   - 대안 조합(`case_key`)은 variant 1개에만 지정할 수 있고 사유가 필수다 (`user:rank-N`).
+  - 추천 기준(`objective.order`)이 있는 run: 기본 등록은 여전히 최저 power 조합(`min_power_case`)이고, 추천 기준의 추천은 그 key로 등록한다 (`auto:objective`).
+- UI variant 상세: 맨 위 **결론** 카드 = 기본 등록 조합 · 판정 · baseline 대비 Δ · 주의 3줄(검증 불일치 · 부분 모델 · budget 판정 불가 · lossy · 가정 ratio · DVFS 상향 · 추천 기준 차이 순) · 등록 버튼(사유 없이 기본 규칙).
+  근거는 Power / Timing / Memory / DVFS tab으로 나누고 Power만 처음 연다. Power tab 첫 카드는 나열된 조합의 power 대 BW · IQ risk · SW 증가 여유 산점도다.
+  다른 조합은 "추천 · 대안 조합" 표에서 골라 등록한다.
 - 기존 current는 `superseded`로 바뀌고 `supersedes_ref`로 연결된다. variant당 current는 1개다 (partial unique index).
 - variant ID는 scenario 내에서만 고유하다. 같은 이름이 여러 scenario에 있으면 개별 등록에 `scenario_id`가 필요하다. 전체 등록은 모든 scenario/variant 쌍을 보존한다.
 - 등록은 variant 행을 잠가 직렬화하며, 동시에 처음 등록하더라도 current 하나와 superseded 이력 체인을 유지한다.
