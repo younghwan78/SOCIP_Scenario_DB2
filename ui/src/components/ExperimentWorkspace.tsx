@@ -39,6 +39,27 @@ export function experimentTabHref(page: ExperimentPage, keep: Record<string, str
   return `#/${page}${s ? `?${s}` : ''}`
 }
 
+/** The active tab keeps the page's own state (an open exploration run, a selected variant …): clicking it
+ * stays on the current URL; only switching tabs drops the page-specific parameters. */
+export function activeTabHref(page: ExperimentPage, keep: Record<string, string | undefined>): string {
+  const hash = typeof window !== 'undefined' ? window.location.hash : ''
+  return hash === `#/${page}` || hash.startsWith(`#/${page}?`) ? hash : experimentTabHref(page, keep)
+}
+
+/** The What-if draft (its model basis, conditions and candidates) belongs to the What-if tab. Exploration
+ * and CPU what-if pick their own profile, so on those tabs the draft is named as the What-if draft, not as
+ * the basis of the calculation shown. */
+export function draftNote(page: ExperimentPage, context: { basis_label?: string | null; changes: unknown[]; candidates: unknown[] } | null | undefined): string {
+  if (!context) return ''
+  const pending = context.changes.length > 0 || context.candidates.length > 0
+  const counts = `조건 ${context.changes.length}개 · 후보 ${context.candidates.length}개`
+  if (page === 'whatif') {
+    return `${context.basis_label ? ` · 모델 기준 ${context.basis_label}` : ''}${pending ? ` · 진행 중인 ${counts}` : ''}`
+  }
+  if (!pending) return ''
+  return ` · What-if 초안 (${context.basis_label ? `모델 기준 ${context.basis_label}, ` : ''}${counts}) — 이 탭의 계산 기준은 아래 설정`
+}
+
 export function ExperimentWorkspaceBar({ page, project, scenario, variant, experiment }: {
   page: ExperimentPage; project: string; scenario: string; variant: string; experiment?: string
 }) {
@@ -50,14 +71,13 @@ export function ExperimentWorkspaceBar({ page, project, scenario, variant, exper
   return <section className="xws" aria-label="실험 workspace">
     <div className="xws-tabs seg" role="tablist" aria-label="실험 방법">
       {EXPERIMENT_TABS.map((t) => <a key={t.page} role="tab" aria-selected={t.page === page} className={t.page === page ? 'on' : ''}
-        href={experimentTabHref(t.page, keep)}>{t.label} <span className="faint">· {t.tool}</span></a>)}
+        href={t.page === page ? activeTabHref(page, keep) : experimentTabHref(t.page, keep)}>{t.label} <span className="faint">· {t.tool}</span></a>)}
     </div>
     <div className="xws-info">
       <span><b>{active.label}</b> — {active.question}</span>
       <span className="faint">
         기준: {variant ? <span className="mono">{variant}</span> : 'variant 미선택'}
-        {context?.basis_label ? ` · 모델 기준 ${context.basis_label}` : ''}
-        {context && (context.changes.length > 0 || context.candidates.length > 0) ? ` · 진행 중인 조건 ${context.changes.length}개 · 후보 ${context.candidates.length}개` : ''}
+        {draftNote(page, context)}
       </span>
       {s && <span className="faint xws-levers">
         레버 카탈로그 (공유): 범위 탐색 내장 {s.builtin.length}개 ({s.builtin.join(' · ')}) · 한 조건 바꿔보기 {s.whatif}개

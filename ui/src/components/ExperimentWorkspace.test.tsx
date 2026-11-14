@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import * as api from '../lib/api'
-import { ExperimentWorkspaceBar, experimentTab, experimentTabHref, isExperimentPage, leverSummary, type LeverMeta } from './ExperimentWorkspace'
+import { ExperimentWorkspaceBar, activeTabHref, draftNote, experimentTab, experimentTabHref, isExperimentPage, leverSummary, type LeverMeta } from './ExperimentWorkspace'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
@@ -43,4 +43,21 @@ it('shows the three tabs, the active question, the shared basis and the lever ca
   expect(host.textContent).toContain('기준: cam-v')
   expect(host.textContent).toContain('범위 탐색 내장 2개 (차기 SW 증가 · Buffer 압축) · 한 조건 바꿔보기 2개, 그중 1개는 범위 탐색의 레버 축으로도 사용 (FPS)')
   act(() => root.unmount())
+})
+
+it('keeps the current URL on the active tab, so an open exploration run is not dropped', () => {
+  const keep = { project: 'p', scenario: 's', variant: 'v' }
+  window.location.hash = '#/explore?project=p&run=r1&cfg=c'
+  expect(activeTabHref('explore', keep)).toBe('#/explore?project=p&run=r1&cfg=c')
+  window.location.hash = '#/explorer'
+  expect(activeTabHref('explore', keep)).toBe('#/explore?project=p&scenario=s&variant=v')
+  window.location.hash = ''
+})
+
+it('names the What-if draft basis as the draft on the other tabs, not as their calculation basis', () => {
+  const ctx = { basis_label: 'model A', changes: [{}], candidates: [] }
+  expect(draftNote('whatif', ctx)).toBe(' · 모델 기준 model A · 진행 중인 조건 1개 · 후보 0개')
+  expect(draftNote('explore', ctx)).toBe(' · What-if 초안 (모델 기준 model A, 조건 1개 · 후보 0개) — 이 탭의 계산 기준은 아래 설정')
+  expect(draftNote('cpu', { basis_label: 'model A', changes: [], candidates: [] })).toBe('')
+  expect(draftNote('whatif', null)).toBe('')
 })
