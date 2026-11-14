@@ -33,6 +33,8 @@ import { isActive, trackExploreJob, useExploreJob } from '../lib/exploreJob'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 import { SensitivityTornado } from '../components/Sensitivity'
 import { Hint } from '../components/Hint'
+import { SpecBadge, specLabel } from '../components/SpecBadge'
+import { TermLegend } from '../components/Term'
 import { RunDeltaView, RunList } from '../components/RunCompare'
 import { ExplorationDecision } from '../components/DecisionCard'
 import { ParetoScatter } from '../components/ParetoScatter'
@@ -269,7 +271,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   }
   const kpis = [
     ['탐색 variant', `${s.variants}`, s.errors ? `실패 ${s.errors}` : run.scenario_type],
-    ['spec 만족', `${s.spec_ok} / ${s.variants}`, `미달 ${counts.fail}${counts.not_applicable ? ` · 판정 미지원 ${counts.not_applicable}건` : ''}`],
+    ['spec 충족', `${s.spec_ok} / ${s.variants}`, `미달 ${counts.fail}${counts.not_applicable ? ` · 판정 미지원 ${counts.not_applicable}건` : ''}`],
     ['조합 수', s.cases.toLocaleString(), `eligible ${s.eligible_cases.toLocaleString()}`],
     ['추천 검증', `${s.verified} / ${s.spec_ok}`, '재시뮬레이션 power·BW 일치 + 제약 재적용'],
     ['추천 power', s.recommended_power_mw ? `${fmt(s.recommended_power_mw[0], 0)}–${fmt(s.recommended_power_mw[1], 0)}` : '—', 'mW (scenario별 최저)'],
@@ -284,9 +286,9 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
     // U-05: the verdict reason is on the row (first line), the rest behind a focusable hint — not hover-only
     { key: 'spec', label: 'spec', width: 180, sort: (r) => (r.spec_ok ? 1 : 0),
-      text: (r) => [r.baseline.verdict === 'not_applicable' ? '해당 없음' : r.spec_ok ? 'OK' : 'Fail', coverageOf(r) === 'partial' ? '부분' : '', r.spec_ok ? '' : (r.spec_reasons[0] ?? '')].filter(Boolean).join(' · '),
+      text: (r) => [r.baseline.verdict === 'not_applicable' ? '판정 미지원' : specLabel(r.spec_ok), coverageOf(r) === 'partial' ? '부분' : '', r.spec_ok ? '' : (r.spec_reasons[0] ?? '')].filter(Boolean).join(' · '),
       render: (r) => { const notes = specNotes(r)
-        return <span className="stack-1" style={{ minWidth: 0 }}><span className="row-1"><TimingVerdictBadge status={r.baseline.verdict === 'not_applicable' ? 'not_applicable' : r.spec_ok ? 'ok' : 'fail'} />
+        return <span className="stack-1" style={{ minWidth: 0 }}><span className="row-1">{r.baseline.verdict === 'not_applicable' ? <TimingVerdictBadge status="not_applicable" /> : <SpecBadge ok={r.spec_ok} />}
           {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}
           <Hint label={`${short(r.variant_id)} 판정 근거`} text={notes.length ? notes.join('\n') : null} /></span>
           {!r.spec_ok && r.spec_reasons[0] && <span className="reason-line">{r.spec_reasons[0]}</span>}</span> } },
@@ -347,7 +349,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       <Card id="ax-range" title="Scenario별 Power · BW range" note="행 클릭 = 조합 상세" defaultWide
         actions={<>
           <div className="seg sm">{METRICS.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}><span className="ax-dot" style={{ background: METRIC_COLOR[k] }} />{l}</button>)}</div>
-          <div className="seg sm">{(['ok', 'fail', ...(counts.not_applicable ? ['not_applicable'] as const : []), 'all'] as const).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? '전체' : f === 'ok' ? `만족 ${s.spec_ok}` : f === 'not_applicable' ? `판정 미지원 ${counts.not_applicable}건` : `미달 ${counts.fail}`}</button>)}</div>
+          <div className="seg sm">{(['ok', 'fail', ...(counts.not_applicable ? ['not_applicable'] as const : []), 'all'] as const).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? '전체' : f === 'ok' ? `충족 ${s.spec_ok}` : f === 'not_applicable' ? `판정 미지원 ${counts.not_applicable}건` : `미달 ${counts.fail}`}</button>)}</div>
           <div className="seg sm">{(['power', 'name'] as const).map((f) => <button key={f} className={order === f ? 'on' : ''} onClick={() => setOrder(f)}>{f === 'power' ? '추천값 순' : '이름 순'}</button>)}</div></>}>
         <RangeBoxes unit={METRICS.find((m) => m[0] === metric)?.[2] ?? ''} selected={ctx.params.v} onPick={choose}
           color={METRIC_COLOR[metric]}
@@ -359,6 +361,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       </Card>
       <Card id="ax-table" title="Variant 표" note="header 클릭 = 정렬 · 행 클릭 = 조합 상세" defaultWide minHeight={260}>
         <SplitLegend />
+        <TermLegend ids={['spec', 'verified', 'baseline', 'power-reference', 'eligible']} />
         <div className="table-x">
           <DataTable id="arch.variants" columns={cols} rows={rows} rowKey={variantKey} onRowClick={(r) => choose(variantKey(r))} defaultSort={{ key: 'tot', dir: -1 }}
             rowClass={(r) => (variantKey(r) === ctx.params.v ? 'selected' : '')} tools={{ presets: VARIANT_PRESETS, filename: `explore-${run.id ?? 'run'}` }} />

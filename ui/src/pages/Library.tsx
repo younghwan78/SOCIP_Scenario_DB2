@@ -7,8 +7,9 @@ import { fmt } from '../lib/timingBudget'
 import { ipSummary, libraryApi, range, type IpRow, type SensorCatalogRow, type SwTaskRow } from '../lib/library'
 import { Card } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
+import { TermsTab } from '../components/TermsTab'
 
-const TABS = [['ip', 'IP'], ['dvfs', 'DVFS'], ['comp', 'Compression'], ['sensor', 'Sensor'], ['sw', 'SW timing']] as const
+const TABS = [['ip', 'IP'], ['dvfs', 'DVFS'], ['comp', 'Compression'], ['sensor', 'Sensor'], ['sw', 'SW timing'], ['terms', '용어']] as const
 type Tab = (typeof TABS)[number][0]
 
 export function LibraryPage({ ctx }: { ctx: Ctx }) {
@@ -26,6 +27,7 @@ export function LibraryPage({ ctx }: { ctx: Ctx }) {
       {tab === 'comp' && <CompTab />}
       {tab === 'sensor' && <SensorTab ctx={ctx} />}
       {tab === 'sw' && <SwTab ctx={ctx} />}
+      {tab === 'terms' && <TermsTab selected={ctx.params.sel} />}
     </div>
   )
 }

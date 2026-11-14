@@ -19,7 +19,7 @@ const growthText = (g: number) => (g > 0 ? `×${fmt(g, 2).replace(/0$/, '')}` : 
 /** The recommendation rule in words, then the cheapest case per SW growth level its own DVFS levels absorb. */
 export function ObjectiveFront({ data }: { data: Objectives }) {
   const rec = data.recommended, low = data.min_power
-  if (!rec || !low) return <div className="empty">eligible 조합이 없어 추천 기준을 적용하지 못했습니다.</div>
+  if (!rec || !low) return <div className="empty">등록 가능한 조합이 없어 추천 기준을 적용하지 못했습니다.</div>
   const same = rec.key === low.key
   return <div className="obj-front">
     <div>

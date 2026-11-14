@@ -31,7 +31,7 @@ function render(node: React.ReactElement) {
 it('lists every lever combination against the variant, with what to check before using it', () => {
   const { host, done } = render(<DesignAxesTable data={data} baseMw={758.44} />)
   const rows = [...host.querySelectorAll('tbody tr')].map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent))
-  expect(rows[0].slice(0, 5)).toEqual(['FPS 24 fps', 'OK', '24', '607.4', '-151.1 (-19.9%)'])
+  expect(rows[0].slice(0, 5)).toEqual(['FPS 24 fps', '충족', '24', '607.4', '-151.1 (-19.9%)'])
   expect(rows[1][0]).toBe('Power option · pyramid_l0 skippyramid L0 skip')
   expect(rows[1][7]).toBe('레버 IQ 평가 필요')
   expect(rows[2].slice(3, 5)).toEqual(['—', '—'])

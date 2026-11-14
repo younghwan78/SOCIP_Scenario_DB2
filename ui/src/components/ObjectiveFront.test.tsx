@@ -49,7 +49,7 @@ it('reports a growth target as met or missed, and a recommendation that is the l
 
 it('says so when nothing is eligible, and when no growth is absorbed', () => {
   const none = render(<ObjectiveFront data={{ ...data, recommended: null, min_power: null, front: [] }} />)
-  expect(none.host.textContent).toBe('eligible 조합이 없어 추천 기준을 적용하지 못했습니다.')
+  expect(none.host.textContent).toBe('등록 가능한 조합이 없어 추천 기준을 적용하지 못했습니다.')
   none.done()
   const zero = point({ growth_fixed: 0, growth_at_least: 0 })
   const flat = render(<ObjectiveFront data={{ ...data, recommended: zero, min_power: zero, front: [zero] }} />)
