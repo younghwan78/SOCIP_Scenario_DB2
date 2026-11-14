@@ -72,7 +72,7 @@ it('fails the decision when the registered case itself failed re-simulation, tho
 it('shows target, verdict, delta, cautions and the action in one card', () => {
   const failing = variant({ spec_ok: false, spec_reasons: ['ISP stage over period', 'MIF short'], recommended: null })
   const { host, done } = render(<ExplorationDecision c={conclusion(failing, false)} action={<button>등록</button>} />)
-  expect(host.textContent).toContain('등록할 eligible 조합 없음')
+  expect(host.textContent).toContain('등록 가능한 조합 없음')
   expect(host.textContent).toContain('ISP stage over period · MIF short')
   done()
   const complete = { zero_power_ips: [], hw_power_modeled: true, cpu_power_modeled: true, power_coverage: 'complete' as const }

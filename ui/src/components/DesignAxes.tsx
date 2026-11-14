@@ -1,5 +1,6 @@
 import { fmt } from '../lib/timingBudget'
 import { TimingVerdictBadge } from './TimingVerdictBadge'
+import { SpecBadge } from './SpecBadge'
 
 /** One lever-axis combination: the variant with these levers changed, explored on its own (API ≥ 2026-11-13). */
 export type DesignAxisResult = {
@@ -75,7 +76,7 @@ export function DesignAxesTable({ data, baseMw }: { data: DesignAxes; baseMw: nu
           ...(r.spec_ok ? [] : r.spec_reasons.slice(0, 2))].filter(Boolean)
         return <tr key={r.key}>
           <td>{r.labels.join(' + ')}{(r.lever_notes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12 }}>{r.lever_notes!.join(' · ')}</div>}</td>
-          <td><TimingVerdictBadge status={r.verdict === 'not_applicable' ? 'not_applicable' : r.spec_ok ? 'ok' : 'fail'} /></td>
+          <td>{r.verdict === 'not_applicable' ? <TimingVerdictBadge status="not_applicable" /> : <SpecBadge ok={r.spec_ok} />}</td>
           <td className="n">{fmt(r.fps, 0)}</td>
           <td className="n">{r.total_mw == null ? '—' : fmt(r.total_mw, 1)}</td>
           <td className="n">{signed(r.delta_mw)}{r.delta_pct != null && <span className="faint"> ({signed(r.delta_pct)}%)</span>}</td>

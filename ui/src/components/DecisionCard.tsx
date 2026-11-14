@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { TimingVerdictBadge } from './TimingVerdictBadge'
+import { SpecBadge } from './SpecBadge'
+import { Term } from './Term'
 import type { Conclusion } from '../lib/conclusion'
 import { fmt } from '../lib/timingBudget'
 
@@ -24,11 +26,11 @@ export function DecisionCard({ title, verdict, reasons = [], target, delta, caut
   return <section className="decision" aria-label={title}>
     <div className="decision-head">
       <b>{title}</b>
-      <TimingVerdictBadge status={verdict === 'not_applicable' ? 'not_applicable' : verdict === 'ok' ? 'ok' : 'fail'} />
+      {verdict === 'not_applicable' ? <TimingVerdictBadge status="not_applicable" /> : <Term id="spec"><SpecBadge ok={verdict === 'ok'} /></Term>}
     </div>
     <dl className="decision-facts">
       <dt>등록 대상</dt><dd>{target}</dd>
-      {delta && <><dt>baseline 대비</dt><dd>{delta}</dd></>}
+      {delta && <><dt><Term id="baseline">baseline 대비</Term></dt><dd>{delta}</dd></>}
       {reasons.length > 0 && <><dt>판정 사유</dt><dd className="err">{reasons.slice(0, 2).join(' · ')}</dd></>}
     </dl>
     {cautions.length > 0
@@ -46,6 +48,6 @@ export function ExplorationDecision({ c, action }: { c: Conclusion; action?: Rea
   return <DecisionCard title="결론" verdict={c.verdict} reasons={c.reasons} cautions={c.cautions} more={c.more} action={action}
     target={t ? <><span className="mono"><b>{fmt(t.total_mw, 1)}</b> mW</span> · {c.targetLabel} <span className="faint mono">({c.rule})</span>
       <div className="faint mono" style={{ fontSize: 12 }}>{t.statistic} ×{t.runtime_scale} · {t.compression.length ? `${t.compression.length} buffer 압축` : '무압축'} · DVFS {Object.entries(t.dvfs).map(([d, l]) => `${d}:${l}`).join(' ') || '—'}</div></>
-      : <span className="err">등록할 eligible 조합 없음</span>}
+      : <span className="err">등록 가능한 조합 없음</span>}
     delta={c.delta ? <span className="mono">{signed(c.delta.total_mw)} mW{c.delta.total_pct != null ? ` (${signed(c.delta.total_pct)}%)` : ''} · BW {signed(c.delta.bw_mbs, 0)} MB/s</span> : undefined} />
 }
