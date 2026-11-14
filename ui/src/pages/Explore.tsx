@@ -68,7 +68,7 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
 
   return (
     <div className="page tb-page">
-      <div className="workflow-note"><b>탐색 범위 선택</b><span>이 화면은 scenario의 SW·DVFS 조합을 탐색합니다. IP mode·크기·센서의 범위와 제약은 조건 실험에서 설정하세요.</span><a className="btn" href={experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}>현재 기준 조건 실험 →</a></div>
+      <div className="workflow-note"><b>탐색 범위</b><span>SW · 압축 · DVFS 조합을 탐색합니다. 크기 · fps · 센서 · LLC 같은 레버는 범위 탐색의 레버 축(API)으로 주거나, 하나씩은 한 조건 바꿔보기에서 확인합니다.</span><a className="btn" href={experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}>이 variant로 한 조건 바꿔보기 →</a></div>
       <CandidateReview scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} />
       <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>탐색 run</span>

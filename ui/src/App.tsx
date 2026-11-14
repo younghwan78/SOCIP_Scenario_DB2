@@ -6,6 +6,7 @@ import { Resizer, usePref, useResizable } from './components/Layout'
 import { Picker } from './components/Picker'
 import { ModelStatusBar } from './components/Provenance'
 import { ExperimentContextBar } from './components/ExperimentContext'
+import { ExperimentWorkspaceBar, experimentTab, isExperimentPage } from './components/ExperimentWorkspace'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, loadCompareSet, parseItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
 import { AdmissionWaitPill } from './components/AdmissionWait'
@@ -36,17 +37,16 @@ const NAV: { title: string; items: NavItem[] }[] = [
   { title: '1 · 선택', items: [
     { page: 'explorer', label: 'Scenario', icon: 'explorer', also: ['matrix'] },
     { page: 'pipeline', label: 'Pipeline', icon: 'pipeline' },
-    { page: 'behavior', label: 'Behavior', icon: 'timer' },
+    { page: 'behavior', label: 'Behavior', icon: 'clock' },
     { page: 'compare', label: 'Compare', icon: 'compare' }] },
   { title: '2 · 예측', items: [
-    { page: 'whatif', label: 'What-if', icon: 'probe' },
     { page: 'timing', label: 'Timing Budget', icon: 'timer', also: ['timing-fleet'] },
     { page: 'predictions', label: '예측 현황', icon: 'bars' }] },
   { title: '3 · 검증', items: [
     { page: 'calibration', label: '예측 ↔ 실측', icon: 'trend' }] },
-  { title: '4 · 최적화', items: [
-    { page: 'explore', label: '조합 탐색', icon: 'probe' },
-    { page: 'cpu', label: 'CPU what-if', icon: 'probe' }] },
+  // U-02: one workspace for changing conditions — 한 조건 바꿔보기 (What-if) · 범위 탐색 (조합 탐색) · CPU 배치
+  { title: '4 · 실험 · 최적화', items: [
+    { page: 'whatif', label: '실험 (조건 · 범위 · CPU)', icon: 'flask', also: ['explore', 'cpu'] }] },
   { title: '5 · 결정 · 보고', items: [
     { page: 'reports', label: '검토 보고서', icon: 'report' }] },
   { title: 'Library', items: [{ page: 'library', label: 'IP · DVFS · SW', icon: 'library' }] },
@@ -55,15 +55,15 @@ const NAV: { title: string; items: NavItem[] }[] = [
 /** U9: the natural next page of the review workflow (shown as a button in the top bar). */
 const NEXT: Partial<Record<Page, { page: Page; label: string }>> = {
   explorer: { page: 'pipeline', label: 'Pipeline 보기' }, matrix: { page: 'pipeline', label: 'Pipeline 보기' },
-  pipeline: { page: 'whatif', label: '조건 변경 실험' }, whatif: { page: 'compare', label: '후보 비교' }, compare: { page: 'timing', label: 'Timing Budget' },
+  pipeline: { page: 'whatif', label: '실험: 한 조건 바꿔보기' }, whatif: { page: 'compare', label: '후보 비교' }, compare: { page: 'timing', label: 'Timing Budget' },
   timing: { page: 'predictions', label: '예측 현황' }, 'timing-fleet': { page: 'predictions', label: '예측 현황' },
-  predictions: { page: 'calibration', label: '실측과 비교' }, calibration: { page: 'explore', label: '조합 탐색' },
-  explore: { page: 'reports', label: '검토 보고서' }, cpu: { page: 'explore', label: '조합 탐색' },
+  predictions: { page: 'calibration', label: '실측과 비교' }, calibration: { page: 'explore', label: '실험: 범위 탐색' },
+  explore: { page: 'reports', label: '검토 보고서' }, cpu: { page: 'explore', label: '실험: 범위 탐색' },
 }
 
 const TITLES: Record<Page, string> = {
   home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', behavior: 'Behavior · full-stack', compare: 'Compare', timing: 'Timing Budget · variant', 'timing-fleet': 'Timing Budget · 전체 variant',
-  explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', whatif: 'What-if · 조건 · 한계 · 병목', library: 'Library', settings: '설정',
+  explore: '실험 · 범위 탐색 (조합 탐색)', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: '실험 · CPU 배치 · 주파수 (CPU what-if)', whatif: '실험 · 한 조건 바꿔보기 (What-if)', library: 'Library', settings: '설정',
 }
 
 /** Where a variant picked in the picker opens: pages with a variant crumb stay where they are, else Pipeline. */
@@ -165,8 +165,9 @@ export default function App() {
             {sideOpen ? <h6>{g.title}</h6> : <div className="nav-sep" />}
             {g.items.map((it) => {
               const active = route.page === it.page || !!it.also?.includes(route.page)
+              // the experiment workspace item opens the tab last used
               return (
-                <a key={it.label} className={`nav-item ${active ? 'active' : ''}`} href={link(it.page)} title={sideOpen ? undefined : it.label}
+                <a key={it.label} className={`nav-item ${active ? 'active' : ''}`} href={link(it.page === 'whatif' ? experimentTab(route.page) : it.page)} title={sideOpen ? undefined : it.label}
                   aria-current={active ? 'page' : undefined}>
                   <Icon name={it.icon} size={17} />{sideOpen && <span className="nav-label">{it.label}</span>}
                 </a>
@@ -227,6 +228,7 @@ export default function App() {
           </button>
         </header>}
         {!catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <ModelStatusBar ctx={ctx} />}
+        {!catalogQ.error && isExperimentPage(route.page) && <ExperimentWorkspaceBar page={route.page} project={project} scenario={scenario} variant={variant} experiment={route.params.experiment} />}
         {!catalogQ.error && route.page !== 'home' && route.page !== 'settings' && route.page !== 'whatif' && <ExperimentContextBar scope={{ project_ref: project, scenario_id: scenario, variant_id: variant }} page={route.page} />}
         {catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
         <Suspense fallback={<div className="page" role="status">화면을 불러오는 중…</div>}>

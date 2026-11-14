@@ -3,7 +3,7 @@ import type { WhatIfScope } from '../lib/scenarioWhatIf'
 import { experimentHref, useExperimentContext } from '../lib/experimentContext'
 import './ExperimentContext.css'
 
-const LINKS: [Page, string][] = [['whatif', '조건·후보'], ['pipeline', 'Pipeline'], ['timing', 'Timing'], ['compare', '비교'], ['calibration', '실측 검증'], ['reports', '보고서']]
+const LINKS: [Page, string][] = [['whatif', '한 조건 바꿔보기'], ['explore', '범위 탐색'], ['pipeline', 'Pipeline'], ['timing', 'Timing'], ['compare', '비교'], ['calibration', '실측 검증'], ['reports', '보고서']]
 export function ExperimentContextBar({ scope, page }: { scope: WhatIfScope; page?: Page }) {
   const experiment = useExperimentContext(scope)
   if (!scope.variant_id || !experiment || (!experiment.changes.length && !experiment.candidates.length)) return null

@@ -53,7 +53,7 @@ export function CandidateReview({ scope, exportable = false }: { scope: WhatIfSc
 export function ExperimentEntry({ scope }: { scope: WhatIfScope }) {
   const context = useExperimentContext(scope)
   const candidate = context?.candidates.find((c) => c.id === context.active_candidate_id) ?? context?.candidates[0]
-  return <div className="experiment-entry"><a href={experimentHref('whatif', scope)} onClick={(e) => e.stopPropagation()}>조건 실험 →</a>
+  return <div className="experiment-entry"><a href={experimentHref('whatif', scope)} onClick={(e) => e.stopPropagation()}>한 조건 바꿔보기 →</a>
     {candidate && <small title={`저장 당시 기준 ${candidate.baseline_hash} 대비 모델 추정치 · ${candidate.created_at}`}>
       저장 Δ {delta(candidate.metrics.modeled_power_mw, candidate.baseline_metrics.modeled_power_mw)} mW · {candidate.metrics.verdict === 'not_applicable' ? <TimingVerdictBadge status={candidate.metrics.verdict} /> : candidate.metrics.feasible ? '성능 OK' : '성능 FAIL'}
     </small>}</div>

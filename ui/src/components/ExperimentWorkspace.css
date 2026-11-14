@@ -1,0 +1,6 @@
+/* U-02: experiment workspace header (one tab bar over What-if / 조합 탐색 / CPU what-if) */
+.xws { display: grid; gap: 6px; padding: 10px 20px 8px; border-bottom: 1px solid var(--line-soft); background: var(--surface-soft); }
+.xws-tabs { justify-self: start; }
+.xws-tabs a .faint { font-weight: 400; }
+.xws-info { display: grid; gap: 2px; font-size: 13px; }
+.xws-info .faint { font-size: 12px; }

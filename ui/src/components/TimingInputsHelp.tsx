@@ -64,7 +64,7 @@ function Effects({ x }: { x: TimingInputs }) {
     [<><b>실측</b> 고르기만</>, '실측 대비 카드 (예측 vs 실측 mW, rail 분류별 Δ)', '계산 전부'],
     [<><b>실측</b> SW ✓</>, <>측정 task runtime으로 교체 (SW 통계 선택 그대로) → {swEffect}</>, swKeeps],
     [<><b>실측</b> clock ✓</>, '측정 IP clock (clock ledger) → HW ms · clock · HW mW', 'SW'],
-    [<><b>실측</b> CPU ✓</>, '측정 CPU profile을 EAS + schedutil로 재현 → CPU mW · CPU BW. 조건 실험으로는 넘길 수 없음', 'SW · HW timing'],
+    [<><b>실측</b> CPU ✓</>, '측정 CPU profile을 EAS + schedutil로 재현 → CPU mW · CPU BW. 한 조건 바꿔보기로는 넘길 수 없음 (실험 · CPU 배치)', 'SW · HW timing'],
     [<b>power params</b>, '계수만 교체 → IP · CPU · BW mW. profile의 power model과 짝이 맞는 version만 선택 가능', 'timing 결과 전부'],
   ]
   return <section className="bd-sec">
