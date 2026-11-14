@@ -34,7 +34,7 @@ export function DecisionCard({ title, verdict, reasons = [], target, delta, caut
     {cautions.length > 0
       ? <ul className="decision-cautions">{cautions.map((c) => <li key={c}>{c}</li>)}
         {more > 0 && <li className="faint">외 {more}건 — 아래 근거 tab</li>}</ul>
-      : <div className="faint decision-cautions">주의 사항 없음 (전력 모델 완전 · 무손실 · catalog ratio)</div>}
+      : <div className="faint decision-cautions">주의 사항 없음</div>}
     {extra}
     {action && <div className="decision-action">{action}</div>}
   </section>

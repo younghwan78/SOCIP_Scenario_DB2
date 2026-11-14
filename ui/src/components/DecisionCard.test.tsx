@@ -46,12 +46,27 @@ it('keeps three cautions in their order of weight and counts the rest', () => {
   const bad = kase('bad', { lossy: true, assumed_ratio: true, compression: ['B1'], dvfs_raise: 1, verified: { ok: false, reasons: ['power 3% off'] } as never })
   const c = conclusion(variant({ recommended: bad, coverage: { zero_power_ips: ['GPU', 'NPU'], hw_power_modeled: true, cpu_power_modeled: true, power_coverage: 'partial' } }), false)
   expect(c.cautions).toEqual([
-    '재시뮬레이션 검증 불일치 — power 3% off',
     '부분 모델 — 전력 미모델 IP 2개 (GPU, NPU), total은 하한',
     'lossy 압축 포함 — IQ 평가 필요',
+    '가정 compression ratio 사용 — catalog에 없는 ratio',
   ])
-  expect(c.more).toBe(2)
-  expect(conclusion(variant({ recommended: kase('clean') }), false).cautions).toEqual([])
+  expect(c.more).toBe(1)
+  const complete = { zero_power_ips: [], hw_power_modeled: true, cpu_power_modeled: true, power_coverage: 'complete' as const }
+  expect(conclusion(variant({ recommended: kase('clean'), coverage: complete }), false).cautions).toEqual([])
+  // no power model at all, and an older result that never recorded its coverage, are not "no caution"
+  expect(conclusion(variant({ coverage: { ...complete, hw_power_modeled: false, power_coverage: 'none' } }), false).cautions[0]).toContain('전력 모델 없음')
+  expect(conclusion(variant(), false).cautions[0]).toBe('전력 모델 범위 미확인 (coverage 기록 이전 결과)')
+})
+
+it('fails the decision when the registered case itself failed re-simulation, though the variant passed', () => {
+  // objective order: the recommendation verified, the lowest-power case the server would register did not
+  const unverified = kase('low', { total_mw: 1098.4, verified: { ok: false, reasons: ['bw 2% off'] } as never })
+  const c = conclusion(variant({ recommended: robust, min_power_case: unverified, objectives: { order: ['growth', 'power'] } as never }), false)
+  expect(c.verdict).toBe('fail')
+  expect(c.registrable).toBe(false)
+  expect(c.reasons).toEqual(['기본 등록 조합 재시뮬레이션 검증 실패 — bw 2% off'])
+  expect(conclusion(variant(), false).registrable).toBe(true)
+  expect(conclusion(variant({ spec_ok: false, spec_reasons: ['x'] }), false).registrable).toBe(false)
 })
 
 it('shows target, verdict, delta, cautions and the action in one card', () => {
@@ -60,7 +75,8 @@ it('shows target, verdict, delta, cautions and the action in one card', () => {
   expect(host.textContent).toContain('등록할 eligible 조합 없음')
   expect(host.textContent).toContain('ISP stage over period · MIF short')
   done()
-  const ok = render(<ExplorationDecision c={conclusion(variant(), false)} action={<button>등록</button>} />)
+  const complete = { zero_power_ips: [], hw_power_modeled: true, cpu_power_modeled: true, power_coverage: 'complete' as const }
+  const ok = render(<ExplorationDecision c={conclusion(variant({ coverage: complete }), false)} action={<button>등록</button>} />)
   const text = ok.host.textContent!
   expect(text).toContain('1098.4 mW · 최저 power (auto:min-power)')
   expect(text).toContain('-101.6 mW (-8.5%) · BW -800 MB/s')
@@ -77,5 +93,17 @@ it('plots each listed case once against the chosen axis and marks the roles', ()
   const { host, done } = render(<ParetoScatter v={v} marks={{ low: '기본 등록' }} />)
   expect(host.querySelectorAll('circle').length).toBe(3)
   expect([...host.querySelectorAll('[role=tab]')].map((b) => b.textContent)).toEqual(['BW MB/s', 'IQ risk'])
+  done()
+})
+
+it('adds the registered case the lists may not hold, and offers only axes with two points', () => {
+  const keep = kase('keep', { total_mw: 1110, bw_mbs: 5600 })
+  const v = variant({ recommended: low, alternatives: [] })
+  expect(scatterPoints(v, 'bw', { keep: '기본 등록' }, [keep]).find((p) => p.key === 'keep')?.roles).toEqual(['기본 등록'])
+  // growth is known for one eligible case only: the axis is not offered, the others stay selectable
+  const grown = variant({ recommended: { ...low, growth_fixed: 1.2 } as ExpCase, alternatives: [] })
+  const { host, done } = render(<ParetoScatter v={grown} marks={{}} extra={[keep]} />)
+  expect([...host.querySelectorAll('[role=tab]')].map((b) => b.textContent)).toEqual(['BW MB/s', 'IQ risk'])
+  expect(host.querySelectorAll('circle').length).toBe(3)
   done()
 })

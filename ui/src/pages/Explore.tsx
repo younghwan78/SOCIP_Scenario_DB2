@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react'
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
 import { CandidateReview } from '../components/CandidateReview'
 import { DesignAxesTable } from '../components/DesignAxes'
@@ -421,7 +421,7 @@ export function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }:
   // U-03: the decision first — what the default registration takes, its verdict, Δ and three cautions
   const decision = conclusion(v, iqKeep)
   const promoteDefault = async () => {
-    if (registering.current || readOnly || !decision.target?.eligible || !guard.ready || !guard.expected) return
+    if (registering.current || readOnly || !decision.registrable || !guard.ready || !guard.expected) return
     registering.current = true
     setBusy(true)
     try {
@@ -446,15 +446,15 @@ export function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }:
     <div style={{ gridColumn: '1 / -1' }}>
       <ExplorationDecision c={decision} action={<>
         <RegistrationBasis guard={guard} />
-        <button className="btn primary" disabled={busy || !guard.ready || readOnly || !v.spec_ok || !decision.target?.eligible} onClick={promoteDefault}
+        <button className="btn primary" disabled={busy || !guard.ready || readOnly || !decision.registrable} onClick={promoteDefault}
           title={readOnly ? '다른 과제의 run — 비교 보기 전용' : '사유 없이 기본 규칙으로 등록 — 다른 조합은 아래 표에서 골라 등록'}>{busy ? '등록 중…' : '이 조합을 예측으로 등록 (current)'}</button></>} />
     </div>
     <div style={{ gridColumn: '1 / -1' }} className="seg evidence-tabs" role="tablist" aria-label="근거">
       {EVIDENCE_TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>)}
     </div>
-    {tab === 'power' && <>
+    <TabPanel id="power" tab={tab}>
     <Card id="ax-pareto" title={`${short(v.variant_id)} — Power vs 다른 축`} note="나열된 조합의 trade-off · 점에 마우스 = 값" defaultWide>
-      <ParetoScatter v={v} marks={marks} /></Card>
+      <ParetoScatter v={v} marks={marks} extra={[decision.target]} /></Card>
     <Card id="ax-levers" title={`${short(v.variant_id)} — Lever 분석: 화질 손해 없이 무엇이 가장 효과적인가`}
       note="baseline → 화질 무손실 lever → IQ 평가 필요 lever → lossy 순으로 가장 큰 절감부터 · 점 분포 = 모든 설계 조합" defaultWide>
       <LeverAnalysisView la={v.levers} battery={battery} measured={measured}
@@ -529,8 +529,8 @@ export function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }:
     <Card id="ax-spread" title="Power range 원인 (축별)" note="SW · compression · DVFS"><AxisSpread spread={v.axis_spread} /></Card>
     <Card id="ax-modes" title="IP mode · unit power" note="IP별 현재 mode와 대안 mode · mode마다 unit power가 다름" defaultWide>
       <IpModes rows={v.ip_modes ?? []} results={v.power_options?.results} /></Card>
-    </>}
-    {tab === 'timing' && <Card id="ax-sw" title="SW timing margin · 권고" note={`${m.basis === 'pipelined' ? '(P − max(최장 SW task, 같은 CPU의 SW 합))/P · stage chain = 동시 frame' : '(P − SW − overhead − HW@set clock)/P'}${m.statistic ? ` · SW ${m.statistic} 기준` : ''}`}>
+    </TabPanel>
+    <TabPanel id="timing" tab={tab}><Card id="ax-sw" title="SW timing margin · 권고" note={`${m.basis === 'pipelined' ? '(P − max(최장 SW task, 같은 CPU의 SW 합))/P · stage chain = 동시 frame' : '(P − SW − overhead − HW@set clock)/P'}${m.statistic ? ` · SW ${m.statistic} 기준` : ''}`}>
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th>stage</th><th>margin</th><th>SW / P</th><th>병목</th>{m.basis === 'pipelined' ? <th>chain (동시 frame)</th> : <th>latency 비중</th>}</tr></thead>
         <tbody>{m.stages.map((s) => <tr key={s.stage}><td>{s.stage.toUpperCase()}</td>
@@ -542,10 +542,16 @@ export function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }:
         SW 증가 허용 — DVFS 재선택 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} · <b>추천 DVFS 고정 {m.growth_tolerance_fixed ? `×${fmt(m.growth_tolerance_fixed, 1)}` : '—'}</b> (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms
         {(m.growth_fixed_rows ?? []).some((r) => !r.ok && r.short_domains.length) && <> · 고정 시 부족 domain: {(m.growth_fixed_rows ?? []).filter((r) => !r.ok).map((r) => `×${fmt(r.runtime_scale, 1)} ${r.short_domains.join('/') || 'timing'}`).join(', ')}</>}</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>{m.recommendations.map((r) => <li key={r}>{r}</li>)}</ul>
-    </Card>}
-    {tab === 'memory' && <Card id="ax-comp" title="Compression BW 절감 (buffer별)" note="지원 DMA만 탐색 · 단독 적용 시 Δ · 합산 가능(port 독립)"><BufferSavings buffers={v.buffers} selected={decision.target?.compression ?? []} /></Card>}
-    {tab === 'dvfs' && <Card id="ax-dvfs" title="DVFS domain level" note="scenario별 level · +level은 전압↑ → power↑"><DomainLevels domains={v.domains} chosen={decision.target?.dvfs ?? {}} /></Card>}
+    </Card></TabPanel>
+    <TabPanel id="memory" tab={tab}><Card id="ax-comp" title="Compression BW 절감 (buffer별)" note="지원 DMA만 탐색 · 단독 적용 시 Δ · 합산 가능(port 독립)"><BufferSavings buffers={v.buffers} selected={decision.target?.compression ?? []} /></Card></TabPanel>
+    <TabPanel id="dvfs" tab={tab}><Card id="ax-dvfs" title="DVFS domain level" note="scenario별 level · +level은 전압↑ → power↑"><DomainLevels domains={v.domains} chosen={decision.target?.dvfs ?? {}} /></Card></TabPanel>
   </>
+}
+
+/** A tab's cards stay mounted while another tab is shown (selections and typed reasons survive a look at the
+ * evidence); ``display: contents`` keeps them items of the page grid. */
+function TabPanel({ id, tab, children }: { id: EvidenceTab; tab: EvidenceTab; children: ReactNode }) {
+  return <div role="tabpanel" aria-label={id} hidden={tab !== id} style={{ display: tab === id ? 'contents' : 'none' }}>{children}</div>
 }
 
 type EvidenceTab = 'power' | 'timing' | 'memory' | 'dvfs'

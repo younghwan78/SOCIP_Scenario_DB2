@@ -11,6 +11,8 @@ export interface Conclusion {
   targetLabel: string
   verdict: 'ok' | 'fail' | 'not_applicable'
   reasons: string[]
+  /** the default registration would be accepted: spec ok, an eligible target that did not fail re-simulation */
+  registrable: boolean
   delta: { total_mw: number; total_pct: number | null; bw_mbs: number } | null
   /** objective-order recommendation when it is not the registered case (registered by picking it) */
   objective: { case: ExpCase; delta_mw: number } | null
@@ -35,13 +37,23 @@ export function lowestPowerCase(v: VariantResult): ExpCase | null {
 
 export function conclusion(v: VariantResult, iqKeep: boolean): Conclusion {
   const target = defaultCase(v, iqKeep)
-  const verdict = variantSpecState(v)
   const cautions: string[] = []
   const verified = target?.verified
-  if (verified && !verified.ok) cautions.push(`재시뮬레이션 검증 불일치 — ${(verified.reasons ?? ['mismatch']).slice(0, 1).join('')}`)
-  if (coverageOf(v) === 'partial') {
+  // the variant verdict follows the recommendation; the registered case can be another one (objective order,
+  // iq_keep) whose own re-simulation failed — the server refuses to register it, so the decision fails too
+  const targetFailed = !!verified && !verified.ok
+  const spec = variantSpecState(v)
+  const verdict = spec === 'ok' && targetFailed ? 'fail' : spec
+  const reasons = spec === 'fail' ? v.spec_reasons
+    : targetFailed ? [`기본 등록 조합 재시뮬레이션 검증 실패 — ${(verified!.reasons ?? ['mismatch']).slice(0, 1).join('')}`] : []
+  const coverage = coverageOf(v)
+  if (coverage === 'partial') {
     const ips = v.coverage?.zero_power_ips ?? []
     cautions.push(`부분 모델 — 전력 미모델 IP ${ips.length}개 (${ips.slice(0, 3).join(', ')}${ips.length > 3 ? ' …' : ''}), total은 하한`)
+  } else if (coverage === 'none') {
+    cautions.push('전력 모델 없음 — IP 전력이 모델되지 않아 total은 CPU · BW 합만')
+  } else if (coverage === undefined) {
+    cautions.push('전력 모델 범위 미확인 (coverage 기록 이전 결과)')
   }
   if (v.status?.power_budget_status === 'unknown') cautions.push('power budget 판정 불가 (전력 모델 불완전)')
   if (target?.lossy && target.compression.length) cautions.push('lossy 압축 포함 — IQ 평가 필요')
@@ -55,7 +67,7 @@ export function conclusion(v: VariantResult, iqKeep: boolean): Conclusion {
   return {
     target, rule: iqKeep ? 'auto:min-power-iq' : 'auto:min-power',
     targetLabel: iqKeep ? '화질 유지 최저 power (과제 기준 iq_keep)' : '최저 power',
-    verdict, reasons: verdict === 'fail' ? v.spec_reasons : [],
+    verdict, reasons, registrable: verdict === 'ok' && !!target?.eligible,
     delta: d ? { total_mw: d.total, total_pct: v.baseline.total_mw ? (100 * d.total) / v.baseline.total_mw : null, bw_mbs: d.bw_mbs } : null,
     objective, cautions: cautions.slice(0, MAX_CAUTIONS), more: Math.max(0, cautions.length - MAX_CAUTIONS),
   }

@@ -49,15 +49,26 @@ it('puts the decision first, registers its case by the default rule and keeps th
   // the first thing after the decision is the tab bar, Power open
   expect([...host.querySelectorAll('.evidence-tabs [role=tab]')].map((t) => [t.textContent, t.getAttribute('aria-selected')]))
     .toEqual([['Power', 'true'], ['Timing', 'false'], ['Memory', 'false'], ['DVFS', 'false']])
-  expect(host.textContent).toContain('lever analysis')
-  expect(host.textContent).not.toContain('SW timing margin')
+  const shown = () => [...host.querySelectorAll<HTMLElement>('[role=tabpanel]')].filter((p) => !p.hidden).map((p) => p.getAttribute('aria-label'))
+  const panel = (id: string) => host.querySelector<HTMLElement>(`[role=tabpanel][aria-label=${id}]`)!
+  expect(shown()).toEqual(['power'])
+  expect(panel('power').textContent).toContain('lever analysis')
+  expect(panel('timing').textContent).toContain('SW timing margin')
   await act(async () => button('이 조합을 예측으로 등록 (current)').click())
   expect(archApi.promote).toHaveBeenCalledWith('run-1', ['cam-v'], undefined, undefined, 's', 'p', [{ scenario_id: 's', variant_id: 'cam-v', prediction_id: null }])
+  // a typed reason survives a look at another tab: the panels stay mounted
+  const reason = host.querySelector<HTMLInputElement>('input.input')!
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(reason, 'thermal headroom')
+    reason.dispatchEvent(new Event('input', { bubbles: true }))
+  })
   act(() => button('Timing').click())
-  expect(host.textContent).toContain('SW timing margin')
-  expect(host.textContent).not.toContain('lever analysis')
+  expect(shown()).toEqual(['timing'])
   act(() => button('DVFS').click())
-  expect(host.textContent).toContain('domain levels')
+  expect(shown()).toEqual(['dvfs'])
+  expect(panel('dvfs').textContent).toContain('domain levels')
+  act(() => button('Power').click())
+  expect(host.querySelector<HTMLInputElement>('input.input')!.value).toBe('thermal headroom')
 })
 
 it('marks the lowest-power case, not the objective recommendation, as the default in the case table', async () => {
