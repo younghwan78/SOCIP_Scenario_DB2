@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-cam-capture
   name: Camera Capture
+  purpose: "정지 촬영 · 셔터 응답, 고해상도 처리와 연속 촬영의 순간 부하를 확인합니다."
+  review_focus:
+  - "셔터 응답"
+  - "고해상도 처리"
+  - "연속 촬영 순간 부하"
   category:
   - camera
   domain:

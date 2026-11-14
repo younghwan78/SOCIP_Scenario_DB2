@@ -6,6 +6,12 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-vid-youtube
   name: YouTube Playback
+  purpose: "YouTube 재생: 네트워크 수신·demux·MFC 디코딩·화면 합성을 검토합니다. 등록된 codec/bitrate는 검토 조건이며 실제 서비스의 적응형 화질 선택이나 네트워크 성능을 보장하지 않습니다."
+  review_focus:
+  - "MFC decode (codec · bitrate)"
+  - "자체 주기 task (ABOX · ExoPlayer · network)"
+  - "화면 합성"
+  - "화면 off 재생 전력"
   category:
   - video_playback
   - video

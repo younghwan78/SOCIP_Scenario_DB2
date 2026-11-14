@@ -4,7 +4,7 @@ import { ExperimentEntry } from '../components/CandidateReview'
 import { api } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { CAMERA_LABEL, MISSING, MODE_LABEL, cameraOf, changedKeys, medoidId, stabOf, valueText } from '../lib/conditions'
-import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER, focusFor, modeBreakdown, primaryCategory, scenarioPurpose } from '../lib/guides'
+import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER, modeBreakdown, primaryCategory, scenarioFocus, scenarioPurpose } from '../lib/guides'
 import { toRows } from '../components/Picker'
 import { PageLayout, Resizer, usePref, useResizable } from '../components/Layout'
 import { Icon } from '../components/Icons'
@@ -255,7 +255,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                 onClick={() => { ctx.navigate(undefined, { scenario: s.scenario_id, variant: undefined }); setFacets({}); setPicked(new Set()) }}>
                 <span className="nm">{s.scenario_name} <span className="cnt" title="variant 수">({s.variant_count})</span>
                   {behavior.has(s.scenario_id) && <span className="bh-badge" title={`Behavior 등록 variant: ${[...behavior.get(s.scenario_id)!].join(', ')}`}>Behavior {behavior.get(s.scenario_id)!.size}</span>}</span>
-                <span className="ds">{scenarioPurpose(s.scenario_id).split(/[·:]/)[1]?.trim().slice(0, 42) ?? ''}</span>
+                <span className="ds">{scenarioPurpose(s.scenario_id, s).split(/[·:]/)[1]?.trim().slice(0, 42) ?? ''}</span>
                 <span className="ct">variant {s.variant_count} · node {s.node_count} · buffer {s.buffer_count}</span>
               </button></div> })}
           </div>
@@ -277,16 +277,16 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
               <summary title={descOpen ? '설명 접기' : '설명 펼치기'}>
                 <span className="desc-caret" aria-hidden="true">{descOpen ? '▾' : '▸'}</span>
                 {descOpen ? <span className="faint" style={{ fontSize: 12 }}>설명 · 구성 · Load</span> : <span className="desc-line">
-                  <span>{scenarioPurpose(selected.scenario_id).split(/[.·:]/).slice(0, 2).join(' · ').slice(0, 60)}</span>
+                  <span>{scenarioPurpose(selected.scenario_id, selected).split(/[.·:]/).slice(0, 2).join(' · ').slice(0, 60)}</span>
                   {isCamera && rows.length > 0 && <span className="faint">· {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => `${mode === 'kpi' ? 'KPI' : MODE_LABEL[mode]} ${count}`).join(' / ')}</span>}
                   <span className="faint">· Load {Object.entries(selected.severity_counts).map(([k, v]) => `${k} ${v}`).join(' / ')}</span></span>}
               </summary>
-              <p>{scenarioPurpose(selected.scenario_id)}</p>
+              <p>{scenarioPurpose(selected.scenario_id, selected)}</p>
               {isCamera && rows.length > 0 && <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>구성</span>
                 {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => <span key={mode} className="focus">{mode === 'kpi' ? 'Video recording · 기본 KPI' : MODE_LABEL[mode]} <span className="cnt">({count})</span></span>)}
                 {derivedCount > 0 && <span className="focus">파생(explored/timing) <span className="cnt">({derivedCount})</span></span>}</div>}
               {isCamera && <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>검토 초점</span>
-                {(() => { const f = focusFor(rows); return <>{f.slice(0, 6).map((x) => <span key={x} className="focus">{x}</span>)}{f.length > 6 && <span className="faint" style={{ fontSize: 12 }} title={f.slice(6).join(' · ')}>+{f.length - 6}</span>}</> })()}</div>}
+                {(() => { const f = scenarioFocus(selected, rows); return <>{f.slice(0, 6).map((x) => <span key={x} className="focus">{x}</span>)}{f.length > 6 && <span className="faint" style={{ fontSize: 12 }} title={f.slice(6).join(' · ')}>+{f.length - 6}</span>}</> })()}</div>}
               <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>Load</span>
                 {Object.entries(selected.severity_counts).map(([k, v]) => <span key={k} className={`badge load-${k}`}>{k} <span className="cnt">({v})</span></span>)}
                 <span className="faint" style={{ fontSize: 12 }}>· 작성자가 저장한 부하 등급이며 KPI 통과 여부가 아닙니다</span></div>

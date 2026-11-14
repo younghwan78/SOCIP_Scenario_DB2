@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-disp-gallery
   name: Gallery Display
+  purpose: "갤러리 표시: 이미지 크기, 색공간, HDR, 레이어와 합성 경로를 비교합니다. 갤러리라는 이름만으로 JPEG 디코더나 모든 UI 동작이 모델링됐다고 가정하지 않습니다."
+  review_focus:
+  - "레이어 · 합성 경로"
+  - "색공간 / HDR"
+  - "이미지 크기"
   category:
   - display
   - display

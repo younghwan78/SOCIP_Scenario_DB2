@@ -1,5 +1,7 @@
 // Scenario descriptions (ported from dashboard/components/category_review.py and
 // camera_review.py). Review lenses only — never severity or feasibility verdicts.
+// D-06: a scenario's own metadata (purpose / review_focus, from the scenario catalog) comes first; these
+// constants are the fallback for scenarios that declare none.
 import { canonicalKey } from './projects'
 import { recordingMode, type Mode } from './conditions'
 import type { VariantRow } from './api'
@@ -28,8 +30,27 @@ export const MODE_FOCUS: Record<Mode, string[]> = {
   none: ['사용 목적', '누락된 조건', '개별 파이프라인'],
 }
 
-export function scenarioPurpose(scenarioId: string): string {
-  return SCENARIO_PURPOSES[canonicalKey(scenarioId)] ?? '등록된 설명이 없습니다. 조건과 파이프라인으로 목적을 확인하세요.'
+export function scenarioPurpose(scenarioId: string, item?: { purpose?: string | null } | null): string {
+  return item?.purpose || (SCENARIO_PURPOSES[canonicalKey(scenarioId)] ?? '등록된 설명이 없습니다. 조건과 파이프라인으로 목적을 확인하세요.')
+}
+
+/** Review focus: the scenario's declared ``review_focus``, else the recording-mode lenses of its variants. */
+export function scenarioFocus(item: { review_focus?: string[] } | null | undefined, rows: VariantRow[]): string[] {
+  return item?.review_focus?.length ? item.review_focus : focusFor(rows)
+}
+
+/** Variant ids without the prefix they all share ("cam-rec-r1-fhd30", "cam-rec-r1-uhd60" -> "fhd30", "uhd60"),
+ * cut at a '-' — instead of a hard-coded scenario prefix. One id keeps its name. */
+export function shortVariantIds(ids: string[]): Map<string, string> {
+  const out = new Map(ids.map((id) => [id, id]))
+  const uniq = [...new Set(ids)]
+  if (uniq.length < 2) return out
+  let p = uniq[0]
+  for (const id of uniq) while (!id.startsWith(p)) p = p.slice(0, -1)
+  const cut = p.lastIndexOf('-') + 1
+  if (cut <= 0) return out
+  for (const id of uniq) out.set(id, id.slice(cut) || id)
+  return out
 }
 
 export function modeBreakdown(rows: VariantRow[]): { mode: Mode; count: number }[] {

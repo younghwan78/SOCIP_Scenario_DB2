@@ -110,7 +110,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
         <span className="faint" style={{ width: 12 }}>{isOpen ? '▾' : '▸'}</span><b>{name}</b> <span className="cnt">({rows.length})</span>
         <span className="mono faint" style={{ fontSize: 11 }}>{sid}</span>
-        <span className="muted" style={{ fontSize: 12, whiteSpace: 'normal' }}>{scenarioPurpose(sid).slice(0, 70)}{scenarioPurpose(sid).length > 70 ? '…' : ''}</span>
+        <span className="muted" style={{ fontSize: 12, whiteSpace: 'normal' }}>{(() => { const t = scenarioPurpose(sid, ctx.catalog.find((c) => c.scenario_id === sid)); return t.length > 70 ? `${t.slice(0, 70)}…` : t })()}</span>
         {(search || load) && <span className="muted" style={{ fontSize: 12 }}>· {shown.length} 일치</span>}
       </span>) }
   })

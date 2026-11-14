@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-game-play
   name: Game Play
+  purpose: "로컬 게임: CPU/GPU 렌더링과 패널 출력 사이의 frame pacing, 해상도 및 목표 fps를 검토합니다. NPU 사용 여부와 render_resolution은 명시된 조건으로만 판단합니다."
+  review_focus:
+  - "frame pacing"
+  - "CPU / GPU 부하"
+  - "목표 fps · 해상도"
   category:
   - game
   - game

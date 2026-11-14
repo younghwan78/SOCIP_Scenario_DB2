@@ -6,6 +6,11 @@ project_ref: proj-sm-s947b
 metadata:
   canonical_usecase: uc-vid-playback-local
   name: Video Playback Local
+  purpose: "로컬 영상 재생: UFS 파일 입력과 MFC/APV 디코딩을 분리해 봅니다. DRM, PiP, HDR, APV chroma format에 따라 복호화·합성·포맷 변환 경로가 달라질 수 있습니다."
+  review_focus:
+  - "MFC / APV decode"
+  - "합성 · 포맷 변환 경로"
+  - "DRM / HDR 조건"
   category:
   - video_playback
   - video
