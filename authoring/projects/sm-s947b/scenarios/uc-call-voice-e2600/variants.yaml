@@ -30,6 +30,18 @@
         note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
           the CPU-fed path.
       model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    modem:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Downlink voice frame (AMR-WB / EVS) every 20 ms, outside the video frame path; judged against the next frame.
+    modem_tx:
+      timeline:
+        cadence: period
+        period_ms: 20.0
+        value_source: assumed
+        note: Uplink voice frame every 20 ms; judged against the next frame.
     audio_hal:
       executes_on: ip-abox-s5e9965
     speaker:
