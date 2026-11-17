@@ -298,16 +298,44 @@ export function toElk(graph: Graph, opts: ElkOptions = {}): ElkNode {
 }
 
 type ElkApi = { layout: (g: ElkNode) => Promise<ElkNode> }
-let elkPromise: Promise<ElkApi> | null = null
-async function elk(): Promise<ElkApi> {
-  if (!elkPromise) {
-    elkPromise = import('elkjs/lib/elk.bundled.js').then((m) => {
-      const Ctor = (m as unknown as { default: new () => ElkApi }).default
-      return new Ctor()
-    })
-  }
-  return elkPromise
+type ElkCtor = new (opts?: { workerFactory?: (url?: string) => Worker }) => ElkApi
+
+/** O-06: ELK runs in a Web Worker (elk-api + elk-worker), so a large pipeline layout no longer blocks the
+ * main thread. Without Worker (tests, very old browsers) or when the worker cannot start, the bundled
+ * main-thread build is used — the same algorithm and options, so the same layout. */
+let bundledPromise: Promise<ElkApi> | null = null
+function bundledElk(): Promise<ElkApi> {
+  bundledPromise ??= import('elkjs/lib/elk.bundled.js').then((m) => new ((m as unknown as { default: ElkCtor }).default)())
+  return bundledPromise
 }
+let workerPromise: Promise<ElkApi> | null = null
+function workerElk(): Promise<ElkApi> {
+  workerPromise ??= Promise.all([import('elkjs/lib/elk-api.js'), import('elkjs/lib/elk-worker.min.js?url')]).then(([api, url]) => {
+    const Ctor = (api as unknown as { default: ElkCtor }).default
+    const workerUrl = (url as { default: string }).default
+    return new Ctor({ workerFactory: () => new Worker(workerUrl) })
+  })
+  return workerPromise
+}
+export const elkUsesWorker = () => typeof Worker !== 'undefined'
+
+async function runLayout(input: ElkNode): Promise<ElkNode> {
+  if (!elkUsesWorker()) return (await bundledElk()).layout(input)
+  try {
+    return await (await workerElk()).layout(structuredClone(input))
+  } catch {
+    workerPromise = null                         // the worker could not run: fall back for good
+    ;(globalThis as { __elkNoWorker?: boolean }).__elkNoWorker = true
+    return (await bundledElk()).layout(input)
+  }
+}
+
+/** Laid-out ELK graphs by their input (ids, sizes, edges, options): reopening a pipeline, toggling a lens back
+ * or re-rendering the same structure skips the layout. Labels / metadata come from the current graph. */
+const LAYOUT_CACHE_MAX = 24
+const layoutCache = new Map<string, ElkNode>()
+export function layoutCacheSize(): number { return layoutCache.size }
+export function clearLayoutCache(): void { layoutCache.clear() }
 
 export function fromElk(graph: Graph, laid: ElkNode): Layout {
   const abs = new Map<string, { x: number; y: number }>()
@@ -345,8 +373,18 @@ export function fromElk(graph: Graph, laid: ElkNode): Layout {
 }
 
 export async function layoutGraph(graph: Graph, opts: ElkOptions = {}): Promise<Layout> {
-  const engine = await elk()
-  const laid = await engine.layout(toElk(graph, opts))
+  const input = toElk(graph, opts)
+  const key = JSON.stringify(input)
+  let laid = layoutCache.get(key)
+  if (laid) {
+    layoutCache.delete(key); layoutCache.set(key, laid)  // most recently used last
+  } else {
+    const t0 = performance.now()
+    laid = (globalThis as { __elkNoWorker?: boolean }).__elkNoWorker ? await (await bundledElk()).layout(input) : await runLayout(input)
+    try { performance.measure('elk-layout', { start: t0, end: performance.now() }) } catch { /* measure unsupported */ }
+    layoutCache.set(key, laid)
+    if (layoutCache.size > LAYOUT_CACHE_MAX) layoutCache.delete(layoutCache.keys().next().value as string)
+  }
   return fromElk(graph, laid)
 }
 
