@@ -192,6 +192,28 @@ node_configs:
   runtime × frame period / own period (an event releases once: no rate). The evidence CPU energy still
   uses the SW task's `rate_hz`, so keep `rate_hz` = 1000 / period.
 
+## Assumed IP (`ip_param`, S-08)
+
+An architecture question is often "what if this IP were different": a 2x ppc ISP, a single-core encoder, a
+higher max clock. These are assumptions, not catalog facts, so they live on the variant node, not in the
+shared IP catalog. Catalog rows and other projects stay untouched.
+
+| Field | Effect |
+|---|---|
+| `node_configs.<node>.sim.ip_params.ppc` / `unit_power_mw_mp` | overrides the catalog value for this node (merged after mode / role) |
+| `node_configs.<node>.sim.ip_params.max_clock_mhz` | lowers the catalog cap (never raises it) |
+| `node_configs.<node>.sim.ip_params.assume_max_clock_mhz` | replaces the catalog cap and may raise it (assumed IP) |
+| `node_configs.<node>.sim.cores` | parallel cores (integer 1..8); required clock / power follow the cores |
+| `capabilities.sim.multi_core: {cores, min_pixels}` | catalog declaration of cores; follows `mfc_dual` (on = cores, off = 1, auto = cores from `min_pixels` up) |
+
+- **Precedence for cores:** a node's `sim.cores`, then the catalog `multi_core`, then the built-in rule (a UHD+
+  output encoder, not APV, runs on 2 cores). Undeclared data gives identical results
+  (`check_engine_equivalence`: 0 differences). The E2600 MFC catalog keeps the built-in rule on purpose:
+  Exynos2700 inherits that IP.
+- **What-if / exploration:** the `ip_param` change kind (`node_id` + `param` ∈ `ppc`, `unit_power_mw_mp`,
+  `assume_max_clock_mhz`, `cores`) writes these fields on a detached copy, and it is an explorable lever. A
+  run can sweep, for example, `ppc` 4 / 8 against `cores` 1 / 2, with a `neutral` IQ class.
+
 ## Readiness Severity
 
 | Condition | SoC fixture contract | Scenario readiness |

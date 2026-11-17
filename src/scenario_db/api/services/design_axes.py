@@ -26,7 +26,7 @@ from scenario_db.sim.design_space import BUILTIN_LEVERS
 # and clock model) and ``sensor_binding`` (a reviewed DT binding, prepared from the catalog per request).
 EXPLORABLE_KINDS: tuple[str, ...] = (
     "output_size", "anchor_size", "node_size", "stream_size", "chain_size", "fps", "sensor_mode",
-    "history_interval", "llc_alloc", "ip_mode", "power_knob", "node_clock_mhz",
+    "history_interval", "llc_alloc", "ip_mode", "power_knob", "node_clock_mhz", "ip_param",
 )
 _IQ_ORDER = {"neutral": 0, "eval": 1, "trade": 2}
 _SELECTOR_KEYS = ("anchor_id", "node_id", "stream_id", "buffer_id", "param")

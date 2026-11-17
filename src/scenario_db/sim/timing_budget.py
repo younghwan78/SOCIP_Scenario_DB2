@@ -579,6 +579,14 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
                 margins[node] = margin
     dual = {}
     for node, workload in workloads.items():
+        declared = _declared_cores(graph, node, workload)
+        if declared is not None:
+            # S-08: a node's ``sim.cores`` or its IP's ``capabilities.sim.multi_core`` decides (the rule below
+            # is the fallback for undeclared IPs, so undeclared data keeps its cores)
+            cores = declared(options.mfc_dual) if callable(declared) else declared
+            if cores > 1:
+                dual[node] = cores
+            continue
         if stage.get(node) == "output" and _ENCODER_RE.search(
             node + " " + str(workload.ip_ref or "")
         ):
@@ -748,6 +756,28 @@ def _ordered_pairs(names: list[str], succ: dict[str, set[str]]) -> list[list[str
     unordered."""
     reach = {n: _closure([n], succ) for n in names}
     return sorted([a, b] for a in names for b in names if a != b and b in reach[a] and a not in reach[b])
+
+
+def _cores_value(value: Any, where: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or int(value) != value or not 1 <= int(value) <= 8:
+        raise ValueError(f"{where}: cores must be an integer 1..8, got {value!r}")
+    return int(value)
+
+
+def _declared_cores(graph, node: str, workload) -> Any:
+    """S-08: parallel cores of a node when declared — ``node_configs.<node>.sim.cores`` (an int, e.g. an assumed
+    IP) or the IP catalog's ``capabilities.sim.multi_core: {cores, min_pixels}``. The catalog rule follows the
+    ``mfc_dual`` option (on = cores, off = 1, auto = cores from ``min_pixels`` up); None = undeclared."""
+    sim = ((graph.variant.node_configs or {}).get(node) or {}).get("sim") or {}
+    if isinstance(sim, dict) and sim.get("cores") is not None:
+        return _cores_value(sim["cores"], f"node_configs.{node}.sim.cores")
+    row = graph.ip_catalog.get(str(workload.ip_ref or "")) if getattr(graph, "ip_catalog", None) else None
+    rule = (((getattr(row, "capabilities", None) or {}).get("sim") or {}).get("multi_core")) if row is not None else None
+    if not isinstance(rule, dict) or rule.get("cores") is None:
+        return None
+    cores = _cores_value(rule["cores"], f"{workload.ip_ref}.capabilities.sim.multi_core.cores")
+    min_pixels = float(rule.get("min_pixels") or 0)
+    return lambda mode: cores if mode == "on" else 1 if mode == "off" else (cores if workload.pixels >= min_pixels else 1)
 
 
 def _sw_order(sw_items: dict[str, list[dict[str, Any]]], edges: list) -> dict[str, list[list[str]]]:

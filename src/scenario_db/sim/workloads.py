@@ -140,6 +140,11 @@ def sim_params_for_node(
             if str(m.get("id")) == str(mode) and m.get("max_clock_mhz") is not None]
     if merged.get("max_clock_mhz") is not None:
         caps.append(float(merged["max_clock_mhz"]))
+    # S-08: an assumed IP (``sim.ip_params.assume_max_clock_mhz``) replaces the catalog cap — it may raise it;
+    # ``max_clock_mhz`` only ever lowers the cap.
+    assumed_cap = override_params.get("assume_max_clock_mhz")
+    if assumed_cap is not None:
+        caps = [float(assumed_cap)]
     if caps:
         merged["max_clock_mhz"] = min(caps)
     hw_name = merged.get("hw_name") or merged.get("hw_name_in_sim") or fallback_hw_name(ip_row.id)

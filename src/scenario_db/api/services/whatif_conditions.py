@@ -455,6 +455,37 @@ def _apply_clock(ctx: _Apply, data: dict) -> tuple:
     return ("node_clock_mhz", node_id)
 
 
+# S-08 assumed IP: catalog values overlaid on one node (sim.ip_params / sim.cores), e.g. "a 2x ppc ISP".
+IP_ASSUME_PARAMS: dict[str, tuple[str, str, float]] = {
+    "ppc": ("ppc", "pixel/cycle", 64.0),
+    "unit_power_mw_mp": ("unit power", "mW/MP", 1000.0),
+    "assume_max_clock_mhz": ("max clock", "MHz", 5000.0),
+    "cores": ("cores", "", 8.0),
+}
+
+
+def _apply_ip_assume(ctx: _Apply, data: dict) -> tuple:
+    node_id, param, value = data["node_id"], data["param"], data["value"]
+    row = next((r for r in ctx.targets["nodes"] if r["id"] == node_id), None)
+    if row is None or not row["clock_supported"]:
+        raise ValueError(f"unsupported ip_param node: {node_id}")
+    if param not in IP_ASSUME_PARAMS:
+        raise ValueError(f"unsupported ip_param: {param} (supported: {', '.join(IP_ASSUME_PARAMS)})")
+    if value > IP_ASSUME_PARAMS[param][2]:
+        raise ValueError(f"ip_param {param} must be at most {IP_ASSUME_PARAMS[param][2]:g}")
+    cfg = ctx.variant.node_configs.setdefault(node_id, {})
+    if cfg is None:
+        cfg = ctx.variant.node_configs[node_id] = {}
+    sim = cfg.setdefault("sim", {})
+    if param == "cores":
+        if int(value) != value:
+            raise ValueError("ip_param cores must be an integer")
+        sim["cores"] = int(value)
+    else:
+        sim.setdefault("ip_params", {})[param] = value
+    return ("ip_param", node_id, param)
+
+
 def _apply_param(ctx: _Apply, data: dict) -> tuple:
     """Without node_id the parameter moves on every node that carries it (e.g. DPU + panel refresh)."""
     rows = [r for r in ctx.targets["params"] if r["param"] == data["param"] and r["modeled"]
@@ -507,6 +538,11 @@ register(ChangeKind("node_clock_mhz", "IP clock 하한", "value", "node_id", uni
                     description="수동 하한 — DVFS·공유 domain 제약으로 더 높게 적용될 수 있음",
                     discover=lambda t: [{"id": n["id"], "ip": n["ip"]} for n in t["nodes"] if n["clock_supported"]],
                     apply=_apply_clock))
+register(ChangeKind("ip_param", "가정 IP (catalog 값)", "value", "node_id", needs_param=True, group="clock",
+                    description="IP catalog 값을 가정값으로 덮어씀 — ppc · unit power · max clock · core 수. 실측 · datasheet 근거가 아닌 IP 가정",
+                    discover=lambda t: [{"id": n["id"], "ip": n["ip"], "param": k, "label": f"{n['id']} · {v[0]}", "unit": v[1], "max": v[2]}
+                                        for n in t["nodes"] if n["clock_supported"] for k, v in IP_ASSUME_PARAMS.items()],
+                    apply=_apply_ip_assume))
 register(ChangeKind("node_param", "IP 설정값", "value", "node_id", needs_param=True, selector_optional=True,
                     description="IP 설정값 (예: display 주사율). IP를 비우면 그 설정을 가진 모든 IP에 함께 적용",
                     discover=lambda t: [{"id": r["node_id"], "param": r["param"], "label": r["label"], "unit": r["unit"], "value": r["value"]}

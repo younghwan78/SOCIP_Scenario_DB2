@@ -73,7 +73,7 @@ class WhatIfChange(BaseModel):
             if name != kind.selector and given:
                 raise ValueError(f"{name} is only allowed for targets selected by {name}")
         if kind.needs_param != (self.param is not None):
-            raise ValueError(f"param is required for {self.target}" if kind.needs_param else "param is only allowed for node_param / power_knob")
+            raise ValueError(f"param is required for {self.target}" if kind.needs_param else "param is only allowed for node_param / power_knob / ip_param")
         limit = param_max(self.param) if kind.needs_param else kind.max_value
         if limit is not None and self.value is not None and self.value > limit:
             raise ValueError(f"{self.target} must be at most {limit:g}" + (" (FPS must be at most 240)" if self.target == "fps" else ""))
