@@ -100,6 +100,40 @@ capabilities:
   `bitrate_mbps`, `cycles_per_bit`, `entropy_cycles_per_frame`, `ppc_effective`, `ppc_mode`) when the
   node opts in.
 
+### Domain load models (`sim/domain_loads.py`, D-03)
+
+GPU, NPU and audio-DSP nodes have no `ppc` / clock rule, so the compute model gives them 0 mW
+(`zero_power_ips`). A domain load model turns a declared work rate into an operating point, a busy
+share and a power. Models are registered in `DOMAIN_MODELS`; today `util-vf-v1`:
+
+```
+work     = (mcycles_per_frame + mcycles_per_layer x input_layers)
+           x (pixels / ref_pixels) ^ pixel_exponent x rate_hz        (or mcycles_per_s)   [Mcycle/s]
+f        = freq_mhz | the node's dvfs.aud_freq_khz | governor: lowest table f with work / f <= target_util
+util     = work / f                                                  (> 1: verdict fail)
+dynamic  = util x coeff_uw_per_mhz_v2 x f x V(f)^2 / 1000            [mW]
+static   = leak(V(f)) x (util + (1 - util) x (1 - idle_gated)),  leak(V) = mw_at_ref x (V / ref_mv) ^ exponent
+```
+
+Declarations merge in this order (later wins):
+
+1. the IP catalog, read only: `power_model` coefficient (`dynamic_coeff_uw_per_mhz_v2` or
+   `profiler_dynamic_coeff`), `vf_table` / `vf_table_sample`, `leakage` / `leakage_sample`, and the
+   `dvfs_model` frequency table (`freq_table_khz`, `dvfs_table[].freq_core_khz`, `aud_qos_levels_khz`);
+2. the scenario pipeline node `domain_load: {model, coeff_uw_per_mhz_v2, vf, leakage, freqs_mhz, ...}`:
+   scenario-local assumptions, so the shared IP catalog and every other scenario's input hash stay unchanged;
+3. the variant `node_configs.<node>.sim.domain_load` (this variant's work; `none` opts out).
+
+- `rate_hz` defaults to the node's `sim.fps`, else the frame rate; `pixels` is the node's `sim.width x height`.
+- The node's power goes into `power.hw_by_ip` and `power.domain_loads[node]` (`work_mcycles_s`, `freq_mhz`,
+  `freq_by`, `util`, `dynamic_mw`, `static_mw`, `mw`, `feasible`, `value_source`, `basis`). A node timed by
+  `sw_timing` (a GPU task) keeps its time in the chain, but its power is the domain load's, not CPU work.
+- Exploration cases (DVFS · compression) keep it constant, like an assumed load; the exploration slice
+  carries `domain_by_ip`, the report row `domain_mw`, and the sensitivity table one `domain:<node>` row.
+- Opt-in: a node without a declaration computes as before (engine revision unchanged, listed under `OPT_IN`).
+  E2600 game, display, video, audio, call and camera-AI scenarios declare assumed values; the recording
+  scenario (inherited by E2700) and the shared IP catalog are not changed.
+
 ## External Device Requirements
 
 Sensors and panels are not compute workloads. They should not require `ppc` or

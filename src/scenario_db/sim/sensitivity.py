@@ -95,6 +95,9 @@ def assumed_sensitivity(
     for ip, mw in (payload.get("assumed_by_ip") or {}).items():
         mw = float(mw or 0.0)
         add(f"load:{ip}", f"{ip} 가정 부하", "design_conditions", mw, -f * mw, f * mw, per_pct_mw=mw / 100.0)
+    for ip, mw in (payload.get("domain_by_ip") or {}).items():  # D-03: power ~ the declared work at a held operating point
+        mw = float(mw or 0.0)
+        add(f"domain:{ip}", f"{ip} domain 부하 (work)", "domain_load", mw, -f * mw, f * mw, per_pct_mw=mw / 100.0)
     if sw_items is None:
         sw_items = [i for st in (payload.get("stages") or {}).values() for i in (st.get("sw_items") or [])]
     sw_items = [i for i in sw_items if i.get("kind") == "sw"]

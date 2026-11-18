@@ -54,6 +54,16 @@ pipeline:
     ip_ref: ip-gpu-s5e9965
     role: composer
     instance_index: 0
+    domain_load:
+      model: util-vf-v1
+      mcycles_per_frame: 0.15
+      mcycles_per_layer: 0.05
+      ref_pixels: 2073600
+      target_util: 0.85
+      idle_gated: 0.8
+      value_source: assumed
+      basis: assumed composition work (0.15 + 0.05 Mcycle per layer per FHD frame); coeff / V-f / leakage = ip-gpu catalog
+        samples
   - id: m2m_scaler
     ip_ref: ip-m2m-scaler-s5e9965
     role: m2m_scaler
@@ -70,6 +80,37 @@ pipeline:
     ip_ref: ip-abox-s5e9965
     role: audio_playback
     instance_index: 0
+    domain_load:
+      model: util-vf-v1
+      coeff_uw_per_mhz_v2: 300
+      vf:
+      - mhz: 200
+        mv: 575
+      - mhz: 332
+        mv: 600
+      - mhz: 400
+        mv: 600
+      - mhz: 533
+        mv: 625
+      - mhz: 663
+        mv: 650
+      - mhz: 800
+        mv: 675
+      - mhz: 935
+        mv: 700
+      - mhz: 1200
+        mv: 750
+      - mhz: 1500
+        mv: 800
+      leakage:
+        mw_at_ref: 3.0
+        ref_mv: 750.0
+        exponent: 2.5
+      mcycles_per_s: 20.0
+      idle_gated: 0.5
+      value_source: assumed
+      basis: assumed ABOX work (20 Mcycle/s); AUD coeff / V-f / leakage assumed (not in the catalog); operating point = the
+        node's dvfs.aud_freq_khz
   edges:
   - from: network
     to: sw_demux

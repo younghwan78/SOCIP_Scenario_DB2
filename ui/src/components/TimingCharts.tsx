@@ -4,7 +4,7 @@ import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
   LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, cpuTileNote, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, voltText, whatIfDomains,
-  type FleetRow, type IpRow, type StageId, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
+  type FleetRow, type IpRow, type PowerSplit, type StageId, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
 // ---------------------------------------------------------------- card
@@ -260,6 +260,7 @@ export function PowerBw({ report }: { report: TimingReport }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
         <HBarList title="HW IP core power (mW)" rows={ipRows.map(([k, v]) => ({ k: k.toUpperCase(), v, c: STAGE_COLOR.rt }))} max={pMax} unit="mW" />
+        {p.domain_loads && <DomainLoads loads={p.domain_loads} />}
         <HBarList title="CPU SW task power (mW)" rows={cpuRows.map(([k, v]) => ({ k, v, c: SW_COLOR }))} max={pMax} unit="mW" />
       </div>
       <HBarList title={`DMA BW by IP / SW (MB/s) · HW ${fmt(bw.hw_mbs, 0)} · SW ${fmt(bw.sw_mbs, 0)}`} rows={bwRows.map((r) => ({ k: r.sw ? `${r.k} (SW)` : r.k.toUpperCase(), v: r.v, c: r.sw ? SW_COLOR : STAGE_COLOR.nrt }))} max={bwMax} unit="MB/s" />
@@ -603,6 +604,22 @@ export function FleetRank({ rows, onPick, limit, margin = 0.25 }: { rows: FleetR
         )
       })}
       <div className="faint" style={{ fontSize: 11, marginTop: 4 }}>axis 0–{fmt(max, 0)} MHz · 정렬 = 배율 내림차순 · 행 클릭 = variant 상세</div>
+    </div>
+  )
+}
+
+/** D-03: operating point and busy share behind the power of each declared domain load (GPU / NPU / audio DSP). */
+export function DomainLoads({ loads }: { loads: NonNullable<PowerSplit['domain_loads']> }) {
+  return (
+    <div className="faint" style={{ fontSize: 12 }} data-testid="domain-loads">
+      <div>Domain 부하 (util × f × V² + leakage)</div>
+      {Object.entries(loads).map(([node, d]) => (
+        <div key={node}>
+          {node.toUpperCase()}: {fmt(d.work_mcycles_s, 0)} Mcycle/s → {fmt(d.freq_mhz, 0)} MHz ({d.freq_by === 'fixed' ? '고정' : 'governor'}) · util {fmt(d.util * 100, 0)}% ·
+          {' '}dynamic {fmt(d.dynamic_mw, 1)} + static {fmt(d.static_mw, 1)} = {fmt(d.mw, 1)} mW
+          {d.value_source === 'assumed' ? ' · 가정' : ''}{d.note ? ` · ${d.note}` : ''}{d.reason ? ` · ${d.reason}` : ''}
+        </div>
+      ))}
     </div>
   )
 }

@@ -31,6 +31,9 @@ class PipelineNode(BaseScenarioModel):
     # D-03 workload load model of this node with scenario-local coefficients ({ref, codecs, ...}),
     # see sim/load_models.py; kept on the scenario so the shared IP catalog stays unchanged
     load_model: dict[str, Any] | None = None
+    # D-03 domain load (GPU / NPU / audio DSP power: util x f x V^2 + leakage) with scenario-local
+    # coefficients ({model, coeff_uw_per_mhz_v2, vf, leakage, ...}), see sim/domain_loads.py
+    domain_load: dict[str, Any] | None = None
 
 
 class EdgeType(StrEnum):

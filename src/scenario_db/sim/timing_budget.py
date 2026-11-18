@@ -33,6 +33,7 @@ from pydantic import Field, model_validator
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.assumed_loads import assumed_loads
+from scenario_db.sim.domain_loads import domain_loads
 from scenario_db.sim.cpu_power import PROFILER_COEFF as _CPU_PROFILER_COEFF
 from scenario_db.sim.models import CpuProfile, DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.power_params import effective_power_params
@@ -1058,11 +1059,20 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
             }
         )
     intervals, latency = _cadence(result, run["inputs"], plan, options)
-    power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions))
+    # D-03: GPU / NPU / audio DSP nodes with a declared domain load (util x f x V^2 + leakage); none = as before
+    # (a GPU task timed by sw_timing is a SW task: with a domain load its power is the domain's, not CPU work)
+    # (an own-cadence task such as the ABOX period IRQ is a timeline task, not a resolved workload)
+    active = set(result.resolved) | set(plan["tasks"])
+    domain = domain_loads(graph, active, 1000.0 / period if period else 0.0)
+    power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain)
     bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
     own = own_cadence_rows(result.timeline_events)
     verdict = _verdict(stages, intervals, ips, domains, period, own)
+    for est in domain.values():
+        if not est["feasible"]:
+            verdict["reasons"].append(est["reason"])
+            verdict["status"] = "fail"
     contract = plan.get("contract")
     if contract is not None:
         from scenario_db.models.definition.usecase import MODELED_KPIS
@@ -1214,10 +1224,13 @@ def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> di
 
 
 def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, period: float,
-              assumed: dict[str, dict[str, Any]] | None = None):
+              assumed: dict[str, dict[str, Any]] | None = None,
+              domain: dict[str, dict[str, Any]] | None = None):
     stage = plan["stage"]
     tasks = plan["tasks"]
     hw_by_ip = {n: r.total_power_mw * plan["dual"].get(n, 1) for n, r in result.resolved.items()}
+    for n, est in (domain or {}).items():  # a declared domain load is that node's IP power (the compute model gives 0)
+        hw_by_ip[n] = hw_by_ip.get(n, 0.0) + est["mw"]
     busy = {
         i["task"]: i["runtime_ms"]
         for items in plan["sw_items"].values()
@@ -1229,6 +1242,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
             busy[tid] = float(task.get("duration_ms") or 0.0)
     for tid, own in (plan.get("own_sw") or {}).items():  # own-cadence SW: runtime per frame period
         busy.setdefault(tid, own["per_period_ms"])
+    for tid in domain or {}:  # its time stays in the chain; its power is the domain load's (not the CPU's)
+        busy.pop(tid, None)
     cpu_by_task = {t: options.cpu.power_mw(ms, period) for t, ms in busy.items()}
     sw_nodes = {t for t, task in tasks.items() if task.get("task_type") == "sw"}
     bw_hw: dict[str, float] = {}
@@ -1271,6 +1286,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     if assumed_by_ip:  # absent key = nothing declared (reports from before stay byte-identical)
         power["assumed_by_ip"] = assumed_by_ip
         power["assumed_basis"] = {ip: a["basis"] for ip, a in (assumed or {}).items() if a.get("basis")}
+    if domain:  # absent key = no domain load declared
+        power["domain_loads"] = domain
     bw = {
         "total_mbs": round(bw_total, 1),
         "hw_mbs": round(sum(bw_hw.values()), 1),

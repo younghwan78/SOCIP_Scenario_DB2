@@ -50,7 +50,7 @@ def components(row: dict[str, Any], overrides: dict[str, str] | None = None) -> 
     for node, mw in (row.get("ip_mw") or {}).items():
         g = group_of(node, overrides)
         groups[g] = groups.get(g, 0.0) + float(mw or 0.0)
-    for ip, mw in (row.get("assumed_mw") or {}).items():
+    for ip, mw in {**(row.get("assumed_mw") or {}), **(row.get("domain_mw") or {})}.items():
         g = group_of(ip, overrides)
         groups[g] = groups.get(g, 0.0) + float(mw or 0.0)
     for g in (*IP_GROUPS, OTHER):
@@ -71,7 +71,8 @@ def component_table(snap: dict[str, Any]) -> dict[str, Any]:
         c = components(r, overrides)
         table.append({"scenario_id": r["scenario_id"], "variant_id": r["variant_id"],
                       "total_mw": float(r["power"]["total_mw"]), "parts": c,
-                      "assumed": sorted({group_of(ip, overrides) for ip in (r.get("assumed_mw") or {})})})
+                      "assumed": sorted({group_of(ip, overrides) for ip in
+                                         [*(r.get("assumed_mw") or {}), *(r.get("domain_mw") or {})]})})
     present = {k: any(t["parts"][k] is not None for t in table) for k in COMPONENTS}
     rank: dict[str, dict[tuple[str, str], int]] = {}
     for k in ("total", *COMPONENTS):

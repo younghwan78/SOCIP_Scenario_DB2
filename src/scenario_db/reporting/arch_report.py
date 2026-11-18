@@ -110,6 +110,9 @@ def build_snapshot(
                       for ip in (chosen.get("ips") if pred else None) or (v.get("objective_slice") or {}).get("ips") or []},
             "assumed_mw": dict((chosen.get("assumed_by_ip") if pred else None)
                                or (v.get("objective_slice") or {}).get("assumed_by_ip") or {}),
+            # D-03 domain loads (GPU / NPU / audio DSP, assumed work): node power the compute model leaves at 0
+            **({"domain_mw": dm} if (dm := dict((chosen.get("domain_by_ip") if pred else None)
+                                                 or (v.get("objective_slice") or {}).get("domain_by_ip") or {})) else {}),
             # S-03: assumed inputs that move the reported case most (linear ±20 %, no re-simulation)
             # the DVFS table of the run this variant came from (a project report merges runs)
             "sensitivity": variant_sensitivity(v, chosen if pred else None,

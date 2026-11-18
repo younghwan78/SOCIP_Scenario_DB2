@@ -53,11 +53,18 @@ export interface IntervalSeries {
   jitter_ms?: number | null; p95_dev_ms?: number | null; p99_dev_ms?: number | null; max_dev_ms?: number | null; duration_ms?: number; drops?: number; warmup_observed?: number; warmup_excluded?: number
 }
 export interface TimelineRow { node: string; type: string; frame: number; start_ms: number; end_ms: number; stage: StageId }
+export interface DomainLoad {
+  model: string; work_mcycles_s: number; freq_mhz: number; freq_by: 'fixed' | 'governor'; f_max_mhz: number; mv: number
+  util: number; target_util: number; dynamic_mw: number; static_mw: number; mw: number; feasible: boolean
+  value_source: string; rate_hz?: number; pixel_scale?: number; basis?: string; note?: string; reason?: string
+}
 export interface PowerSplit {
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_hw_mw: number; bw_sw_mw: number
   share_pct: { cpu: number; hw: number; bw: number }
   hw_by_ip: Record<string, number>; cpu_by_task: Record<string, number>; cpu_busy_ms: number
   cpu_model: { cluster: number; freq_mhz: number; volt_v: number; source: string }; zero_power_ips: string[]
+  /** D-03: GPU / NPU / audio DSP power from a declared work rate (util x f x V^2 + leakage); absent = none declared */
+  domain_loads?: Record<string, DomainLoad>
   /** cpu_model=profile: measured CPU profile replayed with SW growth (absent = flat assumption) */
   cpu_profile?: CpuProfileTerm
   cpu_mw_flat?: number; bw_sw_mw_model?: number
