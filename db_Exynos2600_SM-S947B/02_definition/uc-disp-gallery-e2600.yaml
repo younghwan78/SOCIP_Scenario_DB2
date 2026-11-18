@@ -260,6 +260,11 @@ variants:
           - 390
           bpp: 32
           value_source: assumed
+        ip_params:
+          ppc: 4.0
+          unit_power_mw_mp: 1.0
+          value_source: assumed
+          note: VRR has no sim coefficients in ip-dpu; the Normal mode values are assumed
       resol_clk_khz: 609223
       bw_kb_s:
         bts_read_vote: 9747568
@@ -923,6 +928,11 @@ variants:
       model_ref: ip-dpu-s5e9965.capabilities.bw_model
     m2m_scaler:
       sim:
+        ip_params:
+          ppc: 2.0
+          unit_power_mw_mp: 0.6
+          value_source: assumed
+          note: ip-m2m-scaler declares no ppc / unit power; assumed MSCL throughput and power
         src:
         - 1920
         - 1080
@@ -1095,6 +1105,11 @@ variants:
       model_ref: ip-dpu-s5e9965.capabilities.bw_model
     m2m_scaler:
       sim:
+        ip_params:
+          ppc: 2.0
+          unit_power_mw_mp: 0.6
+          value_source: assumed
+          note: ip-m2m-scaler declares no ppc / unit power; assumed MSCL throughput and power
         src:
         - 1920
         - 1080

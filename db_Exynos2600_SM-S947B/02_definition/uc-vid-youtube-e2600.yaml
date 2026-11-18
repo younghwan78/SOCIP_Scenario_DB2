@@ -2599,6 +2599,11 @@ variants:
         screen_on: true
     m2m_scaler:
       sim:
+        ip_params:
+          ppc: 2.0
+          unit_power_mw_mp: 0.6
+          value_source: assumed
+          note: ip-m2m-scaler declares no ppc / unit power; assumed MSCL throughput and power
         src:
         - 3840
         - 2160

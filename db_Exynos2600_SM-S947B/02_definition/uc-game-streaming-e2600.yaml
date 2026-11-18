@@ -436,6 +436,11 @@ variants:
         fps: 60
         bitdepth: 8
         sbwc: false
+        ip_params:
+          ppc: 4.0
+          unit_power_mw_mp: 1.0
+          value_source: assumed
+          note: LowLatency has no sim coefficients in ip-mfc; the Normal mode values are assumed
       bw_kb_s:
         peak: 452925
         read: 435971
@@ -896,6 +901,11 @@ variants:
         screen_on: true
     m2m_scaler:
       sim:
+        ip_params:
+          ppc: 2.0
+          unit_power_mw_mp: 0.6
+          value_source: assumed
+          note: ip-m2m-scaler declares no ppc / unit power; assumed MSCL throughput and power
         src:
         - 1920
         - 1080
