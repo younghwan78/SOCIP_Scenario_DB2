@@ -1061,7 +1061,8 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     intervals, latency = _cadence(result, run["inputs"], plan, options)
     # D-03: GPU / NPU / audio DSP nodes with a declared domain load (util x f x V^2 + leakage); none = as before
     # (a GPU task timed by sw_timing is a SW task: with a domain load its power is the domain's, not CPU work)
-    active = set(result.resolved) | {t for t, task in plan["tasks"].items() if task.get("task_type") == "sw"}
+    # (an own-cadence task such as the ABOX period IRQ is a timeline task, not a resolved workload)
+    active = set(result.resolved) | set(plan["tasks"])
     domain = domain_loads(graph, active, 1000.0 / period if period else 0.0)
     power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain)
     bw["peak"] = _peak_bw(ips, bw, period)
