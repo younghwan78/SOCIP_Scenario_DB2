@@ -44,6 +44,37 @@ def _basis_fields(db: Session, shim: SimulateRequest) -> dict:
             "basis_overrides": sorted(set(getattr(shim, "basis_overrides", None) or []))}
 
 
+def _domain_load_inputs(graph) -> dict:
+    """Every node's merged domain-load declaration (with the catalog coefficients it uses); {} when none."""
+    from scenario_db.sim.domain_loads import domain_load_config
+
+    out = {}
+    configs = getattr(graph.variant, "node_configs", None) or {}
+    catalog = getattr(graph, "ip_catalog", None) or {}
+    for node in (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("nodes") or []:
+        node_id = str(node.get("id") or "")
+        ip = catalog.get(str(node.get("ip_ref") or ""))
+        try:
+            cfg = domain_load_config(getattr(ip, "capabilities", None) or {}, node, configs.get(node_id) or {})
+        except ValueError as exc:  # an invalid declaration is refused by the calculation itself
+            cfg = {"invalid": str(exc)}
+        if cfg is not None:
+            out[node_id] = cfg
+    return out
+
+
+def _cpu_opp_inputs(graph) -> dict:
+    """The declared CPU OPP condition and the per-task mem_bound it reads; {} when not declared."""
+    design = getattr(graph.variant, "design_conditions", None) or {}
+    keys = {k: design[k] for k in ("cpu_opp_mhz", "cpu_opp_mv", "cpu_mem_bound") if design.get(k) not in (None, "")}
+    if not keys.get("cpu_opp_mhz"):
+        return {}
+    configs = getattr(graph.variant, "node_configs", None) or {}
+    mem = {n: (c.get("sw_timing") or {}).get("mem_bound") for n, c in configs.items()
+           if isinstance(c, dict) and isinstance(c.get("sw_timing"), dict) and c["sw_timing"].get("mem_bound") is not None}
+    return {**keys, **({"mem_bound": mem} if mem else {})}
+
+
 def _condition_hash(graph, options, shim, tables) -> str:
     """Fingerprint resolved inputs, tables and timing choices; display-only options do not change the condition."""
     import hashlib
@@ -61,6 +92,14 @@ def _condition_hash(graph, options, shim, tables) -> str:
     contract = (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("judgement")
     if contract:
         payload["judgement"] = contract
+    # D-03 domain loads (merged catalog / pipeline node / variant declaration) and the S-05 CPU OPP change the
+    # result without touching the simulation inputs; absent = hash unchanged
+    domain = _domain_load_inputs(graph)
+    if domain:
+        payload["domain_loads"] = domain
+    opp = _cpu_opp_inputs(graph)
+    if opp:
+        payload["cpu_opp"] = opp
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -178,6 +217,19 @@ def analyze_concurrent_request(db: Session, request: Any) -> dict[str, Any]:
     keys = [(m.scenario_id, m.variant_id) for m in request.members]
     if len(set(keys)) != len(keys):
         raise UnprocessableError("a concurrent set lists the same variant twice")
+    # one board: DVFS domains of the same name are one physical domain only within one project (SoC / board)
+    from scenario_db.db.models.definition import Scenario
+
+    projects = {}
+    for m in request.members:
+        scenario = db.get(Scenario, m.scenario_id) if db is not None else None
+        if db is not None and scenario is None:
+            raise NotFoundError(f"scenario not found: {m.scenario_id}")
+        if scenario is not None:
+            projects[m.scenario_id] = scenario.project_ref
+    if len(set(projects.values())) > 1:
+        listed = ", ".join(f"{sid} ({ref})" for sid, ref in sorted(projects.items()))
+        raise UnprocessableError(f"concurrent members must belong to one project (one board / SoC): {listed}")
     base = request.model_dump(exclude={"members", "options"})
     options = request.options.model_copy(update={"include_whatif": False})
     reports = []

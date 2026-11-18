@@ -159,7 +159,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         overrides={overrides} setOverrides={(o) => set('dvo', formatOverrides(o))}
         dist={distQ.data ?? null} distLoading={distQ.loading} distError={distQ.error ?? null} distOn={distOn} setDistOn={setDistOn} />}
       {r && <Card id="concurrent" title="⑧ 동시 실행 (정적 합성)" note="이 variant + 다른 variant 1~3개 · 전력 · BW 합산, 공유 DVFS domain은 최고 clock · 경합은 미반영" defaultWide>
-        <ConcurrentCard ctx={ctx} options={baseOpts} configProfileRef={cfg} />
+        <ConcurrentCard ctx={ctx} options={baseOpts} configProfileRef={cfg}
+          blocked={config ? '조건 변경(DVFS override · power params · 실측 입력) 중에는 합성할 수 없습니다 — 합성은 각 member의 기본 조건으로 계산하므로 위 결과와 달라집니다. 조건을 기본으로 되돌리면 합성할 수 있습니다.' : null} />
       </Card>}
     </div>
   )
