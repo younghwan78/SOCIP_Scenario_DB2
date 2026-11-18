@@ -62,6 +62,9 @@
       selected_mode: Offload
       sim:
         offload: true
+        domain_load:
+          mcycles_per_s: 45.0
+          basis: "assumed ABOX work with the AAC decode offloaded (45 Mcycle/s)"
       dvfs:
         aud_freq_khz: 200000
 - id: audio-stream-bt-screen-off

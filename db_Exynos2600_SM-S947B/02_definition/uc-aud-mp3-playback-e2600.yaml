@@ -47,6 +47,37 @@ pipeline:
     ip_ref: ip-abox-s5e9965
     role: audio_offload
     instance_index: 0
+    domain_load:
+      model: util-vf-v1
+      coeff_uw_per_mhz_v2: 300
+      vf:
+      - mhz: 200
+        mv: 575
+      - mhz: 332
+        mv: 600
+      - mhz: 400
+        mv: 600
+      - mhz: 533
+        mv: 625
+      - mhz: 663
+        mv: 650
+      - mhz: 800
+        mv: 675
+      - mhz: 935
+        mv: 700
+      - mhz: 1200
+        mv: 750
+      - mhz: 1500
+        mv: 800
+      leakage:
+        mw_at_ref: 3.0
+        ref_mv: 750.0
+        exponent: 2.5
+      mcycles_per_s: 20.0
+      idle_gated: 0.5
+      value_source: assumed
+      basis: assumed ABOX work (20 Mcycle/s); AUD coeff / V-f / leakage assumed (not in the catalog); operating point = the
+        node's dvfs.aud_freq_khz
   edges:
   - from: storage
     to: sw_decoder
@@ -191,6 +222,9 @@ variants:
         capture_streams: 0
         offload: true
         output: speaker
+        domain_load:
+          mcycles_per_s: 45.0
+          basis: assumed ABOX work with the MP3 decode offloaded (45 Mcycle/s)
       bw_kb_s:
         read: 188
         write: 0

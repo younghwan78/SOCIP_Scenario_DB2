@@ -53,6 +53,16 @@ pipeline:
     ip_ref: ip-gpu-s5e9965
     role: composer
     instance_index: 0
+    domain_load:
+      model: util-vf-v1
+      mcycles_per_frame: 0.15
+      mcycles_per_layer: 0.05
+      ref_pixels: 2073600
+      target_util: 0.85
+      idle_gated: 0.8
+      value_source: assumed
+      basis: assumed composition work (0.15 + 0.05 Mcycle per layer per FHD frame); coeff / V-f / leakage = ip-gpu catalog
+        samples
   - id: m2m_scaler
     ip_ref: ip-m2m-scaler-s5e9965
     role: m2m_scaler

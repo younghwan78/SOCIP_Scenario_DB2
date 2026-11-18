@@ -81,6 +81,9 @@
       selected_mode: Offload
       sim:
         offload: true
+        domain_load:
+          mcycles_per_s: 45.0
+          basis: "assumed ABOX work with the MP3 decode offloaded (45 Mcycle/s)"
       dvfs:
         aud_freq_khz: 200000
     sw_decoder:

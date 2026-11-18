@@ -46,6 +46,9 @@ OPT_IN: list[dict[str, str]] = [
      "opt_in": "node_configs.<node>.timeline.cadence"},
     {"since": "15", "change": "workload load models (codec-throughput-v1 decoder throughput)",
      "opt_in": "sim.load_model / the pipeline node's load_model"},
+    {"since": "15", "change": "domain load models (util-vf-v1): GPU / NPU / audio DSP power from a declared work rate; "
+                              "a domain-load SW task is not CPU work",
+     "opt_in": "the pipeline node's domain_load / node_configs.<node>.sim.domain_load"},
 ]
 
 

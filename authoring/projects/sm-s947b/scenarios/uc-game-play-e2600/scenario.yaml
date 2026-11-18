@@ -26,10 +26,35 @@ pipeline:
     ip_ref: ip-gpu-s5e9965
     role: gpu_renderer
     instance_index: 0
+    domain_load:
+      model: util-vf-v1
+      mcycles_per_frame: 4.0
+      ref_pixels: 2073600
+      pixel_exponent: 0.8
+      target_util: 0.85
+      idle_gated: 0.5
+      value_source: assumed
+      basis: "assumed render work (4 Mcycle per FHD frame); coeff / V-f / leakage = ip-gpu catalog samples"
   - id: npu
     ip_ref: ip-npu-s5e9965
     role: npu
     instance_index: 0
+    domain_load:
+      model: util-vf-v1
+      coeff_uw_per_mhz_v2: 2500
+      vf:
+      - {mhz: 533, mv: 600}
+      - {mhz: 664, mv: 625}
+      - {mhz: 800, mv: 650}
+      - {mhz: 935, mv: 700}
+      - {mhz: 1066, mv: 750}
+      - {mhz: 1200, mv: 800}
+      leakage: {mw_at_ref: 25.0, ref_mv: 750.0, exponent: 2.5}
+      mcycles_per_frame: 10.0
+      target_util: 0.85
+      idle_gated: 0.7
+      value_source: assumed
+      basis: "assumed camera AI work (10 Mcycle per frame); NPU coeff / V-f / leakage assumed (not in the catalog)"
   - id: m2m_scaler
     ip_ref: ip-m2m-scaler-s5e9965
     role: m2m_scaler
