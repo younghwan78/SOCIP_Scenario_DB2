@@ -519,6 +519,10 @@
       selected_mode: Normal
       chroma_format_idc: 1
       sim:
+        ip_params:
+          unit_power_mw_mp: 0.9
+          value_source: assumed
+          note: "ip-apv declares no unit power; assumed close to the MFC decoder"
         $unset:
         - active
         width: 3840
@@ -659,6 +663,12 @@
       to: dpu
   node_configs:
     mfc_dec:
+      sim:
+        ip_params:
+          ppc: 4.0
+          unit_power_mw_mp: 1.0
+          value_source: assumed
+          note: "Secure has no sim coefficients in ip-mfc; the Normal mode values are assumed"
       selected_mode: Secure
       secure: true
 - id: vplay-local-hevc-uhd30-drm
@@ -691,6 +701,12 @@
       to: dpu
   node_configs:
     mfc_dec:
+      sim:
+        ip_params:
+          ppc: 4.0
+          unit_power_mw_mp: 1.0
+          value_source: assumed
+          note: "Secure has no sim coefficients in ip-mfc; the Normal mode values are assumed"
       selected_mode: Secure
       secure: true
 - id: vplay-local-h264-fhd30-panel120hz
@@ -709,6 +725,11 @@
     dpu:
       selected_mode: VRR
       sim:
+        ip_params:
+          ppc: 4.0
+          unit_power_mw_mp: 1.0
+          value_source: assumed
+          note: "VRR has no sim coefficients in ip-dpu; the Normal mode values are assumed"
         refresh_hz: 120
       resol_clk_khz: 609223
       bw_kb_s:
@@ -950,6 +971,11 @@
     m2m_scaler:
       selected_mode: Normal
       sim:
+        ip_params:
+          ppc: 2.0
+          unit_power_mw_mp: 0.6
+          value_source: assumed
+          note: "ip-m2m-scaler declares no ppc / unit power; assumed MSCL throughput and power"
         $unset:
         - active
         src:
