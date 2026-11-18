@@ -1,0 +1,9 @@
+[
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "package": "picomatch",
+    "reason": "ReDoS through repeated extglobs. picomatch is reached only through dev tooling (vite, vitest, tinyglobby, fdir) matching the project's own config globs; it is not in the built UI bundle and never sees user input. The advisory marks every version, so no fixed release exists yet.",
+    "added": "2026-11-19",
+    "expires": "2026-12-19"
+  }
+]
