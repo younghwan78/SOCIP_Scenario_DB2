@@ -226,6 +226,24 @@ node_configs:
   runtime × frame period / own period (an event releases once: no rate). The evidence CPU energy still
   uses the SW task's `rate_hz`, so keep `rate_hz` = 1000 / period.
 
+## Concurrent Scenarios (`/timing-budget/concurrent`, S-06)
+
+Two to four variants that run at the same time are composed from their own Timing Budget reports
+(`sim/concurrency.py`). There is no joint simulation:
+
+- power and BW are summed per component (CPU, HW IP including domain and assumed loads, BW);
+- a DVFS domain that several members use runs at the highest set clock any of them needs. Every member IP in
+  that domain is re-priced at that level's voltage, `P x (V_shared / V_own)^2` (`shared_domains`, `dvfs_raise_mw`);
+- the shared CPU load is the sum of each member's CPU busy time over its own frame period, in core-equivalents.
+  A sum above 1 is noted;
+- a pipeline node present in several members (one DPU, ABOX or GPU) is listed in `shared_nodes`. Its power is
+  the sum of the members' loads, which is an upper bound when one instance serves both;
+- the verdict is `fail` when any member fails.
+
+`limits` lists what the composition does not model: contention between members (the same CPU thread or core,
+BW latency), a shared domain load re-priced on its combined work, and a timing re-run at the shared clocks.
+Each member uses its own project basis and DVFS table, as `/timing-budget/variant` does.
+
 ## Assumed IP (`ip_param`, S-08)
 
 An architecture question is often "what if this IP were different": a 2x ppc ISP, a single-core encoder, a
