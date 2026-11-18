@@ -49,6 +49,9 @@ OPT_IN: list[dict[str, str]] = [
     {"since": "15", "change": "domain load models (util-vf-v1): GPU / NPU / audio DSP power from a declared work rate; "
                               "a domain-load SW task is not CPU work",
      "opt_in": "the pipeline node's domain_load / node_configs.<node>.sim.domain_load"},
+    {"since": "15", "change": "CPU OPP as a timing input: CPU SW runtime and CPU power at a declared cluster frequency "
+                              "(lever cpu_opp)",
+     "opt_in": "design_conditions.cpu_opp_mhz"},
 ]
 
 

@@ -161,7 +161,7 @@ export const whatIfApi = {
   cancelJob: (id: string) => postJson<SweepJob>(`${path}/jobs/${encodeURIComponent(id)}/cancel`, {}),
   resumeJob: (id: string) => postJson<SweepJob>(`${path}/jobs/${encodeURIComponent(id)}/resume`, {}),
 }
-export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값', ip_param: '가정 IP', dvfs_level: 'DVFS level',
+export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값', ip_param: '가정 IP', cpu_opp: 'CPU OPP', dvfs_level: 'DVFS level',
   sensor_mode: '센서 변경', sensor_binding: '등록 센서 교체', chain_size: 'IP crop · downscale', power_knob: 'Power option', history_interval: 'Previous DMA 빈도', ip_mode: 'IP mode', compression: 'SBWC 압축', llc_alloc: 'LLC 할당' }
 /** Lever palette: the commercialization tasks in the order a project usually tries them. */
 export const LEVER_GROUPS: { id: LeverGroup; label: string; hint: string }[] = [

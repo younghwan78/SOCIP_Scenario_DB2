@@ -224,6 +224,20 @@ def _capability(graph) -> dict:
             "readiness": ready.get("status"), "notes": notes}
 
 
+from scenario_db.sim.cpu_opp import ASSUMED_CPU_OPPS, opp_mv  # noqa: E402 (S-05 lever)
+
+
+def _cpu_sw_tasks(graph) -> list[str]:
+    out = []
+    for node in graph.pipeline_nodes:
+        node_id = str(node.get("id") or "")
+        ip = graph.ip_catalog.get(str(node.get("ip_ref") or ""))
+        cfg = (graph.variant.node_configs or {}).get(node_id) or {}
+        if cfg.get("sw_timing") and str(getattr(ip, "category", "") or "").lower() == "cpu":
+            out.append(node_id)
+    return sorted(out)
+
+
 def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dict[str, Any]:
     """Condition targets of a variant. ``domains`` (DVFS domains resolved by a baseline Timing Budget run:
     current level + ladder) is supplied by the service; without it no DVFS level condition is offered."""
@@ -280,7 +294,9 @@ def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dic
            "streams": [] if rows else _streams(graph),
            "params": _node_params(graph),
            "domains": list(domains or []),
-           "capability": _capability(graph)}
+           "capability": _capability(graph),
+           # S-05: CPU SW tasks (sw_timing on a CPU node) whose runtime follows the CPU OPP lever
+           "cpu_sw": _cpu_sw_tasks(graph)}
     from scenario_db.api.services.whatif_levers import lever_targets
     out.update(lever_targets(graph, out["fps"]))
     from scenario_db.sim.transfers import dma_buffer_ids
@@ -548,6 +564,26 @@ register(ChangeKind("node_param", "IP 설정값", "value", "node_id", needs_para
                     discover=lambda t: [{"id": r["node_id"], "param": r["param"], "label": r["label"], "unit": r["unit"], "value": r["value"]}
                                         for r in t["params"] if r["modeled"]],
                     apply=_apply_param))
+
+
+def _apply_cpu_opp(ctx: _Apply, data: dict) -> tuple:
+    if not ctx.targets.get("cpu_sw"):
+        raise ValueError("cpu_opp needs CPU SW tasks (sw_timing on a CPU node)")
+    value = float(data["value"])
+    if value < ASSUMED_CPU_OPPS[0][0] - 1e-9:
+        raise ValueError(f"cpu_opp must be at least {ASSUMED_CPU_OPPS[0][0]:g} MHz")
+    opp_mv(value)  # refused above the OPP table
+    ctx.variant.design_conditions["cpu_opp_mhz"] = value
+    return ("cpu_opp", None)
+
+
+register(ChangeKind("cpu_opp", "CPU OPP (SW 시간 · CPU 전력)", "value", None, unit="MHz", max_value=2000.0, group="clock",
+                    description="CPU SW task를 이 OPP로 — runtime = 기준 × ((1−mem_bound)·f_ref/f + mem_bound), CPU 전력은 f · V(f). "
+                                "V-f · mem_bound는 가정값",
+                    discover=lambda t: [{"id": "cpu", "tasks": t["cpu_sw"],
+                                         "ladder": [f for f, _ in ASSUMED_CPU_OPPS]}]
+                    if t.get("cpu_sw") else [],
+                    apply=_apply_cpu_opp))
 
 
 register(ChangeKind("dvfs_level", "DVFS level", "level", "domain", unit="L", group="clock",

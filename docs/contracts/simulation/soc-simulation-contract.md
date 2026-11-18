@@ -244,6 +244,29 @@ Two to four variants that run at the same time are composed from their own Timin
 BW latency), a shared domain load re-priced on its combined work, and a timing re-run at the shared clocks.
 Each member uses its own project basis and DVFS table, as `/timing-budget/variant` does.
 
+## CPU OPP (`cpu_opp`, S-05)
+
+SW task runtimes are declared at the CPU model's frequency (`cpu.freq_mhz`, the reference). A variant with
+`design_conditions.cpu_opp_mhz` runs its CPU SW tasks (`hw_name` CPU) at that OPP (`sim/cpu_opp.py`):
+
+```
+runtime(f) = runtime_ref x ((1 - mem_bound) x f_ref / f + mem_bound)
+CPU power  = coeff x f x V(f)^2 x busy(f) / period
+```
+
+- `mem_bound` is the share of the runtime that does not follow the clock. It is the task's `sw_timing.mem_bound`,
+  else `design_conditions.cpu_mem_bound`, else 0.3 (assumed).
+- `V(f)` is `design_conditions.cpu_opp_mv`, else the assumed OPP table: the E2600 MID cluster sample, 400 / 1000 /
+  1600 / 2000 MHz at 600 / 650 / 720 / 800 mV. An OPP above the table is refused.
+- GPU and DSP tasks timed by `sw_timing` keep their runtime. The profile CPU model refuses an OPP, because it
+  replays measured clocks.
+- The report carries `cpu_opp`: `mhz`, `mv`, `ref_mhz`, and each task's `mem_bound` and `factor`.
+  `power.cpu_model` shows the OPP.
+- The exploration lever `cpu_opp` (value in MHz) sets the condition, so the CPU clock becomes an axis next to the
+  IP levers. A lower OPP costs less per cycle, but it stretches the SW into the NRT / Post budget and the SW growth
+  tolerance.
+- Opt-in: without `cpu_opp_mhz` the result is unchanged (listed under `OPT_IN`).
+
 ## Assumed IP (`ip_param`, S-08)
 
 An architecture question is often "what if this IP were different": a 2x ppc ISP, a single-core encoder, a

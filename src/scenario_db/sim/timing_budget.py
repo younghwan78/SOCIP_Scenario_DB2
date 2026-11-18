@@ -222,10 +222,12 @@ def analyze_timing_budget(
             "debug_trace": False,
         }
     )
-    plan = _plan(graph, options, base_config)
+    options, plan, opp = _plan_at_opp(graph, options, base_config)
     rule = _run(graph, options, base_config, dvfs_tables, plan, rule_only=True)
     budget = _run(graph, options, base_config, dvfs_tables, plan, rule_only=False)
     report = _report(graph, options, plan, rule, budget, dvfs_tables)
+    if opp is not None:  # S-05: CPU SW at the declared OPP (absent = not declared)
+        report["cpu_opp"] = opp
     report["dvfs"]["overrides"] = dict(base_config.dvfs_overrides)
     report["dvfs"]["ladders"] = dvfs_ladders(report["ips"], dvfs_tables, base_config.asv_group)
     if options.cpu_model == "profile":
@@ -243,7 +245,7 @@ def budget_simulation(graph, options: TimingBudgetOptions, *, config: Simulation
     base_config = (config or SimulationRunConfig()).model_copy(
         update={"include_timeline": True, "timeline_frame_count": max(options.frames, options.timeline_frames + 4),
                 "debug_trace": False})
-    plan = _plan(graph, options, base_config)
+    options, plan, _ = _plan_at_opp(graph, options, base_config)
     return _run(graph, options, base_config, dvfs_tables or {}, plan, rule_only=False)["result"]
 
 
@@ -304,7 +306,7 @@ def interval_distribution(
     dvfs_tables = dvfs_tables or {}
     base_config = (config or SimulationRunConfig()).model_copy(
         update={"include_timeline": True, "timeline_frame_count": frames, "debug_trace": False})
-    plan = _plan(graph, options, base_config)
+    options, plan, _ = _plan_at_opp(graph, options, base_config)
     period = plan["period"]
     ranges = _sw_ranges(plan, options)
     rng = random.Random(seed)
@@ -419,6 +421,21 @@ def summarize(
 
 
 # ------------------------------------------------------------------- planning
+def _plan_at_opp(graph, options: TimingBudgetOptions, config: SimulationRunConfig):
+    """(options, plan, OPP trace or None): with ``design_conditions.cpu_opp_mhz`` (S-05) the CPU SW tasks run at
+    that OPP (runtime scaled, CPU power at f / V(f)); without it the plan is exactly ``_plan``."""
+    from scenario_db.sim.cpu_opp import apply_cpu_opp, cpu_opp_condition
+
+    plan = _plan(graph, options, config)
+    cond = cpu_opp_condition(getattr(graph.variant, "design_conditions", None))
+    if cond is None:
+        return options, plan, None
+    if options.cpu_model == "profile":
+        raise ValueError("cpu_opp_mhz applies to the flat CPU model; the profile CPU model replays measured clocks")
+    options, trace = apply_cpu_opp(options, plan["tasks"], plan["profiles"], cond)
+    return options, _plan(graph, options, config), trace
+
+
 def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> dict[str, Any]:
     probe = _graph_copy(graph, options.statistic, 0.25)
     inputs = build_simulation_inputs(probe, config)
