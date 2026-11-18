@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "audit": "node scripts/audit.mjs --level=moderate"
   },
   "dependencies": {
     "elkjs": "^0.9.3",
