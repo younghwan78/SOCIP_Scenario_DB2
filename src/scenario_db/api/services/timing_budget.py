@@ -170,6 +170,26 @@ def analyze_timing_budget_fleet(
     )
 
 
+def analyze_concurrent_request(db: Session, request: Any) -> dict[str, Any]:
+    """S-06: each member's own Timing Budget report (its project basis / DVFS table), then the static composition."""
+    from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
+    from scenario_db.sim.concurrency import compose
+
+    keys = [(m.scenario_id, m.variant_id) for m in request.members]
+    if len(set(keys)) != len(keys):
+        raise UnprocessableError("a concurrent set lists the same variant twice")
+    base = request.model_dump(exclude={"members", "options"})
+    options = request.options.model_copy(update={"include_whatif": False})
+    reports = []
+    for m in request.members:
+        one = analyze_timing_budget_request(db, TimingBudgetRequest(**base, scenario_id=m.scenario_id,
+                                                                     variant_id=m.variant_id, options=options))
+        reports.append((f"{m.scenario_id}/{m.variant_id}", one.report))
+    out = compose(reports)
+    out["dvfs_table_refs"] = sorted({r["dvfs"].get("table_ref") for _, r in reports if r["dvfs"].get("table_ref")})
+    return out
+
+
 def analyze_dvfs_whatif_request(db: Session, request: Any) -> dict[str, Any]:
     """DVFS level +/-k what-if for one variant (``sim.timing_budget.dvfs_level_whatif``)."""
     from scenario_db.sim.timing_budget import dvfs_level_whatif

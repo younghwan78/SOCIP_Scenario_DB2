@@ -19,6 +19,7 @@ import { ConditionBar, DvfsOverrideTable, IntervalBoxes, MeasuredCompareCard, Me
 import { calibrationApi } from '../lib/calibration'
 import { useRegistrationGuard } from '../lib/registration'
 import { RegistrationBasis } from '../components/RegistrationBasis'
+import { ConcurrentCard } from '../components/ConcurrentCard'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -157,6 +158,9 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         frames={frames} setFrames={(n) => set('frames', n === 20 ? undefined : String(n))} warmup={warmup} setWarmup={(n) => set('warmup', n ? String(n) : undefined)}
         overrides={overrides} setOverrides={(o) => set('dvo', formatOverrides(o))}
         dist={distQ.data ?? null} distLoading={distQ.loading} distError={distQ.error ?? null} distOn={distOn} setDistOn={setDistOn} />}
+      {r && <Card id="concurrent" title="⑧ 동시 실행 (정적 합성)" note="이 variant + 다른 variant 1~3개 · 전력 · BW 합산, 공유 DVFS domain은 최고 clock · 경합은 미반영" defaultWide>
+        <ConcurrentCard ctx={ctx} options={baseOpts} configProfileRef={cfg} />
+      </Card>}
     </div>
   )
 }

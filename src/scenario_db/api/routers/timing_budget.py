@@ -7,6 +7,7 @@ from scenario_db.api.auth import ApiPrincipal, audit_user, require_roles
 from scenario_db.api.deps import get_db
 from scenario_db.api.resource_limits import admission_slot, enforce_request_size, enforce_timeline_frame_limit
 from scenario_db.api.schemas.timing_budget import (
+    TimingBudgetConcurrentRequest,
     TimingBudgetDistributionRequest,
     TimingBudgetDvfsWhatIfRequest,
     TimingBudgetEvidenceRequest,
@@ -17,6 +18,7 @@ from scenario_db.api.schemas.timing_budget import (
     TimingBudgetResponse,
 )
 from scenario_db.api.services.timing_budget import (
+    analyze_concurrent_request,
     analyze_dvfs_whatif_request,
     analyze_timing_budget_fleet,
     analyze_timing_budget_request,
@@ -42,6 +44,20 @@ def timing_budget_variant(
     enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return analyze_timing_budget_request(db, request)
+
+
+@router.post("/concurrent", response_model=dict)
+def timing_budget_concurrent(
+    request: TimingBudgetConcurrentRequest,
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
+):
+    """S-06: 2-4 variants at the same time, static composition (power / BW sums, shared DVFS domains) (read-only)."""
+    settings = get_settings()
+    enforce_request_size(request, settings.exploration_max_request_bytes)
+    enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return analyze_concurrent_request(db, request)
 
 
 @router.post("/dvfs-whatif", response_model=dict)

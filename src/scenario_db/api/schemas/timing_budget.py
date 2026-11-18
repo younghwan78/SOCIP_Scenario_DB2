@@ -79,6 +79,18 @@ class TimingBudgetFleetRequest(_DvfsSelection):
     options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
 
 
+class ConcurrentMember(BaseModel):
+    scenario_id: str
+    variant_id: str
+
+
+class TimingBudgetConcurrentRequest(_DvfsSelection):
+    """S-06: two to four variants running at the same time, composed from their own reports (read-only)."""
+
+    members: list[ConcurrentMember] = Field(min_length=2, max_length=4)
+    options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
+
+
 class TimingBudgetResponse(BaseModel):
     scenario_id: str
     variant_id: str
