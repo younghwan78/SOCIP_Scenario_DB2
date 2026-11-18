@@ -21,8 +21,17 @@ export function rootAdvisories(vulns, name, seen = new Set()) {
 
 const ghsa = (advisory) => String(advisory.url ?? '').split('/').pop()
 
+/** A report npm audit could not produce (registry error, unexpected format) must fail, not pass as "no findings". */
+export function reportError(report) {
+  if (!report || typeof report !== 'object') return 'npm audit produced no JSON report'
+  if (report.error) return `npm audit failed: ${report.error.summary ?? report.error.code ?? JSON.stringify(report.error)}`
+  if (typeof report.vulnerabilities !== 'object' || report.vulnerabilities === null) return 'npm audit report has no vulnerabilities section'
+  return null
+}
+
 export function evaluate(report, allowlist, { level = 'moderate', today = new Date().toISOString().slice(0, 10) } = {}) {
   const min = ORDER.indexOf(level)
+  if (min < 0) throw new Error(`unknown audit level: ${level}`)
   const allowed = new Map(allowlist.map((e) => [e.id, e]))
   const expired = allowlist.filter((e) => !e.expires || e.expires < today)
   const vulns = report.vulnerabilities ?? {}
@@ -49,7 +58,18 @@ function main() {
   } catch (e) {
     out = e.stdout // npm audit exits 1 when it finds anything
   }
-  const r = evaluate(JSON.parse(out), allowlist, { level })
+  let report
+  try {
+    report = JSON.parse(out ?? '')
+  } catch {
+    report = null
+  }
+  const error = reportError(report)
+  if (error) {
+    console.error(error)
+    process.exit(1)
+  }
+  const r = evaluate(report, allowlist, { level })
   for (const id of r.stale) console.log(`allowlist entry no longer needed: ${id}`)
   for (const id of r.expired) console.error(`allowlist entry expired: ${id} (re-review it or remove it)`)
   for (const f of r.failing) console.error(`${f.severity} ${f.name}: ${f.advisories.join('; ') || 'no advisory detail'}`)

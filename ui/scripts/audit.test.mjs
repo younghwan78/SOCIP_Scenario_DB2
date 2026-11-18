@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { evaluate, rootAdvisories } from './audit.mjs'
+import { evaluate, reportError, rootAdvisories } from './audit.mjs'
 
 const adv = (id, title = 't') => ({ url: `https://github.com/advisories/${id}`, title, severity: 'high' })
 const report = {
@@ -28,4 +28,12 @@ it('fails an expired entry and reports entries no longer needed', () => {
   expect(r.expired).toEqual(['GHSA-a'])
   expect(r.failing.map((f) => f.name).sort()).toEqual(['other', 'picomatch', 'vite'])
   expect(r.stale).toEqual(['GHSA-gone'])
+})
+
+it('treats a failed or malformed audit as an error, not as no findings', () => {
+  expect(reportError({ error: { code: 'ENOTFOUND', summary: 'request to registry failed' } })).toContain('registry failed')
+  expect(reportError(null)).toContain('no JSON')
+  expect(reportError({ auditReportVersion: 2 })).toContain('no vulnerabilities section')
+  expect(reportError({ vulnerabilities: {} })).toBeNull()
+  expect(() => evaluate({ vulnerabilities: {} }, [], { level: 'severe' })).toThrow('unknown audit level')
 })

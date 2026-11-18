@@ -2,7 +2,8 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { expect, it } from 'vitest'
-import { ConcurrentView } from './ConcurrentCard'
+import { ConcurrentCard, ConcurrentView } from './ConcurrentCard'
+import type { Ctx } from '../App'
 import { memberLabel, type ConcurrentResult } from '../lib/concurrency'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -34,4 +35,13 @@ it('shows the composed total, each member and the shared DVFS domain', () => {
   expect(text).toContain('vid-youtube / yt-1080p30')
   expect(text).toContain('공유 DVFS MIF: 845 MHz')
   expect(text).toContain('abox: a, b가 같이 사용')
+})
+
+it('refuses to compose while the page has a changed condition', () => {
+  const ctx = { catalog: [], scenario: 'uc-vid-youtube-e2600', variant: 'yt-1080p30' } as unknown as Ctx
+  const el = document.createElement('div')
+  act(() => createRoot(el).render(<ConcurrentCard ctx={ctx} options={{}} blocked="조건 변경 중" />))
+  expect(el.querySelector('[data-testid="concurrent-blocked"]')?.textContent).toBe('조건 변경 중')
+  const run = [...el.querySelectorAll('button')].find((b) => b.textContent === '합성') as HTMLButtonElement
+  expect(run.disabled).toBe(true)
 })

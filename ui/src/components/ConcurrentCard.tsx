@@ -9,7 +9,11 @@ import { TimingVerdictBadge } from './TimingVerdictBadge'
 type Member = { scenario_id: string; variant_id: string }
 
 /** S-06: this variant together with 1-3 others, composed from their own reports (no joint simulation). */
-export function ConcurrentCard({ ctx, options, configProfileRef }: { ctx: Ctx; options: Partial<TimingOptions>; configProfileRef?: string | null }) {
+export function ConcurrentCard({ ctx, options, configProfileRef, blocked }: {
+  ctx: Ctx; options: Partial<TimingOptions>; configProfileRef?: string | null
+  /** why the composition cannot run with the page's current condition (members are composed at their own defaults) */
+  blocked?: string | null
+}) {
   const [others, setOthers] = useState<Member[]>([])
   const [pickScenario, setPickScenario] = useState('')
   const [pickVariant, setPickVariant] = useState('')
@@ -52,8 +56,9 @@ export function ConcurrentCard({ ctx, options, configProfileRef }: { ctx: Ctx; o
           </select>
           <button className="btn tb-mini" onClick={add} disabled={!pickVariant}>추가</button>
         </>}
-        <button className="btn tb-mini primary" onClick={run} disabled={!others.length || busy}>{busy ? '계산 중…' : '합성'}</button>
+        <button className="btn tb-mini primary" onClick={run} disabled={!others.length || busy || !!blocked}>{busy ? '계산 중…' : '합성'}</button>
       </div>
+      {blocked && <div className="faint" data-testid="concurrent-blocked">{blocked}</div>}
       {error && <div className="err">{error}</div>}
       {result && <ConcurrentView r={result} />}
     </div>

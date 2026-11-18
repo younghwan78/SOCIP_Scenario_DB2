@@ -491,14 +491,20 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         if edge.get("latency_ms"):
             edge_latency[dst] = max(edge_latency.get(dst, 0.0), float(edge["latency_ms"]))
     # own-cadence SW (timeline cadence / period): outside the frame budget, but CPU work all the same —
-    # its runtime per frame period = runtime x frame period / own period (an event releases once: no rate)
+    # its runtime per frame period = runtime x frame period / own period. An event releases once: it keeps its
+    # runtime in the timeline (its own deadline is judged on it) but has no rate, so no steady CPU share.
     own_sw: dict[str, dict[str, float]] = {}
     for task_id, task in tasks.items():
-        if task.get("task_type") == "sw" and task_id not in stage and own_cadence(task) and not task.get("independent_once"):
-            own = float(task.get("independent_period_ms") or 0.0) or float(task.get("independent_every") or 0) * period
-            if own > 0:
-                runtime = _task_runtime(task_id, task, profiles, options)
-                own_sw[task_id] = {"runtime_ms": runtime, "per_period_ms": runtime * period / own}
+        if task.get("task_type") != "sw" or task_id in stage or not own_cadence(task):
+            continue
+        if task.get("independent_once"):
+            own_sw[task_id] = {"runtime_ms": _task_runtime(task_id, task, profiles, options), "per_period_ms": 0.0,
+                               "once": True}
+            continue
+        own = float(task.get("independent_period_ms") or 0.0) or float(task.get("independent_every") or 0) * period
+        if own > 0:
+            runtime = _task_runtime(task_id, task, profiles, options)
+            own_sw[task_id] = {"runtime_ms": runtime, "per_period_ms": runtime * period / own}
     for task_id, task in tasks.items():
         if task.get("task_type") != "sw" or task_id not in stage:
             continue  # own-cadence SW is outside the frame budget (its CPU power: own_sw above)
@@ -1258,7 +1264,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         if task.get("task_type") == "sw" and tid not in busy and stage.get(tid) == "output":
             busy[tid] = float(task.get("duration_ms") or 0.0)
     for tid, own in (plan.get("own_sw") or {}).items():  # own-cadence SW: runtime per frame period
-        busy.setdefault(tid, own["per_period_ms"])
+        if not own.get("once"):  # an event has no rate: no steady CPU share
+            busy.setdefault(tid, own["per_period_ms"])
     for tid in domain or {}:  # its time stays in the chain; its power is the domain load's (not the CPU's)
         busy.pop(tid, None)
     cpu_by_task = {t: options.cpu.power_mw(ms, period) for t, ms in busy.items()}
