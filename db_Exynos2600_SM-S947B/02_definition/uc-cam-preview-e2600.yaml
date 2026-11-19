@@ -34,7 +34,7 @@ pipeline:
     role: sensor
     instance_index: 0
   - id: csispdp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-csis-is-v15-s5e9965
     role: csispdp
     instance_index: 0
   - id: n3aa
@@ -42,31 +42,31 @@ pipeline:
     role: 3aa_stats
     instance_index: 0
   - id: byrp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-byrp-is-v15-s5e9965
     role: byrp
     instance_index: 0
   - id: rgbp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-rgbp-is-v15-s5e9965
     role: rgbp
     instance_index: 0
   - id: yuvsc
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvsc-is-v15-s5e9965
     role: yuvsc
     instance_index: 0
   - id: mtnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-mtnr-is-v15-s5e9965
     role: mtnr
     instance_index: 0
   - id: msnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-msnr-is-v15-s5e9965
     role: msnr
     instance_index: 0
   - id: yuvp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvp-is-v15-s5e9965
     role: yuvp
     instance_index: 0
   - id: mcsc
-    ip_ref: ip-mcsc-s5e9965
+    ip_ref: ip-mcsc-is-v15-s5e9965
     role: mcsc
     instance_index: 0
   - id: npu
@@ -103,7 +103,7 @@ pipeline:
     role: eis_stabilization
     instance_index: 0
   - id: gdc_m
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-gdc-is-v15-s5e9965
     role: gdc_preview
     instance_index: 0
   - id: dpu
@@ -183,6 +183,7 @@ pipeline:
   buffers:
     YUVSC_MTNR_BUF:
       format: YUV420
+      size_ref: sensor_out
       bitdepth: 10
       compression: COMP_OFF
       note: M2M break — multi-frame TNR input
@@ -203,19 +204,26 @@ pipeline:
       note: NPU → MTNR AI pre-processed
     MCSC_WDMA_PREV_BUF:
       format: YUV420
+      size_ref: preview_out
       bitdepth: 10
       compression: COMP_OFF
       note: MCSC OUTPUT0 preview WDMA — larger than display (EIS margin)
     EIS_GDC_M_BUF:
       format: YUV420
+      size_ref: preview_out
       bitdepth: 10
       compression: COMP_OFF
       note: EIS warp map + frame → GDC_M
     GDC_M_DPU_BUF:
       format: YUV420
+      size_ref: preview_out
       bitdepth: 10
       compression: COMP_YUV_LOSSLESS
       note: GDC_M crop/warp output → DPU (SBWC zero-copy)
+size_profile:
+  anchors:
+    sensor_out: 4000x3000
+    preview_out: 1920x1440
 variants:
 - id: cam-prev-r1-30
   severity: light
@@ -254,8 +262,44 @@ variants:
   node_configs:
     csispdp:
       selected_mode: Normal
+      sim:
+        inherit_shape: true
     mtnr:
-      selected_mode: Preview
+      selected_mode: Normal
+      sim:
+        inherit_shape: true
+      mode_label: Preview
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Preview' is
+        kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-60
   severity: medium
   design_conditions:
@@ -291,6 +335,38 @@ variants:
   node_configs:
     csispdp:
       selected_mode: Normal
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: binning_4x4
 - id: cam-prev-r1-full-res
@@ -325,17 +401,54 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: binning_2x2
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-remosaic
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_PREVIEW
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_PHOTO
     sensor_place: rear
-    fps: 30
+    fps: 10
     extend_mode: EX_SEAMLESS_TETRA
     is_scenario: IS_SCENARIO_FULL_SIZE
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -359,17 +472,56 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
+      mode_label: Remosaic
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Remosaic'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: full_remosaic
-    mtnr:
-      selected_mode: Remosaic
+  size_overrides:
+    sensor_out: 16384x12288
 - id: cam-prev-r1-ai-remosaic
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_PREVIEW
     sensor_place: rear
-    fps: 30
+    fps: 10
     extend_mode: EX_AI_REMOSAIC
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
     npu_used: true
   routing_switch:
     disabled_nodes:
@@ -389,12 +541,49 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
+      mode_label: Remosaic
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Remosaic'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: full_remosaic
-    mtnr:
-      selected_mode: Remosaic
     npu:
       selected_mode: Normal
+  size_overrides:
+    sensor_out: 16384x12288
 - id: cam-prev-r1-night
   severity: light
   design_conditions:
@@ -425,6 +614,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-night-max
   severity: light
   design_conditions:
@@ -455,6 +680,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-crop-zoom
   severity: light
   design_conditions:
@@ -487,7 +748,41 @@ variants:
       to: gdc_m
   node_configs:
     csispdp:
+      sim:
+        inherit_shape: true
       freeform_crop: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-dcg
   severity: light
   design_conditions:
@@ -517,6 +812,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-ln
   severity: light
   design_conditions:
@@ -546,6 +877,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-3dhdr
   severity: light
   design_conditions:
@@ -577,7 +944,44 @@ variants:
       to: gdc_m
   node_configs:
     csispdp:
+      sim:
+        inherit_shape: true
+        mode: Normal
       selected_mode: VC_DT
+      mode_note: IS v15 catalog has no 'VC_DT' mode; the catalog Normal coefficients are used (E2600 assumption). Mode-specific
+        coefficients belong in sim.ip_params when known.
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-portrait
   severity: light
   design_conditions:
@@ -605,6 +1009,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-expert-raw
   severity: light
   design_conditions:
@@ -634,6 +1074,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-r1-pro
   severity: light
   design_conditions:
@@ -663,6 +1139,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 4080x2296
 - id: cam-prev-f1-30
   severity: light
   design_conditions:
@@ -693,6 +1205,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 3648x2736
 - id: cam-prev-f1-60
   severity: medium
   design_conditions:
@@ -722,6 +1270,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 3648x2736
 - id: cam-prev-f1-full-res
   severity: light
   design_conditions:
@@ -752,8 +1336,43 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
     sensor_front:
       selected_mode: full_res
+  size_overrides:
+    sensor_out: 3648x2736
 - id: cam-prev-rdual-30
   severity: light
   design_conditions:
@@ -781,6 +1400,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-rdual-60
   severity: medium
   design_conditions:
@@ -807,6 +1462,40 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
 - id: cam-prev-rtriple-30
   severity: light
   design_conditions:
@@ -831,6 +1520,42 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-prev-rtriple-60
   severity: medium
   design_conditions:
@@ -854,6 +1579,40 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
 - id: cam-prev-pip-dual
   severity: light
   design_conditions:
@@ -880,3 +1639,39 @@ variants:
       to: eis
     - from: eis
       to: gdc_m
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+    dpu:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000

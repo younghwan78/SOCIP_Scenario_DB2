@@ -32,7 +32,7 @@ tasks:
         max_ms: 6.0
         start_latency_ref: bitstream_available
         start_latency_mean_ms: 0.5
-        rate_hz: 30.0
+        rate_hz: 46.875
         cpu_affinity: CPUCL1
         value_source: assumed
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with

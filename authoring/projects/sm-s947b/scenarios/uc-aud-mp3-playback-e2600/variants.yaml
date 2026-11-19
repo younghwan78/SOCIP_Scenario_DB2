@@ -59,6 +59,13 @@
       executes_on: ip-abox-s5e9965
     dsp_offload:
       executes_on: ip-abox-s5e9965
+    sw_decoder:
+      timeline:
+        cadence: period
+        period_ms: 24.0
+        value_source: assumed
+        note: One MP3 frame (1152 samples at 48 kHz) per decode call, outside the video frame path; judged against the
+          next frame. The CPU work counts at this rate, not at the 30 Hz default scenario rate.
 - id: audio-mp3-screen-off-offload
   extends: audio-mp3-screen-on
   design_conditions:
@@ -87,6 +94,8 @@
       dvfs:
         aud_freq_khz: 200000
     sw_decoder:
+      $unset:
+      - timeline
       sim:
         active: false
       note: offloaded to ABOX / MFC; no CPU decode
@@ -107,6 +116,10 @@
       bitdepth: 24
       compression: COMP_OFF
   node_configs:
+    sw_decoder:
+      timeline:
+        period_ms: 21.333
+        note: One FLAC block (4096 samples, assumed block size) at 192 kHz per decode call; judged against the next block.
     storage:
       $unset:
       - bw_kb_s
@@ -149,6 +162,10 @@
     - from: audio_hal
       to: speaker
   node_configs:
+    sw_decoder:
+      timeline:
+        period_ms: 21.333
+        note: One AAC-LC frame (1024 samples at 48 kHz) per decode call; judged against the next frame.
     abox:
       sim:
         sample_rate_khz: 48.0

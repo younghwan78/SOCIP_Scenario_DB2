@@ -30,7 +30,7 @@ pipeline:
     role: sensor
     instance_index: 0
   - id: csispdp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-csis-is-v15-s5e9965
     role: csispdp
     instance_index: 0
   - id: n3aa
@@ -38,31 +38,31 @@ pipeline:
     role: 3aa_stats
     instance_index: 0
   - id: byrp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-byrp-is-v15-s5e9965
     role: byrp
     instance_index: 0
   - id: rgbp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-rgbp-is-v15-s5e9965
     role: rgbp
     instance_index: 0
   - id: yuvsc
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvsc-is-v15-s5e9965
     role: yuvsc
     instance_index: 0
   - id: mtnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-mtnr-is-v15-s5e9965
     role: mtnr
     instance_index: 0
   - id: msnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-msnr-is-v15-s5e9965
     role: msnr
     instance_index: 0
   - id: yuvp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvp-is-v15-s5e9965
     role: yuvp
     instance_index: 0
   - id: mcsc
-    ip_ref: ip-mcsc-s5e9965
+    ip_ref: ip-mcsc-is-v15-s5e9965
     role: mcsc
     instance_index: 0
   - id: npu
@@ -148,6 +148,7 @@ pipeline:
   buffers:
     YUVSC_MTNR_BUF:
       format: YUV420
+      size_ref: sensor_out
       bitdepth: 10
       compression: COMP_OFF
       note: M2M break — multi-frame TNR input
@@ -170,16 +171,20 @@ pipeline:
       format: YUV420
       bitdepth: 10
       compression: COMP_BAYER_LOSSLESS
-      note: MCSC OUTPUT2 capture WDMA — full/high-res size
+      note: MCSC OUTPUT2 capture WDMA — full/high-res size. Left unsized in the steady model (it is written once per
+        shot, not every frame); the per-shot traffic belongs to the capture event job.
     ZSL_RING_BUF:
-      format: YUV420
+      format: BAYER
       bitdepth: 10
       compression: COMP_BAYER_LOSSLESS
-      note: ZSL ring buffer (capture 직전 N프레임 보관)
+      note: ZSL ring buffer (capture 직전 N프레임 보관). Bayer frames from the BYRP Bayer dump; no edge writes it yet.
     JPEG_BUF:
       format: JPEG
       bitdepth: 8
       compression: COMP_OFF
       note: JPEG encoded output
+size_profile:
+  anchors:
+    sensor_out: 4000x3000
 variants:
   $include: variants.yaml

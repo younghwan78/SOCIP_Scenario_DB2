@@ -30,7 +30,7 @@ pipeline:
     role: sensor
     instance_index: 0
   - id: csispdp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-csis-is-v15-s5e9965
     role: csispdp
     instance_index: 0
   - id: n3aa
@@ -38,31 +38,31 @@ pipeline:
     role: 3aa_stats
     instance_index: 0
   - id: byrp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-byrp-is-v15-s5e9965
     role: byrp
     instance_index: 0
   - id: rgbp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-rgbp-is-v15-s5e9965
     role: rgbp
     instance_index: 0
   - id: yuvsc
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvsc-is-v15-s5e9965
     role: yuvsc
     instance_index: 0
   - id: mtnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-mtnr-is-v15-s5e9965
     role: mtnr
     instance_index: 0
   - id: msnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-msnr-is-v15-s5e9965
     role: msnr
     instance_index: 0
   - id: yuvp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvp-is-v15-s5e9965
     role: yuvp
     instance_index: 0
   - id: mcsc
-    ip_ref: ip-mcsc-s5e9965
+    ip_ref: ip-mcsc-is-v15-s5e9965
     role: mcsc
     instance_index: 0
   - id: npu
@@ -157,6 +157,7 @@ pipeline:
   buffers:
     YUVSC_MTNR_BUF:
       format: YUV420
+      size_ref: sensor_out
       bitdepth: 10
       compression: COMP_OFF
       note: M2M break — multi-frame TNR input
@@ -179,17 +180,21 @@ pipeline:
       format: YUV420
       bitdepth: 10
       compression: COMP_BAYER_LOSSLESS
-      note: MCSC OUTPUT2 capture WDMA — full/high-res size
+      note: MCSC OUTPUT2 capture WDMA — full/high-res size. Left unsized in the steady model (it is written once per shot,
+        not every frame); the per-shot traffic belongs to the capture event job.
     ZSL_RING_BUF:
-      format: YUV420
+      format: BAYER
       bitdepth: 10
       compression: COMP_BAYER_LOSSLESS
-      note: ZSL ring buffer (capture 직전 N프레임 보관)
+      note: ZSL ring buffer (capture 직전 N프레임 보관). Bayer frames from the BYRP Bayer dump; no edge writes it yet.
     JPEG_BUF:
       format: JPEG
       bitdepth: 8
       compression: COMP_OFF
       note: JPEG encoded output
+size_profile:
+  anchors:
+    sensor_out: 4000x3000
 variants:
 - id: cam-cap-r1-sf
   severity: light
@@ -217,10 +222,41 @@ variants:
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_SF
+      selected_mode: Normal
+      sim:
+        inherit_shape: true
+      mode_label: Capture_SF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_SF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       size_role: MCSC_OUTPUT2_FULL
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-sf-burst
   severity: light
   design_conditions:
@@ -244,7 +280,38 @@ variants:
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_SF
+      selected_mode: Normal
+      sim:
+        inherit_shape: true
+      mode_label: Capture_SF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_SF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-sf-single-take
   severity: light
   design_conditions:
@@ -264,6 +331,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-sf-agif
   severity: light
   design_conditions:
@@ -283,6 +380,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-sf-flash
   severity: light
   design_conditions:
@@ -304,6 +431,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-sf-pro
   severity: light
   design_conditions:
@@ -325,6 +482,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 4080x2296
 - id: cam-cap-r1-mf
   severity: light
   design_conditions:
@@ -349,10 +536,41 @@ variants:
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_MF
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
       isp_features:
       - MTNR
       - MSNR
+      mode_label: Capture_MF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_MF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
   buffer_overrides:
     YUVSC_MTNR_BUF:
       note: multi-frame accumulation — N×frame 입력
@@ -379,10 +597,41 @@ variants:
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_MF
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
       isp_features:
       - MTNR
       - MSNR
+      mode_label: Capture_MF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_MF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-mf-high-res
   severity: light
   design_conditions:
@@ -405,11 +654,42 @@ variants:
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_MF
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
       isp_features:
       - MTNR
       - MSNR
       - DJAG
+      mode_label: Capture_MF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_MF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-remosaic-sf
   severity: light
   design_conditions:
@@ -417,6 +697,9 @@ variants:
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
     is_scenario: IS_SCENARIO_FULL_SIZE
+    fps: 10
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -432,10 +715,41 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
+      mode_label: Remosaic
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Remosaic'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: full_remosaic
-    mtnr:
-      selected_mode: Remosaic
+  size_overrides:
+    sensor_out: 16384x12288
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: YUV420
@@ -446,6 +760,9 @@ variants:
   design_conditions:
     subscenario: STILL_REMOSAIC_MF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    fps: 10
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
     isp_features: MTNR,MSNR
   routing_switch:
     disabled_nodes:
@@ -462,15 +779,49 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
+      mode_label: Remosaic
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Remosaic'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: full_remosaic
-    mtnr:
-      selected_mode: Remosaic
+  size_overrides:
+    sensor_out: 16384x12288
 - id: cam-cap-r1-ai-remosaic
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     extend_mode: EX_AI_REMOSAIC
+    fps: 10
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
     npu_used: true
   routing_switch:
     disabled_nodes:
@@ -482,10 +833,39 @@ variants:
     - from: sensor_front
       to: csispdp
   node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: full_remosaic
     npu:
       selected_mode: Normal
+  size_overrides:
+    sensor_out: 16384x12288
 - id: cam-cap-r1-remosaic-cal
   severity: light
   design_conditions:
@@ -505,6 +885,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-low-res-tetra
   severity: light
   design_conditions:
@@ -524,11 +934,44 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-remosaic-pro
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_PRO_SF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    fps: 10
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
     is_scenario: IS_SCENARIO_PRO_VIDEO
   routing_switch:
     disabled_nodes:
@@ -545,10 +988,41 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
+      mode_label: Remosaic
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Remosaic'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: full_remosaic
-    mtnr:
-      selected_mode: Remosaic
+  size_overrides:
+    sensor_out: 16384x12288
 - id: cam-cap-r1-hhdr
   severity: light
   design_conditions:
@@ -569,8 +1043,39 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
     csispdp:
+      sim:
+        inherit_shape: true
+        mode: Normal
       selected_mode: VC_DT
+      mode_note: IS v15 catalog has no 'VC_DT' mode; the catalog Normal coefficients are used (E2600 assumption). Mode-specific
+        coefficients belong in sim.ip_params when known.
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-dcg
   severity: light
   design_conditions:
@@ -590,6 +1095,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-night
   severity: light
   design_conditions:
@@ -613,9 +1148,40 @@ variants:
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_MF
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
       isp_features:
       - MSNR
+      mode_label: Capture_MF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_MF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-night-max
   severity: light
   design_conditions:
@@ -636,11 +1202,44 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-night-remosaic
   severity: light
   design_conditions:
     subscenario: REMOSAIC_NIGHT_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    fps: 10
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
     super_night: true
   routing_switch:
     disabled_nodes:
@@ -657,8 +1256,37 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
     sensor_rear:
       selected_mode: full_remosaic
+  size_overrides:
+    sensor_out: 16384x12288
 - id: cam-cap-r1-srzoom
   severity: light
   design_conditions:
@@ -675,6 +1303,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-motion-free-sf
   severity: light
   design_conditions:
@@ -693,6 +1351,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-motion-free-mf
   severity: light
   design_conditions:
@@ -714,10 +1402,41 @@ variants:
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_MF
+      sim:
+        inherit_shape: true
+      selected_mode: Normal
       isp_features:
       - MTNR
       - MSNR
+      mode_label: Capture_MF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_MF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-high-res-raw
   severity: light
   design_conditions:
@@ -738,6 +1457,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: RAW_BAYER
@@ -767,6 +1516,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: RAW_BAYER
@@ -789,6 +1568,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-rtriple
   severity: light
   design_conditions:
@@ -806,6 +1615,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-f1
   severity: light
   design_conditions:
@@ -826,6 +1665,36 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    mtnr:
+      sim:
+        inherit_shape: true
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 3648x2736
 - id: cam-cap-pip-dual
   severity: light
   design_conditions:
@@ -843,3 +1712,33 @@ variants:
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000

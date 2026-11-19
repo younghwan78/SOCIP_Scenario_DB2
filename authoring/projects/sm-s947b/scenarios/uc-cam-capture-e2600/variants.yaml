@@ -27,10 +27,41 @@
       to: mtnr
   node_configs:
     mtnr:
-      selected_mode: Capture_SF
+      selected_mode: Normal
+      sim:
+        inherit_shape: true
+      mode_label: Capture_SF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_SF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       size_role: MCSC_OUTPUT2_FULL
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-sf-burst
   extends: cam-cap-r1-sf
   $unset:
@@ -43,25 +74,33 @@
     capture_hint: burst
 - id: cam-cap-r1-sf-single-take
   extends: cam-cap-r1-sf-burst
-  $unset:
-  - node_configs
   design_conditions:
     $unset:
     - sensor_place
     - capture_type
     capture_hint: single_take
+  node_configs:
+    mtnr:
+      $unset:
+      - selected_mode
+      - mode_label
+      - mode_note
 - id: cam-cap-r1-sf-agif
   extends: cam-cap-r1-sf-single-take
   design_conditions:
     capture_hint: agif
 - id: cam-cap-r1-sf-flash
   extends: cam-cap-r1-sf-burst
-  $unset:
-  - node_configs
   design_conditions:
     $unset:
     - capture_hint
     flash: true
+  node_configs:
+    mtnr:
+      $unset:
+      - selected_mode
+      - mode_label
+      - mode_note
 - id: cam-cap-r1-sf-pro
   extends: cam-cap-r1-sf-flash
   design_conditions:
@@ -71,6 +110,8 @@
     subscenario: STILL_PRO_SF_CAPTURE
     is_scenario: IS_SCENARIO_PRO_VIDEO
     extend_mode: EX_NONE
+  size_overrides:
+    sensor_out: 4080x2296
 - id: cam-cap-r1-mf
   extends: cam-cap-r1-sf-flash
   design_conditions:
@@ -80,10 +121,13 @@
     isp_features: MTNR,MSNR
   node_configs:
     mtnr:
-      selected_mode: Capture_MF
+      selected_mode: Normal
       isp_features:
       - MTNR
       - MSNR
+      mode_label: Capture_MF
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Capture_MF'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
   buffer_overrides:
     YUVSC_MTNR_BUF:
       note: multi-frame accumulation — N×frame 입력
@@ -118,11 +162,19 @@
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
     is_scenario: IS_SCENARIO_FULL_SIZE
+    fps: 10
+    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
+      30 fps
   node_configs:
+    mtnr:
+      selected_mode: Normal
+      mode_label: Remosaic
+      mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Remosaic'
+        is kept in mode_label and the Normal coefficients are used (E2600 assumption).
     sensor_rear:
       selected_mode: full_remosaic
-    mtnr:
-      selected_mode: Remosaic
+  size_overrides:
+    sensor_out: 16384x12288
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: YUV420
@@ -158,8 +210,11 @@
     - from: sensor_front
       to: csispdp
   node_configs:
-    $unset:
-    - mtnr
+    mtnr:
+      $unset:
+      - selected_mode
+      - mode_label
+      - mode_note
     npu:
       selected_mode: Normal
 - id: cam-cap-r1-remosaic-cal
@@ -186,7 +241,11 @@
     extend_mode: EX_3DHDR
   node_configs:
     csispdp:
+      sim:
+        mode: Normal
       selected_mode: VC_DT
+      mode_note: IS v15 catalog has no 'VC_DT' mode; the catalog Normal coefficients are used (E2600 assumption). Mode-specific
+        coefficients belong in sim.ip_params when known.
 - id: cam-cap-r1-dcg
   extends: cam-cap-r1-remosaic-cal
   design_conditions:
@@ -197,21 +256,26 @@
     $unset:
     - sensor_place
     subscenario: NIGHT_CAPTURE
+    isp_features: MSNR
     extend_mode: EX_NIGHT
     super_night: true
-    isp_features: MSNR
   node_configs:
     mtnr:
       isp_features:
       - MSNR
 - id: cam-cap-r1-night-max
   extends: cam-cap-r1-night
-  $unset:
-  - node_configs
   design_conditions:
     $unset:
     - isp_features
     super_night: max
+  node_configs:
+    mtnr:
+      $unset:
+      - selected_mode
+      - isp_features
+      - mode_label
+      - mode_note
 - id: cam-cap-r1-night-remosaic
   extends: cam-cap-r1-remosaic-pro
   design_conditions:
@@ -220,8 +284,11 @@
     subscenario: REMOSAIC_NIGHT_CAPTURE
     super_night: true
   node_configs:
-    $unset:
-    - mtnr
+    mtnr:
+      $unset:
+      - selected_mode
+      - mode_label
+      - mode_note
 - id: cam-cap-r1-srzoom
   severity: light
   design_conditions:
@@ -238,6 +305,36 @@
       to: npu
     - from: npu
       to: mtnr
+  node_configs:
+    csispdp:
+      sim:
+        inherit_shape: true
+    n3aa:
+      sim:
+        inherit_shape: true
+    byrp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    yuvsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    mcsc:
+      sim:
+        inherit_shape: true
+  size_overrides:
+    sensor_out: 8000x6000
 - id: cam-cap-r1-motion-free-sf
   extends: cam-cap-r1-remosaic-cal
   design_conditions:
@@ -281,8 +378,8 @@
 - id: cam-cap-rtriple
   extends: cam-cap-rdual
   design_conditions:
-    dvfs_sn: IS_DVFS_SN_TRIPLE_CAPTURE
     camera_mode: triple
+    dvfs_sn: IS_DVFS_SN_TRIPLE_CAPTURE
 - id: cam-cap-f1
   extends: cam-cap-r1-remosaic-cal
   design_conditions:
@@ -304,11 +401,13 @@
       to: npu
     - from: npu
       to: mtnr
+  size_overrides:
+    sensor_out: 3648x2736
 - id: cam-cap-pip-dual
   extends: cam-cap-rdual
   design_conditions:
-    dvfs_sn: IS_DVFS_SN_PIP_DUAL_CAPTURE
     camera_mode: dual_async
+    dvfs_sn: IS_DVFS_SN_PIP_DUAL_CAPTURE
   routing_switch:
     disabled_nodes:
     - sensor_rear2
