@@ -485,6 +485,7 @@ def power_options_doc(knobs: dict) -> dict | None:
     Combination exploration re-applies knob values on top of a formal variant at run
     time, so the DB needs the definitions, not only the variants that select them.
     """
-    if not (knobs or {}).get("knobs"):
+    # params / param_rules without knobs are kept too: job stages (R-3) read them
+    if not any((knobs or {}).get(k) for k in POWER_OPTION_KEYS):
         return None
     return {k: copy.deepcopy(knobs[k]) for k in POWER_OPTION_KEYS if knobs.get(k)}

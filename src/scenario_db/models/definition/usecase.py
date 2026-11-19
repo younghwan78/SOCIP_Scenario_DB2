@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from scenario_db.models.definition.job import JobSpec, expression_names
 from scenario_db.models.common import (
     BaseScenarioModel,
     DocumentId,
@@ -103,10 +104,27 @@ class Pipeline(BaseScenarioModel):
     task_graph: dict[str, Any] = Field(default_factory=dict)
     level1_graph: dict[str, Any] = Field(default_factory=dict)
     judgement: JudgementContract | None = None
+    # R-3 event jobs on top of the steady frame DAG (None = none; see models/definition/job.py)
+    jobs: list[JobSpec] | None = None
 
     @model_validator(mode="after")
     def _validate_edge_references(self) -> Pipeline:
         node_ids = {node.id for node in self.nodes}
+        job_ids = [j.id for j in self.jobs or []]
+        if len(job_ids) != len(set(job_ids)):
+            raise ValueError(f"duplicate job ids {sorted({i for i in job_ids if job_ids.count(i) > 1})}")
+        for job in self.jobs or []:
+            clash = sorted(set(job.buffers or {}) & set(self.buffers))
+            if clash:
+                raise ValueError(f"job {job.id}: job buffers {clash} shadow pipeline buffers")
+            for stage in job.stages:
+                for node in [*stage.nodes, *(stage.holds or [])]:
+                    if node not in node_ids:
+                        raise ValueError(f"job {job.id}: stage {stage.id} node '{node}' not found in nodes")
+                unknown = [b for b in (stage.reads or []) if b not in self.buffers]
+                if unknown:
+                    raise ValueError(f"job {job.id}: stage {stage.id} reads {unknown}, which are not pipeline "
+                                     "(session) buffers; job buffers flow from the stage's predecessors")
         for sink in (self.judgement.sinks if self.judgement else []):
             if sink.node not in node_ids:
                 raise ValueError(f"judgement sink '{sink.node}' not found in nodes {node_ids}")
@@ -329,6 +347,20 @@ class Usecase(BaseScenarioModel):
                     )
                 visited.add(current)
                 current = parent_map[current]
+        return self
+
+    @model_validator(mode="after")
+    def _validate_job_parameters(self) -> Usecase:
+        params = set((self.power_options.params if self.power_options else {}) or {})
+        for job in self.pipeline.jobs or []:
+            for path, value in job.numeric_fields():
+                missing = sorted(expression_names(value, f"job {job.id}.{path}") - params)
+                if missing:
+                    raise ValueError(f"job {job.id}.{path}: unknown parameters {missing} "
+                                     "(declare them in knobs.yaml params)")
+            for path, name in job.param_refs():
+                if name not in params:
+                    raise ValueError(f"job {job.id}.{path}: unknown parameter '{name}' (declare it in knobs.yaml params)")
         return self
 
     @model_validator(mode="after")
