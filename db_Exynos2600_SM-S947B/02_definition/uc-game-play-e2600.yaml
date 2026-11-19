@@ -130,6 +130,7 @@ variants:
   design_conditions:
     resolution: FHD
     target_fps: 60
+    fps: 60
     hdr: SDR
     gpu_governor: performance
     panel_fps_hz: 60
@@ -258,6 +259,7 @@ variants:
   design_conditions:
     resolution: FHD
     target_fps: 90
+    fps: 90
     hdr: SDR
     panel_fps_hz: 90
     npu_used: false
@@ -390,6 +392,7 @@ variants:
   design_conditions:
     resolution: FHD
     target_fps: 120
+    fps: 120
     hdr: SDR
     panel_fps_hz: 120
     npu_used: false
@@ -523,6 +526,7 @@ variants:
   design_conditions:
     resolution: UHD
     target_fps: 60
+    fps: 60
     hdr: SDR
     panel_fps_hz: 60
     npu_used: false
@@ -650,6 +654,7 @@ variants:
   design_conditions:
     resolution: FHD
     target_fps: 60
+    fps: 60
     hdr: SDR
     gpu_governor: performance
     panel_fps_hz: 60
@@ -781,6 +786,7 @@ variants:
   design_conditions:
     resolution: FHD
     target_fps: 120
+    fps: 120
     hdr: HDR10
     panel_fps_hz: 120
     npu_used: false
@@ -918,6 +924,7 @@ variants:
   severity: light
   design_conditions:
     target_fps: 60
+    fps: 60
     hdr: SDR
     panel_fps_hz: 60
     npu_used: false
@@ -1074,6 +1081,7 @@ variants:
   design_conditions:
     resolution: FHD
     target_fps: 60
+    fps: 60
     hdr: SDR
     panel_fps_hz: 60
     npu_used: false

@@ -34,7 +34,7 @@ pipeline:
     role: sensor
     instance_index: 0
   - id: csispdp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-csis-is-v15-s5e9965
     role: csispdp
     instance_index: 0
   - id: n3aa
@@ -42,31 +42,31 @@ pipeline:
     role: 3aa_stats
     instance_index: 0
   - id: byrp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-byrp-is-v15-s5e9965
     role: byrp
     instance_index: 0
   - id: rgbp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-rgbp-is-v15-s5e9965
     role: rgbp
     instance_index: 0
   - id: yuvsc
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvsc-is-v15-s5e9965
     role: yuvsc
     instance_index: 0
   - id: mtnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-mtnr-is-v15-s5e9965
     role: mtnr
     instance_index: 0
   - id: msnr
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-msnr-is-v15-s5e9965
     role: msnr
     instance_index: 0
   - id: yuvp
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-yuvp-is-v15-s5e9965
     role: yuvp
     instance_index: 0
   - id: mcsc
-    ip_ref: ip-mcsc-s5e9965
+    ip_ref: ip-mcsc-is-v15-s5e9965
     role: mcsc
     instance_index: 0
   - id: npu
@@ -94,7 +94,7 @@ pipeline:
     role: eis_stabilization
     instance_index: 0
   - id: gdc_m
-    ip_ref: ip-isp-s5e9965
+    ip_ref: ip-gdc-is-v15-s5e9965
     role: gdc_preview
     instance_index: 0
   - id: dpu
@@ -174,6 +174,7 @@ pipeline:
   buffers:
     YUVSC_MTNR_BUF:
       format: YUV420
+      size_ref: sensor_out
       bitdepth: 10
       compression: COMP_OFF
       note: M2M break — multi-frame TNR input
@@ -194,18 +195,25 @@ pipeline:
       note: NPU → MTNR AI pre-processed
     MCSC_WDMA_PREV_BUF:
       format: YUV420
+      size_ref: preview_out
       bitdepth: 10
       compression: COMP_OFF
       note: MCSC OUTPUT0 preview WDMA — larger than display (EIS margin)
     EIS_GDC_M_BUF:
       format: YUV420
+      size_ref: preview_out
       bitdepth: 10
       compression: COMP_OFF
       note: EIS warp map + frame → GDC_M
     GDC_M_DPU_BUF:
       format: YUV420
+      size_ref: preview_out
       bitdepth: 10
       compression: COMP_YUV_LOSSLESS
       note: GDC_M crop/warp output → DPU (SBWC zero-copy)
+size_profile:
+  anchors:
+    sensor_out: 4000x3000
+    preview_out: 1920x1440
 variants:
   $include: variants.yaml

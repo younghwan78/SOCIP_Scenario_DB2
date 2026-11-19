@@ -168,13 +168,19 @@ variants:
     dsp_offload:
       executes_on: ip-abox-s5e9965
     sw_decoder:
+      timeline:
+        cadence: period
+        period_ms: 24.0
+        value_source: assumed
+        note: One MP3 frame (1152 samples at 48 kHz) per decode call, outside the video frame path; judged against the next
+          frame. The CPU work counts at this rate, not at the 30 Hz default scenario rate.
       sw_timing:
         min_ms: 1.5
         mean_ms: 3.0
         max_ms: 6.0
         start_latency_ref: bitstream_available
         start_latency_mean_ms: 0.5
-        rate_hz: 30.0
+        rate_hz: 41.667
         cpu_affinity: CPUCL1
         value_source: assumed
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
@@ -302,13 +308,18 @@ variants:
     dsp_offload:
       executes_on: ip-abox-s5e9965
     sw_decoder:
+      timeline:
+        cadence: period
+        period_ms: 21.333
+        value_source: assumed
+        note: One FLAC block (4096 samples, assumed block size) at 192 kHz per decode call; judged against the next block.
       sw_timing:
         min_ms: 1.5
         mean_ms: 3.0
         max_ms: 6.0
         start_latency_ref: bitstream_available
         start_latency_mean_ms: 0.5
-        rate_hz: 30.0
+        rate_hz: 46.875
         cpu_affinity: CPUCL1
         value_source: assumed
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
@@ -373,13 +384,18 @@ variants:
     dsp_offload:
       executes_on: ip-abox-s5e9965
     sw_decoder:
+      timeline:
+        cadence: period
+        period_ms: 21.333
+        value_source: assumed
+        note: One AAC-LC frame (1024 samples at 48 kHz) per decode call; judged against the next frame.
       sw_timing:
         min_ms: 1.5
         mean_ms: 3.0
         max_ms: 6.0
         start_latency_ref: bitstream_available
         start_latency_mean_ms: 0.5
-        rate_hz: 30.0
+        rate_hz: 46.875
         cpu_affinity: CPUCL1
         value_source: assumed
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with

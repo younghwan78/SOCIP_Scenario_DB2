@@ -1,4 +1,5 @@
-"""W3-7: E2600 display / game / video variants leave no IP at 0 mW except UFS storage (no host power coefficient).
+"""W3-7: E2600 display / game / video / camera preview / capture variants leave no IP at 0 mW except UFS storage (no
+host power coefficient). Preview and capture use the IS v15 module catalogs with shape inheritance (step 0, C-1).
 
 GPU / NPU / ABOX get their power from D-03 domain loads; modes without sim coefficients (DPU VRR, MFC Secure /
 LowLatency), the M2M scaler and the APV decoder carry assumed ``sim.ip_params`` on the variant (E2600 only).
@@ -14,6 +15,7 @@ from tests.unit.sim.test_adapter_runner import _exynos2600_generated_graph
 
 ROOT = "db_Exynos2600_SM-S947B/02_definition"
 SCENARIOS = ["uc-vid-playback-local-e2600", "uc-vid-youtube-e2600", "uc-disp-gallery-e2600", "uc-game-play-e2600",
+             "uc-cam-preview-e2600", "uc-cam-capture-e2600",
              "uc-game-streaming-e2600"]
 NOT_MODELLED = {"ip-ufs-s5e9965"}  # UFS host controller: no power coefficient in the source release
 
