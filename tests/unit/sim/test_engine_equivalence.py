@@ -23,6 +23,16 @@ def test_fixed_variants_cover_every_project_recording_kpi():
     assert "cam-rec-r1-uhd30-vdis" in VARIANTS["uc-cam-recording-e2600"]
 
 
+def test_fixed_variants_cover_every_e2600_scenario():
+    """An opt-in change must leave every scenario's results and input hashes unchanged, so each fixture scenario
+    has at least one fixed case; a new scenario fails here until it gets one."""
+    scenarios = {p.stem for p in (FIXTURE / "02_definition").glob("uc-*.yaml")}
+    assert scenarios == set(VARIANTS)
+    for scenario, variants in VARIANTS.items():
+        ids = {v["id"] for v in read(FIXTURE / "02_definition" / f"{scenario}.yaml")["variants"]}
+        assert variants and set(variants) <= ids, scenario
+
+
 def test_canonical_output_retains_all_fields_and_float_precision():
     assert not EXCLUDED_PATHS
     first = canonical_json({"value": 1.2345678901234567, "input_hash": "a"})

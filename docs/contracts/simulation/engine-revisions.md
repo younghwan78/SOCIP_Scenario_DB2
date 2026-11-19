@@ -20,6 +20,11 @@ revisions in between, taken from `src/scenario_db/sim/engine_revisions.py`, in t
 Run `scripts/check_engine_equivalence.py dump` on main and on the branch, then `compare`. A change that should keep
 the revision has 0 differences. A bump lists the moved variants in its PR.
 
+The fixed cases cover every E2600 scenario (a test fails when a fixture scenario has none). The comparison includes
+the input hashes, so 0 differences also means registered predictions of those scenarios stay fresh. For the
+ejected Exynos2700 fixture, also run `python -m scenario_db.authoring check sm-s957b --against db_Exynos2700_SM-S957B`
+(0 differences) and `tests/unit/authoring` (the inherited-2700 compile test).
+
 ## Revisions
 
 | rev | change | what moves |

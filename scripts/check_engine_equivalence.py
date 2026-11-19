@@ -23,7 +23,10 @@ from scenario_db.sim.models import DVFSTable
 
 
 # Fixed coverage: all project review-policy Recording KPIs (including APV),
-# the remaining IS-v15 Recording KPIs, and two Preview / Capture variants each.
+# the remaining IS-v15 Recording KPIs, two Preview / Capture variants each, and
+# representative variants of every other E2600 scenario (playback, YouTube, gallery,
+# game, audio, call), so an opt-in change that leaks into undeclared scenarios —
+# including their input hashes (registered-prediction freshness) — shows up here.
 VARIANTS = {
     "uc-cam-recording-e2600": (
         "cam-rec-r1-fhd30-sdr", "cam-rec-r1-fhd60-sdr", "cam-rec-r1-uhd30-sdr",
@@ -35,6 +38,18 @@ VARIANTS = {
     "uc-cam-recording-apv-e2600": ("cam-rec-apv-uhd60-422-sdr",),
     "uc-cam-preview-e2600": ("cam-prev-r1-30", "cam-prev-r1-60"),
     "uc-cam-capture-e2600": ("cam-cap-r1-sf", "cam-cap-r1-mf"),
+    "uc-vid-playback-local-e2600": (
+        "vplay-local-h264-fhd30-sdr", "vplay-local-hevc-uhd60-hdr10", "vplay-local-av1-uhd30-sdr",
+        "vplay-local-apv-uhd30-422-sdr", "vplay-local-hevc-fhd-background",
+    ),
+    "uc-vid-youtube-e2600": ("yt-1080p30-h264-sdr", "yt-4k60-av1-hdr10", "yt-1080p-audio-bg"),
+    "uc-disp-gallery-e2600": ("disp-gallery-fhd-sdr-60hz", "disp-gallery-uhd-hdr10-gpu-fallback"),
+    "uc-game-play-e2600": ("game-fhd-60fps-sdr", "game-fhd-120fps-sdr", "game-fhd-60fps-m2m-upscale"),
+    "uc-game-streaming-e2600": ("game-stream-fhd60-hevc",),
+    "uc-aud-mp3-playback-e2600": ("audio-mp3-screen-on", "audio-mp3-screen-off-offload"),
+    "uc-aud-streaming-e2600": ("audio-stream-aac-screen-off",),
+    "uc-call-voice-e2600": ("voice-call-volte",),
+    "uc-call-video-e2600": ("vcall-fhd30-rear",),
 }
 PROFILE_VARIANT = "cam-rec-r1-uhd30-vdis"
 # explore_variant currently has no nondeterministic result fields. Exclude none:
