@@ -227,3 +227,11 @@ def test_the_job_background_is_the_final_steady_power():
     report = analyze_timing_budget(_graph(), opts,
                                    config=SimulationRunConfig(power_params=synthetic_topology([("C", "C", 4)])))
     assert report["jobs"][0]["background"]["power_mw"] == pytest.approx(report["power"]["total_mw"], abs=0.1)
+
+
+def test_resolved_expressions_get_the_literal_ranges():
+    for params, message in (({"zsl_frames": 2.5}, "frames 2.5 must be an integer >= 1"),
+                            ({"pool": 0}, "count 0.0 must be an integer >= 1"),
+                            ({"enc_ms": -1}, "runtime_ms -1.0 must be >= 0")):
+        with pytest.raises(JobError, match=message):
+            _job(**params)
