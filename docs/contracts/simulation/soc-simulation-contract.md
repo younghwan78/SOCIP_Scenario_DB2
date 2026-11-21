@@ -236,6 +236,11 @@ A deterministic SimPy run per selected job, separate from the steady timeline:
   and clock terms are not attributed); `domain` = util-vf-v1 at util 1 at the top operating point; `sw` /
   `transfer` / `fixed` = `power_mw` x time. `clock: dvfs_sn` is not supported by `job-v1` yet.
 
+Measured values (R-7 slot): `node_configs.<one of the stage nodes>.sim.jobs.<job>.<stage>` with `service_ms`
+(uncontended stage time, split evenly over its chunks; `sw` / `transfer` / `fixed` / `domain` keep their power, `hw`
+keeps its per-pixel energy), `clock_mhz` (`hw` / `domain`), `mb` (stage traffic), and `value_source` (default
+`measured`) / `evidence_ref` / `basis`. A sensor stage takes only `service_ms`. Unknown stages or fields are errors.
+
 Outputs: `milestones` (end of the named stage, ms after the trigger), `makespan_ms`, `phases`, `stages`
 (start / end / service / elapsed, chunks, clocks, energy, MB), `energy_mj` (event total, by kind, unattributed
 stages), `peak` (10 ms-window and instantaneous power / BW over the steady values, footprint), `background`,

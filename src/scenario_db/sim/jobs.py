@@ -76,6 +76,21 @@ class _Params:
         return value
 
 
+OVERRIDE_FIELDS = {"service_ms", "clock_mhz", "mb", "value_source", "evidence_ref", "basis"}
+
+
+def stage_overrides(graph, job_id: str) -> dict[str, dict[str, Any]]:
+    """Variant-local values of ``job_id`` (R-7 slot): ``node_configs.<node>.sim.jobs.<job>.<stage>``, by stage id."""
+    out: dict[str, dict[str, Any]] = {}
+    for node, cfg in sorted((getattr(graph.variant, "node_configs", None) or {}).items()):
+        jobs = ((cfg or {}).get("sim") or {}).get("jobs") or {}
+        for sid, values in (jobs.get(job_id) or {}).items():
+            if sid in out:
+                raise JobError(f"job {job_id}: stage {sid} has values under two nodes")
+            out[sid] = {"node": node, **(values or {})}
+    return out
+
+
 def _size(text: Any) -> tuple[int, int] | None:
     if isinstance(text, str) and "x" in text:
         w, _, h = text.lower().partition("x")
@@ -131,6 +146,7 @@ class _Evaluation:
         self.anchors = anchors
         self.comp = compression_catalog(getattr(graph, "soc", None), "mean")
         self.notes: list[str] = []
+        self.overrides = stage_overrides(graph, job.id)
 
     # ---- structure
     def _active(self) -> dict[str, JobStage]:
@@ -196,6 +212,10 @@ class _Evaluation:
         ip = self.ips.get(node) or {}
         group = ip.get("dvfs_group")
         mhz, mv = float(ip.get("set_clock_mhz") or 0.0), float(ip.get("voltage_mv") or 0.0)
+        measured = (self.overrides.get(s.id) or {}).get("clock_mhz")
+        if measured is not None:
+            level = next((lv for lv in self.ladders.get(group, []) if lv["mhz"] >= measured - 1e-6), None)
+            return float(measured), float((level or {}).get("mv") or mv)
         if s.clock == "max" and group in self.ladders:
             top = self.ladders[group][-1]
             return float(top["mhz"]), float(top["mv"] or mv)
@@ -237,7 +257,7 @@ class _Evaluation:
         mcycles = (self.p.num(work["mcycles"], f"stages.{s.id}.work.mcycles") if work.get("mcycles") is not None
                    else self.p.num(work["mcycles_per_mp"], f"stages.{s.id}.work.mcycles_per_mp") * w * h / 1e6)
         freqs = sorted(float(f) for f in (cfg.get("freqs_mhz") or [r["mhz"] for r in cfg.get("vf") or []]))
-        f = float(cfg.get("freq_mhz") or (freqs[-1] if freqs else 0.0))
+        f = float((self.overrides.get(s.id) or {}).get("clock_mhz") or cfg.get("freq_mhz") or (freqs[-1] if freqs else 0.0))
         if f <= 0:
             raise JobError(f"job {self.job.id}: stage {s.id} node {node} has no operating point")
         full = {k: v for k, v in cfg.items() if k not in ("mcycles_per_frame", "mcycles_per_layer", "rate_hz",
@@ -271,6 +291,21 @@ class _Evaluation:
         active = self._active()
         if not active:
             return {"id": self.job.id, "model": MODEL_ID, "stages": [], "notes": self.notes + ["no active stage"]}
+        for sid, ov in self.overrides.items():
+            if sid not in {s.id for s in self.job.stages}:
+                raise JobError(f"job {self.job.id}: node_configs.{ov['node']}.sim.jobs names unknown stage '{sid}'")
+            unknown = sorted(set(ov) - OVERRIDE_FIELDS - {"node"})
+            if unknown:
+                raise JobError(f"job {self.job.id}: stage {sid} values {unknown} are not {sorted(OVERRIDE_FIELDS)}")
+            stage = next(s for s in self.job.stages if s.id == sid)
+            if ov["node"] not in stage.nodes:
+                raise JobError(f"job {self.job.id}: stage {sid} values belong under one of its nodes {stage.nodes}")
+            if stage.kind == "sensor" and ("clock_mhz" in ov or "mb" in ov):
+                raise JobError(f"job {self.job.id}: sensor stage {sid} takes only service_ms")
+            for key in ("service_ms", "clock_mhz", "mb"):
+                if key in ov and not (isinstance(ov[key], (int, float)) and not isinstance(ov[key], bool)
+                                      and math.isfinite(ov[key]) and ov[key] > 0):
+                    raise JobError(f"job {self.job.id}: stage {sid} {key} must be a positive number")
         preds = self._preds(active)
         anc = self._ancestors(preds)
         direct = {sid: [(p, per) for p, per in preds[sid] if not any(p in anc[q] for q, _ in preds[sid] if q != p)]
@@ -339,6 +374,7 @@ class _Evaluation:
                 e["chunks"] = 1
             else:
                 e["chunks"] = e["frames"] * e["passes"] * e["per"]
+            self._apply_override(sid, e)
 
         # ---- SimPy run
         env = simpy.Environment()
@@ -488,6 +524,32 @@ class _Evaluation:
         end = env.now
         return self._metrics(active, plan, log, allocs, at, end, rt_wait[0], dropped[0], session)
 
+    def _apply_override(self, sid: str, e: dict[str, Any]) -> None:
+        """Measured stage values replace the computed ones: ``service_ms`` is the uncontended stage time (split
+        evenly over its chunks; constant-power stages keep their power, HW keeps its per-pixel energy), ``mb`` the
+        stage traffic (read / write split kept)."""
+        ov = self.overrides.get(sid)
+        e["value_source"] = e["stage"].value_source
+        if not ov:
+            return
+        e["value_source"] = ov.get("value_source", "measured")
+        e["evidence_ref"] = ov.get("evidence_ref")
+        if "service_ms" in ov:
+            kind = e["stage"].kind
+            if kind == "sensor":
+                scale = ov["service_ms"] / e["chunk_ms"] if e["chunk_ms"] > 0 else 0.0
+                e["ready_ms"], e["chunk_ms"] = e["ready_ms"] * scale, float(ov["service_ms"])
+            else:
+                new = float(ov["service_ms"]) / e["chunks"]
+                if kind != "hw" and e["chunk_ms"] > 0:
+                    e["chunk_mj"] *= new / e["chunk_ms"]
+                e["chunk_ms"] = new
+        if "mb" in ov:
+            per_frame = float(ov["mb"]) / max(1, e["frames"])
+            total = e["read_mb"] + e["write_mb"]
+            share = e["read_mb"] / total if total > 0 else 0.5
+            e["read_mb"], e["write_mb"] = per_frame * share, per_frame * (1 - share)
+
     def _metrics(self, active, plan, log, allocs, at, end, rt_wait, dropped, session) -> dict[str, Any]:
         stages = []
         for sid, e in plan.items():
@@ -503,7 +565,8 @@ class _Evaluation:
                 "energy_mj": round(e["chunk_mj"] * (e["chunks"] if e["stage"].kind != "sensor" else 0), 3),
                 "mb": round((e["read_mb"] + e["write_mb"]) * e["frames"] * (0 if e["stage"].kind == "sensor" else 1)
                             + (e["write_mb"] if e["stage"].kind == "sensor" else 0.0), 3),
-                "energy_attributed": e["attributed"], "value_source": e["stage"].value_source,
+                "energy_attributed": e["attributed"], "value_source": e["value_source"],
+                **({"evidence_ref": e["evidence_ref"]} if e.get("evidence_ref") else {}),
             })
         by_kind: dict[str, float] = {}
         for st in stages:
