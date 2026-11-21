@@ -95,6 +95,26 @@ class JudgementContract(BaseScenarioModel):
     stages: dict[str, JudgementStage] = Field(default_factory=dict)
     kpis: list[JudgementKpi] = Field(default_factory=lambda: ["interval"])
 
+def job_reference_errors(jobs: list[JobSpec], node_ids: set[str], buffers: set[str]) -> list[str]:
+    """Pipeline-level job checks (shared by the model and the pipeline patch path): ids, nodes, session buffers."""
+    errors: list[str] = []
+    job_ids = [j.id for j in jobs]
+    if len(job_ids) != len(set(job_ids)):
+        errors.append(f"duplicate job ids {sorted({i for i in job_ids if job_ids.count(i) > 1})}")
+    for job in jobs:
+        clash = sorted(set(job.buffers or {}) & buffers)
+        if clash:
+            errors.append(f"job {job.id}: job buffers {clash} shadow pipeline buffers")
+        for stage in job.stages:
+            for node in [*stage.nodes, *(stage.holds or [])]:
+                if node not in node_ids:
+                    errors.append(f"job {job.id}: stage {stage.id} node '{node}' not found in nodes")
+            unknown = [b for b in (stage.reads or []) if b not in buffers]
+            if unknown:
+                errors.append(f"job {job.id}: stage {stage.id} reads {unknown}, which are not pipeline "
+                              "(session) buffers; job buffers flow from the stage's predecessors")
+    return errors
+
 
 class Pipeline(BaseScenarioModel):
     nodes: list[PipelineNode] = Field(default_factory=list)
@@ -110,21 +130,9 @@ class Pipeline(BaseScenarioModel):
     @model_validator(mode="after")
     def _validate_edge_references(self) -> Pipeline:
         node_ids = {node.id for node in self.nodes}
-        job_ids = [j.id for j in self.jobs or []]
-        if len(job_ids) != len(set(job_ids)):
-            raise ValueError(f"duplicate job ids {sorted({i for i in job_ids if job_ids.count(i) > 1})}")
-        for job in self.jobs or []:
-            clash = sorted(set(job.buffers or {}) & set(self.buffers))
-            if clash:
-                raise ValueError(f"job {job.id}: job buffers {clash} shadow pipeline buffers")
-            for stage in job.stages:
-                for node in [*stage.nodes, *(stage.holds or [])]:
-                    if node not in node_ids:
-                        raise ValueError(f"job {job.id}: stage {stage.id} node '{node}' not found in nodes")
-                unknown = [b for b in (stage.reads or []) if b not in self.buffers]
-                if unknown:
-                    raise ValueError(f"job {job.id}: stage {stage.id} reads {unknown}, which are not pipeline "
-                                     "(session) buffers; job buffers flow from the stage's predecessors")
+        errors = job_reference_errors(self.jobs or [], node_ids, set(self.buffers))
+        if errors:
+            raise ValueError(errors[0])
         for sink in (self.judgement.sinks if self.judgement else []):
             if sink.node not in node_ids:
                 raise ValueError(f"judgement sink '{sink.node}' not found in nodes {node_ids}")

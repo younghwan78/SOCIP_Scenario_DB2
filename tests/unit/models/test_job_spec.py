@@ -144,3 +144,28 @@ def test_ip_params_names_must_be_declared_params():
         Usecase.model_validate(_usecase(pipeline))
     pipeline["jobs"][0]["stages"][2]["ip_params"] = {"ppc": "zsl_frames * 8"}
     Usecase.model_validate(_usecase(pipeline))
+
+
+def test_trigger_start_takes_a_parameter_and_rejects_booleans_and_negatives():
+    pipeline = _pipeline()
+    pipeline["jobs"][0]["trigger"]["at_ms"] = "trigger_delay_ms"
+    Usecase.model_validate(_usecase(pipeline, params={**PARAMS, "trigger_delay_ms": 200}))
+    with pytest.raises(ValidationError, match=r"trigger.at_ms: unknown parameters \['trigger_delay_ms'\]"):
+        Usecase.model_validate(_usecase(pipeline))
+    for bad, message in ((True, "is not a number"), (-1, "must be >= 0"), (float("inf"), "not a finite number")):
+        pipeline["jobs"][0]["trigger"]["at_ms"] = bad
+        with pytest.raises(ValidationError, match=message):
+            Usecase.model_validate(_usecase(pipeline))
+
+
+def test_a_pipeline_patch_must_not_leave_job_references_dangling():
+    from scenario_db.write.service import _patched_pipeline, _validate_candidate_jobs
+
+    pipeline = _pipeline()
+    ok = _validate_candidate_jobs(pipeline, {n["id"] for n in NODES}, set(pipeline["buffers"]))
+    assert ok == []
+    candidate = _patched_pipeline(pipeline, {"remove_nodes": ["mtnr"], "remove_buffers": ["ZSL_RING_BUF"]})
+    issues = _validate_candidate_jobs(candidate, {n["id"] for n in candidate["nodes"]}, set(candidate["buffers"]))
+    messages = " | ".join(i.message for i in issues)
+    assert {i.code for i in issues} == {"job_reference_invalid"}
+    assert "node 'mtnr' not found" in messages and "reads ['ZSL_RING_BUF']" in messages

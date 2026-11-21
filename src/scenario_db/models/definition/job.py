@@ -230,10 +230,16 @@ class JobBuffer(BaseScenarioModel):
 
 class JobTrigger(BaseScenarioModel):
     kind: Literal["event", "burst", "periodic"] = "event"
-    at_ms: float = Field(default=0.0, ge=0, allow_inf_nan=False)
+    at_ms: Num = 0.0                              # event start; a literal must be >= 0 (expressions: at run time)
     count: Num = 1
     interval_ms: Num | None = None                # None = as fast as resources and buffers allow
     max_in_flight: Num = 1
+
+    @model_validator(mode="after")
+    def _start(self) -> JobTrigger:
+        if isinstance(self.at_ms, (int, float)) and self.at_ms < 0:
+            raise ValueError(f"trigger.at_ms {self.at_ms} must be >= 0")
+        return self
 
 
 JobKpi = Literal["event_latency", "event_rate", "event_energy", "peak_power", "peak_bw", "peak_footprint",
@@ -302,7 +308,8 @@ class JobSpec(Selector):
         return self
 
     def numeric_fields(self) -> list[tuple[str, Any]]:
-        out = [("trigger.count", self.trigger.count), ("trigger.max_in_flight", self.trigger.max_in_flight)]
+        out = [("trigger.at_ms", self.trigger.at_ms), ("trigger.count", self.trigger.count),
+               ("trigger.max_in_flight", self.trigger.max_in_flight)]
         if self.trigger.interval_ms is not None:
             out.append(("trigger.interval_ms", self.trigger.interval_ms))
         for s in self.stages:
