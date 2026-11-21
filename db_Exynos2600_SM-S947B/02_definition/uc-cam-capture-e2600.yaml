@@ -192,9 +192,290 @@ pipeline:
       bitdepth: 8
       compression: COMP_OFF
       note: JPEG encoded output
+  jobs:
+  - id: still_shot
+    label: 12M ZSL shot (SF / MF)
+    when:
+      capture_readout: null
+    trigger:
+      kind: event
+      at_ms: 200
+    phases:
+    - process
+    - encode
+    - store
+    buffers:
+      cap_yuv:
+        format: YUV420
+        bitdepth: 10
+        count: yuv_pool
+      out_yuv:
+        format: YUV420
+        bitdepth: 10
+      jpeg:
+        mb: jpeg_mb
+    stages:
+    - id: reproc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      - rgbp
+      - yuvsc
+      frames: burst_frames
+      reads:
+      - ZSL_RING_BUF
+      writes:
+      - cap_yuv
+      chunk:
+        by: frame
+    - id: merge
+      phase: process
+      clock: max
+      nodes:
+      - mtnr
+      frames: burst_frames
+      after:
+      - stage: reproc
+        per: frame
+      when:
+        subscenario:
+        - STILL_MF_CAPTURE
+        - STILL_FLASH_MF_CAPTURE
+        - STILL_HIGH_RES_MF_CAPTURE
+        - NIGHT_CAPTURE
+        - STILL_MOTION_FREE_MF_CAPTURE
+        - SRZOOM_CAPTURE
+    - id: post
+      phase: process
+      clock: max
+      nodes:
+      - msnr
+      - yuvp
+      - mcsc
+      writes:
+      - out_yuv
+      after:
+      - merge
+      - reproc
+    - id: enc
+      phase: encode
+      kind: sw
+      nodes:
+      - post_proc
+      writes:
+      - jpeg
+      after:
+      - post
+      work:
+        runtime_ms: encode_ms
+        cluster: big
+        power_mw: cpu_encode_mw
+    - id: store
+      phase: store
+      kind: transfer
+      nodes:
+      - storage
+      after:
+      - enc
+      work:
+        mb: jpeg_mb
+        mb_per_s: ufs_mb_s
+        power_mw: ufs_mw
+    milestones:
+      thumbnail: post
+      saved: store
+    kpis:
+    - event_latency
+    - event_energy
+    - peak_power
+    - peak_bw
+    - peak_footprint
+  - id: still_shot_200m
+    label: 200M shot by seamless mode change (full_remosaic readout)
+    when:
+      capture_readout: full_remosaic
+    trigger:
+      kind: event
+      at_ms: 200
+    phases:
+    - acquire
+    - process
+    - encode
+    - store
+    buffers:
+      cap_bayer:
+        format: BAYER
+        bitdepth: 12
+        size_ref: capture_full
+        count: full_pool
+      cap_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
+        count: full_pool
+      out_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
+      jpeg:
+        mb: jpeg_200m_mb
+    stages:
+    - id: readout
+      phase: acquire
+      kind: sensor
+      nodes:
+      - sensor_rear
+      holds:
+      - csispdp
+      mode: full_remosaic
+      frames: full_frames
+      writes:
+      - cap_bayer
+      work:
+        switch_in_ms: mode_switch_ms
+        switch_out_ms: mode_switch_ms
+    - id: reproc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      - rgbp
+      - yuvsc
+      size_ref: capture_full
+      frames: full_frames
+      writes:
+      - cap_yuv
+      after:
+      - readout
+      chunk:
+        by: stripe
+        max_line_px: isp_line_px
+        overlap_px: stripe_overlap_px
+    - id: ai
+      phase: process
+      kind: domain
+      nodes:
+      - npu
+      size_ref: capture_full
+      after:
+      - reproc
+      work:
+        mcycles_per_mp: ai_mcycles_per_mp
+      when:
+        extend_mode: EX_AI_REMOSAIC
+    - id: merge
+      phase: process
+      clock: max
+      nodes:
+      - mtnr
+      size_ref: capture_full
+      frames: full_frames
+      after:
+      - reproc
+      chunk:
+        by: stripe
+        max_line_px: isp_line_px
+        overlap_px: stripe_overlap_px
+      when:
+        subscenario:
+        - STILL_REMOSAIC_MF_CAPTURE
+        - STILL_REMOSAIC_PRO_SF_CAPTURE
+        - REMOSAIC_NIGHT_CAPTURE
+    - id: post
+      phase: process
+      clock: max
+      nodes:
+      - msnr
+      - yuvp
+      - mcsc
+      size_ref: capture_full
+      writes:
+      - out_yuv
+      after:
+      - ai
+      - merge
+      - reproc
+      chunk:
+        by: stripe
+        max_line_px: isp_line_px
+        overlap_px: stripe_overlap_px
+    - id: enc
+      phase: encode
+      kind: sw
+      nodes:
+      - post_proc
+      writes:
+      - jpeg
+      after:
+      - post
+      work:
+        runtime_ms: encode_200m_ms
+        cluster: big
+        power_mw: cpu_encode_mw
+    - id: store
+      phase: store
+      kind: transfer
+      nodes:
+      - storage
+      after:
+      - enc
+      work:
+        mb: jpeg_200m_mb
+        mb_per_s: ufs_mb_s
+        power_mw: ufs_mw
+    milestones:
+      thumbnail: post
+      saved: store
+    kpis:
+    - event_latency
+    - event_energy
+    - peak_power
+    - peak_bw
+    - peak_footprint
 size_profile:
   anchors:
     sensor_out: 4000x3000
+    capture_full: 16384x12288
+power_options:
+  params:
+    burst_frames: 1
+    yuv_pool: 3
+    encode_ms: 30
+    cpu_encode_mw: 600
+    jpeg_mb: 4
+    ufs_mb_s: 1200
+    ufs_mw: 250
+    full_frames: 1
+    full_pool: 1
+    mode_switch_ms: 33.3
+    isp_line_px: 8192
+    stripe_overlap_px: 64
+    ai_mcycles_per_mp: 2
+    encode_200m_ms: 400
+    jpeg_200m_mb: 40
+  param_rules:
+  - when:
+      subscenario: NIGHT_CAPTURE
+    set:
+      burst_frames: 8
+  - when:
+      subscenario:
+      - STILL_MF_CAPTURE
+      - STILL_FLASH_MF_CAPTURE
+      - STILL_HIGH_RES_MF_CAPTURE
+      - STILL_MOTION_FREE_MF_CAPTURE
+      - SRZOOM_CAPTURE
+    set:
+      burst_frames: 4
+  - when:
+      subscenario:
+      - STILL_REMOSAIC_MF_CAPTURE
+      - STILL_REMOSAIC_PRO_SF_CAPTURE
+      - REMOSAIC_NIGHT_CAPTURE
+    set:
+      full_frames: 3
+      full_pool: 3
 variants:
 - id: cam-cap-r1-sf
   severity: light
@@ -714,6 +995,7 @@ variants:
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    capture_readout: full_remosaic
     preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
       event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_FULL_SIZE
@@ -777,6 +1059,7 @@ variants:
   design_conditions:
     subscenario: STILL_REMOSAIC_MF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    capture_readout: full_remosaic
     preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
       event job), C-2 decision 2026-11-21
     isp_features: MTNR,MSNR
@@ -835,6 +1118,7 @@ variants:
   design_conditions:
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     extend_mode: EX_AI_REMOSAIC
+    capture_readout: full_remosaic
     preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
       event job), C-2 decision 2026-11-21
     npu_used: true
@@ -988,6 +1272,7 @@ variants:
   design_conditions:
     subscenario: STILL_REMOSAIC_PRO_SF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    capture_readout: full_remosaic
     preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
       event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_PRO_VIDEO
@@ -1263,6 +1548,7 @@ variants:
   design_conditions:
     subscenario: REMOSAIC_NIGHT_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    capture_readout: full_remosaic
     preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
       event job), C-2 decision 2026-11-21
     super_night: true

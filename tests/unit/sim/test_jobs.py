@@ -8,8 +8,8 @@ from scenario_db.sim.jobs import JobError, evaluate_jobs
 from scenario_db.sim.timing_budget import TimingBudgetOptions, analyze_timing_budget
 from tests.unit.sim.test_adapter_runner import _exynos2600_generated_graph
 
-VARIANT = "cam-cap-r1-mf"          # sensor_out 8000x6000 -> one YUV420 10-bit frame = 90 MB
-FRAME_MB = 8000 * 6000 * 1.5 * 10 / 8 / 1e6
+VARIANT = "cam-cap-r1-mf"          # 12M session (C-2): sensor_out 4000x3000 -> one YUV420 10-bit frame = 22.5 MB
+FRAME_MB = 4000 * 3000 * 1.5 * 10 / 8 / 1e6
 JOB = {
     "id": "still_shot", "trigger": {"kind": "event", "at_ms": 100},
     "phases": ["acquire", "process", "encode"],
@@ -30,9 +30,16 @@ PARAMS = {"cap_mode": "binning_2x2", "sw_ms": 5, "zsl_frames": 4, "pool": 2, "en
 
 
 def _graph(job=None, params=None, variant=VARIANT):
-    graph = _exynos2600_generated_graph("uc-cam-capture-e2600", variant)
+    graph = _plain(variant)
     graph.scenario.pipeline = {**graph.scenario.pipeline, "jobs": [job or deepcopy(JOB)]}
     graph.scenario.power_options = {"params": {**PARAMS, **(params or {})}}
+    return graph
+
+
+def _plain(variant=VARIANT):
+    """The capture graph without its declared jobs (the scenario declares its own shot since R-3c)."""
+    graph = _exynos2600_generated_graph("uc-cam-capture-e2600", variant)
+    graph.scenario.pipeline = {k: v for k, v in graph.scenario.pipeline.items() if k != "jobs"}
     return graph
 
 
@@ -45,7 +52,7 @@ def _job(**params):
 
 
 def test_jobs_are_opt_in_and_leave_the_steady_report_unchanged():
-    plain = _report(_exynos2600_generated_graph("uc-cam-capture-e2600", VARIANT))
+    plain = _report(_plain())
     with_job = _report(_graph())
     assert "jobs" not in plain
     assert {k: v for k, v in with_job.items() if k != "jobs"} == plain
@@ -92,7 +99,7 @@ def test_stripe_chunks_shorten_the_rt_wait():
     by_frame = _report(_graph(job=frames, params={"pool": 4}))["jobs"][0]
     by_stripe = _report(_graph(job=stripes, params={"pool": 4}))["jobs"][0]
     stage = next(s for s in by_stripe["stages"] if s["id"] == "reproc")
-    assert stage["chunks"] == PARAMS["zsl_frames"] * 8
+    assert stage["chunks"] == PARAMS["zsl_frames"] * 4           # 4000 px wide, 1000 px line buffer
     # a full-frame MTNR chunk blocks the RT frame; stripes interleave with it, at the cost of a longer shot
     assert by_stripe["background"]["rt_wait_max_ms"] < by_frame["background"]["rt_wait_max_ms"] / 2
     assert by_stripe["makespan_ms"] >= by_frame["makespan_ms"]
@@ -122,8 +129,7 @@ def test_disabled_nodes_skip_their_stage():
 
 
 def test_evaluate_jobs_without_declaration_is_empty():
-    graph = _exynos2600_generated_graph("uc-cam-capture-e2600", VARIANT)
-    assert evaluate_jobs(graph, {}, None, {}, None) == []
+    assert evaluate_jobs(_plain(), {}, None, {}, None) == []
 
 
 def _with_slot(node, values, job=None):

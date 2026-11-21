@@ -945,6 +945,7 @@ def _demo_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenari
         pipeline=scenario_raw.get("pipeline") or {},
         size_profile=scenario_raw.get("size_profile"),
         design_axes=scenario_raw.get("design_axes"),
+        power_options=scenario_raw.get("power_options"),
         yaml_sha256="sha",
     )
     variant_rows = {
@@ -997,6 +998,7 @@ def _fixture_graph(fixture: str, scenario_id: str, variant_id: str) -> Canonical
         pipeline=scenario_raw.get("pipeline") or {},
         size_profile=scenario_raw.get("size_profile"),
         design_axes=scenario_raw.get("design_axes"),
+        power_options=scenario_raw.get("power_options"),
         yaml_sha256="sha",
     )
     variant_rows = {
