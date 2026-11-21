@@ -103,8 +103,11 @@ def _condition_hash(graph, options, shim, tables) -> str:
         slots = {node: ((cfg or {}).get("sim") or {}).get("jobs")
                  for node, cfg in (getattr(graph.variant, "node_configs", None) or {}).items()
                  if ((cfg or {}).get("sim") or {}).get("jobs")}
+        from scenario_db.sim.jobs import job_inputs
+
+        selection, params = job_inputs(graph)    # design_conditions feed the knob params and the `when` selection
         payload["jobs"] = {"jobs": jobs, "power_options": getattr(graph.scenario, "power_options", None),
-                           "measured": slots}
+                           "measured": slots, "selection": selection, "params": params}
     opp = _cpu_opp_inputs(graph)
     if opp:
         payload["cpu_opp"] = opp

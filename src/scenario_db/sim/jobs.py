@@ -113,14 +113,19 @@ def _bytes_per_px(fmt: str | None, bitdepth: float | None) -> float:
 
 # --------------------------------------------------------------------------- evaluation
 
+def job_inputs(graph) -> tuple[dict[str, Any], dict[str, Any]]:
+    """What job selection and parameters depend on: the variant fields and its resolved knob params."""
+    vdict = _variant_dict(graph)
+    options = getattr(graph.scenario, "power_options", None) or {}
+    return vdict, (variant_params(options, vdict) if options else {})
+
+
 def evaluate_jobs(graph, report: dict[str, Any], inputs, dvfs_tables: dict, config) -> list[dict[str, Any]]:
     """``report.jobs`` of the variant: one entry per selected job (empty when none matches)."""
     raw_jobs = (graph.scenario.pipeline or {}).get("jobs") or []
     if not raw_jobs:
         return []
-    vdict = _variant_dict(graph)
-    options = getattr(graph.scenario, "power_options", None) or {}
-    params = variant_params(options, vdict) if options else {}
+    vdict, params = job_inputs(graph)
     out = []
     for raw in raw_jobs:
         job = JobSpec.model_validate(raw)
@@ -233,13 +238,24 @@ class _Evaluation:
     def _hw_chunk(self, s: JobStage, w: int, h: int, n_chunks: int) -> tuple[float, float, dict[str, float]]:
         px_chunk = w * h / max(1, n_chunks)
         t_max, energy, clocks = 0.0, 0.0, {}
+        mode = self.p.text(s.mode) if s.mode is not None else None
         for node in s.nodes:
             wl = self.workloads.get(node)
+            base_ppc = float(wl.sim_params.ppc if wl else 0.0)
+            base_unit = float(wl.sim_params.unit_power_mw_mp if wl else 0.0)
+            if mode is not None:                      # the stage's catalog sim mode replaces the session mode
+                row = self.graph.ip_catalog.get(str(self.nodes[node].get("ip_ref")))
+                modes = ((getattr(row, "capabilities", None) or {}).get("sim") or {}).get("modes") or {}
+                if mode not in modes:
+                    raise JobError(f"job {self.job.id}: stage {s.id} node {node} has no catalog mode {mode!r} "
+                                   f"(modes {sorted(modes)})")
+                base_ppc = float(modes[mode].get("ppc") or 0.0)
+                base_unit = float(modes[mode].get("unit_power_mw_mp") or 0.0)
             ipp = s.ip_params or {}
             ppc = (self.p.num(ipp["ppc"], f"stages.{s.id}.ip_params.ppc") if ipp.get("ppc") is not None
-                   else float(wl.sim_params.ppc if wl else 0.0))
+                   else base_ppc)
             unit = (self.p.num(ipp["unit_power_mw_mp"], f"stages.{s.id}.ip_params.unit_power_mw_mp")
-                    if ipp.get("unit_power_mw_mp") is not None else float(wl.sim_params.unit_power_mw_mp if wl else 0.0))
+                    if ipp.get("unit_power_mw_mp") is not None else base_unit)
             if ppc <= 0:
                 raise JobError(f"job {self.job.id}: stage {s.id} node {node} has no ppc (catalog mode or ip_params)")
             mhz, mv = self._clock(s, node)
@@ -417,7 +433,9 @@ class _Evaluation:
             if self.job.background == "steady":
                 env.process(background(rid, hw_ms))
 
-        at = float(self.job.trigger.at_ms)
+        at = self.p.num(self.job.trigger.at_ms, "trigger.at_ms")
+        if not (math.isfinite(at) and at >= 0):
+            raise JobError(f"job {self.job.id}: trigger.at_ms {at} must be a finite number >= 0")
         done = {sid: env.event() for sid in active}
         frame_done = {sid: [env.event() for _ in range(max(1, plan[sid]["frames"]))] for sid in active}
         ready_evt = {sid: env.event() for sid in active}     # data ready (sensor: end of readout)

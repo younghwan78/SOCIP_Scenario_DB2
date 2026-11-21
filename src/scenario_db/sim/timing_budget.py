@@ -230,12 +230,13 @@ def analyze_timing_budget(
         report["cpu_opp"] = opp
     report["dvfs"]["overrides"] = dict(base_config.dvfs_overrides)
     report["dvfs"]["ladders"] = dvfs_ladders(report["ips"], dvfs_tables, base_config.asv_group)
-    if (getattr(graph.scenario, "pipeline", None) or {}).get("jobs"):  # R-3 event jobs (absent = unchanged)
+    if options.cpu_model == "profile":
+        _profile_cpu(report, options, params, config)
+    # R-3 event jobs (absent = unchanged); after the CPU profile so their background is the final steady power
+    if (getattr(graph.scenario, "pipeline", None) or {}).get("jobs"):
         from scenario_db.sim.jobs import evaluate_jobs
 
         report["jobs"] = evaluate_jobs(graph, report, budget["inputs"], dvfs_tables, base_config)
-    if options.cpu_model == "profile":
-        _profile_cpu(report, options, params, config)
     if options.include_whatif:
         report["whatif"] = whatif(graph, options, config=config, dvfs_tables=dvfs_tables)
     return report
