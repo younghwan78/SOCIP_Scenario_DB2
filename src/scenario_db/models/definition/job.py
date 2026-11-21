@@ -137,6 +137,7 @@ class DomainWork(BaseScenarioModel):
 class SwWork(BaseScenarioModel):
     runtime_ms: Num
     cluster: str | None = None
+    power_mw: Num | None = None                   # CPU power while it runs (assumed); absent = not attributed
 
 
 class TransferWork(BaseScenarioModel):

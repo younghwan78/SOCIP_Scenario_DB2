@@ -97,6 +97,10 @@ def _condition_hash(graph, options, shim, tables) -> str:
     domain = _domain_load_inputs(graph)
     if domain:
         payload["domain_loads"] = domain
+    # R-3 event jobs read their knob parameters from power_options; absent = hash unchanged
+    jobs = (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("jobs")
+    if jobs:
+        payload["jobs"] = {"jobs": jobs, "power_options": getattr(graph.scenario, "power_options", None)}
     opp = _cpu_opp_inputs(graph)
     if opp:
         payload["cpu_opp"] = opp
