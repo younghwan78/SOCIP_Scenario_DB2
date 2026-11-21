@@ -235,8 +235,11 @@ class _Evaluation:
         t_max, energy, clocks = 0.0, 0.0, {}
         for node in s.nodes:
             wl = self.workloads.get(node)
-            ppc = float((s.ip_params or {}).get("ppc") or (wl.sim_params.ppc if wl else 0.0))
-            unit = float((s.ip_params or {}).get("unit_power_mw_mp") or (wl.sim_params.unit_power_mw_mp if wl else 0.0))
+            ipp = s.ip_params or {}
+            ppc = (self.p.num(ipp["ppc"], f"stages.{s.id}.ip_params.ppc") if ipp.get("ppc") is not None
+                   else float(wl.sim_params.ppc if wl else 0.0))
+            unit = (self.p.num(ipp["unit_power_mw_mp"], f"stages.{s.id}.ip_params.unit_power_mw_mp")
+                    if ipp.get("unit_power_mw_mp") is not None else float(wl.sim_params.unit_power_mw_mp if wl else 0.0))
             if ppc <= 0:
                 raise JobError(f"job {self.job.id}: stage {s.id} node {node} has no ppc (catalog mode or ip_params)")
             mhz, mv = self._clock(s, node)

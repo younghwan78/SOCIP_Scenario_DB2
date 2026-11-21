@@ -171,3 +171,11 @@ def test_a_measured_clock_sets_the_hw_chunk_time():
 def test_measured_slot_errors(node, values, message):
     with pytest.raises(JobError, match=message):
         _report(_with_slot(node, values))
+
+
+def test_ip_params_are_parameter_expressions():
+    base = {s["id"]: s for s in _job()["stages"]}["merge"]
+    job = deepcopy(JOB)
+    job["stages"][2]["ip_params"] = {"ppc": "pool * 4"}     # pool = 2 -> ppc 8 (catalog MTNR: 4)
+    merge = {s["id"]: s for s in _report(_graph(job=job))["jobs"][0]["stages"]}["merge"]
+    assert merge["service_ms"] == pytest.approx(base["service_ms"] / 2, rel=1e-3)
