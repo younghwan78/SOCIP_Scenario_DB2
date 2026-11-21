@@ -179,3 +179,51 @@ def test_ip_params_are_parameter_expressions():
     job["stages"][2]["ip_params"] = {"ppc": "pool * 4"}     # pool = 2 -> ppc 8 (catalog MTNR: 4)
     merge = {s["id"]: s for s in _report(_graph(job=job))["jobs"][0]["stages"]}["merge"]
     assert merge["service_ms"] == pytest.approx(base["service_ms"] / 2, rel=1e-3)
+
+
+def test_the_condition_hash_follows_the_job_params_from_design_conditions():
+    from scenario_db.api.services.timing_budget import _condition_hash
+    from tests.unit.sim.test_service_hash import _request
+
+    graph, opts, shim = _graph(), TimingBudgetOptions(throughput_model="pipelined"), _request()
+    before = _condition_hash(graph, opts, shim, {})
+    graph.variant.design_conditions = {**(graph.variant.design_conditions or {}), "enc_ms": 100}
+    assert _condition_hash(graph, opts, shim, {}) != before
+    assert _report(graph)["jobs"][0]["stages"][-1]["service_ms"] == pytest.approx(100.0)
+
+
+def test_a_hw_stage_mode_selects_the_catalog_sim_mode():
+    graph = _graph()
+    node = next(n for n in graph.scenario.pipeline["nodes"] if n["id"] == "byrp")
+    ip = graph.ip_catalog[node["ip_ref"]]
+    ip.capabilities = deepcopy(ip.capabilities)
+    normal = ip.capabilities["sim"]["modes"]["Normal"]
+    ip.capabilities["sim"]["modes"]["JobFast"] = {**normal, "ppc": normal["ppc"] * 2}
+    stage = {"id": "a", "phase": "p", "nodes": ["byrp"], "mode": "Normal"}
+    graph.scenario.pipeline["jobs"] = [{"id": "j", "background": "none", "stages": [stage]}]
+    base = _report(graph)["jobs"][0]["stages"][0]["service_ms"]
+    stage["mode"] = "JobFast"
+    assert _report(graph)["jobs"][0]["stages"][0]["service_ms"] == pytest.approx(base / 2, rel=1e-3)
+    stage["mode"] = "Ghost"
+    with pytest.raises(JobError, match="no catalog mode 'Ghost'"):
+        _report(graph)
+
+
+def test_the_trigger_start_is_a_parameter_expression():
+    job = deepcopy(JOB)
+    job["trigger"]["at_ms"] = "sw_ms * 20"                 # = 100, the literal of JOB
+    assert _report(_graph(job=job))["jobs"][0] == _job()
+    job["trigger"]["at_ms"] = "sw_ms * 3"
+    assert _report(_graph(job=job))["jobs"][0] != _job()
+
+
+def test_the_job_background_is_the_final_steady_power():
+    from scenario_db.sim.models import CpuProfile, CpuTaskProfile, SimulationRunConfig
+    from tests.unit.sim.test_cpu_topology_profile import synthetic_topology
+
+    opts = TimingBudgetOptions(throughput_model="pipelined", cpu_model="profile",
+                               cpu_profile=CpuProfile(tasks=[CpuTaskProfile(task="test", cluster="C", cycles=1e7,
+                                                                            bus_bytes=100e6)]))
+    report = analyze_timing_budget(_graph(), opts,
+                                   config=SimulationRunConfig(power_params=synthetic_topology([("C", "C", 4)])))
+    assert report["jobs"][0]["background"]["power_mw"] == pytest.approx(report["power"]["total_mw"], abs=0.1)
