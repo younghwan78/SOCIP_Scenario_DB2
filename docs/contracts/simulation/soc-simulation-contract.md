@@ -187,11 +187,11 @@ pipeline:
 The evidence generator (`scripts/generate_simulation_evidence.py`) accepts a run on the declared sinks
 active in the variant, so screen-off playback is judged on its decoder output.
 
-## Event Jobs (`pipeline.jobs`) — definition only
+## Event Jobs (`pipeline.jobs`)
 
 A one-off or burst piece of work on top of the steady frame DAG (capture shot, camera launch, lens switch, seek)
-is declared as a stage DAG. This release validates the definition; the job evaluator comes later, so a declared job
-does not change any result yet. Absent = no key in the stored pipeline (the field defaults to `None`).
+is declared as a stage DAG. Absent = no key in the stored pipeline (the field defaults to `None`) and no
+`report.jobs`; a declared job adds `report.jobs` and leaves every steady value unchanged.
 
 ```yaml
 pipeline:
@@ -217,6 +217,30 @@ pipeline:
 | `reads` / `writes` | `reads` names session buffers (`pipeline.buffers`); job buffers flow from the predecessors that `writes` them (or to the stages in a buffer's `to`). Job buffer names must not shadow pipeline buffers. |
 | numbers | A number, or an expression of knob parameters (`+ - * /`); `mode` and `clock.dvfs_sn` take a name or `{param: name}` (other string fields are literals). Literals and parameter-free expressions are range-checked at definition time (counts integer >= 1; interval / MB / ppc / clocks > 0; others >= 0); expressions with parameters when resolved. Every name must be a `knobs.yaml` param; params / param_rules are exported even without knobs. |
 | `when` / `when_node_enabled` | Variant selection, as knob rules. |
+| `work.power_mw` (`sw`) | CPU power while the stage runs (assumed); absent = its energy is not attributed. |
+
+### Evaluator `job-v1` (`report.jobs[]`)
+
+A deterministic SimPy run per selected job, separate from the steady timeline:
+
+- **Background**: every steady HW task occupies its physical resource for its steady `hw_ms` once per frame
+  period at RT priority (`preview_priority: fifo` shares the job's priority; `background: none` turns it off).
+- **Chunks**: a stage runs `frames x passes x stripes/tiles` non-preemptive chunks on the steady resources (an OTF
+  group holds all its nodes), so a running chunk delays an RT release by at most its own length
+  (`background.rt_wait_max_ms`). Stripe chunks trade a longer shot for a shorter RT wait.
+- **Sensor**: one reservation of the sensor and its `holds` (switch-in, readout at the catalog mode fps,
+  switch-out); background frames on a reserved resource are dropped (`background.dropped_frames`).
+- **Buffers**: `count` is a token pool; a per-frame consumer returns a frame's token when it is done, which bounds
+  `peak.footprint_mb`. A stage-level consumer needs a pool of at least the producer's frames (else an error).
+- **Costs**: `hw` chunk = px / (MHz x ppc) x (1 + h_blank) + `setup_us`, energy = the v1 dynamic term (static
+  and clock terms are not attributed); `domain` = util-vf-v1 at util 1 at the top operating point; `sw` /
+  `transfer` / `fixed` = `power_mw` x time. `clock: dvfs_sn` is not supported by `job-v1` yet.
+
+Outputs: `milestones` (end of the named stage, ms after the trigger), `makespan_ms`, `phases`, `stages`
+(start / end / service / elapsed, chunks, clocks, energy, MB), `energy_mj` (event total, by kind, unattributed
+stages), `peak` (10 ms-window and instantaneous power / BW over the steady values, footprint), `background`,
+`series` (1 ms), `basis`. The Timing Budget condition hash includes the jobs and `power_options` when jobs are
+declared.
 
 ## Task Cadence (`node_configs.<node>.timeline`)
 
