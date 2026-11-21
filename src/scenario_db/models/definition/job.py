@@ -13,13 +13,26 @@ wrote, plus the buffers whose ``to`` names it; ``reads`` lists session (``pipeli
 from __future__ import annotations
 
 import ast
-from typing import Any, Literal
+import math
+from typing import Annotated, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BeforeValidator, Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
 
-Num = float | int | str            # number, or a knob parameter expression
+
+
+def _strict_num(value: Any) -> Any:
+    """Before coercion: a bool is not a number (pydantic would make it 1 / 0), a literal must be finite."""
+    if isinstance(value, bool):
+        raise ValueError(f"{value!r} is not a number")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{value!r} is not a finite number")
+    return value
+
+
+Num = Annotated[float | int | str, BeforeValidator(_strict_num)]   # number, or a knob parameter expression
+IP_PARAM_KEYS = ("ppc", "unit_power_mw_mp")
 ParamRef = str | dict[str, str]    # literal, or {param: name}
 
 _EXPR_OPS = (ast.Add, ast.Sub, ast.Mult, ast.Div)
@@ -30,6 +43,8 @@ def expression_names(value: Any, where: str) -> set[str]:
     if isinstance(value, bool):
         raise ValueError(f"{where}: {value!r} is not a number")
     if isinstance(value, (int, float)):
+        if not math.isfinite(value):
+            raise ValueError(f"{where}: {value!r} is not a finite number")
         return set()
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{where}: {value!r} is not a number or a parameter expression")
@@ -43,6 +58,8 @@ def expression_names(value: Any, where: str) -> set[str]:
         if isinstance(node, ast.Expression):
             walk(node.body)
         elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+            if not math.isfinite(node.value):
+                raise ValueError(f"{where}: {value!r} is not a finite number")
             return
         elif isinstance(node, ast.Name):
             names.add(node.id)
@@ -157,6 +174,11 @@ class JobStage(Selector):
             raise ValueError(f"stage {self.id}: kind {self.kind} needs work")
         if self.kind == "sensor" and self.mode is None:
             raise ValueError(f"stage {self.id}: a sensor stage needs the sensor mode")
+        unknown = sorted(set(self.ip_params or {}) - set(IP_PARAM_KEYS))
+        if unknown:
+            raise ValueError(f"stage {self.id}: ip_params {unknown} are not {list(IP_PARAM_KEYS)}")
+        for key, value in (self.ip_params or {}).items():
+            expression_names(value, f"stage {self.id}.ip_params.{key}")
         if isinstance(self.clock, dict):
             if not self.clock:
                 raise ValueError(f"stage {self.id}: clock must not be empty")
@@ -180,6 +202,7 @@ class JobStage(Selector):
                 out.append((f"work.{key}", value))
         if isinstance(self.clock, dict):
             out += [(f"clock.{k}", v) for k, v in self.clock.items() if k != "dvfs_sn"]
+        out += [(f"ip_params.{k}", v) for k, v in (self.ip_params or {}).items()]
         return out
 
     def param_refs(self) -> list[tuple[str, str]]:

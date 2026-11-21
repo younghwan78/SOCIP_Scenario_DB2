@@ -118,3 +118,29 @@ def test_params_without_knobs_are_exported():
     assert power_options_doc({}) is None
     assert power_options_doc({"params": {"zsl_frames": 1}}) == {"params": {"zsl_frames": 1}}
     assert power_options_doc({"knobs": {"k": {}}, "params": {}}) == {"knobs": {"k": {}}}
+
+
+@pytest.mark.parametrize("mutate,message", [
+    (lambda j: j["stages"][2].update(frames=float("nan")), "not a finite number"),
+    (lambda j: j["stages"][0]["work"].update(duration_ms=float("inf")), "not a finite number"),
+    (lambda j: j["stages"][2].update(frames=True), "is not a number"),
+    (lambda j: j["buffers"]["cap_yuv"].update(count=False), "is not a number"),
+    (lambda j: j["stages"][2].update(ip_params={"ppc": "f(2)"}), "unsupported expression"),
+    (lambda j: j["stages"][2].update(ip_params={"ppc": True}), "is not a number"),
+    (lambda j: j["stages"][2].update(ip_params={"gain": 1}), r"ip_params \['gain'\]"),
+    (lambda j: j["stages"][2].update(clock={"CAM": "1e999"}), "not a finite number"),
+])
+def test_numbers_are_finite_and_not_booleans(mutate, message):
+    pipeline = _pipeline()
+    mutate(pipeline["jobs"][0])
+    with pytest.raises(ValidationError, match=message):
+        Usecase.model_validate(_usecase(pipeline))
+
+
+def test_ip_params_names_must_be_declared_params():
+    pipeline = _pipeline()
+    pipeline["jobs"][0]["stages"][2]["ip_params"] = {"ppc": "missing_ppc * 2", "unit_power_mw_mp": 4.3}
+    with pytest.raises(ValidationError, match=r"ip_params.ppc: unknown parameters \['missing_ppc'\]"):
+        Usecase.model_validate(_usecase(pipeline))
+    pipeline["jobs"][0]["stages"][2]["ip_params"] = {"ppc": "zsl_frames * 8"}
+    Usecase.model_validate(_usecase(pipeline))
