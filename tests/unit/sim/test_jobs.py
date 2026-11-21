@@ -124,3 +124,50 @@ def test_disabled_nodes_skip_their_stage():
 def test_evaluate_jobs_without_declaration_is_empty():
     graph = _exynos2600_generated_graph("uc-cam-capture-e2600", VARIANT)
     assert evaluate_jobs(graph, {}, None, {}, None) == []
+
+
+def _with_slot(node, values, job=None):
+    graph = _graph(job=job)
+    cfgs = dict(graph.variant.node_configs or {})
+    cfg = dict(cfgs.get(node) or {})
+    cfg["sim"] = {**(cfg.get("sim") or {}), "jobs": {"still_shot": values}}
+    cfgs[node] = cfg
+    graph.variant.node_configs = cfgs
+    return graph
+
+
+def test_measured_stage_values_replace_the_computed_ones():
+    base = {s["id"]: s for s in _job()["stages"]}
+    graph = _with_slot("mtnr", {"merge": {"service_ms": 60.0, "mb": 100.0, "evidence_ref": "meas-x"}})
+    out = _report(graph)["jobs"][0]
+    merge = {s["id"]: s for s in out["stages"]}["merge"]
+    assert merge["service_ms"] == pytest.approx(60.0)
+    assert merge["mb"] == pytest.approx(100.0)
+    assert merge["value_source"] == "measured" and merge["evidence_ref"] == "meas-x"
+    assert merge["energy_mj"] == pytest.approx(base["merge"]["energy_mj"])   # HW keeps its per-pixel energy
+    assert {s["id"]: s for s in out["stages"]}["reproc"]["value_source"] == base["reproc"]["value_source"]
+
+
+def test_measured_sw_time_keeps_the_declared_power():
+    out = _report(_with_slot("post_proc", {"enc": {"service_ms": 70.0}}))["jobs"][0]
+    enc = {s["id"]: s for s in out["stages"]}["enc"]
+    assert enc["service_ms"] == pytest.approx(70.0) and enc["energy_mj"] == pytest.approx(400 * 70 / 1000.0)
+
+
+def test_a_measured_clock_sets_the_hw_chunk_time():
+    base = {s["id"]: s for s in _job()["stages"]}["merge"]
+    out = _report(_with_slot("mtnr", {"merge": {"clock_mhz": base["clock_mhz"]["mtnr"] * 2}}))["jobs"][0]
+    merge = {s["id"]: s for s in out["stages"]}["merge"]
+    assert merge["service_ms"] == pytest.approx(base["service_ms"] / 2, rel=1e-3)
+
+
+@pytest.mark.parametrize("node,values,message", [
+    ("mtnr", {"ghost": {"service_ms": 1}}, "unknown stage 'ghost'"),
+    ("mtnr", {"merge": {"latency_ms": 1}}, r"values \['latency_ms'\]"),
+    ("byrp", {"merge": {"service_ms": 1}}, "belong under one of its nodes"),
+    ("mtnr", {"merge": {"service_ms": 0}}, "must be a positive number"),
+    ("sensor_rear", {"readout": {"mb": 1}}, "takes only service_ms"),
+])
+def test_measured_slot_errors(node, values, message):
+    with pytest.raises(JobError, match=message):
+        _report(_with_slot(node, values))
