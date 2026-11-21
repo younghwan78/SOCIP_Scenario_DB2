@@ -83,6 +83,26 @@ def param_ref_name(value: Any, where: str) -> str | None:
     raise ValueError(f"{where}: expected a string or {{param: name}}, got {value!r}")
 
 
+# Literal ranges by field (expressions are checked by the evaluator once resolved, with the same rule)
+_COUNT = {"frames", "passes", "tiles", "count", "max_in_flight", "bitdepth"}      # integer >= 1
+_POSITIVE = {"interval_ms", "max_line_px", "mb", "mb_per_s", "ppc"}              # > 0
+# everything else (times, cycles, power, overlap, setup, at_ms, unit power) is >= 0; clock.<group> is > 0
+
+
+def range_error(path: str, value: float) -> str | None:
+    """Why ``value`` is out of range for the job field ``path`` (dotted), or None."""
+    parts = path.split(".")
+    key = parts[-1]
+    if key in _COUNT:
+        if value < 1 or value != int(value):
+            return f"{path} {value} must be an integer >= 1"
+    elif key in _POSITIVE or (len(parts) >= 2 and parts[-2] == "clock"):
+        if value <= 0:
+            return f"{path} {value} must be > 0"
+    elif value < 0:
+        return f"{path} {value} must be >= 0"
+    return None
+
 class Selector(BaseScenarioModel):
     """Variant selection shared by jobs and stages (the knob ``_match`` rule)."""
 
@@ -230,16 +250,10 @@ class JobBuffer(BaseScenarioModel):
 
 class JobTrigger(BaseScenarioModel):
     kind: Literal["event", "burst", "periodic"] = "event"
-    at_ms: Num = 0.0                              # event start; a literal must be >= 0 (expressions: at run time)
+    at_ms: Num = 0.0                              # event start (ms after the session start)
     count: Num = 1
     interval_ms: Num | None = None                # None = as fast as resources and buffers allow
     max_in_flight: Num = 1
-
-    @model_validator(mode="after")
-    def _start(self) -> JobTrigger:
-        if isinstance(self.at_ms, (int, float)) and self.at_ms < 0:
-            raise ValueError(f"trigger.at_ms {self.at_ms} must be >= 0")
-        return self
 
 
 JobKpi = Literal["event_latency", "event_rate", "event_energy", "peak_power", "peak_bw", "peak_footprint",
@@ -305,6 +319,16 @@ class JobSpec(Selector):
         for name, sid in (self.milestones or {}).items():
             if sid not in known:
                 raise ValueError(f"job {self.id}: milestone {name} names unknown stage {sid}")
+        for path, value in self.numeric_fields():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                problem = range_error(path, float(value))
+                if problem:
+                    raise ValueError(f"job {self.id}: {problem}")
+        for s in self.stages:
+            c = s.chunk
+            if (c is not None and isinstance(c.max_line_px, (int, float)) and isinstance(c.overlap_px, (int, float))
+                    and c.max_line_px <= c.overlap_px):
+                raise ValueError(f"job {self.id}: stage {s.id} chunk.max_line_px must exceed overlap_px")
         return self
 
     def numeric_fields(self) -> list[tuple[str, Any]]:

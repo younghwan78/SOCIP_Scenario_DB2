@@ -169,3 +169,34 @@ def test_a_pipeline_patch_must_not_leave_job_references_dangling():
     messages = " | ".join(i.message for i in issues)
     assert {i.code for i in issues} == {"job_reference_invalid"}
     assert "node 'mtnr' not found" in messages and "reads ['ZSL_RING_BUF']" in messages
+
+
+@pytest.mark.parametrize("mutate,message", [
+    (lambda j: j["trigger"].update(kind="burst", count=1.5), "trigger.count 1.5 must be an integer >= 1"),
+    (lambda j: j["trigger"].update(max_in_flight=-1), "max_in_flight -1.0 must be an integer >= 1"),
+    (lambda j: j["trigger"].update(interval_ms=-10), "interval_ms -10.0 must be > 0"),
+    (lambda j: j["trigger"].update(at_ms=-1), "at_ms -1.0 must be >= 0"),
+    (lambda j: j["stages"][2].update(frames=0), "frames 0.0 must be an integer >= 1"),
+    (lambda j: j["stages"][0]["work"].update(duration_ms=-5), "duration_ms -5.0 must be >= 0"),
+    (lambda j: j["stages"][2].update(clock={"CAM": 0}), "clock.CAM 0.0 must be > 0"),
+    (lambda j: j["stages"][2].update(ip_params={"ppc": 0}), "ip_params.ppc 0.0 must be > 0"),
+    (lambda j: j["buffers"]["cap_yuv"].update(count=0), "buffers.cap_yuv.count 0.0 must be an integer >= 1"),
+    (lambda j: j["buffers"]["jpeg"].update(mb=-4), "buffers.jpeg.mb -4.0 must be > 0"),
+    (lambda j: j["stages"][4].update(chunk={"by": "stripe", "max_line_px": 64, "overlap_px": 64}),
+     "max_line_px must exceed overlap_px"),
+])
+def test_number_literals_are_range_checked(mutate, message):
+    job = deepcopy(JOB)
+    mutate(job)
+    with pytest.raises(ValidationError, match=message):
+        JobSpec.model_validate(job)
+
+
+def test_selector_nodes_must_exist():
+    for where in ("job", "stage"):
+        pipeline = _pipeline()
+        target = pipeline["jobs"][0] if where == "job" else pipeline["jobs"][0]["stages"][2]
+        target["when_node_enabled"] = "ghost"
+        with pytest.raises(ValidationError, match="when_node_enabled 'ghost' not found"):
+            Pipeline.model_validate(pipeline)
+

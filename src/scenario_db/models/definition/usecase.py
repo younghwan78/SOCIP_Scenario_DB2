@@ -105,7 +105,12 @@ def job_reference_errors(jobs: list[JobSpec], node_ids: set[str], buffers: set[s
         clash = sorted(set(job.buffers or {}) & buffers)
         if clash:
             errors.append(f"job {job.id}: job buffers {clash} shadow pipeline buffers")
+        if job.when_node_enabled is not None and job.when_node_enabled not in node_ids:
+            errors.append(f"job {job.id}: when_node_enabled '{job.when_node_enabled}' not found in nodes")
         for stage in job.stages:
+            if stage.when_node_enabled is not None and stage.when_node_enabled not in node_ids:
+                errors.append(f"job {job.id}: stage {stage.id} when_node_enabled "
+                              f"'{stage.when_node_enabled}' not found in nodes")
             for node in [*stage.nodes, *(stage.holds or [])]:
                 if node not in node_ids:
                     errors.append(f"job {job.id}: stage {stage.id} node '{node}' not found in nodes")
