@@ -30,7 +30,7 @@ import math
 from typing import Any
 
 from scenario_db.authoring.knobs import KnobError, _match, eval_expr, variant_params
-from scenario_db.models.definition.job import AfterRef, JobSpec, JobStage
+from scenario_db.models.definition.job import AfterRef, JobSpec, JobStage, range_error
 from scenario_db.sim.bw_calc import resolve_comp_ratio
 from scenario_db.sim.domain_loads import DOMAIN_MODELS, domain_load_config
 from scenario_db.sim.power_calc import calc_active_power_mw
@@ -64,11 +64,18 @@ class _Params:
 
     def num(self, value: Any, path: str) -> float:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value)
+            return float(value)                  # literals are range-checked by the schema
         try:
-            return eval_expr(value, self.params)
+            out = eval_expr(value, self.params)
         except KnobError as exc:
             raise JobError(f"{self.where}.{path}: {exc}") from None
+        if not math.isfinite(out):
+            raise JobError(f"{self.where}.{path}: {value!r} = {out} is not a finite number")
+        if path.split(".")[0] in ("stages", "buffers", "trigger"):   # job fields: the schema literal ranges
+            problem = range_error(path, out)
+            if problem:
+                raise JobError(f"{self.where}: {problem} ({value!r})")
+        return out
 
     def text(self, value: Any) -> Any:
         if isinstance(value, dict) and "param" in value:
@@ -519,7 +526,7 @@ class _Evaluation:
                             for key in [k for k in open_allocs if k[0] == b]:
                                 i = open_allocs.pop(key)
                                 allocs[i] = (allocs[i][0], env.now, allocs[i][2], b)
-                            yield pools[b].put(max(0, int(self.p.num(buffers[b].count, "count")) - pools[b].level))
+                            yield pools[b].put(max(0, int(self.p.num(buffers[b].count, f"buffers.{b}.count")) - pools[b].level))
 
         for sid, e in plan.items():
             if e["stage"].kind != "sensor":
