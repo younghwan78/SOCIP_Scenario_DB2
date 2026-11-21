@@ -183,8 +183,65 @@ pipeline:
       bitdepth: 8
       compression: COMP_OFF
       note: JPEG encoded output
+  # R-3 event jobs (E2600 assumed values; params in knobs.yaml). The steady session is the 12M preview (C-2);
+  # a shot runs on the same ISP resources at job priority, preview RT first. ISP stages run at the top DVFS level
+  # (capture DVFS SN, assumed); the preview background keeps its steady clock (job-v1).
+  jobs:
+  - id: still_shot
+    label: 12M ZSL shot (SF / MF)
+    when: {capture_readout: null}
+    trigger: {kind: event, at_ms: 200}
+    phases: [process, encode, store]
+    buffers:
+      cap_yuv: {format: YUV420, bitdepth: 10, count: yuv_pool}
+      out_yuv: {format: YUV420, bitdepth: 10}
+      jpeg: {mb: jpeg_mb}
+    stages:
+    - {id: reproc, phase: process, clock: max, nodes: [byrp, rgbp, yuvsc], frames: burst_frames, reads: [ZSL_RING_BUF],
+       writes: [cap_yuv], chunk: {by: frame}}
+    - {id: merge, phase: process, clock: max, nodes: [mtnr], frames: burst_frames, after: [{stage: reproc, per: frame}],
+       when: {subscenario: [STILL_MF_CAPTURE, STILL_FLASH_MF_CAPTURE, STILL_HIGH_RES_MF_CAPTURE, NIGHT_CAPTURE,
+                            STILL_MOTION_FREE_MF_CAPTURE, SRZOOM_CAPTURE]}}
+    - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], writes: [out_yuv], after: [merge, reproc]}
+    - {id: enc, phase: encode, kind: sw, nodes: [post_proc], writes: [jpeg], after: [post],
+       work: {runtime_ms: encode_ms, cluster: big, power_mw: cpu_encode_mw}}
+    - {id: store, phase: store, kind: transfer, nodes: [storage], after: [enc],
+       work: {mb: jpeg_mb, mb_per_s: ufs_mb_s, power_mw: ufs_mw}}
+    milestones: {thumbnail: post, saved: store}
+    kpis: [event_latency, event_energy, peak_power, peak_bw, peak_footprint]
+  - id: still_shot_200m
+    label: 200M shot by seamless mode change (full_remosaic readout)
+    when: {capture_readout: full_remosaic}
+    trigger: {kind: event, at_ms: 200}
+    phases: [acquire, process, encode, store]
+    buffers:
+      cap_bayer: {format: BAYER, bitdepth: 12, size_ref: capture_full, count: full_pool}
+      cap_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_full, count: full_pool}
+      out_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_full}
+      jpeg: {mb: jpeg_200m_mb}
+    stages:
+    - {id: readout, phase: acquire, kind: sensor, nodes: [sensor_rear], holds: [csispdp], mode: full_remosaic,
+       frames: full_frames, writes: [cap_bayer],
+       work: {switch_in_ms: mode_switch_ms, switch_out_ms: mode_switch_ms}}
+    - {id: reproc, phase: process, clock: max, nodes: [byrp, rgbp, yuvsc], size_ref: capture_full, frames: full_frames,
+       writes: [cap_yuv], after: [readout],
+       chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px}}
+    - {id: ai, phase: process, kind: domain, nodes: [npu], size_ref: capture_full, after: [reproc],
+       work: {mcycles_per_mp: ai_mcycles_per_mp}, when: {extend_mode: EX_AI_REMOSAIC}}
+    - {id: merge, phase: process, clock: max, nodes: [mtnr], size_ref: capture_full, frames: full_frames, after: [reproc],
+       chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px},
+       when: {subscenario: [STILL_REMOSAIC_MF_CAPTURE, STILL_REMOSAIC_PRO_SF_CAPTURE, REMOSAIC_NIGHT_CAPTURE]}}
+    - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], size_ref: capture_full, writes: [out_yuv],
+       after: [ai, merge, reproc], chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px}}
+    - {id: enc, phase: encode, kind: sw, nodes: [post_proc], writes: [jpeg], after: [post],
+       work: {runtime_ms: encode_200m_ms, cluster: big, power_mw: cpu_encode_mw}}
+    - {id: store, phase: store, kind: transfer, nodes: [storage], after: [enc],
+       work: {mb: jpeg_200m_mb, mb_per_s: ufs_mb_s, power_mw: ufs_mw}}
+    milestones: {thumbnail: post, saved: store}
+    kpis: [event_latency, event_energy, peak_power, peak_bw, peak_footprint]
 size_profile:
   anchors:
     sensor_out: 4000x3000
+    capture_full: 16384x12288   # full_remosaic readout (capture job only)
 variants:
   $include: variants.yaml

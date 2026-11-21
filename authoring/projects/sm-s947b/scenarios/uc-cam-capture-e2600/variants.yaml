@@ -166,6 +166,7 @@
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    capture_readout: full_remosaic
     preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_FULL_SIZE
   node_configs:
