@@ -260,6 +260,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       selected_mode: Normal
       sim:
@@ -299,7 +301,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-60
   severity: medium
   design_conditions:
@@ -333,6 +335,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       selected_mode: Normal
       sim:
@@ -367,8 +371,6 @@ variants:
     dpu:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: binning_4x4
 - id: cam-prev-r1-full-res
   severity: light
   design_conditions:
@@ -377,7 +379,8 @@ variants:
     sensor_place: rear
     fps: 30
     extend_mode: EX_NONE
-    note: remosaic 캡처 직전 sensor full-size 프리뷰
+    note: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture event
+      job), C-2 decision 2026-11-21
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -401,6 +404,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -434,21 +439,19 @@ variants:
     dpu:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: binning_2x2
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-remosaic
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_PREVIEW
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_PHOTO
     sensor_place: rear
-    fps: 10
+    fps: 30
     extend_mode: EX_SEAMLESS_TETRA
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_FULL_SIZE
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -472,6 +475,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -509,19 +514,17 @@ variants:
     dpu:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-prev-r1-ai-remosaic
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_PREVIEW
     sensor_place: rear
-    fps: 10
+    fps: 30
     extend_mode: EX_AI_REMOSAIC
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     npu_used: true
   routing_switch:
     disabled_nodes:
@@ -541,6 +544,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -578,12 +583,10 @@ variants:
     dpu:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
     npu:
       selected_mode: Normal
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-prev-r1-night
   severity: light
   design_conditions:
@@ -615,6 +618,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -649,7 +654,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-night-max
   severity: light
   design_conditions:
@@ -681,6 +686,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -715,7 +722,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-crop-zoom
   severity: light
   design_conditions:
@@ -747,6 +754,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -782,7 +791,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-dcg
   severity: light
   design_conditions:
@@ -813,6 +822,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -847,7 +858,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-ln
   severity: light
   design_conditions:
@@ -878,6 +889,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -912,7 +925,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-3dhdr
   severity: light
   design_conditions:
@@ -943,6 +956,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -981,7 +996,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-portrait
   severity: light
   design_conditions:
@@ -1010,6 +1025,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1044,7 +1061,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-expert-raw
   severity: light
   design_conditions:
@@ -1075,6 +1092,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1109,7 +1128,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-r1-pro
   severity: light
   design_conditions:
@@ -1140,6 +1159,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: wide_video_16_9_30
     csispdp:
       sim:
         inherit_shape: true
@@ -1206,6 +1227,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1271,6 +1294,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1336,6 +1361,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1401,6 +1428,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1435,7 +1464,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-rdual-60
   severity: medium
   design_conditions:
@@ -1463,6 +1492,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1521,6 +1552,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1555,7 +1588,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-prev-rtriple-60
   severity: medium
   design_conditions:
@@ -1580,6 +1613,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1640,6 +1675,8 @@ variants:
     - from: eis
       to: gdc_m
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1674,4 +1711,4 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000

@@ -221,6 +221,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       selected_mode: Normal
       sim:
@@ -256,7 +258,7 @@ variants:
     MCSC_WDMA_CAP_BUF:
       size_role: MCSC_OUTPUT2_FULL
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-burst
   severity: light
   design_conditions:
@@ -279,6 +281,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       selected_mode: Normal
       sim:
@@ -311,7 +315,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-single-take
   severity: light
   design_conditions:
@@ -332,6 +336,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -360,7 +366,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-agif
   severity: light
   design_conditions:
@@ -381,6 +387,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -409,7 +417,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-flash
   severity: light
   design_conditions:
@@ -432,6 +440,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -460,7 +470,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-pro
   severity: light
   design_conditions:
@@ -483,6 +493,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: wide_video_16_9_30
     mtnr:
       sim:
         inherit_shape: true
@@ -535,6 +547,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -570,7 +584,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
   buffer_overrides:
     YUVSC_MTNR_BUF:
       note: multi-frame accumulation — N×frame 입력
@@ -596,6 +610,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -631,7 +647,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-mf-high-res
   severity: light
   design_conditions:
@@ -653,6 +669,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -689,17 +707,16 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-remosaic-sf
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_FULL_SIZE
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -715,6 +732,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -746,10 +765,8 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: YUV420
@@ -760,9 +777,8 @@ variants:
   design_conditions:
     subscenario: STILL_REMOSAIC_MF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     isp_features: MTNR,MSNR
   routing_switch:
     disabled_nodes:
@@ -779,6 +795,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -810,18 +828,15 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-ai-remosaic
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     extend_mode: EX_AI_REMOSAIC
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     npu_used: true
   routing_switch:
     disabled_nodes:
@@ -833,6 +848,8 @@ variants:
     - from: sensor_front
       to: csispdp
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -860,12 +877,10 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
     npu:
       selected_mode: Normal
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-remosaic-cal
   severity: light
   design_conditions:
@@ -886,6 +901,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -914,7 +931,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-low-res-tetra
   severity: light
   design_conditions:
@@ -935,6 +952,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -963,15 +982,14 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-remosaic-pro
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_PRO_SF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_PRO_VIDEO
   routing_switch:
     disabled_nodes:
@@ -988,6 +1006,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1019,10 +1039,8 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-hhdr
   severity: light
   design_conditions:
@@ -1043,6 +1061,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1075,7 +1095,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-dcg
   severity: light
   design_conditions:
@@ -1096,6 +1116,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1124,7 +1146,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-night
   severity: light
   design_conditions:
@@ -1147,6 +1169,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1181,7 +1205,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-night-max
   severity: light
   design_conditions:
@@ -1203,6 +1227,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1231,15 +1257,14 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-night-remosaic
   severity: light
   design_conditions:
     subscenario: REMOSAIC_NIGHT_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     super_night: true
   routing_switch:
     disabled_nodes:
@@ -1256,6 +1281,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1283,10 +1310,8 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-srzoom
   severity: light
   design_conditions:
@@ -1304,6 +1329,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1332,7 +1359,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-motion-free-sf
   severity: light
   design_conditions:
@@ -1352,6 +1379,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1380,7 +1409,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-motion-free-mf
   severity: light
   design_conditions:
@@ -1401,6 +1430,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1436,7 +1467,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-high-res-raw
   severity: light
   design_conditions:
@@ -1458,6 +1489,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1486,7 +1519,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: RAW_BAYER
@@ -1517,6 +1550,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1545,7 +1580,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: RAW_BAYER
@@ -1569,6 +1604,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1597,7 +1634,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-rtriple
   severity: light
   design_conditions:
@@ -1616,6 +1653,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1644,7 +1683,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-f1
   severity: light
   design_conditions:
@@ -1666,6 +1705,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     mtnr:
       sim:
         inherit_shape: true
@@ -1713,6 +1754,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1741,4 +1784,4 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
