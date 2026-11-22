@@ -262,6 +262,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       selected_mode: Normal
       sim:
@@ -406,6 +426,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -477,6 +517,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -546,6 +606,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -620,6 +700,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -688,6 +788,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -756,6 +876,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -824,6 +964,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -891,6 +1051,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -958,6 +1138,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -1027,6 +1227,29 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: &id001
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id001
     csispdp:
       sim:
         inherit_shape: true
@@ -1094,6 +1317,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -1161,6 +1404,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: wide_video_16_9_30
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -1229,6 +1492,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -1296,6 +1579,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -1363,6 +1666,26 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true
@@ -1430,6 +1753,29 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: &id002
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id002
     csispdp:
       sim:
         inherit_shape: true
@@ -1494,6 +1840,8 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+    sensor_rear2:
+      selected_mode: binning_4x4
     csispdp:
       sim:
         inherit_shape: true
@@ -1554,6 +1902,29 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: &id003
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id003
     csispdp:
       sim:
         inherit_shape: true
@@ -1587,6 +1958,28 @@ variants:
     dpu:
       sim:
         inherit_shape: true
+    sensor_rear3:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
   size_overrides:
     sensor_out: 4000x3000
 - id: cam-prev-rtriple-60
@@ -1614,6 +2007,8 @@ variants:
       to: gdc_m
   node_configs:
     sensor_rear:
+      selected_mode: binning_4x4
+    sensor_rear2:
       selected_mode: binning_4x4
     csispdp:
       sim:
@@ -1648,6 +2043,8 @@ variants:
     dpu:
       sim:
         inherit_shape: true
+    sensor_rear3:
+      selected_mode: binning_4x4
 - id: cam-prev-pip-dual
   severity: light
   design_conditions:
@@ -1677,6 +2074,29 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: &id004
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id004
     csispdp:
       sim:
         inherit_shape: true
