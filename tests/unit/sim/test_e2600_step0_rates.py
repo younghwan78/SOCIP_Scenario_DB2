@@ -3,7 +3,7 @@
 - G-0: a game variant is judged at its target frame rate (design_conditions.fps = target_fps).
 - A-0: a CPU audio decoder runs on its own codec-frame period, not at the 30 Hz default scenario rate.
 - C-1: camera preview / capture ISP nodes compute (sizes follow the sensor mode).
-- C-2: the preview session is 12M (binning_4x4); 50M / 200M are read only at capture (seamless mode change, event job).
+- C-2: the preview session is 12M (binning_4x4; a 30 fps session pins it at 30 fps); 50M / 200M are read only at capture (seamless mode change, event job).
 """
 
 import pytest
@@ -69,6 +69,27 @@ def test_camera_isp_computes_and_the_session_is_a_12m_preview(scenario):
         if v["id"] in ("cam-prev-r1-pro", "cam-cap-r1-sf-pro"):   # pro mode: 16:9 wide video crop
             assert sensor_mode == "wide_video_16_9_30", v["id"]
         else:
-            assert sensor_mode == "binning_4x4", v["id"]
+            assert sensor_mode == "binning_4x4", v["id"]      # 12M (30 fps sessions: resolved_sensor_mode at 30)
             assert (v.get("size_overrides") or {}).get("sensor_out", "4000x3000") == "4000x3000", v["id"]
         assert report["fps"] >= 30.0, v["id"]
+
+
+@pytest.mark.parametrize("scenario", ["uc-cam-preview-e2600", "uc-cam-capture-e2600"])
+def test_active_sensors_run_at_the_session_fps_and_one_size(scenario):
+    from scenario_db.sim.external_devices import active_sensor_nodes, selected_sensor_mode
+
+    bad = []
+    for v in _variants(scenario):
+        fps = float((v.get("design_conditions") or {}).get("fps") or 30)
+        graph = _exynos2600_generated_graph(scenario, v["id"])
+        nodes = active_sensor_nodes(graph)
+        modes = {n["id"]: selected_sensor_mode(graph, n) or {} for n in nodes}
+        for node, mode in modes.items():
+            if float(mode.get("sensor_fps") or 0) != fps:
+                bad.append(f"{v['id']}.{node}: sensor {mode.get('sensor_fps')} fps, session {fps} fps")
+        # instances of one sensor (rear, rear2, rear3 share csispdp) read one size; PIP mixes different sensors
+        for ip in {n["ip_ref"] for n in nodes}:
+            sizes = {n["id"]: modes[n["id"]].get("sensor_size") for n in nodes if n["ip_ref"] == ip}
+            if len({tuple(z or ()) for z in sizes.values()}) > 1:
+                bad.append(f"{v['id']}: {ip} sizes differ {sizes}")
+    assert not bad, bad

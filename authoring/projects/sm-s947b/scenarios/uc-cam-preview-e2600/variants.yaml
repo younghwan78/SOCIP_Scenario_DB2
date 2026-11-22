@@ -38,6 +38,22 @@
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: &hp2_12m_30   # binning_4x4 at the 30 fps session rate (frame-length extension, assumed; C-2)
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size: [4000, 3000]
+        active_size: [4000, 3000]
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       selected_mode: Normal
       sim:
@@ -97,6 +113,8 @@
       - mode_note
     sensor_rear:
       selected_mode: binning_4x4
+      $unset:
+      - resolved_sensor_mode
 - id: cam-prev-r1-full-res
   extends: cam-prev-r1-60
   severity: light
@@ -113,6 +131,7 @@
       - selected_mode
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
   size_overrides:
     sensor_out: 4000x3000
 - id: cam-prev-r1-remosaic
@@ -133,6 +152,7 @@
         is kept in mode_label and the Normal coefficients are used (E2600 assumption).
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
   size_overrides:
     sensor_out: 4000x3000
 - id: cam-prev-r1-ai-remosaic
@@ -239,6 +259,10 @@
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
     csispdp:
       sim:
         inherit_shape: true
@@ -359,12 +383,25 @@
     - sensor_places
     fps: 60
     dvfs_sn: IS_DVFS_SN_REAR_DUAL_PHOTO_60
+  node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      $unset:
+      - resolved_sensor_mode
+    sensor_rear2:
+      selected_mode: binning_4x4
+      $unset:
+      - resolved_sensor_mode
 - id: cam-prev-rtriple-30
   extends: cam-prev-rdual-30
   design_conditions:
     camera_mode: triple
     dvfs_sn: IS_DVFS_SN_TRIPLE_PHOTO
     sensor_places: rear,rear2,rear3
+  node_configs:
+    sensor_rear3:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
   routing_switch:
     disabled_nodes:
     - sensor_front
@@ -391,6 +428,19 @@
     - sensor_places
     fps: 60
     dvfs_sn: IS_DVFS_SN_TRIPLE_PHOTO_60
+  node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      $unset:
+      - resolved_sensor_mode
+    sensor_rear2:
+      selected_mode: binning_4x4
+      $unset:
+      - resolved_sensor_mode
+    sensor_rear3:
+      selected_mode: binning_4x4
+      $unset:
+      - resolved_sensor_mode
 - id: cam-prev-pip-dual
   severity: light
   design_conditions:
@@ -420,6 +470,10 @@
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
     csispdp:
       sim:
         inherit_shape: true
