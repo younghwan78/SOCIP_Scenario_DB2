@@ -189,7 +189,8 @@ class JobStage(Selector):
         if self.work is not None:
             if model is None:
                 raise ValueError(f"stage {self.id}: kind {self.kind} takes no work block")
-            model.model_validate(self.work)
+            # keep the normalized block (optional nulls dropped) so input and stored signatures agree
+            self.work = model.model_validate(self.work).model_dump(exclude_none=True)
         elif self.kind in _WORK_REQUIRED:
             raise ValueError(f"stage {self.id}: kind {self.kind} needs work")
         if self.kind == "sensor" and self.mode is None:
@@ -301,7 +302,6 @@ class JobSpec(Selector):
             if self.phases is not None and s.phase not in self.phases:
                 raise ValueError(f"job {self.id}: stage {s.id} phase {s.phase!r} not in phases {self.phases}")
         # acyclic (all stages; removing stages by `when` cannot create a cycle)
-        state: dict[str, int] = {}
         # a stage waits for its `after` stages and for the producers of buffers whose `to` names it
         waits: dict[str, list[str]] = {sid: list(by_id[sid].after_ids()) for sid in ids}
         for s in self.stages:
@@ -309,19 +309,23 @@ class JobSpec(Selector):
                 for t in ((self.buffers or {}).get(b).to or []) if (self.buffers or {}).get(b) else []:
                     if t in waits and s.id not in waits[t]:
                         waits[t].append(s.id)
-
-        def visit(sid: str, path: tuple[str, ...]) -> None:
-            if state.get(sid) == 2:
-                return
-            if state.get(sid) == 1:
-                raise ValueError(f"job {self.id}: stage cycle {' -> '.join(path + (sid,))}")
-            state[sid] = 1
-            for a in waits[sid]:
-                visit(a, path + (sid,))
-            state[sid] = 2
-
+        # iterative topological sort (Kahn): no recursion limit, independent of declaration order
+        indeg = {sid: len(set(waits[sid])) for sid in ids}
+        users: dict[str, list[str]] = {sid: [] for sid in ids}
         for sid in ids:
-            visit(sid, ())
+            for a in set(waits[sid]):
+                users[a].append(sid)
+        ready = [sid for sid in ids if indeg[sid] == 0]
+        seen = 0
+        while ready:
+            sid = ready.pop()
+            seen += 1
+            for u in users[sid]:
+                indeg[u] -= 1
+                if indeg[u] == 0:
+                    ready.append(u)
+        if seen != len(ids):
+            raise ValueError(f"job {self.id}: stage cycle among {sorted(sid for sid in ids if indeg[sid] > 0)}")
         buffers = self.buffers or {}
         for s in self.stages:
             unknown = [b for b in (s.writes or []) if b not in buffers]

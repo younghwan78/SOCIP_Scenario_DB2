@@ -249,3 +249,38 @@ def test_reimport_keeps_explicit_nulls_of_a_when_selector():
     assert out["pipeline"]["jobs"][0]["stages"][0]["when"] == {"hdr": None, "fps": 30}
     assert "label" not in out["pipeline"]["jobs"][0]
 
+
+
+def test_a_deep_stage_chain_is_checked_without_recursion():
+    n = 1100
+    stages = [{"id": f"s{i}", "phase": "p", "kind": "fixed", "nodes": ["csis"], "work": {"duration_ms": 1},
+               **({"after": [f"s{i + 1}"]} if i + 1 < n else {})} for i in range(n)]
+    JobSpec.model_validate({"id": "deep", "stages": stages})
+    stages[-1]["after"] = ["s0"]
+    with pytest.raises(ValidationError, match="stage cycle"):
+        JobSpec.model_validate({"id": "deep", "stages": stages})
+
+
+def test_param_rules_set_must_be_a_mapping():
+    uc = _usecase(_pipeline())
+    uc["power_options"]["param_rules"] = [{"when": {"x": 1}, "set": ["zsl_frames"]}]
+    with pytest.raises(ValidationError, match=r"param_rules\[0\].set must map parameter names"):
+        Usecase.model_validate(uc)
+
+
+def test_the_work_block_is_stored_normalized():
+    job = deepcopy(JOB)
+    job["stages"][0]["work"] = {"duration_ms": 50, "power_mw": None}
+    stage = JobSpec.model_validate(job).stages[0]
+    assert stage.work == {"duration_ms": 50}
+
+
+def test_jobs_do_not_change_the_steady_replay_fingerprint():
+    from scenario_db.sim.measured_timing import baseline_fingerprint
+    from tests.unit.sim.test_adapter_runner import _exynos2600_generated_graph
+
+    graph = _exynos2600_generated_graph("uc-cam-capture-e2600", "cam-cap-r1-sf")
+    before = baseline_fingerprint(graph)
+    graph.scenario.pipeline = {**graph.scenario.pipeline, "jobs": [deepcopy(JOB)]}
+    assert baseline_fingerprint(graph) == before
+

@@ -365,8 +365,11 @@ class Usecase(BaseScenarioModel):
     @model_validator(mode="after")
     def _validate_job_parameters(self) -> Usecase:
         params = set((self.power_options.params if self.power_options else {}) or {})
-        for rule in (self.power_options.param_rules if self.power_options else []) or []:
-            params |= set((rule or {}).get("set") or {})       # conditional params (knob param_rules)
+        for i, rule in enumerate((self.power_options.param_rules if self.power_options else []) or []):
+            rule_set = (rule or {}).get("set") if isinstance(rule, dict) else None
+            if rule_set is not None and not (isinstance(rule_set, dict) and all(isinstance(k, str) for k in rule_set)):
+                raise ValueError(f"power_options.param_rules[{i}].set must map parameter names to values")
+            params |= set(rule_set or {})       # conditional params (knob param_rules)
         for job in self.pipeline.jobs or []:
             for path, value in job.numeric_fields():
                 missing = sorted(expression_names(value, f"job {job.id}.{path}") - params)
