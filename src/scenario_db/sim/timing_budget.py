@@ -236,9 +236,12 @@ def analyze_timing_budget(
         _profile_cpu(report, options, params, config)
     # R-3 event jobs (absent = unchanged); after the CPU profile so their background is the final steady power
     if jobs and (getattr(graph.scenario, "pipeline", None) or {}).get("jobs"):
-        from scenario_db.sim.jobs import evaluate_jobs
+        from scenario_db.sim.jobs import JobError, evaluate_jobs
 
-        report["jobs"] = evaluate_jobs(graph, report, budget["inputs"], dvfs_tables, base_config)
+        try:
+            report["jobs"] = evaluate_jobs(graph, report, budget["inputs"], dvfs_tables, base_config)
+        except JobError as exc:           # a job definition error must not fail the steady report
+            report["jobs"], report["jobs_error"] = [], str(exc)
     if options.include_whatif:
         report["whatif"] = whatif(graph, options, config=config, dvfs_tables=dvfs_tables)
     return report

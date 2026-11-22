@@ -222,42 +222,53 @@ pipeline:
 ### Evaluator `job-v1` (`report.jobs[]`)
 
 A deterministic SimPy run per selected job, separate from the steady timeline. `job-v1` runs `trigger.kind: event`
-only (a burst / periodic trigger is an error), at `trigger.at_ms` <= 60 s, with at most 20 000 chunks.
+only (a burst / periodic trigger is an error), at `trigger.at_ms` <= 60 s, with at most 20 000 chunks. A job
+error is reported as `report.jobs_error` (with `jobs: []`); the steady report is unchanged.
 
 - **Background**: every frame-DAG HW task occupies its physical resource for its steady `hw_ms` once per frame
   period at RT priority (`preview_priority: fifo` shares the job's priority; `background: none` turns it off).
   Tasks on their own cadence (period / divided / event / vsync) are not released every frame and are left out.
+  Frames are queued at their release time, independent of the previous frame's service; a preview frame lost on
+  a reserved resource counts once in `dropped_frames` however many resources it missed.
 - **Chunks**: a stage runs `frames x passes x stripes/tiles` non-preemptive chunks on the steady resources (an OTF
-  group holds all its nodes, taken in one global order so groups cannot deadlock), so a running chunk delays an RT
+  group holds all its nodes, taken together only when all are idle, so a waiting group holds nothing), so a
+  running chunk delays an RT
   release by at most its own length (`background.rt_wait_max_ms`). Stripe chunks trade a longer shot for a shorter
-  RT wait; the stripe overlap is processed (time, energy) but not stored (buffer size).
+  RT wait; the first stripe takes the full line, later ones add the overlap, which is processed (time, energy)
+  but not stored (buffer size).
 - **Sensor**: one reservation of the sensor and its `holds` (switch-in, `frames` readouts at the catalog mode fps,
   switch-out); each frame takes a buffer slot and is ready at its readout end; background frames on a reserved
-  resource are dropped (`background.dropped_frames`). Its buffers default to the readout mode size; sensor energy
-  is not modelled (listed as unattributed).
+  resource are dropped (`background.dropped_frames`). Its buffers default to the readout mode size and are
+  written while each frame is read out; sensor energy is not modelled (listed as unattributed). A sensor stage
+  cannot read job buffers or wait per frame.
 - **Buffers**: `count` is a token pool. A buffer's readers are the producer's direct successors, or the stages its
   `to` names (they also wait for the producer). A frame's slot is freed when its last reader is done with it
-  (per-frame readers after that frame, stage-level readers at their end), which bounds `peak.footprint_mb`. A
+  (per-frame readers of that frame after it, stage-level readers at their end; a frame nobody reads is freed when
+  written), which bounds `peak.footprint_mb`. A stage-level reader's traffic is every producer frame. A
   stage-level reader needs a pool of at least the producer's frames (else an error). A job buffer needs a size
   (`mb`, `size_ref`, or the writing stage's size).
 - **Costs**: `hw` chunk = px / (MHz x ppc) x (1 + h_blank) + `setup_us`, energy = the v1 dynamic term (static
-  and clock terms are not attributed); `domain` = util-vf-v1 at util 1 at the top operating point; `sw` /
-  `transfer` / `fixed` = `power_mw` x time. A `transfer` without buffers carries its `work.mb`. `clock: dvfs_sn` is
+  and clock terms are not attributed); `domain` = util-vf-v1 at util 1 at its steady `freq_mhz` (`clock: max`
+  or no steady clock: the top operating point); `sw` /
+  `transfer` / `fixed` = `power_mw` x time. A `transfer` without buffers carries its `work.mb`. Session buffers
+  are read as the variant resolves them (`buffer_overrides`). `clock: dvfs_sn` is
   not supported by `job-v1` yet.
 
 Measured values (R-7 slot): `node_configs.<one of the stage nodes>.sim.jobs.<job>.<stage>` (a mapping) with
 `service_ms` (uncontended stage time, split evenly over its chunks; `sw` / `transfer` / `fixed` / `domain` keep their
-power, `hw` keeps its per-pixel energy), `clock_mhz` (`hw` / `domain`), `mb` (stage traffic), and `value_source`
+power over the measured time, `hw` keeps its per-pixel energy), `clock_mhz` (`hw` / `domain`), `mb` (stage traffic), and `value_source`
 (default `measured`) / `evidence_ref` / `basis`, which replace the stage's own. A sensor stage takes only
-`service_ms`. Unknown stages or fields are errors.
+`service_ms`. Unknown stages or fields (including `node`: a slot belongs to the node it is under) are errors.
+Neither `pipeline.jobs` nor these slots are part of the steady measured-replay fingerprint.
 
 Outputs: `milestones` (end of the named stage, ms after the trigger), `makespan_ms`, `phases`, `stages`
 (start / end / service / elapsed, chunks, clocks, energy, MB, provenance), `energy_mj` (event total, by kind,
 unattributed stages), `peak` (exact over the run intervals: the best 10 ms-window average and the instantaneous
 power / BW over the steady values, with the steady values before / after the job inside the window; footprint),
 `background`, `series` (1 ms), `basis`. The Timing Budget condition hash includes the jobs, `power_options`, the
-resolved params, the selection fields and the catalog rows of the job nodes when jobs are declared. Steady-only
-callers (summaries, what-if grids, fleet rows, architecture exploration) skip the jobs.
+resolved params, the selection fields, the catalog rows of the job nodes, the size anchors and the buffer overrides
+when jobs are declared. Steady-only callers (summaries, what-if grids and cases, fleet rows, architecture
+exploration) skip the jobs.
 ## Task Cadence (`node_configs.<node>.timeline`)
 
 The hand-off cadence vocabulary (`sdb.handoff/1`) is also the simulation task model. A node released on

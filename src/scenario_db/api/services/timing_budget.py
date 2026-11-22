@@ -111,8 +111,11 @@ def _condition_hash(graph, options, shim, tables) -> str:
         refs = sorted({str(nodes[n].get("ip_ref")) for j in jobs for st in (j.get("stages") or [])
                        for n in [*(st.get("nodes") or []), *(st.get("holds") or [])] if n in nodes})
         catalog = {ref: getattr(graph.ip_catalog.get(ref), "capabilities", None) for ref in refs}
+        anchors = {**((graph.scenario.size_profile or {}).get("anchors") or {}),
+                   **(getattr(graph.variant, "size_overrides", None) or {})}     # job size_ref (job-only anchors)
         payload["jobs"] = {"jobs": jobs, "power_options": getattr(graph.scenario, "power_options", None),
-                           "measured": slots, "selection": selection, "params": params, "catalog": catalog}
+                           "measured": slots, "selection": selection, "params": params, "catalog": catalog,
+                           "anchors": anchors, "buffer_overrides": getattr(graph.variant, "buffer_overrides", None)}
     opp = _cpu_opp_inputs(graph)
     if opp:
         payload["cpu_opp"] = opp

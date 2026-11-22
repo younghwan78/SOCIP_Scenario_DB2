@@ -249,7 +249,7 @@ def _calculate_case(graph, config, options, tables, ref):
     from scenario_db.api.services.whatif_sensors import sensor_power_coverage
     inputs = build_simulation_inputs(graph, config)
     _enforce_input_limits(inputs)
-    report = analyze_timing_budget(graph, options, config=config, dvfs_tables=tables)
+    report = analyze_timing_budget(graph, options, config=config, dvfs_tables=tables, jobs=False)   # steady case
     report["dvfs"]["table_ref"] = ref
     missing = sorted({w.node_id for w in inputs.workloads
                       if w.sim_params.ppc <= 0 or w.sim_params.unit_power_mw_mp <= 0}

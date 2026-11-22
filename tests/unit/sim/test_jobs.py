@@ -1,6 +1,7 @@
 """R-3b event job evaluator (job-v1) on a real E2600 capture graph with an injected still-shot job."""
 
 from copy import deepcopy
+import math
 
 import pytest
 
@@ -37,7 +38,10 @@ def _graph(job=None, params=None, variant=VARIANT):
 
 
 def _report(graph):
-    return analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"))
+    report = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"))
+    if "jobs_error" in report:        # the steady report survives; the job error is reported beside it
+        raise JobError(report["jobs_error"])
+    return report
 
 
 def _job(**params):
@@ -363,4 +367,113 @@ def test_a_slot_must_be_a_mapping_and_keeps_the_stage_provenance():
     out = _report(_with_slot("mtnr", {"merge": {"service_ms": 60.0, "basis": "trace t1"}}, job=job))["jobs"][0]
     merge = {s["id"]: s for s in out["stages"]}["merge"]
     assert merge["evidence_ref"] == "doc-1" and merge["basis"] == "trace t1"
+
+
+
+def test_a_job_error_leaves_the_steady_report_intact():
+    graph = _graph(job={"id": "j", "trigger": {"kind": "burst", "count": 3}, "stages": [_stage("a", nodes=["byrp"])]})
+    report = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"))
+    assert report["jobs"] == [] and "not supported" in report["jobs_error"]
+    plain = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), jobs=False)
+    assert {k: v for k, v in report.items() if k not in ("jobs", "jobs_error")} == plain
+
+
+def test_a_per_frame_reader_of_fewer_frames_does_not_stall_the_pool():
+    out = _one([
+        _stage("prod", nodes=["byrp"], frames=3, writes=["x"], chunk={"by": "frame"}),
+        _stage("use", nodes=["rgbp"], frames=1, chunk={"by": "frame"}, after=[{"stage": "prod", "per": "frame"}]),
+    ], buffers={"x": {"mb": 10, "count": 1}}, background="none")
+    assert {s["id"] for s in out["stages"]} == {"prod", "use"}
+
+
+def test_a_waiting_group_does_not_hold_a_resource_it_is_not_running_on():
+    out = _one([
+        _stage("long", kind="fixed", nodes=["rgbp"], work={"duration_ms": 50}),
+        _stage("grp", nodes=["byrp", "rgbp"]),
+        _stage("solo", kind="fixed", nodes=["byrp"], work={"duration_ms": 1}),
+    ], background="none")
+    stages = {s["id"]: s for s in out["stages"]}
+    assert stages["solo"]["end_ms"] < 5.0                  # not blocked behind the group waiting for rgbp
+    assert stages["grp"]["start_ms"] >= stages["long"]["end_ms"] - 1e-6
+
+
+def test_the_condition_hash_covers_job_size_anchors():
+    from scenario_db.api.services.timing_budget import _condition_hash
+    from tests.unit.sim.test_service_hash import _request
+
+    graph, opts, shim = _graph(), TimingBudgetOptions(throughput_model="pipelined"), _request()
+    graph.variant.size_overrides = {**(graph.variant.size_overrides or {}), "job_only": "1000x1000"}
+    before = _condition_hash(graph, opts, shim, {})
+    graph.variant.size_overrides = {**graph.variant.size_overrides, "job_only": "2000x2000"}
+    assert _condition_hash(graph, opts, shim, {}) != before
+
+
+def test_a_sensor_stage_cannot_wait_per_frame():
+    with pytest.raises(JobError, match="sensor stage readout cannot read job buffers or wait per frame"):
+        _one([
+            _stage("prep", nodes=["byrp"], chunk={"by": "frame"}),
+            _stage("readout", kind="sensor", nodes=["sensor_rear"], mode={"param": "cap_mode"},
+                   after=[{"stage": "prep", "per": "frame"}], chunk={"by": "frame"}),
+        ])
+
+
+def test_a_stage_level_reader_reads_every_producer_frame():
+    out = _one([
+        _stage("prod", nodes=["byrp"], frames=3, writes=["x"], chunk={"by": "frame"}),
+        _stage("merge", kind="fixed", nodes=["mtnr"], work={"duration_ms": 1}, after=["prod"]),
+    ], buffers={"x": {"mb": 10, "count": 3}}, background="none")
+    assert {s["id"]: s for s in out["stages"]}["merge"]["mb"] == pytest.approx(30.0)
+
+
+def test_sensor_writes_only_while_a_frame_is_read_out():
+    out = _one([_stage("readout", kind="sensor", nodes=["sensor_rear"], mode={"param": "cap_mode"}, writes=["raw"],
+                       work={"switch_in_ms": 50, "switch_out_ms": 50})],
+               buffers={"raw": {"mb": 90}}, background="none")
+    frame_ms = 1000.0 / 30.0                               # binning_2x2 at 30 fps
+    assert out["peak"]["bw_instant_mbs"] == pytest.approx(out["background"]["bw_mbs"] + 90 / frame_ms * 1000, rel=1e-3)
+
+
+def test_dropped_preview_frames_are_counted_once_per_frame():
+    out = _one([_stage("readout", kind="sensor", nodes=["sensor_rear"], holds=["csispdp", "byrp", "rgbp"],
+                       mode={"param": "cap_mode"}, work={"switch_in_ms": 50, "switch_out_ms": 50})])
+    reservation = next(s for s in out["stages"] if s["id"] == "readout")["elapsed_ms"]
+    period = analyze_timing_budget(_graph(), TimingBudgetOptions(throughput_model="pipelined"))["period_ms"]
+    assert 0 < out["background"]["dropped_frames"] <= math.ceil(reservation / period) + 1
+
+
+def test_a_stripe_that_fits_the_line_is_one_chunk():
+    graph = _graph(job={"id": "j", "background": "none", "stages": [
+        _stage("a", nodes=["byrp"], size_ref="tst", chunk={"by": "stripe", "max_line_px": 1000, "overlap_px": 64})]})
+    graph.variant.size_overrides = {**(graph.variant.size_overrides or {}), "tst": "1000x100"}
+    assert _report(graph)["jobs"][0]["stages"][0]["chunks"] == 1
+    graph.variant.size_overrides["tst"] = "1001x100"
+    assert _report(graph)["jobs"][0]["stages"][0]["chunks"] == 2
+
+
+def test_session_reads_use_the_variant_buffer_overrides():
+    base = {s["id"]: s for s in _job()["stages"]}["reproc"]["mb"]
+    graph = _graph()
+    graph.variant.buffer_overrides = {**(graph.variant.buffer_overrides or {}), "ZSL_RING_BUF": {"mb": 1000}}
+    reproc = {s["id"]: s for s in _report(graph)["jobs"][0]["stages"]}["reproc"]
+    assert reproc["mb"] > base and reproc["mb"] >= 1000 * PARAMS["zsl_frames"]
+
+
+def test_a_measured_time_keeps_the_declared_power_from_zero():
+    job = deepcopy(JOB)
+    job["stages"][3]["work"]["runtime_ms"] = 0
+    out = _report(_with_slot("post_proc", {"enc": {"service_ms": 35.0}}, job=job))["jobs"][0]
+    enc = {s["id"]: s for s in out["stages"]}["enc"]
+    assert enc["energy_mj"] == pytest.approx(400 * 35 / 1000.0)
+
+
+def test_a_slot_cannot_claim_another_node():
+    with pytest.raises(JobError, match="must not set 'node'"):
+        _report(_with_slot("byrp", {"merge": {"node": "mtnr", "service_ms": 1.0}}))
+
+
+def test_job_slots_do_not_change_the_steady_replay_fingerprint():
+    from scenario_db.sim.measured_timing import baseline_fingerprint
+
+    before = baseline_fingerprint(_graph())
+    assert baseline_fingerprint(_with_slot("mtnr", {"merge": {"service_ms": 60.0}})) == before
 
