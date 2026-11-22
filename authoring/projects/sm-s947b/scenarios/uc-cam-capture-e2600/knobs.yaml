@@ -6,8 +6,8 @@ params:
   yuv_pool: 3              # capture YUV buffer pool depth (bounds the footprint)
   encode_ms: 30            # 12M JPEG / HEIF encode on the big cluster (assumed)
   cpu_encode_mw: 600       # big-core power while encoding (assumed)
-  jpeg_mb: 4               # 12M JPEG size
-  file_mb: 4               # stored file (JPEG; a RAW shot sets the DNG size)
+  file_mb: 4               # 12M stored file: the JPEG (a RAW shot sets the DNG size)
+  mtnr_wdma_mb_s: 10000    # MTNR write-back of the merged frame (assumed)
   preview_frame_ms: 33.3   # one preview frame at 30 fps (non-ZSL waits for new frames)
   ufs_mb_s: 1200           # sequential write rate (assumed)
   ufs_mw: 250              # storage write power (assumed)

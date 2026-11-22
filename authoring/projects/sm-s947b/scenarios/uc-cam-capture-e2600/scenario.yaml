@@ -177,6 +177,9 @@ pipeline:
       format: BAYER
       bitdepth: 10
       compression: COMP_BAYER_LOSSLESS
+      size_ref: sensor_out
+      count: 8                   # ring depth: the longest ZSL burst (night, 8 frames; assumed)
+      lifetime: session          # held for the whole session (event job footprint)
       note: ZSL ring buffer (capture 직전 N프레임 보관). Bayer frames from the BYRP Bayer dump; no edge writes it yet.
     JPEG_BUF:
       format: JPEG
@@ -199,7 +202,7 @@ pipeline:
       mrg_yuv: {format: YUV420, bitdepth: 10}
       out_yuv: {format: YUV420, bitdepth: 10}
       raw16: {format: RAW, bitdepth: 16}
-      jpeg: {mb: jpeg_mb}
+      jpeg: {mb: file_mb}
     stages:
     - {id: grab, phase: acquire, kind: fixed, nodes: [sensor_rear], frames: burst_frames, chunk: {by: frame},
        work: {duration_ms: preview_frame_ms}, when: {capture_type: non_ZSL},
@@ -212,9 +215,9 @@ pipeline:
        after: [{stage: reproc, per: frame}],
        when: {subscenario: &mf12 [STILL_MF_CAPTURE, STILL_FLASH_MF_CAPTURE, STILL_HIGH_RES_MF_CAPTURE, NIGHT_CAPTURE,
                                    STILL_MOTION_FREE_MF_CAPTURE, SRZOOM_CAPTURE]}}
-    - {id: merge_out, phase: process, kind: fixed, nodes: [mtnr], writes: [mrg_yuv], after: [merge],
-       work: {duration_ms: 0}, when: {subscenario: *mf12},
-       basis: hands the merged frame to the post stage (its time is in merge)}
+    - {id: merge_out, phase: process, kind: transfer, nodes: [mtnr], writes: [mrg_yuv], after: [merge],
+       work: {mb: 22.5, mb_per_s: mtnr_wdma_mb_s}, when: {subscenario: *mf12},
+       basis: write-back of the merged 12M YUV420 10-bit frame (22.5 MB) at the MTNR WDMA rate}
     - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], writes: [out_yuv], after: [merge_out, reproc],
        when: {output_format: null}}
     - {id: enc, phase: encode, kind: sw, nodes: [post_proc], writes: [jpeg], after: [post],
@@ -242,8 +245,9 @@ pipeline:
        writes: [cap_yuv], chunk: {by: frame}, after: [{stage: readout, per: frame}]}
     - {id: merge, phase: process, clock: max, nodes: [mtnr], size_ref: capture_50m, frames: burst_frames,
        after: [{stage: reproc, per: frame}], when: {subscenario: *mf12}}
-    - {id: merge_out, phase: process, kind: fixed, nodes: [mtnr], size_ref: capture_50m, writes: [mrg_yuv],
-       after: [merge], work: {duration_ms: 0}, when: {subscenario: *mf12}}
+    - {id: merge_out, phase: process, kind: transfer, nodes: [mtnr], size_ref: capture_50m, writes: [mrg_yuv],
+       after: [merge], work: {mb: 90, mb_per_s: mtnr_wdma_mb_s}, when: {subscenario: *mf12},
+       basis: write-back of the merged 50M frame (90 MB)}
     - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], size_ref: capture_50m, writes: [out_yuv],
        after: [merge_out, reproc]}
     - {id: enc, phase: encode, kind: sw, nodes: [post_proc], writes: [jpeg], after: [post],
@@ -274,8 +278,9 @@ pipeline:
     - {id: merge, phase: process, clock: max, nodes: [mtnr], size_ref: capture_full, frames: full_frames, after: [reproc],
        chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px},
        when: {subscenario: &mf200 [STILL_REMOSAIC_MF_CAPTURE, REMOSAIC_NIGHT_CAPTURE]}}
-    - {id: merge_out, phase: process, kind: fixed, nodes: [mtnr], size_ref: capture_full, writes: [mrg_yuv],
-       after: [merge], work: {duration_ms: 0}, when: {subscenario: *mf200}}
+    - {id: merge_out, phase: process, kind: transfer, nodes: [mtnr], size_ref: capture_full, writes: [mrg_yuv],
+       after: [merge], work: {mb: 377.487, mb_per_s: mtnr_wdma_mb_s}, when: {subscenario: *mf200},
+       basis: write-back of the merged 200M frame (377.487 MB)}
     - {id: ai, phase: process, kind: domain, nodes: [npu], size_ref: capture_full, writes: [ai_yuv],
        after: [merge_out, reproc], work: {mcycles_per_mp: ai_mcycles_per_mp}, when: {extend_mode: EX_AI_REMOSAIC}}
     - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], size_ref: capture_full, writes: [out_yuv],

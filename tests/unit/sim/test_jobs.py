@@ -38,9 +38,13 @@ def _graph(job=None, params=None, variant=VARIANT):
 
 
 def _plain(variant=VARIANT):
-    """The capture graph without its declared jobs (the scenario declares its own shot since R-3c)."""
+    """The capture graph without its declared jobs (the scenario declares its own shot since R-3c) and without
+    the session lifetime of the ZSL ring (its resident footprint is a capture-data fact, tested there)."""
     graph = _exynos2600_generated_graph("uc-cam-capture-e2600", variant)
-    graph.scenario.pipeline = {k: v for k, v in graph.scenario.pipeline.items() if k != "jobs"}
+    pipeline = {k: v for k, v in graph.scenario.pipeline.items() if k != "jobs"}
+    pipeline["buffers"] = {name: {k: v for k, v in spec.items() if k != "lifetime"}
+                           for name, spec in (pipeline.get("buffers") or {}).items()}
+    graph.scenario.pipeline = pipeline
     return graph
 
 

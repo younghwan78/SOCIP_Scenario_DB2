@@ -97,3 +97,23 @@ def test_a_shot_leaves_the_steady_preview_unchanged(tables):
     graph.scenario.pipeline = {k: v for k, v in graph.scenario.pipeline.items() if k != "jobs"}
     plain = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables)
     assert {k: v for k, v in with_job.items() if k != "jobs"} == plain
+
+
+def test_merged_frame_writes_land_in_a_real_interval(jobs):
+    for vid in ("cam-cap-r1-mf-flash", "cam-cap-r1-mf-high-res", "cam-cap-r1-remosaic-mf"):
+        st = {s["id"]: s for s in jobs[vid][1][0]["stages"]}["merge_out"]
+        assert st["kind"] == "transfer" and st["service_ms"] > 0 and st["mb"] > 0, vid
+
+
+def test_the_zsl_ring_is_in_the_shot_footprint(jobs):
+    ring = 8 * 4000 * 3000 * 10 / 8 / 1e6 * 0.5      # 8 x 12M Bayer 10-bit; lossless Bayer ratio (mean) <= 1
+    for vid in ("cam-cap-r1-sf", "cam-cap-r1-night"):
+        assert jobs[vid][1][0]["peak"]["footprint_mb"] > ring, vid
+
+
+def test_the_stored_jpeg_and_the_jpeg_buffer_are_one_size(tables):
+    graph = _exynos2600_generated_graph(UC, "cam-cap-r1-sf")
+    graph.variant.design_conditions = {**graph.variant.design_conditions, "file_mb": 12}
+    shot = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables)["jobs"][0]
+    store = {s["id"]: s for s in shot["stages"]}["store"]
+    assert store["mb"] == pytest.approx(12.0) and store["service_ms"] == pytest.approx(12 / 1200 * 1000, rel=1e-3)

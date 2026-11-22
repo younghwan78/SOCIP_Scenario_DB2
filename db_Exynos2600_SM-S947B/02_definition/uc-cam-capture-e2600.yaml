@@ -186,6 +186,9 @@ pipeline:
       format: BAYER
       bitdepth: 10
       compression: COMP_BAYER_LOSSLESS
+      size_ref: sensor_out
+      count: 8
+      lifetime: session
       note: ZSL ring buffer (capture 직전 N프레임 보관). Bayer frames from the BYRP Bayer dump; no edge writes it yet.
     JPEG_BUF:
       format: JPEG
@@ -220,7 +223,7 @@ pipeline:
         format: RAW
         bitdepth: 16
       jpeg:
-        mb: jpeg_mb
+        mb: file_mb
     stages:
     - id: grab
       phase: acquire
@@ -284,7 +287,7 @@ pipeline:
         - SRZOOM_CAPTURE
     - id: merge_out
       phase: process
-      kind: fixed
+      kind: transfer
       nodes:
       - mtnr
       writes:
@@ -292,10 +295,11 @@ pipeline:
       after:
       - merge
       work:
-        duration_ms: 0
+        mb: 22.5
+        mb_per_s: mtnr_wdma_mb_s
       when:
         subscenario: *id001
-      basis: hands the merged frame to the post stage (its time is in merge)
+      basis: write-back of the merged 12M YUV420 10-bit frame (22.5 MB) at the MTNR WDMA rate
     - id: post
       phase: process
       clock: max
@@ -423,7 +427,7 @@ pipeline:
         subscenario: *id001
     - id: merge_out
       phase: process
-      kind: fixed
+      kind: transfer
       nodes:
       - mtnr
       size_ref: capture_50m
@@ -432,9 +436,11 @@ pipeline:
       after:
       - merge
       work:
-        duration_ms: 0
+        mb: 90
+        mb_per_s: mtnr_wdma_mb_s
       when:
         subscenario: *id001
+      basis: write-back of the merged 50M frame (90 MB)
     - id: post
       phase: process
       clock: max
@@ -569,7 +575,7 @@ pipeline:
         - REMOSAIC_NIGHT_CAPTURE
     - id: merge_out
       phase: process
-      kind: fixed
+      kind: transfer
       nodes:
       - mtnr
       size_ref: capture_full
@@ -578,9 +584,11 @@ pipeline:
       after:
       - merge
       work:
-        duration_ms: 0
+        mb: 377.487
+        mb_per_s: mtnr_wdma_mb_s
       when:
         subscenario: *id002
+      basis: write-back of the merged 200M frame (377.487 MB)
     - id: ai
       phase: process
       kind: domain
@@ -658,8 +666,8 @@ power_options:
     yuv_pool: 3
     encode_ms: 30
     cpu_encode_mw: 600
-    jpeg_mb: 4
     file_mb: 4
+    mtnr_wdma_mb_s: 10000
     preview_frame_ms: 33.3
     ufs_mb_s: 1200
     ufs_mw: 250
