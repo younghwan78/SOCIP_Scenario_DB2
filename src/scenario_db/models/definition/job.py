@@ -80,6 +80,17 @@ def steady_pipeline(pipeline: dict[str, Any] | None) -> dict[str, Any]:
     return {k: v for k, v in (pipeline or {}).items() if k != "jobs"}
 
 
+def steady_power_options(options: dict[str, Any] | None) -> dict[str, Any] | None:
+    """``power_options`` as steady results see them: without architecture knobs, ``params`` / ``param_rules``
+    only parameterize event jobs, so they are left out."""
+    if not options:
+        return options
+    if options.get("knobs"):
+        return options
+    rest = {k: v for k, v in options.items() if k not in ("params", "param_rules")}
+    return rest or None
+
+
 def const_value(value: Any, where: str) -> float | None:
     """The value of a parameter-free numeric expression (None when it names parameters)."""
     if not isinstance(value, str) or expression_names(value, where):
@@ -91,6 +102,13 @@ def const_value(value: Any, where: str) -> float | None:
     if not math.isfinite(out):
         raise ValueError(f"{where}: {value!r} is not a finite number")
     return out
+
+
+def literal_value(value: Any, where: str) -> float | None:
+    """A number literal or a parameter-free expression, as a float (None when it names parameters)."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return const_value(value, where)
 
 
 def param_ref_name(value: Any, where: str) -> str | None:
@@ -107,14 +125,14 @@ _POSITIVE = {"interval_ms", "max_line_px", "mb", "mb_per_s", "ppc"}             
 # everything else (times, cycles, power, overlap, setup, at_ms, unit power) is >= 0; clock.<group> is > 0
 
 
-def range_error(path: str, value: float) -> str | None:
-    """Why ``value`` is out of range for the job field ``path`` (dotted), or None."""
-    parts = path.split(".")
-    key = parts[-1]
+def range_error(path: str, value: float, key: str | None = None) -> str | None:
+    """Why ``value`` is out of range for the job field ``path`` (dotted, for the message), or None. ``key``
+    is the field kind (its name; ``clock`` for a clock group), default the last path segment."""
+    key = key or path.rsplit(".", 1)[-1]
     if key in _COUNT:
         if value < 1 or value != int(value):
             return f"{path} {value} must be an integer >= 1"
-    elif key in _POSITIVE or ".clock." in f".{path}":
+    elif key in _POSITIVE or key == "clock":
         if value <= 0:
             return f"{path} {value} must be > 0"
     elif value < 0:
@@ -315,11 +333,11 @@ class JobSpec(Selector):
                     for st in (s, by_id[a.stage]):
                         if st.chunk is not None and st.chunk.by != "frame":
                             raise ValueError(f"job {self.id}: per-frame after needs frame chunks ({st.id})")
-                    mine, theirs = s.frames, by_id[a.stage].frames
-                    if (isinstance(mine, (int, float)) and isinstance(theirs, (int, float))
-                            and not isinstance(mine, bool) and not isinstance(theirs, bool) and mine > theirs):
-                        raise ValueError(f"job {self.id}: stage {s.id} has {mine} frames per-frame after "
-                                         f"{a.stage} with {theirs}")
+                    mine = literal_value(s.frames, f"job {self.id}.stages.{s.id}.frames")
+                    theirs = literal_value(by_id[a.stage].frames, f"job {self.id}.stages.{a.stage}.frames")
+                    if mine is not None and theirs is not None and mine > theirs:
+                        raise ValueError(f"job {self.id}: stage {s.id} has {mine:g} frames per-frame after "
+                                         f"{a.stage} with {theirs:g}")
             if self.phases is not None and s.phase not in self.phases:
                 raise ValueError(f"job {self.id}: stage {s.id} phase {s.phase!r} not in phases {self.phases}")
         # acyclic (all stages; removing stages by `when` cannot create a cycle)
@@ -352,29 +370,41 @@ class JobSpec(Selector):
             unknown = [b for b in (s.writes or []) if b not in buffers]
             if unknown:
                 raise ValueError(f"job {self.id}: stage {s.id} writes undeclared job buffers {unknown}")
+        written = {b for st in self.stages for b in (st.writes or [])}
         for name, buf in buffers.items():
             bad = [t for t in (buf.to or []) if t not in known]
             if bad:
                 raise ValueError(f"job {self.id}: buffer {name} to unknown stages {bad}")
+            if buf.to and name not in written:
+                raise ValueError(f"job {self.id}: buffer {name} goes to {buf.to} but no stage writes it")
         for name, sid in (self.milestones or {}).items():
             if sid not in known:
                 raise ValueError(f"job {self.id}: milestone {name} names unknown stage {sid}")
-        for path, value in self.numeric_fields():
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                literal = float(value)
-            else:
-                literal = const_value(value, f"job {self.id}.{path}")      # e.g. "2 - 2", "60 / 0"
-                if literal is None:
-                    continue
-            problem = range_error(path, literal)
+        for path, key, value in self.range_fields():
+            literal = literal_value(value, f"job {self.id}.{path}")       # literals, and e.g. "2 - 2", "60 / 0"
+            if literal is None:
+                continue
+            problem = range_error(path, literal, key)
             if problem:
                 raise ValueError(f"job {self.id}: {problem}")
         for s in self.stages:
             c = s.chunk
-            if (c is not None and isinstance(c.max_line_px, (int, float)) and isinstance(c.overlap_px, (int, float))
-                    and c.max_line_px <= c.overlap_px):
+            if c is None or c.max_line_px is None:
+                continue
+            line = literal_value(c.max_line_px, f"job {self.id}.stages.{s.id}.chunk.max_line_px")
+            overlap = literal_value(c.overlap_px, f"job {self.id}.stages.{s.id}.chunk.overlap_px")
+            if line is not None and overlap is not None and line <= overlap:
                 raise ValueError(f"job {self.id}: stage {s.id} chunk.max_line_px must exceed overlap_px")
         return self
+
+    def range_fields(self) -> list[tuple[str, str, Any]]:
+        """(path, field kind, value) of every numeric field: the kind decides the range, not the path."""
+        out = []
+        for path, value in self.numeric_fields():
+            stage_part = next((f"stages.{s.id}." for s in self.stages if path.startswith(f"stages.{s.id}.")), "")
+            field = path[len(stage_part):]
+            out.append((path, "clock" if field.startswith("clock.") else field.rsplit(".", 1)[-1], value))
+        return out
 
     def numeric_fields(self) -> list[tuple[str, Any]]:
         out = [("trigger.at_ms", self.trigger.at_ms), ("trigger.count", self.trigger.count),

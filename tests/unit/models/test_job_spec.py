@@ -321,3 +321,36 @@ def test_jobs_do_not_change_the_prediction_input_hash():
     graph.scenario.pipeline = {**graph.scenario.pipeline, "jobs": [deepcopy(JOB)]}
     after, _ = input_manifest(graph, SimulationRunConfig(), {})
     assert after["pipeline"] == before["pipeline"]
+
+
+def test_job_only_params_do_not_change_the_prediction_input_hash():
+    from scenario_db.models.definition.job import steady_power_options
+
+    assert steady_power_options({"params": {"trigger_ms": 200}, "param_rules": []}) is None
+    with_knobs = {"params": {"a": 1}, "knobs": {"k": {}}}
+    assert steady_power_options(with_knobs) == with_knobs
+
+
+@pytest.mark.parametrize("mutate,message", [
+    (lambda j: (j["stages"][2].update(frames="1 + 0"), j["stages"][3].update(frames="1 + 1")),
+     "has 2 frames per-frame after reproc with 1"),
+    (lambda j: j["stages"][4].update(chunk={"by": "stripe", "max_line_px": "32 * 2", "overlap_px": 64}),
+     "max_line_px must exceed overlap_px"),
+    (lambda j: j["buffers"].update(orphan={"mb": 1, "to": ["enc"]}), "buffer orphan goes to"),
+])
+def test_cross_field_rules_use_constant_expressions_and_to_needs_a_writer(mutate, message):
+    job = deepcopy(JOB)
+    mutate(job)
+    with pytest.raises(ValidationError, match=message):
+        JobSpec.model_validate(job)
+
+
+def test_the_range_follows_the_field_kind_not_the_path():
+    job = deepcopy(JOB)
+    job["stages"][0]["id"] = "clock"                  # a stage named clock: duration 0 is fine
+    job["stages"][0]["work"]["duration_ms"] = 0
+    job["stages"][1]["after"] = ["clock"]
+    job["stages"][2]["after"] = ["clock", "readout"]
+    JobSpec.model_validate(job)
+    job["stages"][2]["clock"] = {"CPU.frames": 0.5}   # a clock group named *.frames: > 0, not an integer count
+    JobSpec.model_validate(job)
