@@ -36,6 +36,7 @@ from scenario_db.sim.constants import BPP_DEFAULT, BPP_MAP
 from scenario_db.sim.domain_loads import DOMAIN_MODELS, domain_load_config
 from scenario_db.sim.power_calc import calc_active_power_mw
 from scenario_db.sim.timeline_adapter import own_cadence
+from scenario_db.sim.timing_profiles import timing_profiles
 from scenario_db.sim.transfers import compression_catalog
 
 MODEL_ID = "job-v1"
@@ -65,7 +66,7 @@ class _Params:
     def __init__(self, params: dict[str, Any], where: str):
         self.params, self.where = params, where
 
-    def num(self, value: Any, path: str) -> float:
+    def num(self, value: Any, path: str, key: str | None = None) -> float:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)                  # literals are range-checked by the schema
         try:
@@ -75,14 +76,18 @@ class _Params:
         if not math.isfinite(out):
             raise JobError(f"{self.where}.{path}: {value!r} = {out} is not a finite number")
         if path.split(".")[0] in ("stages", "buffers", "trigger"):   # job fields: the schema literal ranges
-            problem = range_error(path, out)
+            problem = range_error(path, out, key)
             if problem:
                 raise JobError(f"{self.where}: {problem} ({value!r})")
         return out
 
-    def text(self, value: Any) -> Any:
+    def text(self, value: Any, path: str = "") -> Any:
         if isinstance(value, dict) and "param" in value:
-            return self.params.get(value["param"])
+            out = self.params.get(value["param"])
+            if not isinstance(out, str) or not out:
+                raise JobError(f"{self.where}.{path}: parameter {value['param']!r} resolves to {out!r} "
+                               "in this variant (a non-empty name is needed)")
+            return out
         return value
 
 
@@ -177,6 +182,7 @@ class _Evaluation:
             fps = float(report.get("fps") or (graph.variant.design_conditions or {}).get("fps") or 0.0)
             self.period = 1000.0 / fps if fps > 0 and math.isfinite(fps) else 0.0
         self._missing_power: set[str] = set()
+        self._chunks = 0
         self.vdict = _variant_dict(graph)
         self.disabled = set((self.vdict["routing_switch"] or {}).get("disabled_nodes") or [])
         self.workloads = {w.node_id: w for w in inputs.workloads}
@@ -213,27 +219,28 @@ class _Evaluation:
         return preds
 
     @staticmethod
-    def _ancestors(preds) -> dict[str, set[str]]:
-        """Ancestors per stage in topological order (no recursion; the schema rejects cycles)."""
-        users: dict[str, list[str]] = {sid: [] for sid in preds}
-        indeg = {sid: len(preds[sid]) for sid in preds}
+    def _direct(preds) -> dict[str, list[tuple[str, str]]]:
+        """The transitive reduction of the active DAG: a predecessor p of a stage is direct unless another of
+        its predecessors reaches p. Only stages with several predecessors search (iteratively), so a chain of
+        any length costs nothing extra."""
+        def reaches(start: str, target: str) -> bool:
+            stack, seen = [start], {start}
+            while stack:
+                for p, _ in preds[stack.pop()]:
+                    if p == target:
+                        return True
+                    if p not in seen:
+                        seen.add(p)
+                        stack.append(p)
+            return False
+
+        out = {}
         for sid, ps in preds.items():
-            for p, _ in ps:
-                users[p].append(sid)
-        order, ready = [], [sid for sid, n in indeg.items() if n == 0]
-        while ready:
-            sid = ready.pop()
-            order.append(sid)
-            for u in users[sid]:
-                indeg[u] -= 1
-                if indeg[u] == 0:
-                    ready.append(u)
-        memo: dict[str, set[str]] = {}
-        for sid in order:
-            memo[sid] = set()
-            for p, _ in preds[sid]:
-                memo[sid] |= {p} | memo[p]
-        return memo
+            if len(ps) < 2:
+                out[sid] = list(ps)
+                continue
+            out[sid] = [(p, per) for p, per in ps if not any(q != p and reaches(q, p) for q, _ in ps)]
+        return out
 
     def _session_buffers(self) -> dict[str, dict[str, Any]]:
         """Session (pipeline) buffers as this variant resolves them (``buffer_overrides`` merged)."""
@@ -242,7 +249,7 @@ class _Evaluation:
         return {name: {**(spec or {}), **(over.get(name) or {})} for name, spec in base.items()}
 
     def _sensor_mode(self, s: JobStage) -> dict[str, Any]:
-        mode = self.p.text(s.mode)
+        mode = self.p.text(s.mode, f"stages.{s.id}.mode")
         row = self.graph.ip_catalog.get(str(self.nodes[s.nodes[0]].get("ip_ref")))
         modes = ((getattr(row, "capabilities", None) or {}).get("properties") or {}).get("modes") or {}
         if not isinstance(modes.get(mode), dict):
@@ -277,7 +284,7 @@ class _Evaluation:
         bitdepth = get("bitdepth")
         bd = self.p.num(bitdepth, f"buffers.{name}.bitdepth") if bitdepth is not None else 8.0
         if compression_enabled(str(get("compression"))) and get("comp_ratio") is not None:
-            ratio = float(get("comp_ratio"))                 # the buffer's own ratio, as the steady DMA uses
+            ratio = self.p.num(get("comp_ratio"), f"buffers.{name}.comp_ratio")   # the buffer's own ratio
         else:
             ratio = resolve_comp_ratio(get("compression"), self.comp)
         return wh[0] * wh[1] * _bytes_per_px(get("format"), bd) * ratio / 1e6
@@ -298,7 +305,7 @@ class _Evaluation:
             if "dvfs_sn" in s.clock:
                 raise JobError(f"job {self.job.id}: stage {s.id} clock dvfs_sn is not supported by {MODEL_ID} yet")
             if group in s.clock:
-                want = self.p.num(s.clock[group], f"stages.{s.id}.clock.{group}")
+                want = self.p.num(s.clock[group], f"stages.{s.id}.clock.{group}", key="clock")
                 level = next((lv for lv in self.ladders.get(group, []) if lv["mhz"] >= want - 1e-6), None)
                 return want, float((level or {}).get("mv") or mv)
         if mhz <= 0:
@@ -309,7 +316,7 @@ class _Evaluation:
         """(time, energy, clocks) of one chunk; ``self._missing_power`` collects nodes with no unit power."""
         px_chunk = w * h / max(1, n_chunks)
         t_max, energy, clocks = 0.0, 0.0, {}
-        mode = self.p.text(s.mode) if s.mode is not None else None
+        mode = self.p.text(s.mode, f"stages.{s.id}.mode") if s.mode is not None else None
         for node in s.nodes:
             wl = self.workloads.get(node)
             base_ppc = float(wl.sim_params.ppc if wl else 0.0)
@@ -400,32 +407,48 @@ class _Evaluation:
                                       and math.isfinite(ov[key]) and ov[key] > 0):
                     raise JobError(f"job {self.job.id}: stage {sid} {key} must be a positive number")
 
+    def _budget(self, sid: str, chunks: int) -> None:
+        self._chunks += chunks
+        if self._chunks > MAX_CHUNKS:
+            raise JobError(f"job {self.job.id}: {self._chunks} chunks (through stage {sid}) exceed {MAX_CHUNKS} "
+                           "(frames x passes x stripes)")
+
     def _plan_stage(self, sid: str, s: JobStage, buffers, session) -> dict[str, Any]:
         w, h = self._stage_size(s)
         frames = int(self.p.num(s.frames, f"stages.{sid}.frames"))
         passes = int(self.p.num(s.passes, f"stages.{sid}.passes"))
-        widths = [w]
+        widths, outs = [w], [w]
         if s.chunk is not None and s.chunk.by == "stripe" and s.chunk.max_line_px is not None:
             line = self.p.num(s.chunk.max_line_px, f"stages.{sid}.chunk.max_line_px")
             overlap = self.p.num(s.chunk.overlap_px, f"stages.{sid}.chunk.overlap_px")
             if line <= overlap:
                 raise JobError(f"job {self.job.id}: stage {sid} chunk.max_line_px {line} must exceed overlap_px "
                                f"{overlap}")
+            n = 1 if w <= line else 1 + math.ceil((w - line) / (line - overlap))
+            self._budget(sid, frames * passes * n)              # before any per-chunk list is built
             # the first stripe takes a full line; each further one re-reads `overlap` columns of its neighbour
-            widths, left = [min(float(w), line)], float(w) - min(float(w), line)
+            first = min(float(w), line)
+            widths, outs, left = [first], [first], float(w) - first
             while left > 1e-9:
                 take = min(line - overlap, left)
                 widths.append(take + overlap)
+                outs.append(take)
                 left -= take
         elif s.chunk is not None and s.chunk.by == "tile" and s.chunk.tiles is not None:
             n = int(self.p.num(s.chunk.tiles, f"stages.{sid}.chunk.tiles"))
-            widths = [w / n] * n
+            self._budget(sid, frames * passes * n)
+            widths = outs = [w / n] * n
+        else:
+            self._budget(sid, frames * passes)
         per = len(widths)
         w_proc = sum(widths)                               # overlap is processed twice, not stored twice
         slices = [wi / w_proc for wi in widths] if w_proc > 0 else [1.0 / per] * per
+        out_total = sum(outs)
+        shares = [o / out_total for o in outs] if out_total > 0 else [1.0 / per] * per   # traffic by output width
         setup = (self.p.num(s.chunk.setup_us, f"stages.{sid}.chunk.setup_us") / 1000.0) if s.chunk else 0.0
         e: dict[str, Any] = {"stage": s, "frames": frames, "passes": passes, "per": per, "w": w, "h": h,
-                             "clocks": {}, "attributed": True, "xfer_mb": 0.0, "slices": slices, "setup_ms": setup}
+                             "clocks": {}, "attributed": True, "xfer_mb": 0.0, "slices": slices, "shares": shares,
+                             "setup_ms": setup, "const_power": s.kind != "hw"}
         work = s.work or {}
         if s.kind == "hw":
             t, mj, clocks = self._hw_chunk(s, int(round(w_proc)), h, 1)
@@ -437,7 +460,7 @@ class _Evaluation:
             t_in, frame_ms, t_out = self._sensor_reservation(s)
             # no sensor power model yet: its energy is not attributed
             e.update(t_in=t_in, frame_ms=frame_ms, t_out=t_out, unit_ms=0.0, unit_mj=0.0, attributed=False,
-                     per=1, passes=1, slices=[1.0], setup_ms=0.0)
+                     per=1, passes=1, slices=[1.0], shares=[1.0], setup_ms=0.0, power_mw=0.0)
         else:
             if s.kind == "sw":
                 t = self.p.num(work["runtime_ms"], f"stages.{sid}.work.runtime_ms")
@@ -451,6 +474,13 @@ class _Evaluation:
             e.update(unit_ms=t, unit_mj=mw * t / 1000.0, attributed=pw is not None, power_mw=mw)
         e["written"] = {b: self._buffer_mb(b, (w, h), buffers[b], required=True) for b in (s.writes or [])}
         e["session_mb"] = sum(self._buffer_mb(b, (w, h), session.get(b) or {}) for b in (s.reads or []))
+        for b in s.reads or []:
+            spec = session.get(b) or {}
+            if spec.get("lifetime") == "session" and spec.get("count") is not None:
+                depth = self.p.num(spec["count"], f"pipeline.buffers.{b}.count")
+                if frames > depth:
+                    raise JobError(f"job {self.job.id}: stage {sid} reads {frames} frames of {b}, which holds "
+                                   f"{depth:g}")
         return e
 
     def run(self) -> dict[str, Any]:
@@ -470,9 +500,7 @@ class _Evaluation:
             raise JobError(f"job {self.job.id}: frame period {self.period} ms is below {MIN_PERIOD_MS} ms "
                            "(background frames cannot be released)")
         preds = self._preds(active)
-        anc = self._ancestors(preds)
-        direct = {sid: [(p, per) for p, per in preds[sid] if not any(p in anc[q] for q, _ in preds[sid] if q != p)]
-                  for sid in active}
+        direct = self._direct(preds)
         buffers = self.job.buffers or {}
         session = self._session_buffers()
 
@@ -509,7 +537,6 @@ class _Evaluation:
                                f"in {MODEL_ID}")
 
         plan = {sid: self._plan_stage(sid, s, buffers, session) for sid, s in active.items()}
-        total = 0
         for sid, e in plan.items():
             # stage traffic in MB: per-frame inputs once per own frame, stage-level inputs all producer frames
             e["read_total"] = sum(plan[producer[b]]["written"][b] * (e["frames"] if per == "frame"
@@ -517,16 +544,13 @@ class _Evaluation:
                                   for b, per in inputs[sid]) + e["session_mb"] * e["frames"]
             e["write_total"] = sum(e["written"].values()) * e["frames"]
             if e["xfer_mb"] and not (e["read_total"] or e["write_total"]):
-                e["write_total"] = e["xfer_mb"] * e["frames"] * e["passes"] * e["per"]   # declared, no buffer
+                e["write_total"] = e["xfer_mb"] * e["frames"] * e["passes"]     # declared, no buffer
             e["chunks"] = 1 if e["stage"].kind == "sensor" else e["frames"] * e["passes"] * e["per"]
-            total += e["frames"] * e["passes"] * e["per"]
             self._apply_override(sid, e)
             for p, per in preds[sid]:
                 if per == "frame" and e["frames"] > plan[p]["frames"]:
                     raise JobError(f"job {self.job.id}: stage {sid} has {e['frames']} frames per-frame after {p} "
                                    f"with {plan[p]['frames']}")
-        if total > MAX_CHUNKS:
-            raise JobError(f"job {self.job.id}: {total} chunks exceed {MAX_CHUNKS} (frames x passes x stripes)")
         counts = {b: int(self.p.num(buffers[b].count, f"buffers.{b}.count")) for b in producer}
         for b, cs in consumers.items():
             for c in cs:
@@ -564,6 +588,7 @@ class _Evaluation:
             """One resource: queue by priority. Several (an OTF group): take a slot of each at once, only when
             each has one free, so a waiting group never holds a resource it is not running on. ``exclusive``
             (a sensor reservation): every slot of every resource, once all are idle."""
+            yield env.timeout(0)       # same-instant RT releases are queued first (priority order on ties)
             if len(rids) == 1 and not exclusive:
                 rq = res(rids[0]).request(priority=prio)
                 yield rq
@@ -586,12 +611,13 @@ class _Evaluation:
         dropped: set[int] = set()                    # preview frame numbers lost on a reserved resource
         stop = env.event()
         # frame-DAG HW only: own-cadence tasks (period / divided / event / vsync) are not released every frame
+        included = {str(n) for prof in timing_profiles(self.graph).values()
+                    for n in (prof.get("includes_hw_nodes") or [])}     # HW folded into a SW task's timing
         bg = [(self._resource(n), float(ip["hw_ms"])) for n, ip in self.ips.items()
-              if ip.get("hw_ms") and n in self.tasks and not own_cadence(self.tasks[n])]
+              if ip.get("hw_ms") and ((n in self.tasks and not own_cadence(self.tasks[n])) or n in included)]
 
-        def bg_frame(rid: str, k: int, hw_ms: float):
+        def bg_frame(rid: str, rq, hw_ms: float):
             release_t = env.now
-            rq = res(rid).request(priority=bg_prio)
             yield rq
             rt_wait[0] = max(rt_wait[0], env.now - release_t)
             yield env.timeout(hw_ms)
@@ -608,8 +634,8 @@ class _Evaluation:
                     return
                 if reserved.get(rid):
                     dropped.add(k)
-                else:
-                    env.process(bg_frame(rid, k, hw_ms))
+                else:   # queued now, so a job request at the same instant comes after it
+                    env.process(bg_frame(rid, res(rid).request(priority=bg_prio), hw_ms))
                 k += 1
 
         if self.job.background == "steady":
@@ -619,7 +645,7 @@ class _Evaluation:
         done = {sid: env.event() for sid in active}
         frame_done = {sid: [env.event() for _ in range(plan[sid]["frames"])] for sid in active}
         ready_evt = {sid: env.event() for sid in active}     # data ready (sensor: end of readout)
-        pools = {b: simpy.Container(env, init=counts[b], capacity=10**6) for b in producer}
+        pools = {b: simpy.Container(env, init=counts[b], capacity=max(1, counts[b])) for b in producer}
         log: list[dict[str, Any]] = []
         traffic: list[tuple[float, float, float]] = []       # (start, end, MB) of the stage transfers
         allocs: list[tuple[float, float | None, float, str]] = []   # start, end (None = open), MB, buffer
@@ -685,7 +711,7 @@ class _Evaluation:
                 log.append({"stage": sid, "start": start, "end": env.now, "mw": 0.0})
                 done[sid].succeed()
                 return
-            chunk_mb = (e["read_total"] + e["write_total"]) / max(1, e["chunks"])
+            pass_mb = (e["read_total"] + e["write_total"]) / max(1, e["frames"] * e["passes"])
             for f in range(e["frames"]):
                 for p, per in waits[sid]:
                     if per == "frame":
@@ -694,16 +720,17 @@ class _Evaluation:
                     yield pools[b].get(1)
                     produce(b, f, e["written"][b])
                 for _p in range(e["passes"]):
-                    for frac in e["slices"]:
+                    for frac, share in zip(e["slices"], e["shares"]):
                         reqs = yield from acquire(rids, 1)
                         t0 = env.now
                         dur = e["unit_ms"] * frac + e["setup_ms"]
                         yield env.timeout(dur)
                         for r, rq in reqs:
                             release(r, rq)
-                        log.append({"stage": sid, "start": t0, "end": env.now,
-                                    "mw": e["unit_mj"] * frac / dur * 1000.0 if dur > 0 else 0.0})
-                        traffic.append((t0, env.now, chunk_mb))
+                        mw = (e["power_mw"] if e["const_power"]
+                              else (e["unit_mj"] * frac / dur * 1000.0 if dur > 0 else 0.0))
+                        log.append({"stage": sid, "start": t0, "end": env.now, "mw": mw})
+                        traffic.append((t0, env.now, pass_mb * share))
                 frame_done[sid][f].succeed()
                 yield from written(sid, f)
                 for b, per in inputs[sid]:               # frame f of a per-frame input is read
@@ -758,12 +785,20 @@ class _Evaluation:
                     e["unit_ms"], e["setup_ms"] = e["unit_ms"] * want / total, e["setup_ms"] * want / total
                 else:
                     e["unit_ms"], e["setup_ms"] = want / units, 0.0
-                if s.kind != "hw":                       # constant power over the measured time
-                    e["unit_mj"] = float(e.get("power_mw") or 0.0) * e["unit_ms"] / 1000.0
+
         if "mb" in ov:                                   # the stage traffic, read / write split kept
             total = e["read_total"] + e["write_total"]
             share = e["read_total"] / total if total > 0 else 0.5
             e["read_total"], e["write_total"] = float(ov["mb"]) * share, float(ov["mb"]) * (1 - share)
+
+    @staticmethod
+    def _energy(e: dict[str, Any]) -> float:
+        """Stage energy (mJ): constant-power stages at their power over the whole stage time (setup and a
+        measured time included); HW at its per-pixel energy."""
+        units = e["frames"] * e["passes"]
+        if e["const_power"]:
+            return float(e.get("power_mw") or 0.0) * units * (e["unit_ms"] + e["setup_ms"] * e["per"]) / 1000.0
+        return e["unit_mj"] * units
 
     def _metrics(self, plan, log, traffic, allocs, at, end, rt_wait, dropped, session) -> dict[str, Any]:
         stages = []
@@ -778,7 +813,7 @@ class _Evaluation:
                 "chunks": e["chunks"], "start_ms": round(start, 3), "end_ms": round(stop, 3),
                 "service_ms": round(service, 3), "elapsed_ms": round(stop - start, 3),
                 "clock_mhz": {k: round(v, 1) for k, v in e["clocks"].items()},
-                "energy_mj": round(0.0 if sensor else e["unit_mj"] * e["frames"] * e["passes"], 3),
+                "energy_mj": round(0.0 if sensor else self._energy(e), 3),
                 "mb": round(e["read_total"] + e["write_total"], 3),
                 "energy_attributed": e["attributed"], "value_source": e["value_source"],
                 **({"evidence_ref": e["evidence_ref"]} if e.get("evidence_ref") else {}),

@@ -121,7 +121,7 @@ def param_ref_name(value: Any, where: str) -> str | None:
 
 # Literal ranges by field (expressions are checked by the evaluator once resolved, with the same rule)
 _COUNT = {"frames", "passes", "tiles", "count", "max_in_flight", "bitdepth"}      # integer >= 1
-_POSITIVE = {"interval_ms", "max_line_px", "mb", "mb_per_s", "ppc"}              # > 0
+_POSITIVE = {"interval_ms", "max_line_px", "mb", "mb_per_s", "ppc", "comp_ratio"}              # > 0
 # everything else (times, cycles, power, overlap, setup, at_ms, unit power) is >= 0; clock.<group> is > 0
 
 
@@ -286,6 +286,7 @@ class JobBuffer(BaseScenarioModel):
     format: str | None = None
     bitdepth: Num | None = None
     compression: str | None = None
+    comp_ratio: Num | None = None                 # the buffer's own ratio when its compression is on
     mb: Num | None = None                         # explicit size (MB = 10^6 B) instead of anchor x format
     count: Num = 1                                # instances = producer -> consumer token capacity
     to: list[str] | None = None                   # consumers that are not direct successors
@@ -415,7 +416,7 @@ class JobSpec(Selector):
         for s in self.stages:
             out += [(f"stages.{s.id}.{p}", v) for p, v in s.numeric_fields()]
         for name, buf in (self.buffers or {}).items():
-            for key in ("bitdepth", "mb", "count"):
+            for key in ("bitdepth", "mb", "count", "comp_ratio"):
                 value = getattr(buf, key)
                 if value is not None:
                     out.append((f"buffers.{name}.{key}", value))

@@ -335,7 +335,7 @@ def test_stripe_overlap_is_processed_not_stored():
 def test_resolved_stripe_widths_and_the_chunk_count_are_checked():
     with pytest.raises(JobError, match="max_line_px 64.0 must exceed overlap_px 64"):
         _one([_stage("a", nodes=["byrp"], chunk={"by": "stripe", "max_line_px": "sw_ms * 12.8", "overlap_px": 64})])
-    with pytest.raises(JobError, match="chunks exceed"):
+    with pytest.raises(JobError, match=r"chunks \(through stage a\) exceed"):
         _one([_stage("a", nodes=["byrp"], frames=30000)])
 
 
@@ -584,3 +584,71 @@ def test_a_new_slot_container_does_not_change_the_fingerprint():
     graph = _with_slot("post_proc", {"enc": {"service_ms": 10.0}})
     assert baseline_fingerprint(graph) == before
 
+
+
+def test_a_huge_tile_count_fails_before_building_chunks():
+    with pytest.raises(JobError, match="exceed 20000"):
+        _one([_stage("a", nodes=["byrp"], chunk={"by": "tile", "tiles": 10**9})])
+
+
+def test_a_same_instant_preview_release_goes_first():
+    period = analyze_timing_budget(_graph(), TimingBudgetOptions(throughput_model="pipelined"))["period_ms"]
+    out = _one([_stage("a", kind="fixed", nodes=["byrp"], work={"duration_ms": 12})],
+               trigger={"kind": "event", "at_ms": round(period * 2, 6)})
+    assert out["background"]["rt_wait_max_ms"] < 12 - 1e-6
+
+
+def test_stripe_traffic_follows_the_output_width():
+    graph = _graph(job={"id": "j", "background": "none", "stages": [
+        _stage("a", nodes=["byrp"], size_ref="tst", writes=["y"],
+               chunk={"by": "stripe", "max_line_px": 1000, "overlap_px": 64})],
+        "buffers": {"y": {"format": "YUV420", "bitdepth": 8}}})
+    graph.variant.size_overrides = {**(graph.variant.size_overrides or {}), "tst": "1000x1000"}
+    one = _report(graph)["jobs"][0]["peak"]["bw_instant_mbs"]
+    graph.variant.size_overrides["tst"] = "1001x1000"
+    two = _report(graph)["jobs"][0]["peak"]["bw_instant_mbs"]
+    assert two < one * 1.5                              # the 1 px stripe carries 1 px of output, not half
+
+
+def test_a_tiled_transfer_keeps_its_declared_bytes():
+    out = _one([_stage("store", kind="transfer", nodes=["post_proc"], chunk={"by": "tile", "tiles": 3},
+                       work={"mb": 12, "mb_per_s": 1200})], background="none")
+    assert out["stages"][0]["mb"] == pytest.approx(12.0)
+
+
+def test_a_measured_time_with_setup_keeps_the_declared_power():
+    job = deepcopy(JOB)
+    job["stages"][3]["chunk"] = {"by": "frame", "setup_us": 2000}
+    out = _report(_with_slot("post_proc", {"enc": {"service_ms": 10.0}}, job=job))["jobs"][0]
+    enc = {s["id"]: s for s in out["stages"]}["enc"]
+    assert enc["energy_mj"] == pytest.approx(400 * 10 / 1000.0)
+
+
+def test_an_unresolved_mode_parameter_is_a_job_error():
+    job = {"id": "j", "background": "none", "stages": [_stage("a", nodes=["byrp"], mode={"param": "no_such"})]}
+    with pytest.raises(JobError, match="parameter 'no_such' resolves to None"):
+        _report(_graph(job=job))
+
+
+def test_a_job_buffer_takes_its_own_comp_ratio():
+    graph = _graph(job={"id": "j", "background": "none", "stages": [
+        _stage("a", nodes=["byrp"], size_ref="tst", writes=["y"])],
+        "buffers": {"y": {"format": "Y", "bitdepth": 8, "compression": "COMP_BAYER_LOSSY", "comp_ratio": 0.25}}})
+    graph.variant.size_overrides = {**(graph.variant.size_overrides or {}), "tst": "1000x1000"}
+    assert _report(graph)["jobs"][0]["stages"][0]["mb"] == pytest.approx(0.25)
+
+
+def test_a_session_ring_cannot_hand_out_more_frames_than_it_holds():
+    graph = _graph(params={"zsl_frames": 9})
+    bufs = deepcopy(graph.scenario.pipeline["buffers"])
+    bufs["ZSL_RING_BUF"] = {**bufs["ZSL_RING_BUF"], "lifetime": "session", "count": 8}
+    graph.scenario.pipeline = {**graph.scenario.pipeline, "buffers": bufs}
+    with pytest.raises(JobError, match="reads 9 frames of ZSL_RING_BUF, which holds 8"):
+        _report(graph)
+
+
+def test_a_long_chain_is_reduced_without_ancestor_sets():
+    n = 3000
+    stages = [_stage(f"s{i}", kind="fixed", nodes=["post_proc"], work={"duration_ms": 0},
+                     **({"after": [f"s{i - 1}"]} if i else {})) for i in range(n)]
+    assert len(_one(stages, background="none")["stages"]) == n

@@ -116,7 +116,8 @@ def _condition_hash(graph, options, shim, tables) -> str:
         payload["jobs"] = {"jobs": jobs, "power_options": getattr(graph.scenario, "power_options", None),
                            "measured": slots, "selection": selection, "params": params, "catalog": catalog,
                            "anchors": anchors, "buffer_overrides": getattr(graph.variant, "buffer_overrides", None),
-                           "session_buffers": (graph.scenario.pipeline or {}).get("buffers")}
+                           "session_buffers": (graph.scenario.pipeline or {}).get("buffers"),
+                           "compression": getattr(getattr(graph, "soc", None), "compression_modes", None)}
     opp = _cpu_opp_inputs(graph)
     if opp:
         payload["cpu_opp"] = opp

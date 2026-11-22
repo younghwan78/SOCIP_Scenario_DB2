@@ -229,7 +229,9 @@ is reported as `report.jobs_error` (with `jobs: []`); the steady report is uncha
 - **Background**: every frame-DAG HW task occupies its physical resource for its steady `hw_ms` once per frame
   period at RT priority (`preview_priority: fifo` shares the job's priority; `background: none` turns it off).
   Tasks on their own cadence (period / divided / event / vsync) are not released every frame and are left out.
-  Frames are queued at their release time, independent of the previous frame's service; a preview frame lost on
+  HW folded into a SW task's timing (`includes_hw_nodes`) occupies its resource the same way.
+  Frames are queued at their release time, independent of the previous frame's service, and ahead of a job
+  request at the same instant; a preview frame lost on
   a reserved resource counts once in `dropped_frames` however many resources it missed.
 - **Chunks**: a stage runs `frames x passes x stripes/tiles` non-preemptive chunks on the steady resources (an OTF
   group takes a slot of each node's resource together, only when each has one free (steady `resource_capacity`),
@@ -237,7 +239,8 @@ is reported as `report.jobs_error` (with `jobs: []`); the steady report is uncha
   running chunk delays an RT
   release by at most its own length (`background.rt_wait_max_ms`). Stripe chunks trade a longer shot for a shorter
   RT wait; the first stripe takes the full line, later ones add the overlap, and each chunk runs its own width;
-  the overlap is processed (time, energy) but not stored (buffer size).
+  the overlap is processed (time, energy) but not stored (buffer size); a chunk's traffic follows its output
+  width. The chunk budget is checked before any chunk is built.
 - **Sensor**: one exclusive reservation (every slot) of the sensor and its `holds` (switch-in, `frames` readouts at the catalog mode fps,
   switch-out); each frame takes a buffer slot and is ready at its readout end; background frames on a reserved
   resource are dropped (`background.dropped_frames`). Its buffers default to the readout mode size and are
@@ -249,17 +252,18 @@ is reported as `report.jobs_error` (with `jobs: []`); the steady report is uncha
   written, the job output included), which bounds `peak.footprint_mb`. A stage-level reader's traffic is every producer frame. A
   stage-level reader needs a pool of at least the producer's frames (else an error). A job buffer needs a size
   (`mb`, `size_ref`, or the writing stage's size); sizes use the shared format factors (`sim.constants.BPP_MAP`)
-  and a buffer's own `comp_ratio` when its compression is on.
+  and a buffer's own `comp_ratio` (job buffers may declare one, > 0) when its compression is on. A stage cannot
+  read more frames of a `lifetime: session` buffer than its `count` (the ring depth).
 - **Costs**: `hw` chunk = px / (MHz x ppc) x (1 + h_blank) + `setup_us`, energy = the v1 dynamic term (static
   and clock terms are not attributed; a node with no unit power leaves the stage unattributed, not 0); `domain` = util-vf-v1 at util 1 at its steady operating point (the report clock, else
   `freq_mhz`; `clock: max` or neither: the top operating point; a clock map is an error); `sw` /
-  `transfer` / `fixed` = `power_mw` x time. A `transfer` without buffers carries its `work.mb`. Session buffers
+  `transfer` / `fixed` = `power_mw` x time. A `transfer` without buffers carries its `work.mb` once per frame-pass, split over its chunks. Session buffers
   are read as the variant resolves them (`buffer_overrides`). `clock: dvfs_sn` is
   not supported by `job-v1` yet.
 
 Measured values (R-7 slot): `node_configs.<one of the stage nodes>.sim.jobs.<job>.<stage>` (a mapping) with
 `service_ms` (uncontended stage time, split evenly over its chunks; `sw` / `transfer` / `fixed` / `domain` keep their
-power over the measured time, `hw` keeps its per-pixel energy), `clock_mhz` (`hw` / `domain`), `mb` (stage traffic), and `value_source`
+power over the whole measured time, setup included, `hw` keeps its per-pixel energy), `clock_mhz` (`hw` / `domain`), `mb` (stage traffic), and `value_source`
 (default `measured`) / `evidence_ref` / `basis`, which replace the stage's own. A sensor stage takes only
 `service_ms`. Unknown stages or fields (including `node`: a slot belongs to the node it is under) are errors.
 Neither `pipeline.jobs` nor these slots are part of the steady measured-replay fingerprint.
