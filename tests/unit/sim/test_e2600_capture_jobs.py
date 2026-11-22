@@ -34,12 +34,42 @@ def jobs(tables):
     return out
 
 
+SHOT = {None: "still_shot", "binning_2x2": "still_shot_50m", "full_remosaic": "still_shot_200m"}
+
+
 def test_every_capture_variant_has_exactly_one_shot(jobs):
     for vid, (v, rows) in jobs.items():
+        dc = v.get("design_conditions") or {}
         assert len(rows) == 1, vid
-        full = (v.get("design_conditions") or {}).get("capture_readout") == "full_remosaic"
-        assert rows[0]["id"] == ("still_shot_200m" if full else "still_shot"), vid
-        assert rows[0]["milestones"]["thumbnail"] < rows[0]["milestones"]["saved"], vid
+        assert rows[0]["id"] == SHOT[dc.get("capture_readout")], vid
+        if dc.get("output_format") == "RAW_BAYER_16":          # DNG: no ISP thumbnail
+            assert rows[0]["milestones"]["thumbnail"] is None and rows[0]["milestones"]["saved"] > 0, vid
+        else:
+            assert rows[0]["milestones"]["thumbnail"] < rows[0]["milestones"]["saved"], vid
+
+
+def test_the_post_stage_reads_the_merged_frame(jobs):
+    def post(vid):
+        return {s["id"]: s for s in jobs[vid][1][0]["stages"]}["post"]["mb"]
+
+    assert post("cam-cap-r1-mf-flash") == pytest.approx(post("cam-cap-r1-sf"))          # 12M: read + write
+    assert post("cam-cap-r1-remosaic-mf") == pytest.approx(post("cam-cap-r1-remosaic-sf"))
+    assert post("cam-cap-r1-ai-remosaic") == pytest.approx(post("cam-cap-r1-remosaic-sf"))
+
+
+def test_shot_acquisition_follows_the_capture_type(jobs):
+    def thumb(vid):
+        return jobs[vid][1][0]["milestones"]["thumbnail"]
+
+    # non-ZSL waits for 4 new frames after the shutter (reprocessing overlaps the wait); the flash MF variant
+    # reprocesses ZSL frames at once
+    assert thumb("cam-cap-r1-mf") > 4 * 33.3 > thumb("cam-cap-r1-mf-flash")
+    high = {s["id"]: s for s in jobs["cam-cap-r1-mf-high-res"][1][0]["stages"]}
+    assert high["readout"]["kind"] == "sensor" and high["readout"]["chunks"] == 1
+    raw = {s["id"] for s in jobs["cam-cap-r1-high-res-raw"][1][0]["stages"]}
+    assert raw == {"raw_proc", "store"}
+    assert {s["id"] for s in jobs["cam-cap-r1-remosaic-pro"][1][0]["stages"]} == \
+        {s["id"] for s in jobs["cam-cap-r1-remosaic-sf"][1][0]["stages"]}             # pro SF: a single frame
 
 
 def test_a_200m_shot_is_a_seamless_mode_change_readout(jobs):
@@ -56,7 +86,7 @@ def test_shot_latency_follows_the_frame_count(jobs):
     def thumb(vid):
         return jobs[vid][1][0]["milestones"]["thumbnail"]
 
-    assert thumb("cam-cap-r1-sf") < thumb("cam-cap-r1-mf") < thumb("cam-cap-r1-night")
+    assert thumb("cam-cap-r1-sf") < thumb("cam-cap-r1-mf-flash") < thumb("cam-cap-r1-night")   # 1 / 4 / 8 ZSL
     assert thumb("cam-cap-r1-remosaic-sf") < thumb("cam-cap-r1-remosaic-mf")
     assert {s["id"] for s in jobs["cam-cap-r1-ai-remosaic"][1][0]["stages"]} >= {"readout", "ai"}
 

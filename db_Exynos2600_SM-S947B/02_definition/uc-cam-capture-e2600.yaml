@@ -194,13 +194,14 @@ pipeline:
       note: JPEG encoded output
   jobs:
   - id: still_shot
-    label: 12M ZSL shot (SF / MF)
+    label: 12M shot (ZSL / non-ZSL, SF / MF, JPEG / RAW)
     when:
       capture_readout: null
     trigger:
       kind: event
       at_ms: 200
     phases:
+    - acquire
     - process
     - encode
     - store
@@ -209,12 +210,31 @@ pipeline:
         format: YUV420
         bitdepth: 10
         count: yuv_pool
+      mrg_yuv:
+        format: YUV420
+        bitdepth: 10
       out_yuv:
         format: YUV420
         bitdepth: 10
+      raw16:
+        format: RAW
+        bitdepth: 16
       jpeg:
         mb: jpeg_mb
     stages:
+    - id: grab
+      phase: acquire
+      kind: fixed
+      nodes:
+      - sensor_rear
+      frames: burst_frames
+      chunk:
+        by: frame
+      work:
+        duration_ms: preview_frame_ms
+      when:
+        capture_type: non_ZSL
+      basis: non-ZSL waits for the frames exposed after the shutter (one preview frame period each)
     - id: reproc
       phase: process
       clock: max
@@ -229,6 +249,22 @@ pipeline:
       - cap_yuv
       chunk:
         by: frame
+      after:
+      - stage: grab
+        per: frame
+      when:
+        output_format: null
+    - id: raw_proc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      reads:
+      - ZSL_RING_BUF
+      writes:
+      - raw16
+      when:
+        output_format: RAW_BAYER_16
     - id: merge
       phase: process
       clock: max
@@ -239,13 +275,27 @@ pipeline:
       - stage: reproc
         per: frame
       when:
-        subscenario:
+        subscenario: &id001
         - STILL_MF_CAPTURE
         - STILL_FLASH_MF_CAPTURE
         - STILL_HIGH_RES_MF_CAPTURE
         - NIGHT_CAPTURE
         - STILL_MOTION_FREE_MF_CAPTURE
         - SRZOOM_CAPTURE
+    - id: merge_out
+      phase: process
+      kind: fixed
+      nodes:
+      - mtnr
+      writes:
+      - mrg_yuv
+      after:
+      - merge
+      work:
+        duration_ms: 0
+      when:
+        subscenario: *id001
+      basis: hands the merged frame to the post stage (its time is in merge)
     - id: post
       phase: process
       clock: max
@@ -256,8 +306,10 @@ pipeline:
       writes:
       - out_yuv
       after:
-      - merge
+      - merge_out
       - reproc
+      when:
+        output_format: null
     - id: enc
       phase: encode
       kind: sw
@@ -271,6 +323,144 @@ pipeline:
         runtime_ms: encode_ms
         cluster: big
         power_mw: cpu_encode_mw
+      when:
+        output_format: null
+    - id: store
+      phase: store
+      kind: transfer
+      nodes:
+      - storage
+      after:
+      - enc
+      - raw_proc
+      work:
+        mb: file_mb
+        mb_per_s: ufs_mb_s
+        power_mw: ufs_mw
+    milestones:
+      thumbnail: post
+      saved: store
+    kpis:
+    - event_latency
+    - event_energy
+    - peak_power
+    - peak_bw
+    - peak_footprint
+  - id: still_shot_50m
+    label: 50M shot by seamless mode change (binning_2x2 readout)
+    when:
+      capture_readout: binning_2x2
+    trigger:
+      kind: event
+      at_ms: 200
+    phases:
+    - acquire
+    - process
+    - encode
+    - store
+    buffers:
+      cap_bayer:
+        format: BAYER
+        bitdepth: 10
+        count: yuv_pool
+      cap_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_50m
+        count: yuv_pool
+      mrg_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_50m
+      out_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_50m
+      jpeg:
+        mb: jpeg_50m_mb
+    stages:
+    - id: readout
+      phase: acquire
+      kind: sensor
+      nodes:
+      - sensor_rear
+      holds:
+      - csispdp
+      mode: binning_2x2
+      frames: burst_frames
+      writes:
+      - cap_bayer
+      work:
+        switch_in_ms: mode_switch_ms
+        switch_out_ms: mode_switch_ms
+    - id: reproc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      - rgbp
+      - yuvsc
+      size_ref: capture_50m
+      frames: burst_frames
+      writes:
+      - cap_yuv
+      chunk:
+        by: frame
+      after:
+      - stage: readout
+        per: frame
+    - id: merge
+      phase: process
+      clock: max
+      nodes:
+      - mtnr
+      size_ref: capture_50m
+      frames: burst_frames
+      after:
+      - stage: reproc
+        per: frame
+      when:
+        subscenario: *id001
+    - id: merge_out
+      phase: process
+      kind: fixed
+      nodes:
+      - mtnr
+      size_ref: capture_50m
+      writes:
+      - mrg_yuv
+      after:
+      - merge
+      work:
+        duration_ms: 0
+      when:
+        subscenario: *id001
+    - id: post
+      phase: process
+      clock: max
+      nodes:
+      - msnr
+      - yuvp
+      - mcsc
+      size_ref: capture_50m
+      writes:
+      - out_yuv
+      after:
+      - merge_out
+      - reproc
+    - id: enc
+      phase: encode
+      kind: sw
+      nodes:
+      - post_proc
+      writes:
+      - jpeg
+      after:
+      - post
+      work:
+        runtime_ms: encode_50m_ms
+        cluster: big
+        power_mw: cpu_encode_mw
     - id: store
       phase: store
       kind: transfer
@@ -279,7 +469,7 @@ pipeline:
       after:
       - enc
       work:
-        mb: jpeg_mb
+        mb: jpeg_50m_mb
         mb_per_s: ufs_mb_s
         power_mw: ufs_mw
     milestones:
@@ -314,6 +504,14 @@ pipeline:
         bitdepth: 10
         size_ref: capture_full
         count: full_pool
+      mrg_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
+      ai_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
       out_yuv:
         format: YUV420
         bitdepth: 10
@@ -352,18 +550,6 @@ pipeline:
         by: stripe
         max_line_px: isp_line_px
         overlap_px: stripe_overlap_px
-    - id: ai
-      phase: process
-      kind: domain
-      nodes:
-      - npu
-      size_ref: capture_full
-      after:
-      - reproc
-      work:
-        mcycles_per_mp: ai_mcycles_per_mp
-      when:
-        extend_mode: EX_AI_REMOSAIC
     - id: merge
       phase: process
       clock: max
@@ -378,10 +564,38 @@ pipeline:
         max_line_px: isp_line_px
         overlap_px: stripe_overlap_px
       when:
-        subscenario:
+        subscenario: &id002
         - STILL_REMOSAIC_MF_CAPTURE
-        - STILL_REMOSAIC_PRO_SF_CAPTURE
         - REMOSAIC_NIGHT_CAPTURE
+    - id: merge_out
+      phase: process
+      kind: fixed
+      nodes:
+      - mtnr
+      size_ref: capture_full
+      writes:
+      - mrg_yuv
+      after:
+      - merge
+      work:
+        duration_ms: 0
+      when:
+        subscenario: *id002
+    - id: ai
+      phase: process
+      kind: domain
+      nodes:
+      - npu
+      size_ref: capture_full
+      writes:
+      - ai_yuv
+      after:
+      - merge_out
+      - reproc
+      work:
+        mcycles_per_mp: ai_mcycles_per_mp
+      when:
+        extend_mode: EX_AI_REMOSAIC
     - id: post
       phase: process
       clock: max
@@ -394,7 +608,7 @@ pipeline:
       - out_yuv
       after:
       - ai
-      - merge
+      - merge_out
       - reproc
       chunk:
         by: stripe
@@ -436,6 +650,7 @@ pipeline:
 size_profile:
   anchors:
     sensor_out: 4000x3000
+    capture_50m: 8000x6000
     capture_full: 16384x12288
 power_options:
   params:
@@ -444,6 +659,8 @@ power_options:
     encode_ms: 30
     cpu_encode_mw: 600
     jpeg_mb: 4
+    file_mb: 4
+    preview_frame_ms: 33.3
     ufs_mb_s: 1200
     ufs_mw: 250
     full_frames: 1
@@ -452,6 +669,8 @@ power_options:
     isp_line_px: 8192
     stripe_overlap_px: 64
     ai_mcycles_per_mp: 2
+    encode_50m_ms: 120
+    jpeg_50m_mb: 15
     encode_200m_ms: 400
     jpeg_200m_mb: 40
   param_rules:
@@ -471,11 +690,14 @@ power_options:
   - when:
       subscenario:
       - STILL_REMOSAIC_MF_CAPTURE
-      - STILL_REMOSAIC_PRO_SF_CAPTURE
       - REMOSAIC_NIGHT_CAPTURE
     set:
       full_frames: 3
       full_pool: 3
+  - when:
+      output_format: RAW_BAYER_16
+    set:
+      file_mb: 24
 variants:
 - id: cam-cap-r1-sf
   severity: light
@@ -876,26 +1098,6 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: wide_video_16_9_30
-      resolved_sensor_mode:
-        mode_id: binning_4x4
-        sensor_name: HP2 12MP 4-in-1 binning
-        sensor_size:
-        - 4000
-        - 3000
-        active_size:
-        - 4000
-        - 3000
-        sensor_fps: 30.0
-        sensor_format: BAYER
-        sensor_bitwidth: 10
-        sensor_mipi_speed: 2.5
-        sensor_ln_mode: 1
-        sensor_sbwc: enable
-        sensor_phy_type: CPHY
-        place: rear
-        ip_ref: ip-sensor-rear-s5e9965
-        value_source: assumed
-        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1095,6 +1297,7 @@ variants:
     subscenario: STILL_HIGH_RES_MF_CAPTURE
     sensor_place: rear
     isp_features: MTNR,MSNR,DJAG
+    capture_readout: binning_2x2
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -2017,7 +2220,7 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
-      resolved_sensor_mode: &id001
+      resolved_sensor_mode: &id003
         mode_id: binning_4x4
         sensor_name: HP2 12MP 4-in-1 binning
         sensor_size:
@@ -2039,7 +2242,7 @@ variants:
         basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     sensor_rear2:
       selected_mode: binning_4x4
-      resolved_sensor_mode: *id001
+      resolved_sensor_mode: *id003
     csispdp:
       sim:
         inherit_shape: true
@@ -2395,7 +2598,7 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
-      resolved_sensor_mode: &id002
+      resolved_sensor_mode: &id004
         mode_id: binning_4x4
         sensor_name: HP2 12MP 4-in-1 binning
         sensor_size:
@@ -2417,7 +2620,7 @@ variants:
         basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     sensor_rear2:
       selected_mode: binning_4x4
-      resolved_sensor_mode: *id002
+      resolved_sensor_mode: *id004
     csispdp:
       sim:
         inherit_shape: true
@@ -2467,7 +2670,7 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
-      resolved_sensor_mode: &id003
+      resolved_sensor_mode: &id005
         mode_id: binning_4x4
         sensor_name: HP2 12MP 4-in-1 binning
         sensor_size:
@@ -2489,7 +2692,7 @@ variants:
         basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     sensor_rear2:
       selected_mode: binning_4x4
-      resolved_sensor_mode: *id003
+      resolved_sensor_mode: *id005
     csispdp:
       sim:
         inherit_shape: true
@@ -2611,7 +2814,7 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: binning_4x4
-      resolved_sensor_mode: &id004
+      resolved_sensor_mode: &id006
         mode_id: binning_4x4
         sensor_name: HP2 12MP 4-in-1 binning
         sensor_size:
@@ -2633,7 +2836,7 @@ variants:
         basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     sensor_rear2:
       selected_mode: binning_4x4
-      resolved_sensor_mode: *id004
+      resolved_sensor_mode: *id006
     csispdp:
       sim:
         inherit_shape: true

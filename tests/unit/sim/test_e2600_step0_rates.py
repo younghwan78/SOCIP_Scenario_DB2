@@ -68,6 +68,9 @@ def test_camera_isp_computes_and_the_session_is_a_12m_preview(scenario):
         sensor_mode = ((v.get("node_configs") or {}).get("sensor_rear") or {}).get("selected_mode")
         if v["id"] in ("cam-prev-r1-pro", "cam-cap-r1-sf-pro"):   # pro mode: 16:9 wide video crop
             assert sensor_mode == "wide_video_16_9_30", v["id"]
+            from scenario_db.sim.external_devices import active_sensor_nodes, selected_sensor_mode
+            resolved = selected_sensor_mode(g, next(n for n in active_sensor_nodes(g) if n["id"] == "sensor_rear"))
+            assert resolved["sensor_size"] == [4080, 2296] and resolved["sensor_bitwidth"] == 12, v["id"]
         else:
             assert sensor_mode == "binning_4x4", v["id"]      # 12M (30 fps sessions: resolved_sensor_mode at 30)
             assert (v.get("size_overrides") or {}).get("sensor_out", "4000x3000") == "4000x3000", v["id"]

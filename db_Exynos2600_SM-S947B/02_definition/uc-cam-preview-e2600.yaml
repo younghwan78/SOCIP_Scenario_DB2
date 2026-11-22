@@ -1404,26 +1404,6 @@ variants:
   node_configs:
     sensor_rear:
       selected_mode: wide_video_16_9_30
-      resolved_sensor_mode:
-        mode_id: binning_4x4
-        sensor_name: HP2 12MP 4-in-1 binning
-        sensor_size:
-        - 4000
-        - 3000
-        active_size:
-        - 4000
-        - 3000
-        sensor_fps: 30.0
-        sensor_format: BAYER
-        sensor_bitwidth: 10
-        sensor_mipi_speed: 2.5
-        sensor_ln_mode: 1
-        sensor_sbwc: enable
-        sensor_phy_type: CPHY
-        place: rear
-        ip_ref: ip-sensor-rear-s5e9965
-        value_source: assumed
-        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     csispdp:
       sim:
         inherit_shape: true

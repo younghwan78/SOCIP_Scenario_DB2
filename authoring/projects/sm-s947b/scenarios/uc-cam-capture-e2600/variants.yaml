@@ -131,6 +131,8 @@
   node_configs:
     sensor_rear:
       selected_mode: wide_video_16_9_30
+      $unset:
+      - resolved_sensor_mode     # the 12M 30 fps pin of the parent does not apply to the 16:9 crop mode
   size_overrides:
     sensor_out: 4080x2296
 - id: cam-cap-r1-mf
@@ -168,6 +170,7 @@
     - flash
     subscenario: STILL_HIGH_RES_MF_CAPTURE
     isp_features: MTNR,MSNR,DJAG
+    capture_readout: binning_2x2   # 50M frames read at the shot by a seamless mode change (C-2)
   node_configs:
     mtnr:
       isp_features:
@@ -276,6 +279,7 @@
   design_conditions:
     $unset:
     - sensor_place
+    - capture_readout
     subscenario: NIGHT_CAPTURE
     isp_features: MSNR
     extend_mode: EX_NIGHT

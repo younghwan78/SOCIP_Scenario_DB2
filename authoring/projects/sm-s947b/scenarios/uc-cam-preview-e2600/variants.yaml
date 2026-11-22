@@ -313,6 +313,8 @@
   node_configs:
     sensor_rear:
       selected_mode: wide_video_16_9_30
+      $unset:
+      - resolved_sensor_mode     # the 12M 30 fps pin of the parent does not apply to the 16:9 crop mode
   size_overrides:
     sensor_out: 4080x2296
 - id: cam-prev-f1-30

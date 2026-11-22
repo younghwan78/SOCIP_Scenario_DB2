@@ -187,26 +187,69 @@ pipeline:
   # a shot runs on the same ISP resources at job priority, preview RT first. ISP stages run at the top DVFS level
   # (capture DVFS SN, assumed); the preview background keeps its steady clock (job-v1).
   jobs:
+  # 12M shot from the preview session (binning_4x4): ZSL frames, or N new frames after the shutter (non-ZSL);
+  # JPEG through the ISP, or a 16-bit RAW (DNG) straight from BYRP
   - id: still_shot
-    label: 12M ZSL shot (SF / MF)
+    label: 12M shot (ZSL / non-ZSL, SF / MF, JPEG / RAW)
     when: {capture_readout: null}
     trigger: {kind: event, at_ms: 200}
-    phases: [process, encode, store]
+    phases: [acquire, process, encode, store]
     buffers:
       cap_yuv: {format: YUV420, bitdepth: 10, count: yuv_pool}
+      mrg_yuv: {format: YUV420, bitdepth: 10}
       out_yuv: {format: YUV420, bitdepth: 10}
+      raw16: {format: RAW, bitdepth: 16}
       jpeg: {mb: jpeg_mb}
     stages:
+    - {id: grab, phase: acquire, kind: fixed, nodes: [sensor_rear], frames: burst_frames, chunk: {by: frame},
+       work: {duration_ms: preview_frame_ms}, when: {capture_type: non_ZSL},
+       basis: non-ZSL waits for the frames exposed after the shutter (one preview frame period each)}
     - {id: reproc, phase: process, clock: max, nodes: [byrp, rgbp, yuvsc], frames: burst_frames, reads: [ZSL_RING_BUF],
-       writes: [cap_yuv], chunk: {by: frame}}
-    - {id: merge, phase: process, clock: max, nodes: [mtnr], frames: burst_frames, after: [{stage: reproc, per: frame}],
-       when: {subscenario: [STILL_MF_CAPTURE, STILL_FLASH_MF_CAPTURE, STILL_HIGH_RES_MF_CAPTURE, NIGHT_CAPTURE,
-                            STILL_MOTION_FREE_MF_CAPTURE, SRZOOM_CAPTURE]}}
-    - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], writes: [out_yuv], after: [merge, reproc]}
+       writes: [cap_yuv], chunk: {by: frame}, after: [{stage: grab, per: frame}], when: {output_format: null}}
+    - {id: raw_proc, phase: process, clock: max, nodes: [byrp], reads: [ZSL_RING_BUF], writes: [raw16],
+       when: {output_format: RAW_BAYER_16}}
+    - {id: merge, phase: process, clock: max, nodes: [mtnr], frames: burst_frames,
+       after: [{stage: reproc, per: frame}],
+       when: {subscenario: &mf12 [STILL_MF_CAPTURE, STILL_FLASH_MF_CAPTURE, STILL_HIGH_RES_MF_CAPTURE, NIGHT_CAPTURE,
+                                   STILL_MOTION_FREE_MF_CAPTURE, SRZOOM_CAPTURE]}}
+    - {id: merge_out, phase: process, kind: fixed, nodes: [mtnr], writes: [mrg_yuv], after: [merge],
+       work: {duration_ms: 0}, when: {subscenario: *mf12},
+       basis: hands the merged frame to the post stage (its time is in merge)}
+    - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], writes: [out_yuv], after: [merge_out, reproc],
+       when: {output_format: null}}
     - {id: enc, phase: encode, kind: sw, nodes: [post_proc], writes: [jpeg], after: [post],
-       work: {runtime_ms: encode_ms, cluster: big, power_mw: cpu_encode_mw}}
+       work: {runtime_ms: encode_ms, cluster: big, power_mw: cpu_encode_mw}, when: {output_format: null}}
+    - {id: store, phase: store, kind: transfer, nodes: [storage], after: [enc, raw_proc],
+       work: {mb: file_mb, mb_per_s: ufs_mb_s, power_mw: ufs_mw}}
+    milestones: {thumbnail: post, saved: store}
+    kpis: [event_latency, event_energy, peak_power, peak_bw, peak_footprint]
+  # 50M shot: the sensor switches to binning_2x2 for the shot frames (seamless mode change), then back
+  - id: still_shot_50m
+    label: 50M shot by seamless mode change (binning_2x2 readout)
+    when: {capture_readout: binning_2x2}
+    trigger: {kind: event, at_ms: 200}
+    phases: [acquire, process, encode, store]
+    buffers:
+      cap_bayer: {format: BAYER, bitdepth: 10, count: yuv_pool}
+      cap_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_50m, count: yuv_pool}
+      mrg_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_50m}
+      out_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_50m}
+      jpeg: {mb: jpeg_50m_mb}
+    stages:
+    - {id: readout, phase: acquire, kind: sensor, nodes: [sensor_rear], holds: [csispdp], mode: binning_2x2,
+       frames: burst_frames, writes: [cap_bayer], work: {switch_in_ms: mode_switch_ms, switch_out_ms: mode_switch_ms}}
+    - {id: reproc, phase: process, clock: max, nodes: [byrp, rgbp, yuvsc], size_ref: capture_50m, frames: burst_frames,
+       writes: [cap_yuv], chunk: {by: frame}, after: [{stage: readout, per: frame}]}
+    - {id: merge, phase: process, clock: max, nodes: [mtnr], size_ref: capture_50m, frames: burst_frames,
+       after: [{stage: reproc, per: frame}], when: {subscenario: *mf12}}
+    - {id: merge_out, phase: process, kind: fixed, nodes: [mtnr], size_ref: capture_50m, writes: [mrg_yuv],
+       after: [merge], work: {duration_ms: 0}, when: {subscenario: *mf12}}
+    - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], size_ref: capture_50m, writes: [out_yuv],
+       after: [merge_out, reproc]}
+    - {id: enc, phase: encode, kind: sw, nodes: [post_proc], writes: [jpeg], after: [post],
+       work: {runtime_ms: encode_50m_ms, cluster: big, power_mw: cpu_encode_mw}}
     - {id: store, phase: store, kind: transfer, nodes: [storage], after: [enc],
-       work: {mb: jpeg_mb, mb_per_s: ufs_mb_s, power_mw: ufs_mw}}
+       work: {mb: jpeg_50m_mb, mb_per_s: ufs_mb_s, power_mw: ufs_mw}}
     milestones: {thumbnail: post, saved: store}
     kpis: [event_latency, event_energy, peak_power, peak_bw, peak_footprint]
   - id: still_shot_200m
@@ -217,6 +260,8 @@ pipeline:
     buffers:
       cap_bayer: {format: BAYER, bitdepth: 12, size_ref: capture_full, count: full_pool}
       cap_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_full, count: full_pool}
+      mrg_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_full}
+      ai_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_full}
       out_yuv: {format: YUV420, bitdepth: 10, size_ref: capture_full}
       jpeg: {mb: jpeg_200m_mb}
     stages:
@@ -226,13 +271,15 @@ pipeline:
     - {id: reproc, phase: process, clock: max, nodes: [byrp, rgbp, yuvsc], size_ref: capture_full, frames: full_frames,
        writes: [cap_yuv], after: [readout],
        chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px}}
-    - {id: ai, phase: process, kind: domain, nodes: [npu], size_ref: capture_full, after: [reproc],
-       work: {mcycles_per_mp: ai_mcycles_per_mp}, when: {extend_mode: EX_AI_REMOSAIC}}
     - {id: merge, phase: process, clock: max, nodes: [mtnr], size_ref: capture_full, frames: full_frames, after: [reproc],
        chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px},
-       when: {subscenario: [STILL_REMOSAIC_MF_CAPTURE, STILL_REMOSAIC_PRO_SF_CAPTURE, REMOSAIC_NIGHT_CAPTURE]}}
+       when: {subscenario: &mf200 [STILL_REMOSAIC_MF_CAPTURE, REMOSAIC_NIGHT_CAPTURE]}}
+    - {id: merge_out, phase: process, kind: fixed, nodes: [mtnr], size_ref: capture_full, writes: [mrg_yuv],
+       after: [merge], work: {duration_ms: 0}, when: {subscenario: *mf200}}
+    - {id: ai, phase: process, kind: domain, nodes: [npu], size_ref: capture_full, writes: [ai_yuv],
+       after: [merge_out, reproc], work: {mcycles_per_mp: ai_mcycles_per_mp}, when: {extend_mode: EX_AI_REMOSAIC}}
     - {id: post, phase: process, clock: max, nodes: [msnr, yuvp, mcsc], size_ref: capture_full, writes: [out_yuv],
-       after: [ai, merge, reproc], chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px}}
+       after: [ai, merge_out, reproc], chunk: {by: stripe, max_line_px: isp_line_px, overlap_px: stripe_overlap_px}}
     - {id: enc, phase: encode, kind: sw, nodes: [post_proc], writes: [jpeg], after: [post],
        work: {runtime_ms: encode_200m_ms, cluster: big, power_mw: cpu_encode_mw}}
     - {id: store, phase: store, kind: transfer, nodes: [storage], after: [enc],
@@ -242,6 +289,7 @@ pipeline:
 size_profile:
   anchors:
     sensor_out: 4000x3000
+    capture_50m: 8000x6000      # binning_2x2 readout (capture job only)
     capture_full: 16384x12288   # full_remosaic readout (capture job only)
 variants:
   $include: variants.yaml
