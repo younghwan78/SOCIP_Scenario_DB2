@@ -117,3 +117,23 @@ def test_the_stored_jpeg_and_the_jpeg_buffer_are_one_size(tables):
     shot = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables)["jobs"][0]
     store = {s["id"]: s for s in shot["stages"]}["store"]
     assert store["mb"] == pytest.approx(12.0) and store["service_ms"] == pytest.approx(12 / 1200 * 1000, rel=1e-3)
+
+
+def test_the_zsl_ring_fill_is_steady_traffic():
+    from copy import deepcopy
+
+    graph = _exynos2600_generated_graph(UC, "cam-cap-r1-sf")
+    with_fill = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), jobs=False)
+    pipeline = deepcopy(graph.scenario.pipeline)
+    pipeline["buffers"]["ZSL_RING_BUF"].pop("dma")
+    graph.scenario.pipeline = pipeline
+    without = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), jobs=False)
+    assert with_fill["bw"]["total_mbs"] > without["bw"]["total_mbs"]
+
+
+def test_a_raw_shot_stores_the_declared_file_size(tables):
+    graph = _exynos2600_generated_graph(UC, "cam-cap-r1-high-res-raw")
+    graph.variant.design_conditions = {**graph.variant.design_conditions, "file_mb": 12}
+    shot = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables)["jobs"][0]
+    store = {s["id"]: s for s in shot["stages"]}["store"]
+    assert store["mb"] == pytest.approx(12.0) and store["service_ms"] == pytest.approx(10.0, rel=1e-3)

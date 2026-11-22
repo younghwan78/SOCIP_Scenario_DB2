@@ -180,6 +180,10 @@ pipeline:
       size_ref: sensor_out
       count: 8                   # ring depth: the longest ZSL burst (night, 8 frames; assumed)
       lifetime: session          # held for the whole session (event job footprint)
+      dma:                       # BYRP fills the ring with every preview frame (steady traffic)
+        node_id: byrp
+        write_ports:
+        - BYRP_WDMA_BYR
       note: ZSL ring buffer (capture 직전 N프레임 보관). Bayer frames from the BYRP Bayer dump; no edge writes it yet.
     JPEG_BUF:
       format: JPEG
@@ -201,7 +205,7 @@ pipeline:
       cap_yuv: {format: YUV420, bitdepth: 10, count: yuv_pool}
       mrg_yuv: {format: YUV420, bitdepth: 10}
       out_yuv: {format: YUV420, bitdepth: 10}
-      raw16: {format: RAW, bitdepth: 16}
+      raw16: {format: RAW, bitdepth: 16, mb: file_mb}   # the DNG the store stage writes
       jpeg: {mb: file_mb}
     stages:
     - {id: grab, phase: acquire, kind: fixed, nodes: [sensor_rear], frames: burst_frames, chunk: {by: frame},

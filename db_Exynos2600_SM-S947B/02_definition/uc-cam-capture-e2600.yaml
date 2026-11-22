@@ -189,6 +189,10 @@ pipeline:
       size_ref: sensor_out
       count: 8
       lifetime: session
+      dma:
+        node_id: byrp
+        write_ports:
+        - BYRP_WDMA_BYR
       note: ZSL ring buffer (capture 직전 N프레임 보관). Bayer frames from the BYRP Bayer dump; no edge writes it yet.
     JPEG_BUF:
       format: JPEG
@@ -222,6 +226,7 @@ pipeline:
       raw16:
         format: RAW
         bitdepth: 16
+        mb: file_mb
       jpeg:
         mb: file_mb
     stages:
