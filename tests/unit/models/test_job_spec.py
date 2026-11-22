@@ -178,7 +178,7 @@ def test_a_pipeline_patch_must_not_leave_job_references_dangling():
     (lambda j: j["trigger"].update(at_ms=-1), "at_ms -1.0 must be >= 0"),
     (lambda j: j["stages"][2].update(frames=0), "frames 0.0 must be an integer >= 1"),
     (lambda j: j["stages"][0]["work"].update(duration_ms=-5), "duration_ms -5.0 must be >= 0"),
-    (lambda j: j["stages"][2].update(clock={"CAM": 0}), "clock.CAM 0.0 must be > 0"),
+    (lambda j: j["stages"][2].update(clock={"CAM": 0}), "clock.CAM 0 must be > 0"),
     (lambda j: j["stages"][2].update(ip_params={"ppc": 0}), "ip_params.ppc 0.0 must be > 0"),
     (lambda j: j["buffers"]["cap_yuv"].update(count=0), "buffers.cap_yuv.count 0.0 must be an integer >= 1"),
     (lambda j: j["buffers"]["jpeg"].update(mb=-4), "buffers.jpeg.mb -4.0 must be > 0"),
@@ -284,3 +284,40 @@ def test_jobs_do_not_change_the_steady_replay_fingerprint():
     graph.scenario.pipeline = {**graph.scenario.pipeline, "jobs": [deepcopy(JOB)]}
     assert baseline_fingerprint(graph) == before
 
+
+
+@pytest.mark.parametrize("value,message", [
+    ("0", "frames 0.0 must be an integer >= 1"), ("2 - 2", "frames 0.0 must be an integer >= 1"),
+    ("60 / 0", "divides by zero"),
+])
+def test_parameter_free_expressions_are_range_checked(value, message):
+    job = deepcopy(JOB)
+    job["stages"][2]["frames"] = value
+    with pytest.raises(ValidationError, match=message):
+        JobSpec.model_validate(job)
+
+
+def test_a_dotted_clock_group_must_be_positive():
+    job = deepcopy(JOB)
+    job["stages"][2]["clock"] = {"CPU.big": 0}
+    with pytest.raises(ValidationError, match=r"clock.CPU.big 0 must be > 0"):
+        JobSpec.model_validate(job)
+
+
+def test_reimport_keeps_explicit_nulls_of_a_param_rule_set():
+    from scenario_db.write.service import _compact_doc
+
+    doc = {"power_options": {"param_rules": [{"when": {"day": True}, "set": {"mode_x": None, "y": 1}}]}}
+    assert _compact_doc(doc)["power_options"]["param_rules"][0]["set"] == {"mode_x": None, "y": 1}
+
+
+def test_jobs_do_not_change_the_prediction_input_hash():
+    from scenario_db.sim.arch_exploration import input_manifest
+    from scenario_db.sim.models import SimulationRunConfig
+    from tests.unit.sim.test_adapter_runner import _exynos2600_generated_graph
+
+    graph = _exynos2600_generated_graph("uc-cam-capture-e2600", "cam-cap-r1-sf")
+    before, _ = input_manifest(graph, SimulationRunConfig(), {})
+    graph.scenario.pipeline = {**graph.scenario.pipeline, "jobs": [deepcopy(JOB)]}
+    after, _ = input_manifest(graph, SimulationRunConfig(), {})
+    assert after["pipeline"] == before["pipeline"]

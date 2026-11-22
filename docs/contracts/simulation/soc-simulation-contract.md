@@ -215,7 +215,7 @@ pipeline:
 | `stages[].nodes` / `holds` | Pipeline nodes; two or more `nodes` form an OTF group. |
 | `after` | Stage ids, or `{stage, per: frame}` for frame-wise pipelining (both stages chunk by frame). The graph must be acyclic. |
 | `reads` / `writes` | `reads` names session buffers (`pipeline.buffers`); job buffers flow from the predecessors that `writes` them (or to the stages in a buffer's `to`). Job buffer names must not shadow pipeline buffers. |
-| numbers | A number, or an expression of knob parameters (`+ - * /`); string fields take `{param: name}`. Every name must be a `knobs.yaml` param; params / param_rules are exported even without knobs. |
+| numbers | A number, or an expression of knob parameters (`+ - * /`); `mode` and `clock.dvfs_sn` take a name or `{param: name}` (other string fields are literals). Literals and parameter-free expressions are range-checked at definition time (counts integer >= 1; interval / MB / ppc / clocks > 0; others >= 0); expressions with parameters when resolved. Every name must be a `knobs.yaml` param; params / param_rules are exported even without knobs. |
 | `when` / `when_node_enabled` | Variant selection, as knob rules. |
 
 ## Task Cadence (`node_configs.<node>.timeline`)

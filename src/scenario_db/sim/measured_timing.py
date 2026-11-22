@@ -42,7 +42,9 @@ def baseline_fingerprint(graph: CanonicalScenarioGraph) -> str:
     import json
     from dataclasses import asdict
     # R-3 event jobs are not steady inputs: declaring or editing them keeps a steady replay valid
-    pipeline = {k: v for k, v in (graph.scenario.pipeline or {}).items() if k != "jobs"}
+    from scenario_db.models.definition.job import steady_pipeline
+
+    pipeline = steady_pipeline(graph.scenario.pipeline)
     payload = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id,
                    pipeline=pipeline, size_profile=graph.scenario.size_profile, variant=asdict(graph.variant),
                    project=dict(metadata=graph.project.metadata_, globals=graph.project.globals_) if graph.project else None,

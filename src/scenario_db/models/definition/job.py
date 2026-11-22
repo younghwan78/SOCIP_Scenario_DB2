@@ -75,6 +75,24 @@ def expression_names(value: Any, where: str) -> set[str]:
     return names
 
 
+def steady_pipeline(pipeline: dict[str, Any] | None) -> dict[str, Any]:
+    """The pipeline without ``jobs``: what steady results depend on (fingerprints, input hashes)."""
+    return {k: v for k, v in (pipeline or {}).items() if k != "jobs"}
+
+
+def const_value(value: Any, where: str) -> float | None:
+    """The value of a parameter-free numeric expression (None when it names parameters)."""
+    if not isinstance(value, str) or expression_names(value, where):
+        return None
+    try:
+        out = float(eval(compile(ast.parse(value, mode="eval"), where, "eval"), {"__builtins__": {}}, {}))
+    except ZeroDivisionError:
+        raise ValueError(f"{where}: {value!r} divides by zero") from None
+    if not math.isfinite(out):
+        raise ValueError(f"{where}: {value!r} is not a finite number")
+    return out
+
+
 def param_ref_name(value: Any, where: str) -> str | None:
     if value is None or isinstance(value, str):
         return None
@@ -96,7 +114,7 @@ def range_error(path: str, value: float) -> str | None:
     if key in _COUNT:
         if value < 1 or value != int(value):
             return f"{path} {value} must be an integer >= 1"
-    elif key in _POSITIVE or (len(parts) >= 2 and parts[-2] == "clock"):
+    elif key in _POSITIVE or ".clock." in f".{path}":
         if value <= 0:
             return f"{path} {value} must be > 0"
     elif value < 0:
@@ -205,6 +223,9 @@ class JobStage(Selector):
                 raise ValueError(f"stage {self.id}: clock must not be empty")
             if "dvfs_sn" in self.clock and len(self.clock) > 1:
                 raise ValueError(f"stage {self.id}: clock is either {{dvfs_sn: ...}} or DVFS group clocks")
+            for group, value in self.clock.items():
+                if group != "dvfs_sn" and isinstance(value, (int, float)) and not isinstance(value, bool) and value <= 0:
+                    raise ValueError(f"stage {self.id}: clock.{group} {value} must be > 0")
             sn = self.clock.get("dvfs_sn", "")
             if "dvfs_sn" in self.clock and not ((isinstance(sn, str) and sn) or isinstance(sn, dict)):
                 raise ValueError(f"stage {self.id}: clock.dvfs_sn needs a DVFS scenario name or {{param: name}}")
@@ -340,9 +361,14 @@ class JobSpec(Selector):
                 raise ValueError(f"job {self.id}: milestone {name} names unknown stage {sid}")
         for path, value in self.numeric_fields():
             if isinstance(value, (int, float)) and not isinstance(value, bool):
-                problem = range_error(path, float(value))
-                if problem:
-                    raise ValueError(f"job {self.id}: {problem}")
+                literal = float(value)
+            else:
+                literal = const_value(value, f"job {self.id}.{path}")      # e.g. "2 - 2", "60 / 0"
+                if literal is None:
+                    continue
+            problem = range_error(path, literal)
+            if problem:
+                raise ValueError(f"job {self.id}: {problem}")
         for s in self.stages:
             c = s.chunk
             if (c is not None and isinstance(c.max_line_px, (int, float)) and isinstance(c.overlap_px, (int, float))
