@@ -205,7 +205,9 @@ def analyze_timing_budget(
     *,
     config: SimulationRunConfig | None = None,
     dvfs_tables: dict[str, DVFSTable] | None = None,
+    jobs: bool = True,
 ) -> dict[str, Any]:
+    """``jobs=False``: steady-only callers (summaries, what-if grids, fleet rows) skip the R-3 event jobs."""
     options = options or TimingBudgetOptions()
     params = effective_power_params(config) if config is not None else None
     if params is not None and "cpu" not in options.model_fields_set:
@@ -233,7 +235,7 @@ def analyze_timing_budget(
     if options.cpu_model == "profile":
         _profile_cpu(report, options, params, config)
     # R-3 event jobs (absent = unchanged); after the CPU profile so their background is the final steady power
-    if (getattr(graph.scenario, "pipeline", None) or {}).get("jobs"):
+    if jobs and (getattr(graph.scenario, "pipeline", None) or {}).get("jobs"):
         from scenario_db.sim.jobs import evaluate_jobs
 
         report["jobs"] = evaluate_jobs(graph, report, budget["inputs"], dvfs_tables, base_config)
@@ -382,6 +384,7 @@ def summarize(
         options.model_copy(update={"include_whatif": False}),
         config=config,
         dvfs_tables=dvfs_tables,
+        jobs=False,
     )
     stages = {s["id"]: s for s in full["stages"]}
     ips = full["ips"]
@@ -1714,7 +1717,7 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
     tables = dvfs_tables or {}
     config = config or SimulationRunConfig()
     opts = options.model_copy(update={"include_whatif": False})
-    base = analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables)
+    base = analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables, jobs=False)
     found: dict[str, dict[str, Any]] = {}
     for ip in base["ips"]:
         g = ip.get("dvfs_group")
@@ -1745,7 +1748,7 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
             target = ladder[j]
             cfg = config.model_copy(update={"dvfs_overrides": {**config.dvfs_overrides, g: target.level}})
             try:
-                rep = analyze_timing_budget(graph, opts, config=cfg, dvfs_tables=tables)
+                rep = analyze_timing_budget(graph, opts, config=cfg, dvfs_tables=tables, jobs=False)
             except ValueError as exc:
                 rows.append({"domain": g, "shift": k, "level": target.level, "mhz": target.speed_mhz, "error": str(exc)})
                 continue
@@ -1781,7 +1784,7 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
             continue
         cfg = config.model_copy(update={"dvfs_overrides": {**config.dvfs_overrides, **overrides}})
         try:
-            rep_c = analyze_timing_budget(graph, opts, config=cfg, dvfs_tables=tables)
+            rep_c = analyze_timing_budget(graph, opts, config=cfg, dvfs_tables=tables, jobs=False)
         except ValueError as exc:
             combo_rows.append(row | {"error": str(exc)})
             continue

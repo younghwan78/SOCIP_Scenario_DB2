@@ -106,8 +106,13 @@ def _condition_hash(graph, options, shim, tables) -> str:
         from scenario_db.sim.jobs import job_inputs
 
         selection, params = job_inputs(graph)    # design_conditions feed the knob params and the `when` selection
+        # catalog rows of the job nodes: a job-only mode (or sensor mode) is not a steady simulation input
+        nodes = {str(n.get("id")): n for n in (graph.scenario.pipeline or {}).get("nodes") or []}
+        refs = sorted({str(nodes[n].get("ip_ref")) for j in jobs for st in (j.get("stages") or [])
+                       for n in [*(st.get("nodes") or []), *(st.get("holds") or [])] if n in nodes})
+        catalog = {ref: getattr(graph.ip_catalog.get(ref), "capabilities", None) for ref in refs}
         payload["jobs"] = {"jobs": jobs, "power_options": getattr(graph.scenario, "power_options", None),
-                           "measured": slots, "selection": selection, "params": params}
+                           "measured": slots, "selection": selection, "params": params, "catalog": catalog}
     opp = _cpu_opp_inputs(graph)
     if opp:
         payload["cpu_opp"] = opp
@@ -207,7 +212,7 @@ def analyze_timing_budget_fleet(
             # O-04: the same resolved inputs + engine give the same row (shared content-addressed cache)
             key = result_cache.calculation_key("timing-fleet-row", graph, config=shim.config, options=opts, tables=tables)
             row, _ = result_cache.cached(key, lambda: _jsonable_row(
-                fleet_row(analyze_timing_budget(graph, opts, config=shim.config, dvfs_tables=tables))))
+                fleet_row(analyze_timing_budget(graph, opts, config=shim.config, dvfs_tables=tables, jobs=False))))
             out.append(row)
         except Exception as exc:  # noqa: BLE001 - one variant must not abort the fleet
             errors.append(variant_failure(exc, variant_id=variant_id, stage=stage))

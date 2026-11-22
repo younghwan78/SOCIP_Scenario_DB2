@@ -235,3 +235,132 @@ def test_resolved_expressions_get_the_literal_ranges():
                             ({"enc_ms": -1}, "runtime_ms -1.0 must be >= 0")):
         with pytest.raises(JobError, match=message):
             _job(**params)
+
+
+def _stage(sid, **kw):
+    return {"id": sid, "phase": "p", **kw}
+
+
+def _one(stages, buffers=None, background="steady", params=None, **job):
+    spec = {"id": "j", "background": background, "stages": stages, **job}
+    if buffers:
+        spec["buffers"] = buffers
+    return _report(_graph(job=spec, params=params))["jobs"][0]
+
+
+def test_an_otf_group_and_a_sensor_hold_cannot_deadlock():
+    out = _one([
+        _stage("otf", nodes=["byrp", "rgbp"], frames=4, chunk={"by": "frame"}),
+        _stage("readout", kind="sensor", nodes=["sensor_rear"], holds=["rgbp", "byrp"], mode={"param": "cap_mode"},
+               frames=1),
+    ])
+    assert {s["id"] for s in out["stages"]} == {"otf", "readout"}
+
+
+def test_a_shared_buffer_is_freed_after_its_last_reader():
+    out = _one([
+        _stage("prod", nodes=["byrp"], frames=2, writes=["x"], chunk={"by": "frame"}),
+        _stage("fast", kind="fixed", nodes=["post_proc"], work={"duration_ms": 1}, after=["prod"]),
+        _stage("slow", kind="fixed", nodes=["mtnr"], work={"duration_ms": 50}, after=["prod"]),
+    ], buffers={"x": {"mb": 10, "count": 2}})
+    slow = {s["id"]: s for s in out["stages"]}["slow"]
+    assert out["peak"]["footprint_mb"] == pytest.approx(20.0, abs=1e-3)
+    # both frames stay allocated until `slow` (the last reader) ends
+    held = [v for t, v in zip(range(len(out["series"]["footprint_mb"])), out["series"]["footprint_mb"])
+            if t < slow["end_ms"] - 1]
+    assert held and min(held[int(slow["start_ms"]) + 1:]) >= 20.0 - 1e-6
+
+
+def test_the_peak_window_is_exact_over_the_run_intervals():
+    out = _one([_stage("burst", kind="fixed", nodes=["post_proc"], work={"duration_ms": 1, "power_mw": 1000})],
+               background="none")
+    bg = out["background"]["power_mw"]
+    assert out["peak"]["power_instant_mw"] == pytest.approx(bg + 1000, abs=0.1)
+    assert out["peak"]["power_mw"] == pytest.approx(bg + 100, abs=0.1)       # 1 mJ over the 10 ms window
+
+
+def test_repeating_triggers_are_rejected():
+    for kind in ("burst", "periodic"):
+        with pytest.raises(JobError, match=f"trigger kind '{kind}' is not supported"):
+            _one([_stage("a", nodes=["byrp"])], trigger={"kind": kind, "count": 3, "interval_ms": 10})
+
+
+def test_a_to_consumer_reads_and_frees_the_buffer():
+    out = _one([
+        _stage("prod", nodes=["byrp"], writes=["x"]),
+        _stage("mid", kind="fixed", nodes=["post_proc"], work={"duration_ms": 1}, after=["prod"]),
+        _stage("use", kind="fixed", nodes=["mtnr"], work={"duration_ms": 1}, after=["mid"]),
+    ], buffers={"x": {"mb": 10, "to": ["use"]}})
+    stages = {s["id"]: s for s in out["stages"]}
+    assert stages["use"]["mb"] == pytest.approx(10.0) and stages["mid"]["mb"] == 0.0
+    assert out["series"]["footprint_mb"][-1] == pytest.approx(0.0)
+
+
+def test_a_multi_frame_sensor_readout_produces_every_frame():
+    out = _one([
+        _stage("readout", kind="sensor", nodes=["sensor_rear"], mode={"param": "cap_mode"}, frames=3,
+               writes=["raw"], chunk={"by": "frame"}),
+        _stage("proc", nodes=["byrp"], frames=3, chunk={"by": "frame"}, after=[{"stage": "readout", "per": "frame"}]),
+    ], buffers={"raw": {"format": "BAYER", "bitdepth": 10, "count": 3}})
+    stages = {s["id"]: s for s in out["stages"]}
+    frame_mb = 8000 * 6000 * 10 / 8 / 1e6          # binning_2x2 readout size, BAYER 10-bit
+    assert stages["readout"]["mb"] == pytest.approx(3 * frame_mb, rel=1e-6)
+    assert stages["proc"]["start_ms"] < stages["readout"]["end_ms"]      # frame 0 is processed during readout
+    assert "readout" in out["energy_mj"]["unattributed"]
+
+
+def test_a_transfer_without_buffers_counts_its_declared_bytes():
+    out = _one([_stage("store", kind="transfer", nodes=["post_proc"], work={"mb": 12, "mb_per_s": 1200})],
+               background="none")
+    st = out["stages"][0]
+    assert st["service_ms"] == pytest.approx(10.0) and st["mb"] == pytest.approx(12.0)
+    assert out["peak"]["bw_instant_mbs"] == pytest.approx(out["background"]["bw_mbs"] + 1200, abs=0.1)
+
+
+def test_stripe_overlap_is_processed_not_stored():
+    def write_mb(chunk):
+        out = _one([_stage("a", nodes=["byrp"], writes=["y"], chunk=chunk)],
+                   buffers={"y": {"format": "YUV420", "bitdepth": 10}}, background="none")
+        return out["stages"][0]["mb"], out["stages"][0]["service_ms"]
+
+    (mb_f, t_f), (mb_s, t_s) = write_mb({"by": "frame"}), write_mb({"by": "stripe", "max_line_px": 1000,
+                                                                     "overlap_px": 64})
+    assert mb_s == pytest.approx(mb_f) and t_s > t_f
+
+
+def test_resolved_stripe_widths_and_the_chunk_count_are_checked():
+    with pytest.raises(JobError, match="max_line_px 64.0 must exceed overlap_px 64"):
+        _one([_stage("a", nodes=["byrp"], chunk={"by": "stripe", "max_line_px": "sw_ms * 12.8", "overlap_px": 64})])
+    with pytest.raises(JobError, match="chunks exceed"):
+        _one([_stage("a", nodes=["byrp"], frames=30000)])
+
+
+def test_the_condition_hash_covers_job_only_catalog_modes():
+    from scenario_db.api.services.timing_budget import _condition_hash
+    from tests.unit.sim.test_service_hash import _request
+
+    graph, opts, shim = _graph(), TimingBudgetOptions(throughput_model="pipelined"), _request()
+    before = _condition_hash(graph, opts, shim, {})
+    ip = graph.ip_catalog[next(n for n in graph.scenario.pipeline["nodes"] if n["id"] == "mtnr")["ip_ref"]]
+    ip.capabilities = deepcopy(ip.capabilities)
+    ip.capabilities["sim"]["modes"]["JobOnly"] = {"ppc": 8.0, "unit_power_mw_mp": 1.0}
+    assert _condition_hash(graph, opts, shim, {}) != before
+
+
+def test_steady_only_callers_skip_the_jobs():
+    graph = _graph()
+    assert "jobs" not in analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), jobs=False)
+
+
+def test_a_slot_must_be_a_mapping_and_keeps_the_stage_provenance():
+    graph = _with_slot("mtnr", {"merge": 60})
+    with pytest.raises(JobError, match="sim.jobs.still_shot.merge must be a mapping"):
+        _report(graph)
+    job = deepcopy(JOB)
+    job["stages"][2].update(evidence_ref="doc-1", basis="vendor sheet")
+    merge = {s["id"]: s for s in _report(_graph(job=job))["jobs"][0]["stages"]}["merge"]
+    assert merge["evidence_ref"] == "doc-1" and merge["basis"] == "vendor sheet"
+    out = _report(_with_slot("mtnr", {"merge": {"service_ms": 60.0, "basis": "trace t1"}}, job=job))["jobs"][0]
+    merge = {s["id"]: s for s in out["stages"]}["merge"]
+    assert merge["evidence_ref"] == "doc-1" and merge["basis"] == "trace t1"
+
