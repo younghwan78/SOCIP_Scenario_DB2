@@ -1579,7 +1579,9 @@ def _canonical_import_doc_for_signature(kind: str, doc: dict[str, Any]) -> dict[
 def _compact_doc(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: _compact_doc(item)
+            # an explicit null in a `when` selector matches "absent or null": it is part of the condition
+            key: ({k: _compact_doc(v) for k, v in item.items()} if key == "when" and isinstance(item, dict)
+                  else _compact_doc(item))
             for key, item in value.items()
             if item is not None
         }

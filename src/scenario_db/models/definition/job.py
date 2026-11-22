@@ -204,6 +204,9 @@ class JobStage(Selector):
                 raise ValueError(f"stage {self.id}: clock must not be empty")
             if "dvfs_sn" in self.clock and len(self.clock) > 1:
                 raise ValueError(f"stage {self.id}: clock is either {{dvfs_sn: ...}} or DVFS group clocks")
+            sn = self.clock.get("dvfs_sn", "")
+            if "dvfs_sn" in self.clock and not ((isinstance(sn, str) and sn) or isinstance(sn, dict)):
+                raise ValueError(f"stage {self.id}: clock.dvfs_sn needs a DVFS scenario name or {{param: name}}")
         return self
 
     def after_ids(self) -> list[str]:
@@ -290,10 +293,22 @@ class JobSpec(Selector):
                     for st in (s, by_id[a.stage]):
                         if st.chunk is not None and st.chunk.by != "frame":
                             raise ValueError(f"job {self.id}: per-frame after needs frame chunks ({st.id})")
+                    mine, theirs = s.frames, by_id[a.stage].frames
+                    if (isinstance(mine, (int, float)) and isinstance(theirs, (int, float))
+                            and not isinstance(mine, bool) and not isinstance(theirs, bool) and mine > theirs):
+                        raise ValueError(f"job {self.id}: stage {s.id} has {mine} frames per-frame after "
+                                         f"{a.stage} with {theirs}")
             if self.phases is not None and s.phase not in self.phases:
                 raise ValueError(f"job {self.id}: stage {s.id} phase {s.phase!r} not in phases {self.phases}")
         # acyclic (all stages; removing stages by `when` cannot create a cycle)
         state: dict[str, int] = {}
+        # a stage waits for its `after` stages and for the producers of buffers whose `to` names it
+        waits: dict[str, list[str]] = {sid: list(by_id[sid].after_ids()) for sid in ids}
+        for s in self.stages:
+            for b in s.writes or []:
+                for t in ((self.buffers or {}).get(b).to or []) if (self.buffers or {}).get(b) else []:
+                    if t in waits and s.id not in waits[t]:
+                        waits[t].append(s.id)
 
         def visit(sid: str, path: tuple[str, ...]) -> None:
             if state.get(sid) == 2:
@@ -301,7 +316,7 @@ class JobSpec(Selector):
             if state.get(sid) == 1:
                 raise ValueError(f"job {self.id}: stage cycle {' -> '.join(path + (sid,))}")
             state[sid] = 1
-            for a in by_id[sid].after_ids():
+            for a in waits[sid]:
                 visit(a, path + (sid,))
             state[sid] = 2
 

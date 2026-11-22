@@ -200,3 +200,52 @@ def test_selector_nodes_must_exist():
         with pytest.raises(ValidationError, match="when_node_enabled 'ghost' not found"):
             Pipeline.model_validate(pipeline)
 
+
+
+def test_buffer_consumers_count_in_the_cycle_check():
+    job = deepcopy(JOB)
+    # aeaf writes a buffer to readout, and aeaf runs after readout: each waits for the other
+    job["buffers"]["pre"] = {"mb": 1, "to": ["readout"]}
+    job["stages"][0].update(writes=["pre"], after=["readout"])
+    job["stages"][1]["after"] = []
+    with pytest.raises(ValidationError, match="stage cycle"):
+        JobSpec.model_validate(job)
+
+
+def test_a_per_frame_consumer_has_no_more_frames_than_its_producer():
+    job = deepcopy(JOB)
+    job["stages"][2]["frames"] = 1
+    job["stages"][3]["frames"] = 2
+    with pytest.raises(ValidationError, match="has 2 frames per-frame after reproc with 1"):
+        JobSpec.model_validate(job)
+    job["stages"][3]["frames"] = 1
+    JobSpec.model_validate(job)
+
+
+def test_conditional_params_from_param_rules_are_declared():
+    pipeline = _pipeline()
+    pipeline["jobs"][0]["stages"][3]["frames"] = "night_frames"
+    uc = _usecase(pipeline)
+    with pytest.raises(ValidationError, match=r"unknown parameters \['night_frames'\]"):
+        Usecase.model_validate(uc)
+    uc["power_options"]["param_rules"] = [{"when": {"shooting_mode": "night"}, "set": {"night_frames": 8}}]
+    Usecase.model_validate(uc)
+
+
+def test_an_explicit_dvfs_sn_must_name_a_table():
+    job = deepcopy(JOB)
+    job["stages"][2]["clock"] = {"dvfs_sn": None}
+    with pytest.raises(ValidationError, match="clock.dvfs_sn needs"):
+        JobSpec.model_validate(job)
+
+
+def test_reimport_keeps_explicit_nulls_of_a_when_selector():
+    from scenario_db.write.service import _compact_doc
+
+    doc = {"pipeline": {"jobs": [{"id": "j", "when": {"shooting_mode": None}, "label": None,
+                                  "stages": [{"id": "a", "when": {"hdr": None, "fps": 30}}]}]}}
+    out = _compact_doc(doc)
+    assert out["pipeline"]["jobs"][0]["when"] == {"shooting_mode": None}
+    assert out["pipeline"]["jobs"][0]["stages"][0]["when"] == {"hdr": None, "fps": 30}
+    assert "label" not in out["pipeline"]["jobs"][0]
+
