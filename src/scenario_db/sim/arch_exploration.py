@@ -2065,11 +2065,14 @@ def input_manifest(graph, config, tables, *, timing=None) -> tuple[dict[str, str
 
 
 def _variant_doc(variant) -> Any:
+    """The variant as steady results see it (job measured slots left out)."""
+    from scenario_db.sim.jobs import steady_variant_doc
+
     dump = getattr(variant, "model_dump", None)
     if callable(dump):
-        return dump(mode="json")
+        return steady_variant_doc(dump(mode="json"))
     if is_dataclass(variant) and not isinstance(variant, type):
-        return asdict(variant)
+        return steady_variant_doc(asdict(variant))
     return repr(variant)
 
 

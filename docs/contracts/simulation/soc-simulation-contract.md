@@ -223,7 +223,8 @@ pipeline:
 
 A deterministic SimPy run per selected job, separate from the steady timeline. `job-v1` runs `trigger.kind: event`
 only (a burst / periodic trigger is an error), at `trigger.at_ms` <= 60 s, with at most 20 000 chunks. A job
-error is reported as `report.jobs_error` (with `jobs: []`); the steady report is unchanged.
+error (including an expression that cannot be computed, or a frame period below 0.1 ms with a steady background)
+is reported as `report.jobs_error` (with `jobs: []`); the steady report is unchanged.
 
 - **Background**: every frame-DAG HW task occupies its physical resource for its steady `hw_ms` once per frame
   period at RT priority (`preview_priority: fifo` shares the job's priority; `background: none` turns it off).
@@ -231,12 +232,13 @@ error is reported as `report.jobs_error` (with `jobs: []`); the steady report is
   Frames are queued at their release time, independent of the previous frame's service; a preview frame lost on
   a reserved resource counts once in `dropped_frames` however many resources it missed.
 - **Chunks**: a stage runs `frames x passes x stripes/tiles` non-preemptive chunks on the steady resources (an OTF
-  group holds all its nodes, taken together only when all are idle, so a waiting group holds nothing), so a
+  group takes a slot of each node's resource together, only when each has one free (steady `resource_capacity`),
+  so a waiting group holds nothing), so a
   running chunk delays an RT
   release by at most its own length (`background.rt_wait_max_ms`). Stripe chunks trade a longer shot for a shorter
-  RT wait; the first stripe takes the full line, later ones add the overlap, which is processed (time, energy)
-  but not stored (buffer size).
-- **Sensor**: one reservation of the sensor and its `holds` (switch-in, `frames` readouts at the catalog mode fps,
+  RT wait; the first stripe takes the full line, later ones add the overlap, and each chunk runs its own width;
+  the overlap is processed (time, energy) but not stored (buffer size).
+- **Sensor**: one exclusive reservation (every slot) of the sensor and its `holds` (switch-in, `frames` readouts at the catalog mode fps,
   switch-out); each frame takes a buffer slot and is ready at its readout end; background frames on a reserved
   resource are dropped (`background.dropped_frames`). Its buffers default to the readout mode size and are
   written while each frame is read out; sensor energy is not modelled (listed as unattributed). A sensor stage
@@ -244,12 +246,13 @@ error is reported as `report.jobs_error` (with `jobs: []`); the steady report is
 - **Buffers**: `count` is a token pool. A buffer's readers are the producer's direct successors, or the stages its
   `to` names (they also wait for the producer). A frame's slot is freed when its last reader is done with it
   (per-frame readers of that frame after it, stage-level readers at their end; a frame nobody reads is freed when
-  written), which bounds `peak.footprint_mb`. A stage-level reader's traffic is every producer frame. A
+  written, the job output included), which bounds `peak.footprint_mb`. A stage-level reader's traffic is every producer frame. A
   stage-level reader needs a pool of at least the producer's frames (else an error). A job buffer needs a size
-  (`mb`, `size_ref`, or the writing stage's size).
+  (`mb`, `size_ref`, or the writing stage's size); sizes use the shared format factors (`sim.constants.BPP_MAP`)
+  and a buffer's own `comp_ratio` when its compression is on.
 - **Costs**: `hw` chunk = px / (MHz x ppc) x (1 + h_blank) + `setup_us`, energy = the v1 dynamic term (static
-  and clock terms are not attributed); `domain` = util-vf-v1 at util 1 at its steady `freq_mhz` (`clock: max`
-  or no steady clock: the top operating point); `sw` /
+  and clock terms are not attributed; a node with no unit power leaves the stage unattributed, not 0); `domain` = util-vf-v1 at util 1 at its steady operating point (the report clock, else
+  `freq_mhz`; `clock: max` or neither: the top operating point; a clock map is an error); `sw` /
   `transfer` / `fixed` = `power_mw` x time. A `transfer` without buffers carries its `work.mb`. Session buffers
   are read as the variant resolves them (`buffer_overrides`). `clock: dvfs_sn` is
   not supported by `job-v1` yet.

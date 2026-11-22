@@ -477,3 +477,110 @@ def test_job_slots_do_not_change_the_steady_replay_fingerprint():
     before = baseline_fingerprint(_graph())
     assert baseline_fingerprint(_with_slot("mtnr", {"merge": {"service_ms": 60.0}})) == before
 
+
+
+def test_a_too_short_frame_period_is_a_job_error_not_a_hang():
+    graph = _graph()
+    report = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"))
+    from scenario_db.sim.jobs import MIN_PERIOD_MS, _Evaluation, _Params
+    from scenario_db.models.definition.job import JobSpec
+
+    inputs = __import__("scenario_db.sim.adapter", fromlist=["build_simulation_inputs"]).build_simulation_inputs(
+        graph, None)
+    ev = _Evaluation(graph, {**report, "period_ms": 0.0, "fps": 1e9}, inputs, JobSpec.model_validate(JOB),
+                     _Params(PARAMS, "job still_shot"), None)
+    assert ev.period < MIN_PERIOD_MS
+    with pytest.raises(JobError, match="frame period"):
+        ev.run()
+
+
+def test_an_unread_output_frame_frees_its_slot():
+    out = _one([_stage("prod", nodes=["byrp"], frames=2, writes=["x"], chunk={"by": "frame"})],
+               buffers={"x": {"mb": 10, "count": 1}}, background="none")
+    assert out["stages"][0]["chunks"] == 2
+
+
+def test_an_arithmetic_error_in_a_job_expression_is_a_job_error():
+    job = deepcopy(JOB)
+    job["stages"][3]["work"]["runtime_ms"] = "35 / (sw_ms - 5)"          # sw_ms = 5 -> divides by zero
+    with pytest.raises(JobError, match="enc.work.runtime_ms"):
+        _report(_graph(job=job))
+
+
+def test_resource_capacity_lets_independent_chunks_overlap():
+    graph = _graph(job={"id": "j", "background": "none", "stages": [
+        _stage("a", kind="fixed", nodes=["post_proc"], work={"duration_ms": 1}),
+        _stage("b", kind="fixed", nodes=["post_proc"], work={"duration_ms": 1})]})
+    one = _report(graph)["jobs"][0]["makespan_ms"]
+    node = next(n for n in graph.scenario.pipeline["nodes"] if n["id"] == "post_proc")
+    node["resource_capacity"] = 2
+    two = _report(graph)["jobs"][0]["makespan_ms"]
+    assert one == pytest.approx(2.0) and two == pytest.approx(1.0)
+
+
+def test_stripe_chunks_run_their_own_width():
+    def service(width, chunk):
+        graph = _graph(job={"id": "j", "background": "none", "stages": [
+            _stage("a", nodes=["byrp"], size_ref="tst", chunk=chunk)]})
+        graph.variant.size_overrides = {**(graph.variant.size_overrides or {}), "tst": f"{width}x1000"}
+        st = _report(graph)["jobs"][0]["stages"][0]
+        return st["chunks"], st["service_ms"]
+
+    base = service(1000, {"by": "frame"})[1]
+    chunks, total = service(1001, {"by": "stripe", "max_line_px": 1000, "overlap_px": 64})
+    assert chunks == 2 and total == pytest.approx(base * 1065 / 1000, rel=1e-3)   # 1000 px + (1 + 64) px
+
+
+def test_job_buffers_use_the_shared_format_factors():
+    graph = _graph(job={"id": "j", "background": "none", "stages": [
+        _stage("a", nodes=["byrp"], size_ref="tst", writes=["rgb"])], "buffers": {"rgb": {"format": "RGB", "bitdepth": 8}}})
+    graph.variant.size_overrides = {**(graph.variant.size_overrides or {}), "tst": "1000x1000"}
+    assert _report(graph)["jobs"][0]["stages"][0]["mb"] == pytest.approx(3.0)
+
+
+def test_a_sensor_session_read_counts_in_the_bandwidth():
+    graph = _graph(job={"id": "j", "background": "none", "stages": [
+        _stage("readout", kind="sensor", nodes=["sensor_rear"], mode={"param": "cap_mode"}, reads=["ZSL_RING_BUF"])]})
+    graph.variant.buffer_overrides = {**(graph.variant.buffer_overrides or {}), "ZSL_RING_BUF": {"mb": 100}}
+    out = _report(graph)["jobs"][0]
+    assert out["peak"]["bw_instant_mbs"] > out["background"]["bw_mbs"] + 100 / 34 * 1000 * 0.99
+
+
+def test_a_hw_mode_without_unit_power_is_unattributed():
+    graph = _graph()
+    ip = graph.ip_catalog[next(n for n in graph.scenario.pipeline["nodes"] if n["id"] == "byrp")["ip_ref"]]
+    ip.capabilities = deepcopy(ip.capabilities)
+    ip.capabilities["sim"]["modes"]["NoPower"] = {"ppc": 8.0}
+    graph.scenario.pipeline["jobs"] = [{"id": "j", "background": "none",
+                                        "stages": [_stage("a", nodes=["byrp"], mode="NoPower")]}]
+    out = _report(graph)["jobs"][0]
+    assert out["energy_mj"]["unattributed"] == ["a"]
+
+
+def test_a_deep_evaluated_dag_has_no_recursion_limit():
+    n = 1100
+    stages = [_stage(f"s{i}", kind="fixed", nodes=["post_proc"], work={"duration_ms": 0},
+                     **({"after": [f"s{i + 1}"]} if i + 1 < n else {})) for i in range(n)]
+    out = _one(stages, background="none")
+    assert len(out["stages"]) == n
+
+
+def test_the_condition_hash_covers_the_session_buffers():
+    from scenario_db.api.services.timing_budget import _condition_hash
+    from tests.unit.sim.test_service_hash import _request
+
+    graph, opts, shim = _graph(), TimingBudgetOptions(throughput_model="pipelined"), _request()
+    before = _condition_hash(graph, opts, shim, {})
+    bufs = deepcopy(graph.scenario.pipeline["buffers"])
+    bufs["ZSL_RING_BUF"] = {**bufs["ZSL_RING_BUF"], "count": 9}
+    graph.scenario.pipeline = {**graph.scenario.pipeline, "buffers": bufs}
+    assert _condition_hash(graph, opts, shim, {}) != before
+
+
+def test_a_new_slot_container_does_not_change_the_fingerprint():
+    from scenario_db.sim.measured_timing import baseline_fingerprint
+
+    before = baseline_fingerprint(_graph())
+    graph = _with_slot("post_proc", {"enc": {"service_ms": 10.0}})
+    assert baseline_fingerprint(graph) == before
+

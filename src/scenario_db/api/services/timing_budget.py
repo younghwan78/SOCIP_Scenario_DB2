@@ -115,7 +115,8 @@ def _condition_hash(graph, options, shim, tables) -> str:
                    **(getattr(graph.variant, "size_overrides", None) or {})}     # job size_ref (job-only anchors)
         payload["jobs"] = {"jobs": jobs, "power_options": getattr(graph.scenario, "power_options", None),
                            "measured": slots, "selection": selection, "params": params, "catalog": catalog,
-                           "anchors": anchors, "buffer_overrides": getattr(graph.variant, "buffer_overrides", None)}
+                           "anchors": anchors, "buffer_overrides": getattr(graph.variant, "buffer_overrides", None),
+                           "session_buffers": (graph.scenario.pipeline or {}).get("buffers")}
     opp = _cpu_opp_inputs(graph)
     if opp:
         payload["cpu_opp"] = opp
