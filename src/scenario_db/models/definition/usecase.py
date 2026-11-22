@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from scenario_db.models.definition.job import JobSpec, expression_names
 from scenario_db.models.common import (
     BaseScenarioModel,
     DocumentId,
@@ -94,6 +95,31 @@ class JudgementContract(BaseScenarioModel):
     stages: dict[str, JudgementStage] = Field(default_factory=dict)
     kpis: list[JudgementKpi] = Field(default_factory=lambda: ["interval"])
 
+def job_reference_errors(jobs: list[JobSpec], node_ids: set[str], buffers: set[str]) -> list[str]:
+    """Pipeline-level job checks (shared by the model and the pipeline patch path): ids, nodes, session buffers."""
+    errors: list[str] = []
+    job_ids = [j.id for j in jobs]
+    if len(job_ids) != len(set(job_ids)):
+        errors.append(f"duplicate job ids {sorted({i for i in job_ids if job_ids.count(i) > 1})}")
+    for job in jobs:
+        clash = sorted(set(job.buffers or {}) & buffers)
+        if clash:
+            errors.append(f"job {job.id}: job buffers {clash} shadow pipeline buffers")
+        if job.when_node_enabled is not None and job.when_node_enabled not in node_ids:
+            errors.append(f"job {job.id}: when_node_enabled '{job.when_node_enabled}' not found in nodes")
+        for stage in job.stages:
+            if stage.when_node_enabled is not None and stage.when_node_enabled not in node_ids:
+                errors.append(f"job {job.id}: stage {stage.id} when_node_enabled "
+                              f"'{stage.when_node_enabled}' not found in nodes")
+            for node in [*stage.nodes, *(stage.holds or [])]:
+                if node not in node_ids:
+                    errors.append(f"job {job.id}: stage {stage.id} node '{node}' not found in nodes")
+            unknown = [b for b in (stage.reads or []) if b not in buffers]
+            if unknown:
+                errors.append(f"job {job.id}: stage {stage.id} reads {unknown}, which are not pipeline "
+                              "(session) buffers; job buffers flow from the stage's predecessors")
+    return errors
+
 
 class Pipeline(BaseScenarioModel):
     nodes: list[PipelineNode] = Field(default_factory=list)
@@ -103,10 +129,15 @@ class Pipeline(BaseScenarioModel):
     task_graph: dict[str, Any] = Field(default_factory=dict)
     level1_graph: dict[str, Any] = Field(default_factory=dict)
     judgement: JudgementContract | None = None
+    # R-3 event jobs on top of the steady frame DAG (None = none; see models/definition/job.py)
+    jobs: list[JobSpec] | None = None
 
     @model_validator(mode="after")
     def _validate_edge_references(self) -> Pipeline:
         node_ids = {node.id for node in self.nodes}
+        errors = job_reference_errors(self.jobs or [], node_ids, set(self.buffers))
+        if errors:
+            raise ValueError(errors[0])
         for sink in (self.judgement.sinks if self.judgement else []):
             if sink.node not in node_ids:
                 raise ValueError(f"judgement sink '{sink.node}' not found in nodes {node_ids}")
@@ -329,6 +360,25 @@ class Usecase(BaseScenarioModel):
                     )
                 visited.add(current)
                 current = parent_map[current]
+        return self
+
+    @model_validator(mode="after")
+    def _validate_job_parameters(self) -> Usecase:
+        params = set((self.power_options.params if self.power_options else {}) or {})
+        for i, rule in enumerate((self.power_options.param_rules if self.power_options else []) or []):
+            rule_set = (rule or {}).get("set") if isinstance(rule, dict) else None
+            if rule_set is not None and not (isinstance(rule_set, dict) and all(isinstance(k, str) for k in rule_set)):
+                raise ValueError(f"power_options.param_rules[{i}].set must map parameter names to values")
+            params |= set(rule_set or {})       # conditional params (knob param_rules)
+        for job in self.pipeline.jobs or []:
+            for path, value in job.numeric_fields():
+                missing = sorted(expression_names(value, f"job {job.id}.{path}") - params)
+                if missing:
+                    raise ValueError(f"job {job.id}.{path}: unknown parameters {missing} "
+                                     "(declare them in knobs.yaml params)")
+            for path, name in job.param_refs():
+                if name not in params:
+                    raise ValueError(f"job {job.id}.{path}: unknown parameter '{name}' (declare it in knobs.yaml params)")
         return self
 
     @model_validator(mode="after")

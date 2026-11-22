@@ -187,6 +187,37 @@ pipeline:
 The evidence generator (`scripts/generate_simulation_evidence.py`) accepts a run on the declared sinks
 active in the variant, so screen-off playback is judged on its decoder output.
 
+## Event Jobs (`pipeline.jobs`) — definition only
+
+A one-off or burst piece of work on top of the steady frame DAG (capture shot, camera launch, lens switch, seek)
+is declared as a stage DAG. This release validates the definition; the job evaluator comes later, so a declared job
+does not change any result yet. Absent = no key in the stored pipeline (the field defaults to `None`).
+
+```yaml
+pipeline:
+  jobs:
+  - id: still_shot
+    trigger: {kind: event, at_ms: 200}           # event | burst | periodic
+    phases: [precapture, acquire, process, encode]
+    buffers: {cap_yuv: {format: YUV420, bitdepth: 10, count: 3}}   # count = pool depth (token capacity)
+    stages:
+    - {id: aeaf, phase: precapture, kind: fixed, nodes: [n3aa], work: {duration_ms: precapture_ms}}
+    - {id: reproc, phase: process, nodes: [byrp, rgbp], frames: zsl_frames, reads: [ZSL_RING_BUF],
+       writes: [cap_yuv], chunk: {by: frame}, clock: {CAM: capture_cam_mhz}, after: [aeaf]}
+    - {id: merge, phase: process, nodes: [mtnr], frames: zsl_frames, after: [{stage: reproc, per: frame}],
+       when: {shooting_mode: [mf, night]}}
+    milestones: {thumbnail: merge}
+```
+
+| Field | Rule |
+| --- | --- |
+| `stages[].kind` | `hw` (no work), `domain` (`mcycles` or `mcycles_per_mp`), `sw` (`runtime_ms`), `transfer` (`mb`, `mb_per_s`), `fixed` (`duration_ms`), `sensor` (`mode`; optional `switch_in_ms` / `switch_out_ms`). |
+| `stages[].nodes` / `holds` | Pipeline nodes; two or more `nodes` form an OTF group. |
+| `after` | Stage ids, or `{stage, per: frame}` for frame-wise pipelining (both stages chunk by frame). The graph must be acyclic. |
+| `reads` / `writes` | `reads` names session buffers (`pipeline.buffers`); job buffers flow from the predecessors that `writes` them (or to the stages in a buffer's `to`). Job buffer names must not shadow pipeline buffers. |
+| numbers | A number, or an expression of knob parameters (`+ - * /`); `mode` and `clock.dvfs_sn` take a name or `{param: name}` (other string fields are literals). Literals and parameter-free expressions are range-checked at definition time (counts integer >= 1; interval / MB / ppc / clocks > 0; others >= 0); expressions with parameters when resolved. Every name must be a `knobs.yaml` param; params / param_rules are exported even without knobs. |
+| `when` / `when_node_enabled` | Variant selection, as knob rules. |
+
 ## Task Cadence (`node_configs.<node>.timeline`)
 
 The hand-off cadence vocabulary (`sdb.handoff/1`) is also the simulation task model. A node released on

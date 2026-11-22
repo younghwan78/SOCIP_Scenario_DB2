@@ -48,7 +48,9 @@ from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTabl
 from scenario_db.models.capability.hw import SocPlatform as PydanticSocPlatform
 from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
 from scenario_db.models.definition.project import Project as PydanticProject
+from scenario_db.models.definition.job import JobSpec
 from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
+from scenario_db.models.definition.usecase import job_reference_errors
 
 logger = logging.getLogger(__name__)
 
@@ -1080,8 +1082,22 @@ def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[
                 "pipeline.edges",
             )
         )
+    issues.extend(_validate_candidate_jobs(pipeline, node_ids, buffers))
     issues.extend(_validate_pipeline_compression(db, pipeline))
     return issues
+
+
+def _validate_candidate_jobs(pipeline: dict[str, Any], node_ids: set[str], buffers: set[str]) -> list[ValidationIssue]:
+    """R-3 jobs reference pipeline nodes and session buffers: a patch must not leave them dangling."""
+    raw = pipeline.get("jobs")
+    if not raw:
+        return []
+    try:
+        jobs = [JobSpec.model_validate(job) for job in raw]
+    except Exception as exc:
+        return [_issue("error", "job_invalid", str(exc), "pipeline.jobs")]
+    return [_issue("error", "job_reference_invalid", message, "pipeline.jobs")
+            for message in job_reference_errors(jobs, node_ids, buffers)]
 
 
 def _pipeline_patch_impact(db: Session, scenario_ref: str, candidate: dict[str, Any]) -> dict[str, Any]:
@@ -1563,7 +1579,10 @@ def _canonical_import_doc_for_signature(kind: str, doc: dict[str, Any]) -> dict[
 def _compact_doc(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: _compact_doc(item)
+            # an explicit null in a `when` selector matches "absent or null": it is part of the condition
+            # explicit nulls of a `when` selector or a param rule `set` are part of the document
+            key: ({k: _compact_doc(v) for k, v in item.items()} if key in ("when", "set") and isinstance(item, dict)
+                  else _compact_doc(item))
             for key, item in value.items()
             if item is not None
         }

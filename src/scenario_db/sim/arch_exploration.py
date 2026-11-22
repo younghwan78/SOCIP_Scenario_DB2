@@ -35,6 +35,7 @@ from typing import Any, Literal
 
 from pydantic import Field, model_serializer, model_validator
 
+from scenario_db.models.definition.job import steady_pipeline, steady_power_options
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_port_transfers, build_simulation_inputs
 from scenario_db.sim.bw_calc import calc_port_bw, compression_enabled, normalize_compression
@@ -2021,12 +2022,12 @@ def input_hash(graph, spec, config, tables) -> str:
     payload = {
         "engine": ENGINE_REV,
         "scenario": graph.scenario.id, "variant": graph.variant.id,
-        "pipeline": graph.scenario.pipeline, "variant_doc": _variant_doc(graph.variant),
+        "pipeline": steady_pipeline(graph.scenario.pipeline), "variant_doc": _variant_doc(graph.variant),
         "spec": spec_doc, "config": config.model_dump(mode="json"),
         "dvfs": {k: t.model_dump(mode="json") for k, t in sorted(tables.items())},
         "simulation_inputs": build_simulation_inputs(graph, config).model_dump(mode="json"),
         "ip_capabilities": {key: row.capabilities for key, row in sorted(graph.ip_catalog.items())},
-        "power_options": getattr(graph.scenario, "power_options", None),
+        "power_options": steady_power_options(getattr(graph.scenario, "power_options", None)),
         "soc_catalog": getattr(graph.soc, "compression_modes", None),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
@@ -2044,10 +2045,11 @@ def input_manifest(graph, config, tables, *, timing=None) -> tuple[dict[str, str
     catalog moved on. Blobs are deduplicated by sha256 at run level.
     """
     raw: dict[str, Any] = {
-        "pipeline": _jsonable(graph.scenario.pipeline), "variant_doc": _jsonable(_variant_doc(graph.variant)),
+        "pipeline": _jsonable(steady_pipeline(graph.scenario.pipeline)),
+        "variant_doc": _jsonable(_variant_doc(graph.variant)),
         "config": config.model_dump(mode="json"),
         "simulation_inputs": build_simulation_inputs(graph, config).model_dump(mode="json"),
-        "power_options": _jsonable(getattr(graph.scenario, "power_options", None)),
+        "power_options": _jsonable(steady_power_options(getattr(graph.scenario, "power_options", None))),
         "soc_catalog": _jsonable(getattr(graph.soc, "compression_modes", None)),
     }
     raw |= {f"dvfs:{k}": t.model_dump(mode="json") for k, t in sorted(tables.items())}
