@@ -132,7 +132,8 @@ def test_all_noncamera_driver_coverage(imported):
         assert counts[("dpu", "calculated")] == 62
         assert counts[("mscl", "calculated")] == 6
         assert counts[("ufs", "missing_input")] == 12
-        assert counts[("abox", "partial")] == 5
+        # offload variants (no PCM read BW); screen-off streaming decodes on the AP since R-4b (Normal path)
+        assert counts[("abox", "partial")] == 3
 
 
 def test_calculation_trace_db_roundtrip(imported):
