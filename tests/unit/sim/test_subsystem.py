@@ -21,13 +21,13 @@ SUB = {
               {"id": "dma", "kind": "hw", "power": {"mw": 1.0}}, {"id": "uaif0", "kind": "interface"}],
     "streams": [{"id": "pb_main", "fs_hz": 48000, "channels": 2, "bits": 16, "period_frames": 960},
                 {"id": "pb_out", "fs_hz": 48000, "channels": 2, "bits": 32, "period_frames": 240, "buffer": "sram"}],
-    "stages": [{"id": "rdma", "kind": "dma", "on": "dma", "stream": "pb_main"},
-               {"id": "decode", "kind": "codec", "on": "hifi5", "stream": "pb_main", "mcps": 18,
+    "stages": [{"id": "rdma", "kind": "dma", "unit": "dma", "stream": "pb_main"},
+               {"id": "decode", "kind": "codec", "unit": "hifi5", "stream": "pb_main", "mcps": 18,
                 "when": {"offload": True}},
-               {"id": "mix", "kind": "mixer", "on": "ca32_0", "stream": "pb_out", "mcps": 6},
-               {"id": "eq", "kind": "effect", "on": "hifi5", "stream": "pb_out", "mcps": 25},
-               {"id": "spk", "kind": "solution", "on": "ca32_1", "stream": "pb_out", "mcps": 12, "bind": "speaker"},
-               {"id": "out", "kind": "interface", "on": "uaif0", "stream": "pb_out", "bind": "speaker"}],
+               {"id": "mix", "kind": "mixer", "unit": "ca32_0", "stream": "pb_out", "mcps": 6},
+               {"id": "eq", "kind": "effect", "unit": "hifi5", "stream": "pb_out", "mcps": 25},
+               {"id": "spk", "kind": "solution", "unit": "ca32_1", "stream": "pb_out", "mcps": 12, "bind": "speaker"},
+               {"id": "out", "kind": "interface", "unit": "uaif0", "stream": "pb_out", "bind": "speaker"}],
     "edges": [["rdma", "decode"], ["decode", "mix"], ["rdma", "mix"], ["mix", "eq"], ["eq", "spk"], ["spk", "out"]],
     "routes": [{"id": "pb_cpu", "kind": "playback", "when": {"offload": False},
                 "stages": ["rdma", "mix", "eq", "spk", "out"], "latency_target_ms": 60},
@@ -61,11 +61,11 @@ def _sub(graph):
 
 @pytest.mark.parametrize("mutate,message", [
     (lambda s: s["units"].append(deepcopy(s["units"][0])), "duplicate unit ids"),
-    (lambda s: s["stages"][2].update(on="ghost"), "unit 'ghost' not found"),
+    (lambda s: s["stages"][2].update(unit="ghost"), "unit 'ghost' not found"),
     (lambda s: s["stages"][2].update(stream="ghost"), "stream 'ghost' not found"),
     (lambda s: s["stages"][0].update(mcps=3), "a load needs a cpu / dsp unit"),
     (lambda s: s["stages"][2].update(mcycles_per_period=1), "mcps or mcycles_per_period, not both"),
-    (lambda s: s["routes"][0]["stages"].insert(1, "eq"), "are not edges"),
+    (lambda s: s["routes"][0].update(stages=["rdma", "eq", "mix", "spk", "out"]), "are not edges"),
     (lambda s: s["routes"][0]["stages"].append("ghost"), "unknown stages"),
     (lambda s: s["edges"].append(["mix", "ghost"]), "needs two known stage ids"),
     (lambda s: s["wake"].append({"kind": "refill"}), "refill needs every_ms"),
@@ -229,3 +229,71 @@ def test_a_bad_patch_on_a_disabled_node_does_not_break_the_hash():
 
     graph = _graph(patch={"$items": {"stages": {"patch": {"ghost": {"mcps": 1}}}}})
     assert isinstance(_condition_hash(graph, OPTS, _request(), {}), str)
+
+
+def test_a_yaml_declaration_parses_with_the_unit_key():
+    import yaml
+
+    doc = yaml.safe_load("""
+units: [{id: dsp, kind: dsp, power: {coeff_uw_per_mhz_v2: 90, vf: [{mhz: 200, mv: 600}]}}]
+streams: [{id: s, fs_hz: 48000, channels: 2, bits: 16, period_frames: 240}]
+stages: [{id: eq, kind: effect, unit: dsp, stream: s, mcps: 25}]
+""")
+    assert SubsystemSpec.model_validate(doc).stages[0].unit == "dsp"
+
+
+def test_non_compute_units_on_a_clock_share_its_levels():
+    sub = deepcopy(SUB)
+    for u in sub["units"][:3]:
+        u["freqs_mhz"] = [200, 400]
+    sub["units"][3].update(clock_domain="AUD", freqs_mhz=[400])        # dma runs at 400 only
+    assert _sub(_graph(sub=sub))["domains"]["AUD"]["freq_mhz"] == pytest.approx(400.0)
+
+
+def test_the_ip_row_shows_the_subsystem_power():
+    report = analyze_timing_budget(_graph(), OPTS)
+    row = next(ip for ip in report["ips"] if ip["node"] == "abox")
+    assert row["power_mw"] == pytest.approx(report["subsystems"]["abox"]["mw"], abs=1e-3)
+
+
+@pytest.mark.parametrize("patch,message", [("nnoe", "takes a patch mapping or 'none'"),
+                                           ({"$items": ["stages"]}, "patch is malformed"),
+                                           (3, "takes a patch mapping or 'none'")])
+def test_a_malformed_variant_slot_is_an_input_error(patch, message):
+    with pytest.raises(ValueError, match=message):
+        analyze_timing_budget(_graph(patch=patch), OPTS)
+
+
+def test_null_takes_the_default_and_an_explicit_zero_stays_zero():
+    sub = deepcopy(SUB)
+    sub["units"][0]["power"] = {**CA32, "idle_gated": None,
+                                "leakage": {"mw_at_ref": 10, "ref_mv": 750, "exponent": 0}}
+    ca32_0 = {u["id"]: u for u in _sub(_graph(sub=sub))["units"]}["ca32_0"]
+    assert ca32_0["static_mw"] == pytest.approx(10.0, abs=1e-3)          # V^0: constant leakage
+
+
+def test_a_modeled_zero_is_not_unmodeled():
+    sub = deepcopy(SUB)
+    sub["units"] = [{"id": "dma", "kind": "hw", "power": {"mw": 0}}]
+    sub["stages"] = [s for s in sub["stages"] if s["id"] == "rdma"]
+    sub["edges"], sub["routes"], sub["wake"] = [], None, None
+    report = analyze_timing_budget(_graph(sub=sub), OPTS)
+    assert "abox" not in report["power"]["zero_power_ips"]
+
+
+@pytest.mark.parametrize("mutate,message", [
+    (lambda s: s["wake"].append({"kind": "event", "per_s": float("inf")}), "finite number"),
+    (lambda s: s["routes"][0]["stages"].extend(["mix"]), "visits each stage once"),
+])
+def test_finite_wake_inputs_and_linear_routes(mutate, message):
+    sub = deepcopy(SUB)
+    mutate(sub)
+    with pytest.raises(ValidationError, match=message):
+        SubsystemSpec.model_validate(sub)
+
+
+def test_a_tiny_refill_period_is_refused_not_infinite():
+    sub = deepcopy(SUB)
+    sub["wake"][1]["every_ms"] = 1e-320
+    with pytest.raises(ValueError, match="rate is not finite"):
+        analyze_timing_budget(_graph(OFFLOAD, sub=sub), OPTS)

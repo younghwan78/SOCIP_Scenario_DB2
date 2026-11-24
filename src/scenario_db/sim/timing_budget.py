@@ -1104,6 +1104,9 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     active = set(result.resolved) | set(plan["tasks"])
     domain = domain_loads(graph, active, 1000.0 / period if period else 0.0)
     power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain)
+    for ip in ips:  # R-4: a subsystem is its node's whole power, in the IP detail as in the totals
+        if (domain.get(ip["node"]) or {}).get("model") == "mcps-v1":
+            ip["power_mw"] = round(domain[ip["node"]]["mw"], 3)
     bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
     own = own_cadence_rows(result.timeline_events)
@@ -1323,7 +1326,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         "cpu_busy_ms": round(sum(busy.values()), 3),
         "cpu_model": options.cpu.model_dump(),
         # a subsystem unit without power is an unmodeled part of its node (the node total is a lower bound)
-        "zero_power_ips": sorted([n for n, v in hw_by_ip.items() if v <= 0]
+        "zero_power_ips": sorted([n for n, v in hw_by_ip.items()
+                                  if v <= 0 and (domain or {}).get(n, {}).get("model") != "mcps-v1"]
                                  + [f"{n}.{u}" for n, est in (domain or {}).items()
                                     for u in est.get("unattributed_units") or []]),
     }

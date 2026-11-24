@@ -53,7 +53,10 @@ def _domain_load_inputs(graph) -> dict:
     out = {}
     configs = getattr(graph.variant, "node_configs", None) or {}
     catalog = getattr(graph, "ip_catalog", None) or {}
-    for node in (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("nodes") or []:
+    nodes = list((getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("nodes") or [])
+    known = {str(n.get("id") or "") for n in nodes}
+    nodes += [n for n in getattr(graph, "pipeline_nodes", None) or [] if str(n.get("id") or "") not in known]
+    for node in nodes:      # the variant's added nodes too, as the calculation
         node_id = str(node.get("id") or "")
         ip = catalog.get(str(node.get("ip_ref") or ""))
         try:

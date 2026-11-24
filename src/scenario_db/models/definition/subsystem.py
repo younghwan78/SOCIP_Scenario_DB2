@@ -92,10 +92,10 @@ class SubsystemStream(BaseScenarioModel):
 class SubsystemStage(Selector):
     id: str = Field(min_length=1)
     kind: StageKind
-    on: str = Field(min_length=1)                 # unit id
+    unit: str = Field(min_length=1)               # unit id (not `on`: YAML 1.1 reads that key as true)
     stream: str | None = None
-    mcps: float | None = Field(default=None, ge=0)                 # load at this stream format
-    mcycles_per_period: float | None = Field(default=None, ge=0)   # or work per stream period
+    mcps: float | None = Field(default=None, ge=0, allow_inf_nan=False)                 # load at this stream format
+    mcycles_per_period: float | None = Field(default=None, ge=0, allow_inf_nan=False)   # or work per stream period
     bind: str | None = None                       # pipeline node the result is shown on (attribution only)
     value_source: str = "assumed"
     basis: str | None = None
@@ -113,9 +113,9 @@ class SubsystemStage(Selector):
 class WakeSource(Selector):
     kind: Literal["period_irq", "refill", "event"]
     stream: str | None = None                     # period_irq: one wake per period of this stream
-    every_ms: float | None = Field(default=None, gt=0)   # refill period
-    mb: float | None = Field(default=None, ge=0)          # DRAM read per refill
-    per_s: float | None = Field(default=None, ge=0)       # event rate
+    every_ms: float | None = Field(default=None, gt=0, allow_inf_nan=False)   # refill period
+    mb: float | None = Field(default=None, ge=0, allow_inf_nan=False)          # DRAM read per refill
+    per_s: float | None = Field(default=None, ge=0, allow_inf_nan=False)       # event rate
 
     @model_validator(mode="after")
     def _check(self) -> WakeSource:
@@ -159,13 +159,13 @@ class SubsystemSpec(BaseScenarioModel):
             if dup:
                 raise ValueError(f"subsystem: duplicate {name} ids {dup}")
         for s in self.stages or []:
-            if s.on not in units:
-                raise ValueError(f"subsystem stage {s.id}: unit '{s.on}' not found")
+            if s.unit not in units:
+                raise ValueError(f"subsystem stage {s.id}: unit '{s.unit}' not found")
             if s.stream is not None and s.stream not in streams:
                 raise ValueError(f"subsystem stage {s.id}: stream '{s.stream}' not found")
-            if (s.mcps or s.mcycles_per_period) and units[s.on].kind not in COMPUTE_KINDS:
-                raise ValueError(f"subsystem stage {s.id}: a load needs a cpu / dsp unit, '{s.on}' is "
-                                 f"{units[s.on].kind}")
+            if (s.mcps or s.mcycles_per_period) and units[s.unit].kind not in COMPUTE_KINDS:
+                raise ValueError(f"subsystem stage {s.id}: a load needs a cpu / dsp unit, '{s.unit}' is "
+                                 f"{units[s.unit].kind}")
         edges = set()
         for pair in self.edges or []:
             if len(pair) != 2 or any(p not in stages for p in pair):
@@ -176,6 +176,8 @@ class SubsystemSpec(BaseScenarioModel):
             missing = [s for s in r.stages if s not in stages]
             if missing:
                 raise ValueError(f"subsystem route {r.id}: unknown stages {missing}")
+            if len(set(r.stages)) != len(r.stages):
+                raise ValueError(f"subsystem route {r.id}: a linear route visits each stage once")
             unperiodic = [s for s in r.stages if (by_id[s].mcps or by_id[s].mcycles_per_period) and not by_id[s].stream]
             if unperiodic:     # its work per period (route latency) needs the stream it runs per period of
                 raise ValueError(f"subsystem route {r.id}: load stages {unperiodic} need a stream")

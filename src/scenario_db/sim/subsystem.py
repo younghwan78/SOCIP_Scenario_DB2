@@ -23,12 +23,13 @@ to show where their load belongs (never added there).
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from scenario_db.authoring.knobs import _match
 from scenario_db.authoring.patch import deep_merge
 from scenario_db.models.definition.subsystem import COMPUTE_KINDS, SubsystemSpec
-from scenario_db.sim.domain_loads import UtilVfV1, _catalog_defaults
+from scenario_db.sim.domain_loads import DomainPowerModel, _catalog_defaults
 
 MODEL_ID = "mcps-v1"
 
@@ -36,14 +37,48 @@ MODEL_ID = "mcps-v1"
 def subsystem_config(node: dict[str, Any] | None, node_config: dict[str, Any]) -> dict[str, Any] | None:
     """The merged declaration of one node (scenario node, then the variant patch), or None when it has none.
     ``sim.subsystem: none`` in the variant turns a scenario subsystem off (the node keeps its domain load)."""
-    own = (node_config.get("sim") or {}).get("subsystem")
+    sim = node_config.get("sim") or {}
+    own = sim.get("subsystem")
     base = (node or {}).get("subsystem")
-    if isinstance(own, str) and own.lower() == "none":
+    nid = (node or {}).get("id")
+    if isinstance(own, str):
+        if own.lower() == "none":
+            return None
+        raise ValueError(f"{nid}: sim.subsystem takes a patch mapping or 'none', not {own!r}")
+    if own is not None and not isinstance(own, dict):
+        raise ValueError(f"{nid}: sim.subsystem takes a patch mapping or 'none', not {type(own).__name__}")
+    if base is not None and not isinstance(base, dict):
+        raise ValueError(f"{nid}: subsystem must be a mapping")
+    if own is None and base is None:
         return None
-    if not isinstance(own, dict) and not isinstance(base, dict):
-        return None
-    merged = deep_merge(base or {}, own) if isinstance(own, dict) else base
-    return merged
+    if own is None:
+        return base
+    try:
+        return deep_merge(base or {}, own)
+    except (AttributeError, TypeError) as exc:     # a malformed $items / $unset / ... operation
+        raise ValueError(f"{nid}: sim.subsystem patch is malformed ({exc})") from None
+
+
+def _given(d: dict[str, Any], key: str, default: float) -> float:
+    """``d[key]`` when it is set (an explicit 0 included), else ``default``."""
+    v = d.get(key)
+    return default if v is None else float(v)
+
+
+def _unit_power(node_id: str, u, load: float, f: float) -> dict[str, float]:
+    """util-vf-v1 of one cpu / dsp unit at clock ``f``: busy x C f V^2 + leakage (gated when idle)."""
+    p = u.power or {}
+    leak = p.get("leakage") or {}
+    vf = sorted((float(r["mhz"]), float(r["mv"])) for r in p["vf"])
+    model = DomainPowerModel(name=f"{node_id}.{u.id}", ip_ref="", coeff_uw_per_mhz_v2=float(p["coeff_uw_per_mhz_v2"]),
+                             vf=tuple(vf), leak_mw_at_ref=_given(leak, "mw_at_ref", 0.0),
+                             leak_ref_mv=_given(leak, "ref_mv", 750.0), leak_exponent=_given(leak, "exponent", 2.0))
+    busy = min(load / f, 1.0) if f > 0 else 0.0
+    idle_gated = _given(p, "idle_gated", 0.0)
+    dyn = busy * model.dyn_mw(f)
+    static = model.leak_mw(f) * (busy + (1.0 - busy) * (1.0 - idle_gated))
+    return {"mw": round(dyn + static, 3), "dynamic_mw": round(dyn, 3), "static_mw": round(static, 3),
+            "mv": model.mv(f)}
 
 
 def _variant_dict(graph) -> dict[str, Any]:
@@ -86,13 +121,13 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
 
     load = {u: 0.0 for u in units}
     for s in stages:
-        load[s.on] += stage_load(s)
+        load[s.unit] += stage_load(s)
 
     # ---- clock domains
     catalog_freqs = sorted(_catalog_defaults(caps or {}).get("freqs_mhz") or [])
     domains: dict[str, list[str]] = {}
-    for u in spec.units:
-        if u.kind in COMPUTE_KINDS:
+    for u in spec.units:    # compute units always run on a clock; others only when they declare a domain
+        if u.kind in COMPUTE_KINDS or u.clock_domain:
             domains.setdefault(u.clock_domain or u.id, []).append(u.id)
     freq: dict[str, float] = {}          # unit -> MHz
     domain_rows = {}
@@ -106,13 +141,14 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
         levels = sorted(set.intersection(*per_unit))
         if not levels:
             raise ValueError(f"{node_id}: subsystem clock domain {dom} units share no operating point")
-        f = next((x for x in levels if all(load[m] / x <= units[m].target_util + 1e-12 for m in members)), levels[-1])
+        compute = [m for m in members if units[m].kind in COMPUTE_KINDS]
+        f = next((x for x in levels if all(load[m] / x <= units[m].target_util + 1e-12 for m in compute)), levels[-1])
         for m in members:
             freq[m] = f
             if load[m] / f > 1.0 + 1e-9:
                 infeasible.append(f"{m} {load[m]:.1f} Mcycle/s > {f:.0f} MHz")
         domain_rows[dom] = {"units": members, "freq_mhz": round(f, 1), "levels_mhz": [round(x, 1) for x in levels],
-                            "max_util": round(max(load[m] / f for m in members), 4)}
+                            "max_util": round(max((load[m] / f for m in compute), default=0.0), 4)}
 
     # ---- power per unit
     unit_rows, unattributed, total = [], [], 0.0
@@ -123,12 +159,7 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
             row.update(load_mcps=round(load[u.id], 3), freq_mhz=round(f, 1), util=round(load[u.id] / f, 4),
                        target_util=u.target_util, clock_domain=u.clock_domain or u.id)
             if u.power is not None:
-                p = u.power
-                est = UtilVfV1().estimate(node_id=f"{node_id}.{u.id}", rate_hz=0.0, pixels=None, cfg={
-                    "coeff_uw_per_mhz_v2": p["coeff_uw_per_mhz_v2"], "vf": p["vf"], "leakage": p.get("leakage") or {},
-                    "idle_gated": p.get("idle_gated", 0.0), "mcycles_per_s": load[u.id], "freq_mhz": f,
-                    "target_util": u.target_util})
-                row.update(mw=est["mw"], dynamic_mw=est["dynamic_mw"], static_mw=est["static_mw"], mv=est["mv"])
+                row.update(_unit_power(node_id, u, load[u.id], f))
         elif u.power is not None:
             row["mw"] = round(float(u.power["mw"]), 3)
         if "mw" in row:
@@ -143,18 +174,18 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
     stage_rows = []
     for s in stages:
         lo = stage_load(s)
-        row = {"id": s.id, "kind": s.kind, "on": s.on, "load_mcps": round(lo, 3), "value_source": s.value_source}
+        row = {"id": s.id, "kind": s.kind, "unit": s.unit, "load_mcps": round(lo, 3), "value_source": s.value_source}
         if s.stream:
             row["stream"] = s.stream
-            if units[s.on].kind in COMPUTE_KINDS and lo:
-                row["ms_per_period"] = round(lo * streams[s.stream].period_ms / freq[s.on], 4)
+            if units[s.unit].kind in COMPUTE_KINDS and lo:
+                row["ms_per_period"] = round(lo * streams[s.stream].period_ms / freq[s.unit], 4)
         for key in ("bind", "basis", "evidence_ref"):
             if getattr(s, key):
                 row[key] = getattr(s, key)
         stage_rows.append(row)
     slack = []
     for sid, st in streams.items():
-        on = sorted({s.on for s in stages if s.stream == sid and units[s.on].kind in COMPUTE_KINDS})
+        on = sorted({s.unit for s in stages if s.stream == sid and units[s.unit].kind in COMPUTE_KINDS})
         if not on:
             continue
         worst = min(on, key=lambda u: 1.0 - load[u] / freq[u])
@@ -180,8 +211,8 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
             if s.stream and s.stream not in seen:
                 seen.append(s.stream)
                 buffering += streams[s.stream].period_ms * streams[s.stream].periods
-            if s.stream and units[s.on].kind in COMPUTE_KINDS:
-                work += stage_load(s) * streams[s.stream].period_ms / freq[s.on]
+            if s.stream and units[s.unit].kind in COMPUTE_KINDS:
+                work += stage_load(s) * streams[s.stream].period_ms / freq[s.unit]
         latency = buffering + work
         route = {"id": r.id, "kind": r.kind, "stages": list(r.stages), "streams": seen,
                  "buffering_ms": round(buffering, 4), "processing_ms": round(work, 4),
@@ -199,6 +230,8 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
             rate = 1000.0 / float(w.every_ms or 0.0)
         else:
             rate = float(w.per_s or 0.0)
+        if not math.isfinite(rate):
+            raise ValueError(f"{node_id}: subsystem wake {w.kind} rate is not finite")
         row = {"kind": w.kind, "per_s": round(rate, 4)}
         for key in ("stream", "every_ms", "mb"):
             if getattr(w, key) is not None:

@@ -181,6 +181,9 @@ def domain_load_config(caps: dict[str, Any], node: dict[str, Any] | None, node_c
 def domain_loads(graph, active: set[str], default_rate_hz: float) -> dict[str, dict[str, Any]]:
     """``{node: estimate}`` of every active node that declares a domain load (empty when none does)."""
     nodes = {str(n.get("id")): n for n in ((graph.scenario.pipeline or {}).get("nodes") or [])}
+    # nodes a variant adds (topology_patch.add_nodes) can declare a subsystem too
+    for n in getattr(graph, "pipeline_nodes", None) or []:
+        nodes.setdefault(str(n.get("id")), n)
     configs = graph.variant.node_configs or {}
     out: dict[str, dict[str, Any]] = {}
     for node_id in sorted(active):
@@ -195,7 +198,7 @@ def domain_loads(graph, active: set[str], default_rate_hz: float) -> dict[str, d
         decl = subsystem_config(node, node_config)
         if decl is not None:
             res = evaluate_subsystem(node_id, decl, getattr(ip, "capabilities", None) or {}, _variant_dict(graph),
-                                     set(nodes))
+                                     set(nodes) | {str(n.get("id")) for n in (getattr(graph, "pipeline_nodes", None) or [])})
             out[node_id] = {**res["summary"], "subsystem": res["detail"]}
             continue
         cfg = domain_load_config(getattr(ip, "capabilities", None) or {}, node, node_config)

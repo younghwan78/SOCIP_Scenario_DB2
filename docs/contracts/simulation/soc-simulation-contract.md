@@ -145,7 +145,7 @@ the node keeps its `domain_load`; reports and hashes are unchanged.
 | --- | --- |
 | `units` | `id`, `kind` (`cpu` / `dsp` / `hw` / `memory` / `interface`), `clock_domain`, `freqs_mhz` (default: the node IP catalog DVFS levels, e.g. `aud_qos_levels_khz`), `power` (cpu / dsp: util-vf-v1 `coeff_uw_per_mhz_v2` / `vf` / `leakage` / `idle_gated`; others: `{mw}`), `target_util` (0.85) |
 | `streams` | `fs_hz`, `channels`, `bits`, `period_frames` (period = frames / fs), `periods` (buffer depth, 2), `buffer` (`sram` / `dram`) |
-| `stages` | `kind`, `on` (unit), `stream`, `mcps` or `mcycles_per_period` (cpu / dsp units only), `bind` (a pipeline node the load is shown on), `when` / `when_node_enabled`, provenance |
+| `stages` | `kind`, `unit` (the unit id; not `on`, which YAML 1.1 reads as `true`), `stream`, `mcps` or `mcycles_per_period` (cpu / dsp units only), `bind` (a pipeline node the load is shown on), `when` / `when_node_enabled`, provenance |
 | `edges` / `routes` | `[from, to]` stage pairs; a route (`playback` / `capture` / `duplex`, `when`, `latency_target_ms`) is a linear path over edges |
 | `wake` | `period_irq` (a `stream`), `refill` (`every_ms`, `mb`), `event` (`per_s`), with `when` |
 
