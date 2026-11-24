@@ -827,7 +827,9 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "intervals_ok_by": {k: report["intervals"][k].get("ok") for k in ("preview", "video")},
         "interval_tolerance": report["intervals"].get("tolerance"),
         "latency": report["latency"],
-        "power": {k: report["power"][k] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_hw_mw", "bw_sw_mw")},
+        "power": {k: report["power"][k] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_hw_mw", "bw_sw_mw")}
+        # R-4 / M-5 wake residency: a constant term of the slice (no lever changes it), inside total_mw
+        | ({"residency_mw": report["power"]["residency_mw"]} if "residency_mw" in report["power"] else {}),
         "cpu_by_task": report["power"]["cpu_by_task"],
         "cpu_basis": (report["power"].get("cpu_profile") or {}).get("kind", "flat"),
         "zero_power_ips": report["power"].get("zero_power_ips", []),
@@ -1301,7 +1303,7 @@ def _case(s: dict[str, Any], cset: dict[str, Any], dset: dict[str, Any]) -> dict
     p, b = s["power"], s["bw"]
     hw = p["hw_mw"] + dset["delta_mw"]
     bw = p["bw_mw"] + cset["delta_mw"]
-    total = p["cpu_mw"] + hw + bw
+    total = p["cpu_mw"] + hw + bw + float(p.get("residency_mw") or 0.0)
     key = "|".join([
         f"s={s['statistic']}", f"x={s['runtime_scale']:g}",
         "c=" + ("+".join(f"{b}:{_short_mode(cset.get('modes', {}).get(b))}" for b in cset["buffers"]) or "-"),

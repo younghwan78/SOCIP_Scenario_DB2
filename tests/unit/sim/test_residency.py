@@ -86,3 +86,66 @@ def test_coefficients_change_the_request_hash_only_when_set():
     base = _request_hash(inputs, _request())
     assert _request_hash(inputs, _request(config=SimulationRunConfig(asv_group=4))) == base
     assert _request_hash(inputs, _request(config=SimulationRunConfig(asv_group=4, residency=COEF))) != base
+
+
+def test_the_residency_bucket_is_in_the_total_and_the_shares():
+    p = _run("audio-mp3-screen-on", CFG)["power"]
+    assert p["total_mw"] == pytest.approx(p["cpu_mw"] + p["hw_mw"] + p["bw_mw"] + p["residency_mw"], abs=0.02)
+    assert p["share_pct"]["residency"] == pytest.approx(100 * p["residency_mw"] / p["total_mw"], abs=0.1)
+    assert sum(p["share_pct"].values()) == pytest.approx(100, abs=0.3)
+
+
+def test_the_profile_cpu_model_re_total_keeps_the_residency(monkeypatch):
+    from scenario_db.sim import timing_budget as tb
+
+    def retotal(report, *_a):      # what apply_profile_cpu does: CPU + HW + BW again
+        p = report["power"]
+        p["cpu_mw"] = 30.0
+        p["total_mw"] = round(p["cpu_mw"] + p["hw_mw"] + p["bw_mw"], 2)
+
+    monkeypatch.setattr(tb, "_profile_cpu", retotal)
+    r = analyze_timing_budget(_exynos2600_generated_graph(MP3, "audio-mp3-screen-on"),
+                              TimingBudgetOptions(throughput_model="pipelined", cpu_model="profile"), config=CFG)
+    p = r["power"]
+    assert p["total_mw"] == pytest.approx(30.0 + p["hw_mw"] + p["bw_mw"] + r["residency"]["mw"], abs=0.02)
+
+
+def test_exploration_cases_carry_the_residency_term():
+    from scenario_db.sim.arch_exploration import _case, _slice
+
+    r = _run("audio-mp3-screen-on", CFG)
+    s = _slice(r, "p50", 1.0)
+    zero = {"delta_mw": 0.0, "delta_mbs": 0.0, "delta_ip_mw": 0.0, "delta_ip_mbs": 0.0, "delta_cpu_mw": 0.0,
+            "delta_cpu_mbs": 0.0, "buffers": [], "modes": {}, "lossy": False, "assumed": False}
+    case = _case(s, zero, {"delta_mw": 0.0, "levels": {}, "raises": 0})
+    assert case["total_mw"] == pytest.approx(r["power"]["total_mw"], abs=0.02)
+
+
+def test_concurrent_members_add_wakes_and_share_one_mif_state():
+    from scenario_db.sim.concurrency import compose
+
+    a = _run("audio-flac-hires-screen-off", CFG)
+    b = _run("audio-mp3-screen-off-offload", CFG)
+    c = compose([("a", a), ("b", b)])
+    ra, rb = a["residency"], b["residency"]
+    ratio = 1 - (1 - ra["mif_active_ratio"]) * (1 - rb["mif_active_ratio"])
+    mif = ratio * 40 + (1 - ratio) * 2
+    z = c["residency"]
+    assert z["cpu_wake_mw"] == pytest.approx(ra["cpu_wake_mw"] + rb["cpu_wake_mw"], abs=1e-3)
+    assert z["mif_state_mw"] == pytest.approx(mif, abs=1e-3)
+    parts = sum(c["power"][k] for k in ("cpu_mw", "hw_mw", "bw_mw", "dvfs_raise_mw"))
+    assert c["power"]["total_mw"] == pytest.approx(parts + z["mw"], abs=0.03)
+    assert c["power"]["total_mw"] < c["power"]["sum_of_members_mw"]      # the self-refresh floor is paid once
+    assert any("residency" in x for x in c["limits"])
+
+
+def test_an_explicit_null_turns_the_profile_residency_off():
+    from tests.unit.sim import test_config_profile as tc
+
+    db, row = tc._stored_profile()
+    row.run_config = {**row.run_config, "residency": COEF}
+    on = tc._request()
+    tc._apply_config_profile(db, on)
+    off = tc._request(residency=None)
+    tc._apply_config_profile(db, off)
+    assert on.config.residency is not None and off.config.residency is None

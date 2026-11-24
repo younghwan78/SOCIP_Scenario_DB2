@@ -8,7 +8,9 @@ composed from their own Timing Budget reports, without a joint simulation:
   domain is re-priced at that level's voltage, ``P x (V_shared / V_own)^2`` (the IP's own work is unchanged);
 - shared CPU load: the members' CPU busy time per their own frame period, in core-equivalents;
 - a pipeline node present in several members (one DPU, one ABOX, one GPU …) is listed as shared: its power is
-  the sum of the members' loads, an upper bound when one instance serves both (one display composes both).
+  the sum of the members' loads, an upper bound when one instance serves both (one display composes both);
+- wake residency (R-4 / M-5): each member's AP wake entry / exit adds up; the MIF state is one DRAM, priced once
+  from the members' active ratios as independent sources, ``r = 1 - prod(1 - r_i)``.
 
 Out of scope (stated in ``limits``): contention between members (the same CPU thread / core, BW latency), a domain
 load re-priced on its combined work, and a timing re-run at the shared clocks (a higher clock only shortens HW).
@@ -64,6 +66,7 @@ def compose(members: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
                                "members": sorted({lab for lab, *_ in rows}), "raised": raised, "delta_mw": round(delta, 3)})
 
     rows = []
+    residents: list[dict[str, Any]] = []
     totals = {"cpu_mw": 0.0, "hw_mw": 0.0, "bw_mw": 0.0, "dvfs_raise_mw": 0.0, "bw_mbs": 0.0, "cpu_load": 0.0,
               "peak_bw_upper_mbs": 0.0}
     node_members: dict[str, list[str]] = {}
@@ -87,9 +90,26 @@ def compose(members: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
             hw_by_node[node] = hw_by_node.get(node, 0.0) + float(mw or 0.0)
         for node in (p.get("assumed_by_ip") or {}):
             node_members.setdefault(node, []).append(label)
+        res = r.get("residency") or {}
+        if res.get("status") == "ok" and "residency_mw" in p:
+            row["residency_mw"] = float(p["residency_mw"])
+            residents.append(res)
     shared_nodes = [{"node": n, "members": m, "mw": round(hw_by_node.get(n, 0.0), 3)}
                     for n, m in sorted(node_members.items()) if len(set(m)) > 1]
     total = totals["cpu_mw"] + totals["hw_mw"] + totals["bw_mw"] + totals["dvfs_raise_mw"]
+    residency = None
+    if residents:     # AP wakes add up; one DRAM: its MIF state is priced once over the combined active ratio
+        keep_off = 1.0
+        for res in residents:
+            keep_off *= 1.0 - float(res["mif_active_ratio"])
+        ratio = 1.0 - keep_off
+        act = max(float(res.get("mif_active_mw") or 0.0) for res in residents)
+        sr = max(float(res.get("mif_self_refresh_mw") or 0.0) for res in residents)
+        wake = sum(float(res["cpu_wake_mw"]) for res in residents)
+        mif = ratio * act + (1.0 - ratio) * sr
+        residency = {"cpu_wake_mw": round(wake, 3), "mif_active_ratio": round(ratio, 6), "mif_state_mw": round(mif, 3),
+                     "mw": round(wake + mif, 3), "members": len(residents)}
+        total += wake + mif
     failing = [r["member"] for r in rows if r["verdict"] == "fail"]
     notes = []
     if totals["cpu_load"] > 1.0:
@@ -100,7 +120,9 @@ def compose(members: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
         "members": rows,
         "power": {"total_mw": round(total, 2), "cpu_mw": round(totals["cpu_mw"], 2), "hw_mw": round(totals["hw_mw"], 2),
                   "bw_mw": round(totals["bw_mw"], 2), "dvfs_raise_mw": round(totals["dvfs_raise_mw"], 2),
-                  "sum_of_members_mw": round(sum(r["total_mw"] for r in rows), 2)},
+                  "sum_of_members_mw": round(sum(r["total_mw"] for r in rows), 2)}
+                 | ({"residency_mw": residency["mw"]} if residency else {}),
+        **({"residency": residency} if residency else {}),
         "bw": {"total_mbs": round(totals["bw_mbs"], 1), "peak_upper_mbs": round(totals["peak_bw_upper_mbs"], 1)},
         "cpu": {"load_core_eq": round(totals["cpu_load"], 3)},
         "shared_domains": shared_domains,
@@ -108,5 +130,7 @@ def compose(members: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
         "verdict": {"status": "fail" if failing else "ok", "failing_members": failing, "notes": notes},
         "limits": ["member 사이 경합(같은 CPU thread/core, BW 지연)은 반영 안 함",
                    "공유 domain 부하(GPU · NPU · ABOX)는 합산만 — 합친 work로 운영점 재선정 안 함",
-                   "공유 clock에서 timing 재실행 안 함 (clock이 오르면 HW 시간은 줄기만 함)"],
+                   "공유 clock에서 timing 재실행 안 함 (clock이 오르면 HW 시간은 줄기만 함)"]
+                  + (["wake residency: MIF 상태는 residency를 계산한 member끼리만 한 번 합성 (나머지 member의 DRAM 점유는 "
+                      "반영 안 함)"] if residency else []),
     }

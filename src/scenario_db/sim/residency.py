@@ -67,6 +67,7 @@ def evaluate_residency(subsystems: dict[str, dict[str, Any]], params: ResidencyP
     mif = ratio * params.mif_active_mw + (1.0 - ratio) * params.mif_self_refresh_mw
     out.update(status="ok", mif_active_ratio=round(ratio, 6), cpu_wake_mw=round(cpu_wake, 3),
                mif_state_mw=round(mif, 3), mw=round(cpu_wake + mif, 3), value_source=params.value_source,
+               mif_active_mw=params.mif_active_mw, mif_self_refresh_mw=params.mif_self_refresh_mw,
                basis=params.basis or ("wake-residency-v1: P = W x E_wake + r_MIF x P_active + (1 - r_MIF) x "
                                       "P_self_refresh; independent sources: r = 1 - prod(1 - p_k)"))
     return out

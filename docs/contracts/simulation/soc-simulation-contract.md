@@ -183,11 +183,18 @@ With coefficients in the run config (`residency`: `e_wake_mj`, `t_exit_ms`, `per
   wake, `p = min(1, rate x busy / 1000)`; independent sources overlap: `mif_active_ratio = 1 - prod(1 - p)`; the
   screen on (`design_conditions.screen_on`, default true) keeps it at 1;
 - `mif_state_mw` = ratio x `mif_active_mw` + (1 - ratio) x `mif_self_refresh_mw`;
-- `power.residency_mw` = the sum, added to `power.total_mw`. Owners: ABOX units are the subsystem's, SW runtime the
-  CPU model's, traffic-proportional BW power the BW model's (keep the MIF state power out of the BW coefficient).
+- `power.residency_mw` = the sum, its own bucket: `power.total_mw` = CPU + HW + BW + residency and
+  `power.share_pct.residency` (shares over that total), applied after the profile CPU model. Owners: ABOX units are
+  the subsystem's, SW runtime the CPU model's, traffic-proportional BW power the BW model's (keep the MIF state power
+  out of the BW coefficient).
+
+Carried by: architecture exploration (a constant term of every case of the slice), the concurrent composition
+(AP wakes add up; the one DRAM's MIF state is priced once, `r = 1 - prod(1 - r_i)` over the members with
+residency, stated in `limits`) and stored Timing Budget evidence (`power_breakdown.residency`: mW, ratio, basis).
 
 Without coefficients `status: no_coefficients` and nothing is added. The coefficients are part of the run config
-(request and condition hashes) only when set.
+(request and condition hashes) only when set; an explicit `config.residency: null` turns the model off over a
+profile that declares it.
 
 ## External Device Requirements
 

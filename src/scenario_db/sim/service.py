@@ -184,6 +184,9 @@ def _merge_config_profile(db: Session, request: SimulateRequest) -> str:
         if value is not None
     }
     explicit = request.config.model_dump(exclude_unset=True)
+    # an explicit null (e.g. residency: null = model off) beats the profile; exclude_if drops it from the dump
+    explicit.update({k: None for k in request.config.model_fields_set if k not in explicit
+                     and getattr(request.config, k) is None})
     try:
         request.config = SimulationRunConfig(**{**defaults, **explicit})
     except ValueError as exc:
