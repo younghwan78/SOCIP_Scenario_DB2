@@ -53,11 +53,17 @@ export interface IntervalSeries {
   jitter_ms?: number | null; p95_dev_ms?: number | null; p99_dev_ms?: number | null; max_dev_ms?: number | null; duration_ms?: number; drops?: number; warmup_observed?: number; warmup_excluded?: number
 }
 export interface TimelineRow { node: string; type: string; frame: number; start_ms: number; end_ms: number; stage: StageId }
-export interface DomainLoad {
-  model: string; work_mcycles_s: number; freq_mhz: number; freq_by: 'fixed' | 'governor'; f_max_mhz: number; mv: number
+export interface UtilVfLoad {
+  model: 'util-vf-v1'; work_mcycles_s: number; freq_mhz: number; freq_by: 'fixed' | 'governor'; f_max_mhz: number; mv: number
   util: number; target_util: number; dynamic_mw: number; static_mw: number; mw: number; feasible: boolean
   value_source: string; rate_hz?: number; pixel_scale?: number; basis?: string; note?: string; reason?: string
 }
+/** R-4: a node subsystem (mcps-v1) in the node's domain-load slot; its detail is report.subsystems[node]. */
+export interface SubsystemLoad {
+  model: 'mcps-v1'; mw: number; feasible: boolean; freq_mhz: number | null; util: number; value_source: string
+  unattributed_units: string[]; note?: string; reason?: string
+}
+export type DomainLoad = UtilVfLoad | SubsystemLoad
 export interface PowerSplit {
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_hw_mw: number; bw_sw_mw: number
   share_pct: { cpu: number; hw: number; bw: number }

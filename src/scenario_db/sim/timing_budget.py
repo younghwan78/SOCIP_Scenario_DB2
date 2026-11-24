@@ -228,6 +228,11 @@ def analyze_timing_budget(
     rule = _run(graph, options, base_config, dvfs_tables, plan, rule_only=True)
     budget = _run(graph, options, base_config, dvfs_tables, plan, rule_only=False)
     report = _report(graph, options, plan, rule, budget, dvfs_tables)
+    # R-4: subsystem detail (mcps-v1) beside the power summary; absent = no subsystem declared
+    subsystems = {n: d.pop("subsystem") for n, d in ((report.get("power") or {}).get("domain_loads") or {}).items()
+                  if "subsystem" in d}
+    if subsystems:
+        report["subsystems"] = subsystems
     if opp is not None:  # S-05: CPU SW at the declared OPP (absent = not declared)
         report["cpu_opp"] = opp
     report["dvfs"]["overrides"] = dict(base_config.dvfs_overrides)
@@ -1099,6 +1104,9 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     active = set(result.resolved) | set(plan["tasks"])
     domain = domain_loads(graph, active, 1000.0 / period if period else 0.0)
     power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain)
+    for ip in ips:  # R-4: a subsystem is its node's whole power, in the IP detail as in the totals
+        if (domain.get(ip["node"]) or {}).get("model") == "mcps-v1":
+            ip["power_mw"] = round(domain[ip["node"]]["mw"], 3)
     bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
     own = own_cadence_rows(result.timeline_events)
@@ -1264,7 +1272,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     tasks = plan["tasks"]
     hw_by_ip = {n: r.total_power_mw * plan["dual"].get(n, 1) for n, r in result.resolved.items()}
     for n, est in (domain or {}).items():  # a declared domain load is that node's IP power (the compute model gives 0)
-        hw_by_ip[n] = hw_by_ip.get(n, 0.0) + est["mw"]
+        # a subsystem models the whole node: it replaces the node's computed power instead of adding to it
+        hw_by_ip[n] = est["mw"] if est.get("model") == "mcps-v1" else hw_by_ip.get(n, 0.0) + est["mw"]
     busy = {
         i["task"]: i["runtime_ms"]
         for items in plan["sw_items"].values()
@@ -1316,7 +1325,11 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         },
         "cpu_busy_ms": round(sum(busy.values()), 3),
         "cpu_model": options.cpu.model_dump(),
-        "zero_power_ips": sorted(n for n, v in hw_by_ip.items() if v <= 0),
+        # a subsystem unit without power is an unmodeled part of its node (the node total is a lower bound)
+        "zero_power_ips": sorted([n for n, v in hw_by_ip.items()
+                                  if v <= 0 and (domain or {}).get(n, {}).get("model") != "mcps-v1"]
+                                 + [f"{n}.{u}" for n, est in (domain or {}).items()
+                                    for u in est.get("unattributed_units") or []]),
     }
     if assumed_by_ip:  # absent key = nothing declared (reports from before stay byte-identical)
         power["assumed_by_ip"] = assumed_by_ip
