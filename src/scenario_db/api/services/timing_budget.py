@@ -56,7 +56,11 @@ def _domain_load_inputs(graph) -> dict:
     for node in (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("nodes") or []:
         node_id = str(node.get("id") or "")
         ip = catalog.get(str(node.get("ip_ref") or ""))
-        decl = subsystem_config(node, configs.get(node_id) or {})
+        try:
+            decl = subsystem_config(node, configs.get(node_id) or {})
+        except ValueError as exc:   # a bad variant patch is refused by the calculation itself (or never used)
+            out[node_id] = {"subsystem_invalid": str(exc)}
+            continue
         if decl is not None:     # the subsystem replaces the domain load: its declaration is the input
             out[node_id] = {"subsystem": decl, "selection": _variant_dict(graph),     # `when` reads the variant
                             "catalog_freqs_mhz": _catalog_defaults(getattr(ip, "capabilities", None) or {}).get("freqs_mhz")}

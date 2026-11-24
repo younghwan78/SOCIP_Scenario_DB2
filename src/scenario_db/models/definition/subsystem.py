@@ -11,6 +11,7 @@ Numbers are plain literals (MCPS = million cycles per second, the unit audio DSP
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
@@ -19,6 +20,14 @@ from scenario_db.models.common import BaseScenarioModel
 from scenario_db.models.definition.job import Selector
 
 UnitKind = Literal["cpu", "dsp", "hw", "memory", "interface"]
+
+
+def _num(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _pos(value: Any) -> bool:
+    return _num(value) and value > 0
 StageKind = Literal["dma", "mixer", "src", "effect", "codec", "solution", "interface", "detector"]
 COMPUTE_KINDS = ("cpu", "dsp")
 
@@ -37,18 +46,32 @@ class SubsystemUnit(BaseScenarioModel):
 
     @model_validator(mode="after")
     def _check(self) -> SubsystemUnit:
-        if self.freqs_mhz is not None and (not self.freqs_mhz or any(f <= 0 for f in self.freqs_mhz)):
+        if self.freqs_mhz is not None and (not self.freqs_mhz or any(not _pos(f) for f in self.freqs_mhz)):
             raise ValueError(f"unit {self.id}: freqs_mhz must be positive MHz values")
         p = self.power
-        if p is not None:
-            if self.kind in COMPUTE_KINDS:
-                if "mw" in p:
-                    raise ValueError(f"unit {self.id}: a {self.kind} unit takes util-vf-v1 power, not a constant mw")
-                if not p.get("coeff_uw_per_mhz_v2") or not p.get("vf"):
-                    raise ValueError(f"unit {self.id}: power needs coeff_uw_per_mhz_v2 and vf")
-            elif set(p) - {"mw", "value_source", "basis"} or not isinstance(p.get("mw"), (int, float)) \
-                    or isinstance(p.get("mw"), bool) or p["mw"] < 0:
-                raise ValueError(f"unit {self.id}: a {self.kind} unit takes power {{mw: >= 0}}")
+        if p is None:
+            return self
+        where = f"unit {self.id}: power"
+        if self.kind in COMPUTE_KINDS:
+            unknown = sorted(set(p) - {"coeff_uw_per_mhz_v2", "vf", "leakage", "idle_gated", "value_source", "basis"})
+            if "mw" in p:
+                raise ValueError(f"unit {self.id}: a {self.kind} unit takes util-vf-v1 power, not a constant mw")
+            if unknown:
+                raise ValueError(f"{where} has unknown keys {unknown}")
+            if not _pos(p.get("coeff_uw_per_mhz_v2")):
+                raise ValueError(f"{where}.coeff_uw_per_mhz_v2 must be a positive number")
+            vf = p.get("vf")
+            if not isinstance(vf, list) or not vf or any(
+                    not isinstance(r, dict) or not _pos(r.get("mhz")) or not _pos(r.get("mv")) for r in vf):
+                raise ValueError(f"{where}.vf must be a list of {{mhz: > 0, mv: > 0}}")
+            leak = p.get("leakage")
+            if leak is not None and (not isinstance(leak, dict) or any(
+                    k not in ("mw_at_ref", "ref_mv", "exponent") or not _num(v) or v < 0 for k, v in leak.items())):
+                raise ValueError(f"{where}.leakage takes mw_at_ref / ref_mv / exponent >= 0")
+            if p.get("idle_gated") is not None and not (_num(p["idle_gated"]) and 0 <= p["idle_gated"] <= 1):
+                raise ValueError(f"{where}.idle_gated must be within [0, 1]")
+        elif set(p) - {"mw", "value_source", "basis"} or not _num(p.get("mw")) or p["mw"] < 0:
+            raise ValueError(f"unit {self.id}: a {self.kind} unit takes power {{mw: finite >= 0}}")
         return self
 
 
@@ -148,10 +171,14 @@ class SubsystemSpec(BaseScenarioModel):
             if len(pair) != 2 or any(p not in stages for p in pair):
                 raise ValueError(f"subsystem edge {pair}: needs two known stage ids")
             edges.add((pair[0], pair[1]))
+        by_id = {s.id: s for s in self.stages or []}
         for r in self.routes or []:
             missing = [s for s in r.stages if s not in stages]
             if missing:
                 raise ValueError(f"subsystem route {r.id}: unknown stages {missing}")
+            unperiodic = [s for s in r.stages if (by_id[s].mcps or by_id[s].mcycles_per_period) and not by_id[s].stream]
+            if unperiodic:     # its work per period (route latency) needs the stream it runs per period of
+                raise ValueError(f"subsystem route {r.id}: load stages {unperiodic} need a stream")
             broken = [f"{a}->{b}" for a, b in zip(r.stages, r.stages[1:]) if (a, b) not in edges]
             if broken:
                 raise ValueError(f"subsystem route {r.id}: {broken} are not edges")
@@ -162,3 +189,8 @@ class SubsystemSpec(BaseScenarioModel):
 
     def bind_nodes(self) -> set[str]:
         return {s.bind for s in self.stages or [] if s.bind}
+
+    def node_refs(self) -> set[str]:
+        """Pipeline nodes the declaration names (``bind`` and every selector's ``when_node_enabled``)."""
+        sels = [*(self.stages or []), *(self.routes or []), *(self.wake or [])]
+        return self.bind_nodes() | {s.when_node_enabled for s in sels if s.when_node_enabled}

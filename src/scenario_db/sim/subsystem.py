@@ -56,13 +56,18 @@ def _selected(sel, vdict) -> bool:
     return _match(vdict, {"when": sel.when or {}, "when_node_enabled": sel.when_node_enabled})
 
 
-def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any], vdict: dict[str, Any]) -> dict:
+def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any], vdict: dict[str, Any],
+                       node_ids: set[str] | None = None) -> dict:
     """``{"summary": <domain-load-shaped entry>, "detail": <report.subsystems[node]>}``; ValueError on an invalid
-    declaration (as a domain load)."""
+    declaration (as a domain load). ``node_ids``: the pipeline nodes the merged declaration may name."""
     try:
         spec = SubsystemSpec.model_validate(decl)
     except Exception as exc:  # noqa: BLE001 - pydantic detail, refused like a bad domain load
         raise ValueError(f"{node_id}: invalid subsystem: {exc}") from None
+    if node_ids is not None:
+        unknown = sorted(spec.node_refs() - node_ids)
+        if unknown:      # also after the variant patch (a patched bind / when_node_enabled)
+            raise ValueError(f"{node_id}: subsystem names unknown nodes {unknown} (bind / when_node_enabled)")
     if spec.model != MODEL_ID:
         raise ValueError(f"{node_id}: unknown subsystem model {spec.model!r} (registered: ['{MODEL_ID}'])")
     units = {u.id: u for u in spec.units}
@@ -93,13 +98,14 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
     domain_rows = {}
     infeasible: list[str] = []
     for dom, members in domains.items():
-        declared = {tuple(sorted(units[m].freqs_mhz or [])) for m in members if units[m].freqs_mhz}
-        if len(declared) > 1:
-            raise ValueError(f"{node_id}: subsystem clock domain {dom} units declare different freqs_mhz")
-        levels = sorted(declared.pop()) if declared else catalog_freqs
+        # each unit's levels (its own freqs_mhz, else the catalog's); the shared clock takes common levels only
+        per_unit = [set(units[m].freqs_mhz or catalog_freqs) for m in members]
+        if any(not lv for lv in per_unit):
+            raise ValueError(f"{node_id}: subsystem clock domain {dom} has a unit without operating points "
+                             "(freqs_mhz or the IP catalog DVFS levels)")
+        levels = sorted(set.intersection(*per_unit))
         if not levels:
-            raise ValueError(f"{node_id}: subsystem clock domain {dom} has no operating points (freqs_mhz or the "
-                             "IP catalog DVFS levels)")
+            raise ValueError(f"{node_id}: subsystem clock domain {dom} units share no operating point")
         f = next((x for x in levels if all(load[m] / x <= units[m].target_util + 1e-12 for m in members)), levels[-1])
         for m in members:
             freq[m] = f
@@ -221,7 +227,7 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
     if spec.sram_kb is not None:
         detail["sram_kb"] = spec.sram_kb
     summary = {
-        "model": MODEL_ID, "mw": round(total, 3), "feasible": feasible,
+        "model": MODEL_ID, "mw": round(total, 3), "feasible": feasible, "unattributed_units": unattributed,
         "freq_mhz": main["freq_mhz"] if main else None, "util": main["max_util"] if main else 0.0,
         "value_source": spec.value_source,
     }

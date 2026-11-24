@@ -194,7 +194,8 @@ def domain_loads(graph, active: set[str], default_rate_hz: float) -> dict[str, d
 
         decl = subsystem_config(node, node_config)
         if decl is not None:
-            res = evaluate_subsystem(node_id, decl, getattr(ip, "capabilities", None) or {}, _variant_dict(graph))
+            res = evaluate_subsystem(node_id, decl, getattr(ip, "capabilities", None) or {}, _variant_dict(graph),
+                                     set(nodes))
             out[node_id] = {**res["summary"], "subsystem": res["detail"]}
             continue
         cfg = domain_load_config(getattr(ip, "capabilities", None) or {}, node, node_config)

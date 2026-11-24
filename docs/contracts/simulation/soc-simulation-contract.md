@@ -152,12 +152,16 @@ the node keeps its `domain_load`; reports and hashes are unchanged.
 Evaluation (per variant, active = matching `when`):
 
 - unit load = sum of its active stages' MCPS (`mcycles_per_period` x 1000 / period_ms);
-- a clock domain runs at the lowest level keeping every unit at or below its `target_util` (else the top level;
+- a clock domain runs at the lowest level common to its units (each unit's `freqs_mhz`, else the catalog's; no
+  common level is an error) keeping every unit at or below its `target_util` (else the top level;
   a unit above 1 is infeasible and fails the verdict like a domain load);
 - power = cpu / dsp units by util-vf-v1 at the domain clock + hw / interface constants; a unit without power is
-  `unattributed_units` (not 0). The total is the node's entry in `power.domain_loads` (model `mcps-v1`), in
-  place of its domain load; `bind` nodes only show where a load belongs;
+  `unattributed_units` (not 0) and appears in `power.zero_power_ips` as `<node>.<unit>`, so power coverage is
+  partial. The total is the node's entry in `power.domain_loads` (model `mcps-v1`) and the node's whole power
+  (it replaces the node's domain load and any computed HW power); `bind` nodes only show where a load belongs;
 - deadline slack per stream = min over its units of period x (1 - util);
+- `bind` / `when_node_enabled` must name pipeline nodes, also after the variant patch; power coefficients are
+  checked (finite, positive; `vf` rows `{mhz, mv}`); a route's load stages need a stream;
 - route latency (exactly one active route when routes are declared; its stages must be active) = per stream on the
   route period x periods + each stage's work per period at its clock;
 - wake rates (wakeups/s) are reported for the residency evaluator, not costed.

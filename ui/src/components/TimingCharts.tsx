@@ -615,8 +615,17 @@ export function DomainLoads({ loads }: { loads: NonNullable<PowerSplit['domain_l
       <div>Domain 부하 (util × f × V² + leakage)</div>
       {Object.entries(loads).map(([node, d]) => (
         <div key={node}>
-          {node.toUpperCase()}: {fmt(d.work_mcycles_s, 0)} Mcycle/s → {fmt(d.freq_mhz, 0)} MHz ({d.freq_by === 'fixed' ? '고정' : 'governor'}) · util {fmt(d.util * 100, 0)}% ·
-          {' '}dynamic {fmt(d.dynamic_mw, 1)} + static {fmt(d.static_mw, 1)} = {fmt(d.mw, 1)} mW
+          {d.model === 'mcps-v1' ? (
+            <>
+              {node.toUpperCase()}: subsystem (MCPS) → {d.freq_mhz == null ? '—' : `${fmt(d.freq_mhz, 0)} MHz`} · 최대 util {fmt(d.util * 100, 0)}% ·
+              {' '}unit 합 {fmt(d.mw, 1)} mW{d.unattributed_units.length ? ` (미산정 ${d.unattributed_units.join(', ')}: 하한)` : ''}
+            </>
+          ) : (
+            <>
+              {node.toUpperCase()}: {fmt(d.work_mcycles_s, 0)} Mcycle/s → {fmt(d.freq_mhz, 0)} MHz ({d.freq_by === 'fixed' ? '고정' : 'governor'}) · util {fmt(d.util * 100, 0)}% ·
+              {' '}dynamic {fmt(d.dynamic_mw, 1)} + static {fmt(d.static_mw, 1)} = {fmt(d.mw, 1)} mW
+            </>
+          )}
           {d.value_source === 'assumed' ? ' · 가정' : ''}{d.note ? ` · ${d.note}` : ''}{d.reason ? ` · ${d.reason}` : ''}
         </div>
       ))}

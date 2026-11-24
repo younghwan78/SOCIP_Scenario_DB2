@@ -82,7 +82,7 @@ def test_subsystem_structure_errors(mutate, message):
 
 def test_a_bind_must_name_a_pipeline_node():
     nodes = [{"id": "abox", "ip_ref": "ip-abox", "subsystem": deepcopy(SUB)}]
-    with pytest.raises(ValidationError, match=r"bind to unknown nodes \['speaker'\]"):
+    with pytest.raises(ValidationError, match=r"names unknown nodes \['speaker'\]"):
         Pipeline.model_validate({"nodes": nodes})
     Pipeline.model_validate({"nodes": nodes + [{"id": "speaker", "ip_ref": "ip-abox"}]})
 
@@ -177,3 +177,55 @@ def test_the_condition_hash_follows_the_subsystem():
     heavier = deepcopy(SUB)
     heavier["stages"][2]["mcps"] = 7
     assert len({plain, one, _condition_hash(_graph(sub=heavier), OPTS, shim, {})}) == 3
+
+
+@pytest.mark.parametrize("mutate,message", [
+    (lambda s: s["units"][0].update(power={**CA32, "vf": [600]}), r"vf must be a list of \{mhz: > 0, mv: > 0\}"),
+    (lambda s: s["units"][0].update(power={**CA32, "coeff_uw_per_mhz_v2": float("inf")}), "must be a positive number"),
+    (lambda s: s["units"][3].update(power={"mw": float("inf")}), "finite >= 0"),
+    (lambda s: s["units"][0].update(power={**CA32, "leakage": {"mw_at_ref": -1}}), "leakage takes"),
+    (lambda s: s["units"][0].update(power={**CA32, "gain": 2}), r"unknown keys \['gain'\]"),
+    (lambda s: s["stages"][2].pop("stream"), r"load stages \['mix'\] need a stream"),
+])
+def test_power_coefficients_and_route_periods_are_checked(mutate, message):
+    sub = deepcopy(SUB)
+    mutate(sub)
+    with pytest.raises(ValidationError, match=message):
+        SubsystemSpec.model_validate(sub)
+
+
+def test_a_shared_clock_takes_only_levels_every_unit_supports():
+    one = deepcopy(SUB)
+    one["units"][0]["freqs_mhz"] = [150]                    # catalog levels start at 200: no common point
+    with pytest.raises(ValueError, match="share no operating point"):
+        analyze_timing_budget(_graph(sub=one), OPTS)
+    both = deepcopy(SUB)
+    for u in both["units"][:3]:
+        u["freqs_mhz"] = [300, 600]
+    assert _sub(_graph(sub=both))["domains"]["AUD"]["freq_mhz"] == pytest.approx(300.0)
+
+
+def test_a_subsystem_replaces_the_node_power_and_keeps_coverage_partial():
+    report = analyze_timing_budget(_graph(), OPTS)
+    assert report["power"]["hw_by_ip"]["abox"] == pytest.approx(report["subsystems"]["abox"]["mw"], abs=1e-3)
+    assert "abox.uaif0" in report["power"]["zero_power_ips"]          # an unattributed unit: a lower bound
+    full = deepcopy(SUB)
+    full["units"][4]["power"] = {"mw": 0.5}
+    assert not [z for z in analyze_timing_budget(_graph(sub=full), OPTS)["power"]["zero_power_ips"]
+                if z.startswith("abox.")]
+
+
+def test_a_patched_declaration_must_name_real_nodes():
+    with pytest.raises(ValueError, match=r"names unknown nodes \['ghost'\]"):
+        analyze_timing_budget(_graph(patch={"$items": {"stages": {"patch": {"mix": {"bind": "ghost"}}}}}), OPTS)
+    with pytest.raises(ValueError, match=r"names unknown nodes \['ghost'\]"):
+        analyze_timing_budget(_graph(patch={"$items": {"stages": {"patch": {"mix": {"when_node_enabled": "ghost"}}}}}),
+                              OPTS)
+
+
+def test_a_bad_patch_on_a_disabled_node_does_not_break_the_hash():
+    from scenario_db.api.services.timing_budget import _condition_hash
+    from tests.unit.sim.test_service_hash import _request
+
+    graph = _graph(patch={"$items": {"stages": {"patch": {"ghost": {"mcps": 1}}}}})
+    assert isinstance(_condition_hash(graph, OPTS, _request(), {}), str)

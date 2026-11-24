@@ -140,9 +140,9 @@ class Pipeline(BaseScenarioModel):
     def _validate_edge_references(self) -> Pipeline:
         node_ids = {node.id for node in self.nodes}
         for node in self.nodes:
-            unknown = sorted((node.subsystem.bind_nodes() if node.subsystem else set()) - node_ids)
+            unknown = sorted((node.subsystem.node_refs() if node.subsystem else set()) - node_ids)
             if unknown:
-                raise ValueError(f"node {node.id}: subsystem stages bind to unknown nodes {unknown}")
+                raise ValueError(f"node {node.id}: subsystem names unknown nodes {unknown} (bind / when_node_enabled)")
         errors = job_reference_errors(self.jobs or [], node_ids, set(self.buffers))
         if errors:
             raise ValueError(errors[0])
