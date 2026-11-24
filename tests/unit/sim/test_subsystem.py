@@ -39,8 +39,23 @@ SUB = {
 OPTS = TimingBudgetOptions(throughput_model="pipelined")
 
 
-def _graph(variant=CPU_ON, sub=None, patch=None):
+def _plain(variant=CPU_ON):
+    """The MP3 graph with the ABOX subsystem of the E2600 data and its variant patches taken out (R-4b)."""
     graph = _exynos2600_generated_graph(UC, variant)
+    for node in graph.scenario.pipeline["nodes"]:
+        if node["id"] == "abox":
+            node.pop("subsystem", None)
+    cfgs = dict(graph.variant.node_configs or {})
+    abox = dict(cfgs.get("abox") or {})
+    abox["sim"] = {k: v for k, v in (abox.get("sim") or {}).items() if k != "subsystem"}
+    abox.pop("dvfs", None)      # the clock is chosen, not pinned (pinning: its own test)
+    cfgs["abox"] = abox
+    graph.variant.node_configs = cfgs
+    return graph
+
+
+def _graph(variant=CPU_ON, sub=None, patch=None):
+    graph = _plain(variant)
     for node in graph.scenario.pipeline["nodes"]:
         if node["id"] == "abox":
             node["subsystem"] = deepcopy(sub or SUB)
@@ -94,10 +109,10 @@ def test_an_undeclared_node_dumps_no_subsystem():
 
 # ---------------------------------------------------------------------------- evaluator
 
-def test_without_a_subsystem_the_report_is_unchanged():
-    plain = analyze_timing_budget(_exynos2600_generated_graph(UC, CPU_ON), OPTS)
+def test_without_a_subsystem_the_report_has_none():
+    plain = analyze_timing_budget(_plain(), OPTS)
     assert "subsystems" not in plain
-    assert plain["power"]["domain_loads"]["abox"]["model"] == "util-vf-v1"
+    assert "abox" not in (plain["power"].get("domain_loads") or {})
 
 
 def test_the_subsystem_replaces_the_domain_load():
@@ -153,7 +168,7 @@ def test_a_variant_patches_the_subsystem_by_id():
     sub = _sub(_graph(patch={"$items": {"stages": {"patch": {"eq": {"mcps": 50}}}}}))
     assert {u["id"]: u for u in sub["units"]}["hifi5"]["load_mcps"] == pytest.approx(50.0)
     report = analyze_timing_budget(_graph(patch="none"), OPTS)
-    assert "subsystems" not in report and report["power"]["domain_loads"]["abox"]["model"] == "util-vf-v1"
+    assert "subsystems" not in report and "abox" not in (report["power"].get("domain_loads") or {})
 
 
 def test_routes_must_resolve_to_exactly_one():
@@ -172,7 +187,7 @@ def test_the_condition_hash_follows_the_subsystem():
     from tests.unit.sim.test_service_hash import _request
 
     shim = _request()
-    plain = _condition_hash(_exynos2600_generated_graph(UC, CPU_ON), OPTS, shim, {})
+    plain = _condition_hash(_plain(), OPTS, shim, {})
     one = _condition_hash(_graph(), OPTS, shim, {})
     heavier = deepcopy(SUB)
     heavier["stages"][2]["mcps"] = 7
@@ -297,3 +312,58 @@ def test_a_tiny_refill_period_is_refused_not_infinite():
     sub["wake"][1]["every_ms"] = 1e-320
     with pytest.raises(ValueError, match="rate is not finite"):
         analyze_timing_budget(_graph(OFFLOAD, sub=sub), OPTS)
+
+
+def _pin(graph, khz):
+    cfgs = dict(graph.variant.node_configs or {})
+    cfgs["abox"] = {**cfgs["abox"], "dvfs": {"aud_freq_khz": khz}}
+    graph.variant.node_configs = cfgs
+    return graph
+
+
+def test_the_node_aud_operating_point_pins_the_domain_clock():
+    free = _sub(_graph())
+    pinned = _sub(_pin(_graph(), 400000))
+    assert free["domains"]["AUD"]["freq_mhz"] < 400 and "pinned" not in free["domains"]["AUD"]
+    assert pinned["domains"]["AUD"] == {**pinned["domains"]["AUD"], "freq_mhz": 400.0, "pinned": True}
+    assert pinned["mw"] > free["mw"]
+    with pytest.raises(ValueError, match="pinned to 123 MHz"):
+        _sub(_pin(_graph(), 123000))
+
+
+def test_the_pinned_clock_is_in_the_condition_hash():
+    from scenario_db.api.services.timing_budget import _domain_load_inputs
+
+    assert _domain_load_inputs(_graph())["abox"] != _domain_load_inputs(_pin(_graph(), 400000))["abox"]
+
+
+def test_a_hw_or_interface_unit_without_an_active_stage_is_gated():
+    sub = deepcopy(SUB)
+    sub["units"][4]["power"] = {"mw": 0.3}
+    sub["units"].append({"id": "uaif1", "kind": "interface", "power": {"mw": 0.3}})
+    sub["units"].append({"id": "sram", "kind": "memory", "power": {"mw": 0.2}})
+    units = {u["id"]: u for u in _sub(_graph(sub=sub))["units"]}
+    assert units["uaif1"] == {**units["uaif1"], "mw": 0.0, "gated": True}
+    assert units["uaif0"]["mw"] == 0.3 and units["sram"]["mw"] == 0.2 and "gated" not in units["sram"]
+
+
+def test_a_numeric_string_pins_like_driver_models_and_junk_is_refused():
+    assert _sub(_pin(_graph(), "400000"))["domains"]["AUD"]["freq_mhz"] == 400.0
+    with pytest.raises(ValueError, match="aud_freq_khz must be a positive number"):
+        _sub(_pin(_graph(), "fast"))
+
+
+def test_a_load_over_the_pinned_clock_says_so():
+    sub = deepcopy(SUB)
+    sub["stages"][2]["mcps"] = 250        # fits 332 MHz, not a 200 MHz pin
+    assert _sub(_graph(sub=sub))["feasible"]
+    r = analyze_timing_budget(_pin(_graph(sub=sub), 200000), OPTS)
+    reason = r["power"]["domain_loads"]["abox"]["reason"]
+    assert "고정 AUD 클럭" in reason and "pinned by dvfs.aud_freq_khz" in reason
+
+
+def test_the_rule_revision_is_in_the_condition_hash():
+    from scenario_db.api.services.timing_budget import _domain_load_inputs
+    from scenario_db.sim.subsystem import RULE_REV
+
+    assert _domain_load_inputs(_graph())["abox"]["rule_rev"] == RULE_REV

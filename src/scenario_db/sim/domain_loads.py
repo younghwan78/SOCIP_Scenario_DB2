@@ -193,12 +193,13 @@ def domain_loads(graph, active: set[str], default_rate_hz: float) -> dict[str, d
         node_config = configs.get(node_id) or {}
         ip = graph.ip_catalog.get(str(node.get("ip_ref") or ""))
         # R-4: a declared subsystem (mcps-v1) is the node's load, in place of its domain_load
-        from scenario_db.sim.subsystem import _variant_dict, evaluate_subsystem, subsystem_config
+        from scenario_db.sim.subsystem import _variant_dict, evaluate_subsystem, pinned_clocks, subsystem_config
 
         decl = subsystem_config(node, node_config)
         if decl is not None:
             res = evaluate_subsystem(node_id, decl, getattr(ip, "capabilities", None) or {}, _variant_dict(graph),
-                                     set(nodes) | {str(n.get("id")) for n in (getattr(graph, "pipeline_nodes", None) or [])})
+                                     set(nodes) | {str(n.get("id")) for n in (getattr(graph, "pipeline_nodes", None) or [])},
+                                     pinned=pinned_clocks(node_config))
             out[node_id] = {**res["summary"], "subsystem": res["detail"]}
             continue
         cfg = domain_load_config(getattr(ip, "capabilities", None) or {}, node, node_config)
