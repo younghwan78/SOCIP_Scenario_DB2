@@ -233,6 +233,16 @@ def analyze_timing_budget(
                   if "subsystem" in d}
     if subsystems:
         report["subsystems"] = subsystems
+        # R-4 / M-5: wake / MIF state power of the subsystems' wake sources (coefficients from the run config)
+        from scenario_db.sim.residency import evaluate_residency
+
+        screen_on = (graph.variant.design_conditions or {}).get("screen_on", True)
+        residency = evaluate_residency(subsystems, (config or SimulationRunConfig()).residency, screen_on)
+        if residency is not None:
+            report["residency"] = residency
+            if residency["status"] == "ok":
+                report["power"]["residency_mw"] = residency["mw"]
+                report["power"]["total_mw"] = round(report["power"]["total_mw"] + residency["mw"], 2)
     if opp is not None:  # S-05: CPU SW at the declared OPP (absent = not declared)
         report["cpu_opp"] = opp
     report["dvfs"]["overrides"] = dict(base_config.dvfs_overrides)

@@ -172,6 +172,23 @@ Output `report.subsystems[node]`: domains, units (load, clock, util, mW), stages
 unattributed units, binds. The Timing Budget condition hash includes the merged declaration, the variant
 selection fields and the catalog levels when a subsystem is declared.
 
+### Wake residency (`config.residency`, R-4 / M-5, evaluator `wake-residency-v1`)
+
+When an active subsystem declares wake sources, `report.residency` lists them (wakeups/s per source and total).
+With coefficients in the run config (`residency`: `e_wake_mj`, `t_exit_ms`, `period_burst_ms`, `refill_mb_s`,
+`mif_active_mw`, `mif_self_refresh_mw`, from the project `sim.config_profile` `run_config.residency`):
+
+- `cpu_wake_mw` = wakeups/s x `e_wake_mj` (AP entry / exit only; SW runtime stays the CPU model's);
+- each source is busy `period_burst_ms` (period IRQ, event) or `mb / refill_mb_s` (refill) plus `t_exit_ms` per
+  wake, `p = min(1, rate x busy / 1000)`; independent sources overlap: `mif_active_ratio = 1 - prod(1 - p)`; the
+  screen on (`design_conditions.screen_on`, default true) keeps it at 1;
+- `mif_state_mw` = ratio x `mif_active_mw` + (1 - ratio) x `mif_self_refresh_mw`;
+- `power.residency_mw` = the sum, added to `power.total_mw`. Owners: ABOX units are the subsystem's, SW runtime the
+  CPU model's, traffic-proportional BW power the BW model's (keep the MIF state power out of the BW coefficient).
+
+Without coefficients `status: no_coefficients` and nothing is added. The coefficients are part of the run config
+(request and condition hashes) only when set.
+
 ## External Device Requirements
 
 Sensors and panels are not compute workloads. They should not require `ppc` or

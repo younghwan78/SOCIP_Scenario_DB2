@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from scenario_db.sim.residency import ResidencyParams
 from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.clock_models import (
@@ -298,6 +299,8 @@ class SimulationRunConfig(BaseScenarioModel):
     # time meets the sensor read-out window. "sw_margin": legacy (1 - margin) rule.
     rt_clock_basis: Literal["sensor_readout", "sw_margin"] | None = Field(default=None, exclude_if=lambda v: v is None)
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
+    # R-4 / M-5 wake / MIF state coefficients (wake-residency-v1); None = not computed (hash unchanged)
+    residency: ResidencyParams | None = Field(default=None, exclude_if=lambda v: v is None)
     include_timeline: bool = True
     timeline_frame_count: int = Field(default=4, ge=1)
     timeline_frame_period_ms: float | None = None
