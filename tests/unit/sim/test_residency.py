@@ -37,8 +37,8 @@ def test_deep_buffer_wakes_cost_the_cpu_and_little_mif():
 def test_offload_refills_wake_a_hundred_times_less():
     z = _run("audio-mp3-screen-off-offload", CFG)["residency"]
     assert z["wakeups_per_s"] == pytest.approx(0.5) and z["cpu_wake_mw"] == pytest.approx(0.1)
-    assert z["sources"][0]["burst_ms"] == pytest.approx(0.4 / 200 * 1000)
-    assert z["mif_active_ratio"] == pytest.approx(0.5 * (2.0 + 0.1) / 1000)
+    assert z["sources"][0]["burst_ms"] == pytest.approx(0.08 / 200 * 1000)
+    assert z["mif_active_ratio"] == pytest.approx(0.5 * (0.4 + 0.1) / 1000)
 
 
 def test_the_screen_keeps_mif_active():
