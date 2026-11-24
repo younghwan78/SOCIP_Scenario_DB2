@@ -48,6 +48,7 @@ def _plain(variant=CPU_ON):
     cfgs = dict(graph.variant.node_configs or {})
     abox = dict(cfgs.get("abox") or {})
     abox["sim"] = {k: v for k, v in (abox.get("sim") or {}).items() if k != "subsystem"}
+    abox.pop("dvfs", None)      # the clock is chosen, not pinned (pinning: its own test)
     cfgs["abox"] = abox
     graph.variant.node_configs = cfgs
     return graph
@@ -311,3 +312,36 @@ def test_a_tiny_refill_period_is_refused_not_infinite():
     sub["wake"][1]["every_ms"] = 1e-320
     with pytest.raises(ValueError, match="rate is not finite"):
         analyze_timing_budget(_graph(OFFLOAD, sub=sub), OPTS)
+
+
+def _pin(graph, khz):
+    cfgs = dict(graph.variant.node_configs or {})
+    cfgs["abox"] = {**cfgs["abox"], "dvfs": {"aud_freq_khz": khz}}
+    graph.variant.node_configs = cfgs
+    return graph
+
+
+def test_the_node_aud_operating_point_pins_the_domain_clock():
+    free = _sub(_graph())
+    pinned = _sub(_pin(_graph(), 400000))
+    assert free["domains"]["AUD"]["freq_mhz"] < 400 and "pinned" not in free["domains"]["AUD"]
+    assert pinned["domains"]["AUD"] == {**pinned["domains"]["AUD"], "freq_mhz": 400.0, "pinned": True}
+    assert pinned["mw"] > free["mw"]
+    with pytest.raises(ValueError, match="pinned to 123 MHz"):
+        _sub(_pin(_graph(), 123000))
+
+
+def test_the_pinned_clock_is_in_the_condition_hash():
+    from scenario_db.api.services.timing_budget import _domain_load_inputs
+
+    assert _domain_load_inputs(_graph())["abox"] != _domain_load_inputs(_pin(_graph(), 400000))["abox"]
+
+
+def test_a_hw_or_interface_unit_without_an_active_stage_is_gated():
+    sub = deepcopy(SUB)
+    sub["units"][4]["power"] = {"mw": 0.3}
+    sub["units"].append({"id": "uaif1", "kind": "interface", "power": {"mw": 0.3}})
+    sub["units"].append({"id": "sram", "kind": "memory", "power": {"mw": 0.2}})
+    units = {u["id"]: u for u in _sub(_graph(sub=sub))["units"]}
+    assert units["uaif1"] == {**units["uaif1"], "mw": 0.0, "gated": True}
+    assert units["uaif0"]["mw"] == 0.3 and units["sram"]["mw"] == 0.2 and "gated" not in units["sram"]

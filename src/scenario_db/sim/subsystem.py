@@ -31,6 +31,8 @@ from scenario_db.authoring.patch import deep_merge
 from scenario_db.models.definition.subsystem import COMPUTE_KINDS, SubsystemSpec
 from scenario_db.sim.domain_loads import DomainPowerModel, _catalog_defaults
 
+GATED_KINDS = frozenset({"hw", "interface"})   # off without an active stage; memory stays on
+
 MODEL_ID = "mcps-v1"
 
 
@@ -91,10 +93,20 @@ def _selected(sel, vdict) -> bool:
     return _match(vdict, {"when": sel.when or {}, "when_node_enabled": sel.when_node_enabled})
 
 
+def pinned_clocks(node_config: dict[str, Any]) -> dict[str, float]:
+    """Clock domains the node config fixes: ``dvfs.aud_freq_khz`` pins the ``AUD`` domain (as for a domain load)."""
+    dvfs = node_config.get("dvfs") if isinstance(node_config, dict) else None
+    aud = dvfs.get("aud_freq_khz") if isinstance(dvfs, dict) else None
+    if isinstance(aud, bool) or not isinstance(aud, (int, float)) or not math.isfinite(aud) or aud <= 0:
+        return {}
+    return {"AUD": float(aud) / 1000.0}
+
+
 def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any], vdict: dict[str, Any],
-                       node_ids: set[str] | None = None) -> dict:
+                       node_ids: set[str] | None = None, pinned: dict[str, float] | None = None) -> dict:
     """``{"summary": <domain-load-shaped entry>, "detail": <report.subsystems[node]>}``; ValueError on an invalid
-    declaration (as a domain load). ``node_ids``: the pipeline nodes the merged declaration may name."""
+    declaration (as a domain load). ``node_ids``: the pipeline nodes the merged declaration may name.
+    ``pinned``: clock domains fixed by the node config (``pinned_clocks``), used instead of the lowest level."""
     try:
         spec = SubsystemSpec.model_validate(decl)
     except Exception as exc:  # noqa: BLE001 - pydantic detail, refused like a bad domain load
@@ -142,15 +154,27 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
         if not levels:
             raise ValueError(f"{node_id}: subsystem clock domain {dom} units share no operating point")
         compute = [m for m in members if units[m].kind in COMPUTE_KINDS]
-        f = next((x for x in levels if all(load[m] / x <= units[m].target_util + 1e-12 for m in compute)), levels[-1])
+        fixed = (pinned or {}).get(dom)
+        if fixed is not None:
+            match = [x for x in levels if abs(x - fixed) < 1e-6]
+            if not match:
+                raise ValueError(f"{node_id}: subsystem clock domain {dom} is pinned to {fixed:g} MHz (node dvfs), "
+                                 f"not one of its levels {levels}")
+            f = match[0]
+        else:
+            f = next((x for x in levels if all(load[m] / x <= units[m].target_util + 1e-12 for m in compute)),
+                     levels[-1])
         for m in members:
             freq[m] = f
             if load[m] / f > 1.0 + 1e-9:
                 infeasible.append(f"{m} {load[m]:.1f} Mcycle/s > {f:.0f} MHz")
         domain_rows[dom] = {"units": members, "freq_mhz": round(f, 1), "levels_mhz": [round(x, 1) for x in levels],
                             "max_util": round(max((load[m] / f for m in compute), default=0.0), 4)}
+        if fixed is not None:
+            domain_rows[dom]["pinned"] = True
 
     # ---- power per unit
+    used = {s.unit for s in stages}
     unit_rows, unattributed, total = [], [], 0.0
     for u in spec.units:
         row: dict[str, Any] = {"id": u.id, "kind": u.kind, "value_source": u.value_source}
@@ -160,6 +184,8 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
                        target_util=u.target_util, clock_domain=u.clock_domain or u.id)
             if u.power is not None:
                 row.update(_unit_power(node_id, u, load[u.id], f))
+        elif u.kind in GATED_KINDS and u.id not in used:
+            row.update(mw=0.0, gated=True)     # hw / interface without an active stage is off (e.g. the unused output)
         elif u.power is not None:
             row["mw"] = round(float(u.power["mw"]), 3)
         if "mw" in row:

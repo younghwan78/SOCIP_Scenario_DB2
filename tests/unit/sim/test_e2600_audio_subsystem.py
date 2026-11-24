@@ -52,3 +52,27 @@ def test_the_subsystem_is_the_abox_node_power(reports):
         row = next(ip for ip in r["ips"] if ip["node"] == "abox")
         assert row["power_mw"] == pytest.approx(r["subsystems"]["abox"]["mw"], abs=1e-3), vid
         assert r["power"]["hw_by_ip"]["abox"] == pytest.approx(r["subsystems"]["abox"]["mw"], abs=1e-3), vid
+
+
+def test_the_declared_aud_operating_point_is_the_subsystem_clock(reports):
+    for vid, (v, r) in reports.items():
+        aud = ((v.get("node_configs") or {}).get("abox") or {}).get("dvfs", {}).get("aud_freq_khz")
+        dom = r["subsystems"]["abox"]["domains"]["AUD"]
+        if aud:
+            assert dom["freq_mhz"] == pytest.approx(aud / 1000) and dom["pinned"], vid
+
+
+def test_the_unused_output_interface_is_gated(reports):
+    for vid, (_v, r) in reports.items():
+        sub = r["subsystems"]["abox"]
+        units = {u["id"]: u for u in sub["units"]}
+        used = "out_bt" if sub["route"]["id"] == "pb_bt" else "out_spk"
+        off = "uaif_spk" if used == "out_bt" else "uaif_bt"
+        assert units[off]["mw"] == 0.0 and units[off]["gated"], vid
+        assert not units["uaif_bt" if off == "uaif_spk" else "uaif_spk"].get("gated"), vid
+
+
+def test_the_offload_refill_matches_the_input_bitrate(reports):
+    src = reports["audio-mp3-screen-off-offload"][1]["subsystems"]["abox"]["wake"]["sources"]
+    refill = next(s for s in src if s["kind"] == "refill")
+    assert refill["mb"] * 1000 / (refill.get("every_ms") or 2000) == pytest.approx(0.04)   # 40 kB/s = 320 kbps

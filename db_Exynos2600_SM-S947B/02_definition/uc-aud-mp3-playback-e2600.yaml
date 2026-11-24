@@ -228,7 +228,7 @@ pipeline:
         when_node_enabled: sw_decoder
       - kind: refill
         every_ms: 2000
-        mb: 0.4
+        mb: 0.08
         when_node_enabled: dsp_offload
   edges:
   - from: storage

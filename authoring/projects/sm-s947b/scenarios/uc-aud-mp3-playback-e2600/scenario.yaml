@@ -85,7 +85,7 @@ pipeline:
       - {id: pb_bt, kind: playback, when_node_enabled: bt_codec, stages: [rdma, mix, eq, out_bt], latency_target_ms: 80}
       wake:
       - {kind: period_irq, stream: pb_main, when_node_enabled: sw_decoder}   # AP decode / mix feeds a 20 ms period: 50 wake/s
-      - {kind: refill, every_ms: 2000, mb: 0.4, when_node_enabled: dsp_offload}   # offload: a compressed refill every 2 s
+      - {kind: refill, every_ms: 2000, mb: 0.08, when_node_enabled: dsp_offload}   # offload: 2 s of 320 kbps (40 kB/s) per refill
   edges:
   - from: storage
     to: sw_decoder
