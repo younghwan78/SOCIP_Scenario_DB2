@@ -88,9 +88,12 @@
       selected_mode: Offload
       sim:
         offload: true
-        domain_load:
-          mcycles_per_s: 45.0
-          basis: "assumed ABOX work with the MP3 decode offloaded (45 Mcycle/s)"
+        subsystem:               # the offload route decodes on the HiFi5 (R-4 subsystem patch)
+          $items:
+            routes:
+              patch:
+                pb_speaker:
+                  stages: [rdma, decode, mix, eq, spkprot, out_spk]
       dvfs:
         aud_freq_khz: 200000
     sw_decoder:
@@ -133,6 +136,16 @@
         sample_rate_khz: 192.0
         bit_depth: 24
         offload: true
+        subsystem:               # 192 kHz / 24-bit streams; mix and EQ scale with the rate (x4, assumed)
+          $items:
+            streams:
+              patch:
+                pb_main: {fs_hz: 192000, bits: 24, period_frames: 3840}
+                pb_out: {fs_hz: 192000, period_frames: 960}
+            stages:
+              patch:
+                mix: {mcps: 24}
+                eq: {mcps: 100}
       bw_kb_s:
         read: 1125
       dvfs:
@@ -168,6 +181,8 @@
         note: One AAC-LC frame (1024 samples at 48 kHz) per decode call; judged against the next frame.
     abox:
       sim:
+        $unset:
+        - subsystem              # back to the 48 kHz scenario subsystem (the parent patched it for FLAC)
         sample_rate_khz: 48.0
         bit_depth: 16
         output: Bluetooth

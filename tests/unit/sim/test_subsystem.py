@@ -39,8 +39,22 @@ SUB = {
 OPTS = TimingBudgetOptions(throughput_model="pipelined")
 
 
-def _graph(variant=CPU_ON, sub=None, patch=None):
+def _plain(variant=CPU_ON):
+    """The MP3 graph with the ABOX subsystem of the E2600 data and its variant patches taken out (R-4b)."""
     graph = _exynos2600_generated_graph(UC, variant)
+    for node in graph.scenario.pipeline["nodes"]:
+        if node["id"] == "abox":
+            node.pop("subsystem", None)
+    cfgs = dict(graph.variant.node_configs or {})
+    abox = dict(cfgs.get("abox") or {})
+    abox["sim"] = {k: v for k, v in (abox.get("sim") or {}).items() if k != "subsystem"}
+    cfgs["abox"] = abox
+    graph.variant.node_configs = cfgs
+    return graph
+
+
+def _graph(variant=CPU_ON, sub=None, patch=None):
+    graph = _plain(variant)
     for node in graph.scenario.pipeline["nodes"]:
         if node["id"] == "abox":
             node["subsystem"] = deepcopy(sub or SUB)
@@ -94,10 +108,10 @@ def test_an_undeclared_node_dumps_no_subsystem():
 
 # ---------------------------------------------------------------------------- evaluator
 
-def test_without_a_subsystem_the_report_is_unchanged():
-    plain = analyze_timing_budget(_exynos2600_generated_graph(UC, CPU_ON), OPTS)
+def test_without_a_subsystem_the_report_has_none():
+    plain = analyze_timing_budget(_plain(), OPTS)
     assert "subsystems" not in plain
-    assert plain["power"]["domain_loads"]["abox"]["model"] == "util-vf-v1"
+    assert "abox" not in (plain["power"].get("domain_loads") or {})
 
 
 def test_the_subsystem_replaces_the_domain_load():
@@ -153,7 +167,7 @@ def test_a_variant_patches_the_subsystem_by_id():
     sub = _sub(_graph(patch={"$items": {"stages": {"patch": {"eq": {"mcps": 50}}}}}))
     assert {u["id"]: u for u in sub["units"]}["hifi5"]["load_mcps"] == pytest.approx(50.0)
     report = analyze_timing_budget(_graph(patch="none"), OPTS)
-    assert "subsystems" not in report and report["power"]["domain_loads"]["abox"]["model"] == "util-vf-v1"
+    assert "subsystems" not in report and "abox" not in (report["power"].get("domain_loads") or {})
 
 
 def test_routes_must_resolve_to_exactly_one():
@@ -172,7 +186,7 @@ def test_the_condition_hash_follows_the_subsystem():
     from tests.unit.sim.test_service_hash import _request
 
     shim = _request()
-    plain = _condition_hash(_exynos2600_generated_graph(UC, CPU_ON), OPTS, shim, {})
+    plain = _condition_hash(_plain(), OPTS, shim, {})
     one = _condition_hash(_graph(), OPTS, shim, {})
     heavier = deepcopy(SUB)
     heavier["stages"][2]["mcps"] = 7

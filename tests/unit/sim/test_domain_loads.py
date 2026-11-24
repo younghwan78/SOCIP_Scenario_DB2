@@ -99,9 +99,26 @@ def test_an_infeasible_domain_load_fails_the_verdict():
     assert r["verdict"]["status"] == "fail" and any("domain 부하" in x for x in r["verdict"]["reasons"])
 
 
+def _abox_domain_load(work):
+    """The ABOX as one domain load (its declaration before the R-4 subsystem), for the domain-load path."""
+    def mutate(g):
+        for node in g.scenario.pipeline["nodes"]:
+            if node["id"] == "abox":
+                node.pop("subsystem", None)
+                node["domain_load"] = {"model": "util-vf-v1", "coeff_uw_per_mhz_v2": 300,
+                                       "vf": [{"mhz": 200, "mv": 575}, {"mhz": 1500, "mv": 800}],
+                                       "leakage": {"mw_at_ref": 3.0, "ref_mv": 750.0}, "mcycles_per_s": work}
+        cfg = dict((g.variant.node_configs or {}).get("abox") or {})
+        cfg["sim"] = {k: v for k, v in (cfg.get("sim") or {}).items() if k != "subsystem"}
+        g.variant.node_configs = {**(g.variant.node_configs or {}), "abox": cfg}
+    return mutate
+
+
 def test_audio_offload_costs_abox_power_at_its_fixed_operating_point():
-    on = _report("uc-aud-mp3-playback-e2600", "audio-mp3-screen-on")["power"]["domain_loads"]["abox"]
-    off = _report("uc-aud-mp3-playback-e2600", "audio-mp3-screen-off-offload")["power"]["domain_loads"]["abox"]
+    on = _report("uc-aud-mp3-playback-e2600", "audio-mp3-screen-on",
+                 _abox_domain_load(20.0))["power"]["domain_loads"]["abox"]
+    off = _report("uc-aud-mp3-playback-e2600", "audio-mp3-screen-off-offload",
+                  _abox_domain_load(45.0))["power"]["domain_loads"]["abox"]
     assert (on["freq_by"], on["freq_mhz"], off["freq_mhz"]) == ("fixed", 400.0, 200.0)
     assert off["work_mcycles_s"] > on["work_mcycles_s"]  # the decode runs on ABOX
 

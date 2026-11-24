@@ -42,24 +42,43 @@ pipeline:
     ip_ref: ip-abox-s5e9965
     role: audio_offload
     instance_index: 0
-    domain_load:
-      model: util-vf-v1
-      coeff_uw_per_mhz_v2: 300
-      vf:
-      - {mhz: 200, mv: 575}
-      - {mhz: 332, mv: 600}
-      - {mhz: 400, mv: 600}
-      - {mhz: 533, mv: 625}
-      - {mhz: 663, mv: 650}
-      - {mhz: 800, mv: 675}
-      - {mhz: 935, mv: 700}
-      - {mhz: 1200, mv: 750}
-      - {mhz: 1500, mv: 800}
-      leakage: {mw_at_ref: 3.0, ref_mv: 750.0, exponent: 2.5}
-      mcycles_per_s: 20.0
-      idle_gated: 0.5
+    subsystem:
+      model: mcps-v1
       value_source: assumed
-      basis: "assumed ABOX work (20 Mcycle/s); AUD coeff / V-f / leakage assumed (not in the catalog); operating point = the node's dvfs.aud_freq_khz"
+      basis: "E2600 ABOX (CA32 x3 + HiFi5, AUD clock) with assumed MCPS and power; replaces the single 20 / 45 Mcycle/s domain load. Levels: the catalog aud_qos_levels_khz"
+      units:
+      - &ca32 {id: ca32_0, kind: cpu, clock_domain: AUD,
+               power: {coeff_uw_per_mhz_v2: 60, idle_gated: 0.5, leakage: {mw_at_ref: 0.6, ref_mv: 750.0, exponent: 2.5},
+                       vf: [{mhz: 200, mv: 575}, {mhz: 332, mv: 600}, {mhz: 400, mv: 600}, {mhz: 533, mv: 625},
+                  {mhz: 663, mv: 650}, {mhz: 800, mv: 675}, {mhz: 935, mv: 700}, {mhz: 1200, mv: 750},
+                  {mhz: 1500, mv: 800}]}}
+      - {<<: *ca32, id: ca32_1}
+      - {<<: *ca32, id: ca32_2}
+      - {id: hifi5, kind: dsp, clock_domain: AUD,
+         power: {coeff_uw_per_mhz_v2: 90, idle_gated: 0.5, leakage: {mw_at_ref: 1.2, ref_mv: 750.0, exponent: 2.5},
+                 vf: [{mhz: 200, mv: 575}, {mhz: 332, mv: 600}, {mhz: 400, mv: 600}, {mhz: 533, mv: 625},
+                  {mhz: 663, mv: 650}, {mhz: 800, mv: 675}, {mhz: 935, mv: 700}, {mhz: 1200, mv: 750},
+                  {mhz: 1500, mv: 800}]}}
+      - {id: dma, kind: hw, power: {mw: 0.5}}
+      - {id: uaif_spk, kind: interface, power: {mw: 0.3}}
+      - {id: uaif_bt, kind: interface, power: {mw: 0.3}}
+      streams:
+      - {id: pb_main, fs_hz: 48000, channels: 2, bits: 16, period_frames: 960, periods: 2, buffer: dram}   # 20 ms deep buffer
+      - {id: pb_out, fs_hz: 48000, channels: 2, bits: 32, period_frames: 240, periods: 2, buffer: sram}    # 5 ms ABOX
+      stages:
+      - {id: rdma, kind: dma, unit: dma, stream: pb_main}
+      - {id: mix, kind: mixer, unit: ca32_0, stream: pb_out, mcps: 6}
+      - {id: eq, kind: effect, unit: hifi5, stream: pb_out, mcps: 25}
+      - {id: spkprot, kind: solution, unit: ca32_1, stream: pb_out, mcps: 12, when_node_enabled: speaker, bind: speaker}
+      - {id: out_spk, kind: interface, unit: uaif_spk, stream: pb_out, when_node_enabled: speaker, bind: speaker}
+      - {id: out_bt, kind: interface, unit: uaif_bt, stream: pb_out, when_node_enabled: bt_codec, bind: bt_codec}
+      edges: [[rdma, mix], [mix, eq], [eq, spkprot], [spkprot, out_spk], [eq, out_bt]]
+      routes:
+      - {id: pb_speaker, kind: playback, when_node_enabled: speaker, stages: [rdma, mix, eq, spkprot, out_spk],
+         latency_target_ms: 60}
+      - {id: pb_bt, kind: playback, when_node_enabled: bt_codec, stages: [rdma, mix, eq, out_bt], latency_target_ms: 80}
+      wake:
+      - {kind: period_irq, stream: pb_main, when_node_enabled: sw_decoder}   # AP decode / mix feeds a 20 ms period: 50 wake/s
   edges:
   - from: network
     to: sw_decoder
