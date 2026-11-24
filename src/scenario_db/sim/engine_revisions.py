@@ -58,6 +58,10 @@ OPT_IN: list[dict[str, str]] = [
     {"since": "15", "change": "IP subsystems (mcps-v1): unit load, clock-domain operating point, power, deadline "
                               "slack, route latency and wake rates inside a node (ABOX), in place of its domain load",
      "opt_in": "the pipeline node's subsystem / node_configs.<node>.sim.subsystem (report.subsystems)"},
+    {"since": "15", "change": "mcps-v1 rule 2: the node's dvfs.aud_freq_khz pins the subsystem AUD clock; a hw / "
+                              "interface unit without an active stage is gated (0 mW). The rule revision is in the "
+                              "condition hash, so subsystem results of rule 1 are stale",
+     "opt_in": "the pipeline node's subsystem (E2600 ABOX since R-4b)"},
 ]
 
 

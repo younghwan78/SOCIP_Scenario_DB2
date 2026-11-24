@@ -353,14 +353,14 @@ variants:
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
     abox:
-      selected_mode: Offload
+      selected_mode: Normal
       sim:
         sample_rate_khz: 48.0
         bit_depth: 16
         channels: 2
         playback_streams: 1
         capture_streams: 0
-        offload: true
+        offload: false
         output: speaker
       bw_kb_s:
         read: 188
@@ -431,14 +431,14 @@ variants:
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
     abox:
-      selected_mode: Offload
+      selected_mode: Normal
       sim:
         sample_rate_khz: 48.0
         bit_depth: 16
         channels: 2
         playback_streams: 1
         capture_streams: 0
-        offload: true
+        offload: false
         output: Bluetooth
       bw_kb_s:
         read: 188

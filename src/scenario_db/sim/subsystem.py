@@ -31,6 +31,9 @@ from scenario_db.authoring.patch import deep_merge
 from scenario_db.models.definition.subsystem import COMPUTE_KINDS, SubsystemSpec
 from scenario_db.sim.domain_loads import DomainPowerModel, _catalog_defaults
 
+# evaluator rule revision: in the condition hash, so results of an older rule on the same declaration are stale
+# (2: dvfs.aud_freq_khz pins the AUD domain; a hw / interface unit without an active stage is gated)
+RULE_REV = 2
 GATED_KINDS = frozenset({"hw", "interface"})   # off without an active stage; memory stays on
 
 MODEL_ID = "mcps-v1"
@@ -97,9 +100,15 @@ def pinned_clocks(node_config: dict[str, Any]) -> dict[str, float]:
     """Clock domains the node config fixes: ``dvfs.aud_freq_khz`` pins the ``AUD`` domain (as for a domain load)."""
     dvfs = node_config.get("dvfs") if isinstance(node_config, dict) else None
     aud = dvfs.get("aud_freq_khz") if isinstance(dvfs, dict) else None
-    if isinstance(aud, bool) or not isinstance(aud, (int, float)) or not math.isfinite(aud) or aud <= 0:
+    if aud is None:
         return {}
-    return {"AUD": float(aud) / 1000.0}
+    try:        # read as Driver Models reads it (a numeric string is a number); anything else is refused
+        khz = float(aud) if not isinstance(aud, bool) else float("nan")
+    except (TypeError, ValueError):
+        khz = float("nan")
+    if not math.isfinite(khz) or khz <= 0:
+        raise ValueError(f"dvfs.aud_freq_khz must be a positive number, got {aud!r}")
+    return {"AUD": khz / 1000.0}
 
 
 def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any], vdict: dict[str, Any],
@@ -167,7 +176,8 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
         for m in members:
             freq[m] = f
             if load[m] / f > 1.0 + 1e-9:
-                infeasible.append(f"{m} {load[m]:.1f} Mcycle/s > {f:.0f} MHz")
+                infeasible.append(f"{m} {load[m]:.1f} Mcycle/s > {f:.0f} MHz"
+                                  + (" (pinned by dvfs.aud_freq_khz)" if fixed is not None else " (top level)"))
         domain_rows[dom] = {"units": members, "freq_mhz": round(f, 1), "levels_mhz": [round(x, 1) for x in levels],
                             "max_util": round(max((load[m] / f for m in compute), default=0.0), 4)}
         if fixed is not None:
@@ -291,7 +301,10 @@ def evaluate_subsystem(node_id: str, decl: dict[str, Any], caps: dict[str, Any],
         "value_source": spec.value_source,
     }
     if infeasible:
-        summary["reason"] = f"{node_id}: subsystem 부하가 최고 운영점을 넘음 — " + "; ".join(infeasible)
+        pinned_only = all("(pinned" in x for x in infeasible)
+        summary["reason"] = (f"{node_id}: subsystem 부하가 "
+                             + ("고정 AUD 클럭(dvfs.aud_freq_khz)을 넘음 — " if pinned_only else "최고 운영점을 넘음 — ")
+                             + "; ".join(infeasible))
     if route is not None and route.get("latency_ok") is False:
         summary["note"] = (f"route {route['id']} latency {route['latency_ms']:.1f} ms > 목표 "
                            f"{route['latency_target_ms']:.1f} ms")

@@ -66,9 +66,8 @@
     screen_on: false
   node_configs:
     abox:
-      selected_mode: Offload
-      sim:
-        offload: true
+      # no dsp_offload node: the AP (sw_decoder) decodes and feeds PCM, as the ABOX subsystem models it
+      # (period IRQ wakes), so the driver path stays Normal / offload false
       dvfs:
         aud_freq_khz: 200000
 - id: audio-stream-bt-screen-off

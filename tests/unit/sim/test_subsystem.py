@@ -345,3 +345,25 @@ def test_a_hw_or_interface_unit_without_an_active_stage_is_gated():
     units = {u["id"]: u for u in _sub(_graph(sub=sub))["units"]}
     assert units["uaif1"] == {**units["uaif1"], "mw": 0.0, "gated": True}
     assert units["uaif0"]["mw"] == 0.3 and units["sram"]["mw"] == 0.2 and "gated" not in units["sram"]
+
+
+def test_a_numeric_string_pins_like_driver_models_and_junk_is_refused():
+    assert _sub(_pin(_graph(), "400000"))["domains"]["AUD"]["freq_mhz"] == 400.0
+    with pytest.raises(ValueError, match="aud_freq_khz must be a positive number"):
+        _sub(_pin(_graph(), "fast"))
+
+
+def test_a_load_over_the_pinned_clock_says_so():
+    sub = deepcopy(SUB)
+    sub["stages"][2]["mcps"] = 250        # fits 332 MHz, not a 200 MHz pin
+    assert _sub(_graph(sub=sub))["feasible"]
+    r = analyze_timing_budget(_pin(_graph(sub=sub), 200000), OPTS)
+    reason = r["power"]["domain_loads"]["abox"]["reason"]
+    assert "고정 AUD 클럭" in reason and "pinned by dvfs.aud_freq_khz" in reason
+
+
+def test_the_rule_revision_is_in_the_condition_hash():
+    from scenario_db.api.services.timing_budget import _domain_load_inputs
+    from scenario_db.sim.subsystem import RULE_REV
+
+    assert _domain_load_inputs(_graph())["abox"]["rule_rev"] == RULE_REV

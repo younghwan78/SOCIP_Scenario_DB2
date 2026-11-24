@@ -76,3 +76,11 @@ def test_the_offload_refill_matches_the_input_bitrate(reports):
     src = reports["audio-mp3-screen-off-offload"][1]["subsystems"]["abox"]["wake"]["sources"]
     refill = next(s for s in src if s["kind"] == "refill")
     assert refill["mb"] * 1000 / (refill.get("every_ms") or 2000) == pytest.approx(0.04)   # 40 kB/s = 320 kbps
+
+
+def test_screen_off_streaming_keeps_the_ap_decode_driver_path(reports):
+    for vid in ("audio-stream-aac-screen-off", "audio-stream-bt-screen-off"):
+        v, r = reports[vid]
+        abox = (v.get("node_configs") or {}).get("abox") or {}
+        assert (abox.get("sim") or {}).get("offload") is not True and abox.get("selected_mode") != "Offload", vid
+        assert r["subsystems"]["abox"]["wake"]["per_s"] == pytest.approx(50.0), vid

@@ -48,7 +48,7 @@ def _domain_load_inputs(graph) -> dict:
     """Every node's merged domain-load declaration (with the catalog coefficients it uses); {} when none.
     A node with a subsystem (R-4) contributes its merged subsystem declaration and the catalog levels it uses."""
     from scenario_db.sim.domain_loads import _catalog_defaults, domain_load_config
-    from scenario_db.sim.subsystem import _variant_dict, pinned_clocks, subsystem_config
+    from scenario_db.sim.subsystem import RULE_REV, _variant_dict, pinned_clocks, subsystem_config
 
     out = {}
     configs = getattr(graph.variant, "node_configs", None) or {}
@@ -65,8 +65,12 @@ def _domain_load_inputs(graph) -> dict:
             out[node_id] = {"subsystem_invalid": str(exc)}
             continue
         if decl is not None:     # the subsystem replaces the domain load: its declaration is the input
+            try:
+                pinned = pinned_clocks(configs.get(node_id) or {})
+            except ValueError as exc:
+                pinned = {"invalid": str(exc)}
             out[node_id] = {"subsystem": decl, "selection": _variant_dict(graph),     # `when` reads the variant
-                            "pinned_clocks": pinned_clocks(configs.get(node_id) or {}),
+                            "pinned_clocks": pinned, "rule_rev": RULE_REV,
                             "catalog_freqs_mhz": _catalog_defaults(getattr(ip, "capabilities", None) or {}).get("freqs_mhz")}
             continue
         try:
