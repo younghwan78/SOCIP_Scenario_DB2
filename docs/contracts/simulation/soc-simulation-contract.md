@@ -181,7 +181,8 @@ With coefficients in the run config (`residency`: `e_wake_mj`, `t_exit_ms`, `per
 - `cpu_wake_mw` = wakeups/s x `e_wake_mj` (AP entry / exit only; SW runtime stays the CPU model's);
 - each source is busy `period_burst_ms` (period IRQ, event) or `mb / refill_mb_s` (refill) plus `t_exit_ms` per
   wake, `p = min(1, rate x busy / 1000)`; independent sources overlap: `mif_active_ratio = 1 - prod(1 - p)`; the
-  screen on (`design_conditions.screen_on`, default true) keeps it at 1;
+  screen on (`design_conditions.screen_on`, default true when absent; `"false"` / `"0"` / `"no"` / `"off"` are
+  false, an unreadable value is refused) keeps it at 1;
 - `mif_state_mw` = ratio x `mif_active_mw` + (1 - ratio) x `mif_self_refresh_mw`;
 - `power.residency_mw` = the sum, its own bucket: `power.total_mw` = CPU + HW + BW + residency and
   `power.share_pct.residency` (shares over that total), applied after the profile CPU model. Owners: ABOX units are
@@ -190,11 +191,14 @@ With coefficients in the run config (`residency`: `e_wake_mj`, `t_exit_ms`, `per
 
 Carried by: architecture exploration (a constant term of every case of the slice), the concurrent composition
 (AP wakes add up; the one DRAM's MIF state is priced once, `r = 1 - prod(1 - r_i)` over the members with
-residency, stated in `limits`) and stored Timing Budget evidence (`power_breakdown.residency`: mW, ratio, basis).
+residency, stated in `limits`), stored Timing Budget evidence (`power_breakdown.residency`: mW, ratio, basis),
+prediction payloads (`power.residency_mw`) and the power attribution (its own `Wake residency` factor), and the
+Timing Budget power tiles / bar (a fourth part when present).
 
 Without coefficients `status: no_coefficients` and nothing is added. The coefficients are part of the run config
 (request and condition hashes) only when set; an explicit `config.residency: null` turns the model off over a
-profile that declares it.
+profile that declares it and is kept when a request is serialized and rebuilt (concurrent members, queued or stored
+exploration).
 
 ## External Device Requirements
 

@@ -149,3 +149,56 @@ def test_an_explicit_null_turns_the_profile_residency_off():
     off = tc._request(residency=None)
     tc._apply_config_profile(db, off)
     assert on.config.residency is not None and off.config.residency is None
+
+
+def test_an_explicit_null_survives_a_dump_and_rebuild():
+    off = SimulationRunConfig(residency=None)
+    dumped = off.model_dump(mode="json")
+    assert "residency" in dumped and dumped["residency"] is None
+    assert "residency" in SimulationRunConfig(**dumped).model_fields_set
+    assert "residency" not in SimulationRunConfig().model_dump(mode="json")
+    assert "residency" not in SimulationRunConfig().model_dump(mode="json", exclude_unset=True)
+
+
+def test_a_rebuilt_concurrent_member_keeps_the_model_off():
+    from scenario_db.api.schemas.timing_budget import TimingBudgetConcurrentRequest, TimingBudgetRequest
+
+    req = TimingBudgetConcurrentRequest(members=[{"scenario_id": "s1", "variant_id": "a"},
+                                                 {"scenario_id": "s2", "variant_id": "b"}],
+                                        config={"residency": None})
+    base = req.model_dump(exclude={"members", "options"})
+    one = TimingBudgetRequest(**base, scenario_id="s1", variant_id="a")
+    assert one.config.residency is None and "residency" in one.config.model_fields_set
+
+
+def test_the_attribution_names_the_residency_term():
+    from scenario_db.sim.power_attribution import attribute
+
+    def payload(res):
+        return {"power": {"total_mw": 10.0 + res, "cpu_mw": 4.0, "hw_mw": 3.0, "bw_mw": 3.0,
+                          **({"residency_mw": res} if res else {})}, "ips": [], "cpu_by_task": {"t": 4.0}}
+
+    out = attribute(payload(0.0), payload(50.0))
+    assert out["components"]["residency_mw"] == pytest.approx(50.0)
+    assert abs(out["residual_mw"]) < 1e-6 and out["by_category"]["Wake residency"] == pytest.approx(50.0)
+
+
+def test_exploration_payload_carries_the_residency_term():
+    from scenario_db.sim.arch_exploration import _case, _slice
+
+    s = _slice(_run("audio-mp3-screen-on", CFG), "p50", 1.0)
+    zero = {"delta_mw": 0.0, "delta_mbs": 0.0, "delta_ip_mw": 0.0, "delta_ip_mbs": 0.0, "delta_cpu_mw": 0.0,
+            "delta_cpu_mbs": 0.0, "buffers": [], "modes": {}, "lossy": False, "assumed": False}
+    assert _case(s, zero, {"delta_mw": 0.0, "levels": {}, "raises": 0})["residency_mw"] == pytest.approx(50.0)
+
+
+@pytest.mark.parametrize("raw,on", [("false", False), ("0", False), ("off", False), ("true", True), (None, True)])
+def test_a_string_screen_flag_is_read_as_the_viewer_reads_it(raw, on):
+    graph = _exynos2600_generated_graph(MP3, "audio-mp3-screen-off-offload")
+    dc = dict(graph.variant.design_conditions or {})
+    dc.pop("screen_on", None)
+    if raw is not None:
+        dc["screen_on"] = raw
+    graph.variant.design_conditions = dc
+    z = analyze_timing_budget(graph, OPTS, config=CFG)["residency"]
+    assert z["screen_on"] is on and (z["mif_active_ratio"] == 1.0) is on

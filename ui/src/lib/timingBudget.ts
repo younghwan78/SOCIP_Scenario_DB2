@@ -66,7 +66,9 @@ export interface SubsystemLoad {
 export type DomainLoad = UtilVfLoad | SubsystemLoad
 export interface PowerSplit {
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_hw_mw: number; bw_sw_mw: number
-  share_pct: { cpu: number; hw: number; bw: number }
+  share_pct: { cpu: number; hw: number; bw: number; residency?: number }
+  /** R-4 / M-5 wake residency (AP wake entry / exit + MIF state), inside total_mw; absent = not computed */
+  residency_mw?: number
   hw_by_ip: Record<string, number>; cpu_by_task: Record<string, number>; cpu_busy_ms: number
   cpu_model: { cluster: number; freq_mhz: number; volt_v: number; source: string }; zero_power_ips: string[]
   /** D-03: GPU / NPU / audio DSP power from a declared work rate (util x f x V^2 + leakage); absent = none declared */
@@ -327,6 +329,7 @@ export const STAGE_COLOR: Record<StageId, string> = { rt: '#2F6F68', nrt: '#C241
 export const SW_COLOR = '#B7791F'
 export const LAT_COLOR = '#D6CFC2'
 export const OVH_COLOR = '#8B5E34'
+export const RES_COLOR = '#6B7280'
 
 export interface Segment { key: string; label: string; ms: number; color: string; text: string; tip: string }
 

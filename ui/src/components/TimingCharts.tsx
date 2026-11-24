@@ -3,7 +3,7 @@ import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
-  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, cpuTileNote, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, voltText, whatIfDomains,
+  LAT_COLOR, OVH_COLOR, RES_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, cpuTileNote, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, voltText, whatIfDomains,
   type FleetRow, type IpRow, type PowerSplit, type StageId, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
@@ -220,6 +220,7 @@ export function PowerBw({ report }: { report: TimingReport }) {
     { key: 'CPU', v: p.cpu_mw, c: SW_COLOR },
     { key: 'HW IP core', v: p.hw_mw, c: STAGE_COLOR.rt },
     { key: 'BW (MIF)', v: p.bw_mw, c: STAGE_COLOR.nrt },
+    ...(p.residency_mw != null ? [{ key: 'Wake residency', v: p.residency_mw, c: RES_COLOR }] : []),
   ]
   const ipRows = Object.entries(p.hw_by_ip).filter(([, v]) => v > 0)
   const cpuRows = Object.entries(p.cpu_by_task).filter(([, v]) => v > 0)
@@ -231,10 +232,11 @@ export function PowerBw({ report }: { report: TimingReport }) {
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="faint" style={{ fontSize: 12 }}>Power (mW · Total 대비 비중)</div>
       <div className="tb-tiles">
-        <Tile label="Total power" value={`${fmt(p.total_mw)} mW`} note="CPU + HW IP core + BW(MIF)" strong />
+        <Tile label="Total power" value={`${fmt(p.total_mw)} mW`} note={p.residency_mw != null ? 'CPU + HW IP core + BW(MIF) + wake residency' : 'CPU + HW IP core + BW(MIF)'} strong />
         <Tile label="CPU power" value={`${fmt(p.cpu_mw)} mW`} share={pct(p.cpu_mw, p.total_mw)} note={cpuTileNote(p)} color={SW_COLOR} />
         <Tile label="HW IP core power" value={`${fmt(p.hw_mw)} mW`} share={pct(p.hw_mw, p.total_mw)} note={p.zero_power_ips.length ? `unit_power=0: ${p.zero_power_ips.join(', ')}` : '전 IP 계수 있음'} color={STAGE_COLOR.rt} />
         <Tile label="BW (MIF) power" value={`${fmt(p.bw_mw)} mW`} share={pct(p.bw_mw, p.total_mw)} note={`HW ${fmt(p.bw_hw_mw, 0)} · CPU ${fmt(p.bw_sw_mw, 0)} mW`} color={STAGE_COLOR.nrt} />
+        {p.residency_mw != null && <Tile label="Wake residency" value={`${fmt(p.residency_mw)} mW`} share={pct(p.residency_mw, p.total_mw)} note="AP wake 진입/복귀 + MIF active/self-refresh 상태" color={RES_COLOR} />}
       </div>
       <div className="faint" style={{ fontSize: 12 }}>BW (MB/s · Total 대비 비중)</div>
       <div className="tb-tiles">

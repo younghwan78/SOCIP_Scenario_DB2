@@ -236,7 +236,7 @@ def analyze_timing_budget(
         # R-4 / M-5: wake / MIF state power of the subsystems' wake sources (coefficients from the run config)
         from scenario_db.sim.residency import evaluate_residency
 
-        screen_on = (graph.variant.design_conditions or {}).get("screen_on", True)
+        screen_on = _flag((graph.variant.design_conditions or {}).get("screen_on"), default=True)
         residency = evaluate_residency(subsystems, (config or SimulationRunConfig()).residency, screen_on)
         if residency is not None:
             report["residency"] = residency
@@ -1671,6 +1671,20 @@ def fleet_row(report: dict[str, Any]) -> dict[str, Any]:
         "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
         "verdict": report["verdict"],
     }
+
+
+def _flag(value: Any, *, default: bool) -> bool:
+    """A design-condition boolean as the viewer reads it: 'false' / '0' / 'no' / 'off' are false; absent = default."""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("false", "0", "no", "off"):
+            return False
+        if v in ("true", "1", "yes", "on"):
+            return True
+        raise ValueError(f"design_conditions.screen_on must be a boolean, got {value!r}")
+    return bool(value)
 
 
 def add_residency_power(power: dict[str, Any], mw: float) -> None:
