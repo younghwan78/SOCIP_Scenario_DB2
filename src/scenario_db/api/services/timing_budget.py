@@ -45,8 +45,10 @@ def _basis_fields(db: Session, shim: SimulateRequest) -> dict:
 
 
 def _domain_load_inputs(graph) -> dict:
-    """Every node's merged domain-load declaration (with the catalog coefficients it uses); {} when none."""
-    from scenario_db.sim.domain_loads import domain_load_config
+    """Every node's merged domain-load declaration (with the catalog coefficients it uses); {} when none.
+    A node with a subsystem (R-4) contributes its merged subsystem declaration and the catalog levels it uses."""
+    from scenario_db.sim.domain_loads import _catalog_defaults, domain_load_config
+    from scenario_db.sim.subsystem import _variant_dict, subsystem_config
 
     out = {}
     configs = getattr(graph.variant, "node_configs", None) or {}
@@ -54,6 +56,11 @@ def _domain_load_inputs(graph) -> dict:
     for node in (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("nodes") or []:
         node_id = str(node.get("id") or "")
         ip = catalog.get(str(node.get("ip_ref") or ""))
+        decl = subsystem_config(node, configs.get(node_id) or {})
+        if decl is not None:     # the subsystem replaces the domain load: its declaration is the input
+            out[node_id] = {"subsystem": decl, "selection": _variant_dict(graph),     # `when` reads the variant
+                            "catalog_freqs_mhz": _catalog_defaults(getattr(ip, "capabilities", None) or {}).get("freqs_mhz")}
+            continue
         try:
             cfg = domain_load_config(getattr(ip, "capabilities", None) or {}, node, configs.get(node_id) or {})
         except ValueError as exc:  # an invalid declaration is refused by the calculation itself

@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scenario_db.models.definition.job import JobSpec, expression_names
+from scenario_db.models.definition.subsystem import SubsystemSpec
 from scenario_db.models.common import (
     BaseScenarioModel,
     DocumentId,
@@ -35,6 +36,9 @@ class PipelineNode(BaseScenarioModel):
     # D-03 domain load (GPU / NPU / audio DSP power: util x f x V^2 + leakage) with scenario-local
     # coefficients ({model, coeff_uw_per_mhz_v2, vf, leakage, ...}), see sim/domain_loads.py
     domain_load: dict[str, Any] | None = None
+    # R-4 IP-internal subsystem (units / streams / stages / routes / wake; evaluator mcps-v1) — replaces the
+    # node's domain_load when declared (None = none; see models/definition/subsystem.py)
+    subsystem: SubsystemSpec | None = None
 
 
 class EdgeType(StrEnum):
@@ -135,6 +139,10 @@ class Pipeline(BaseScenarioModel):
     @model_validator(mode="after")
     def _validate_edge_references(self) -> Pipeline:
         node_ids = {node.id for node in self.nodes}
+        for node in self.nodes:
+            unknown = sorted((node.subsystem.bind_nodes() if node.subsystem else set()) - node_ids)
+            if unknown:
+                raise ValueError(f"node {node.id}: subsystem stages bind to unknown nodes {unknown}")
         errors = job_reference_errors(self.jobs or [], node_ids, set(self.buffers))
         if errors:
             raise ValueError(errors[0])

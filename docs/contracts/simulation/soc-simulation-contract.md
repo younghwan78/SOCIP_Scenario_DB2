@@ -134,6 +134,38 @@ Declarations merge in this order (later wins):
   E2600 game, display, video, audio, call and camera-AI scenarios declare assumed values; the recording
   scenario (inherited by E2700) and the shared IP catalog are not changed.
 
+### IP subsystems (`pipeline.nodes[].subsystem`, R-4, evaluator `mcps-v1`)
+
+A node whose inside is several loads (ABOX: CA32 cores, a HiFi DSP, DMA, audio interfaces on one AUD clock)
+declares `subsystem` (`models/definition/subsystem.py`); a variant patches it at
+`node_configs.<node>.sim.subsystem` (deep merge, `$items` edits lists by `id`; `none` turns it off). Absent =
+the node keeps its `domain_load`; reports and hashes are unchanged.
+
+| Part | Fields |
+| --- | --- |
+| `units` | `id`, `kind` (`cpu` / `dsp` / `hw` / `memory` / `interface`), `clock_domain`, `freqs_mhz` (default: the node IP catalog DVFS levels, e.g. `aud_qos_levels_khz`), `power` (cpu / dsp: util-vf-v1 `coeff_uw_per_mhz_v2` / `vf` / `leakage` / `idle_gated`; others: `{mw}`), `target_util` (0.85) |
+| `streams` | `fs_hz`, `channels`, `bits`, `period_frames` (period = frames / fs), `periods` (buffer depth, 2), `buffer` (`sram` / `dram`) |
+| `stages` | `kind`, `on` (unit), `stream`, `mcps` or `mcycles_per_period` (cpu / dsp units only), `bind` (a pipeline node the load is shown on), `when` / `when_node_enabled`, provenance |
+| `edges` / `routes` | `[from, to]` stage pairs; a route (`playback` / `capture` / `duplex`, `when`, `latency_target_ms`) is a linear path over edges |
+| `wake` | `period_irq` (a `stream`), `refill` (`every_ms`, `mb`), `event` (`per_s`), with `when` |
+
+Evaluation (per variant, active = matching `when`):
+
+- unit load = sum of its active stages' MCPS (`mcycles_per_period` x 1000 / period_ms);
+- a clock domain runs at the lowest level keeping every unit at or below its `target_util` (else the top level;
+  a unit above 1 is infeasible and fails the verdict like a domain load);
+- power = cpu / dsp units by util-vf-v1 at the domain clock + hw / interface constants; a unit without power is
+  `unattributed_units` (not 0). The total is the node's entry in `power.domain_loads` (model `mcps-v1`), in
+  place of its domain load; `bind` nodes only show where a load belongs;
+- deadline slack per stream = min over its units of period x (1 - util);
+- route latency (exactly one active route when routes are declared; its stages must be active) = per stream on the
+  route period x periods + each stage's work per period at its clock;
+- wake rates (wakeups/s) are reported for the residency evaluator, not costed.
+
+Output `report.subsystems[node]`: domains, units (load, clock, util, mW), stages, deadline slack, route, wake,
+unattributed units, binds. The Timing Budget condition hash includes the merged declaration, the variant
+selection fields and the catalog levels when a subsystem is declared.
+
 ## External Device Requirements
 
 Sensors and panels are not compute workloads. They should not require `ppc` or

@@ -228,6 +228,11 @@ def analyze_timing_budget(
     rule = _run(graph, options, base_config, dvfs_tables, plan, rule_only=True)
     budget = _run(graph, options, base_config, dvfs_tables, plan, rule_only=False)
     report = _report(graph, options, plan, rule, budget, dvfs_tables)
+    # R-4: subsystem detail (mcps-v1) beside the power summary; absent = no subsystem declared
+    subsystems = {n: d.pop("subsystem") for n, d in ((report.get("power") or {}).get("domain_loads") or {}).items()
+                  if "subsystem" in d}
+    if subsystems:
+        report["subsystems"] = subsystems
     if opp is not None:  # S-05: CPU SW at the declared OPP (absent = not declared)
         report["cpu_opp"] = opp
     report["dvfs"]["overrides"] = dict(base_config.dvfs_overrides)

@@ -55,6 +55,9 @@ OPT_IN: list[dict[str, str]] = [
     {"since": "15", "change": "event jobs (job-v1): a shot / launch / switch on top of the steady frames - latency, "
                               "event energy, peak power / BW / footprint, RT wait and dropped preview frames",
      "opt_in": "pipeline.jobs (report.jobs)"},
+    {"since": "15", "change": "IP subsystems (mcps-v1): unit load, clock-domain operating point, power, deadline "
+                              "slack, route latency and wake rates inside a node (ABOX), in place of its domain load",
+     "opt_in": "the pipeline node's subsystem / node_configs.<node>.sim.subsystem (report.subsystems)"},
 ]
 
 
