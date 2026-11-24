@@ -1,0 +1,33 @@
+# Capture event job parameters (R-3, E2600 assumed values; hand-authored). No architecture knobs yet.
+# A variant can pin a value with design_conditions.<param>; param_rules set conditional defaults
+# (first match wins per param). The in-house port replaces these with measured values (R-7 slots).
+params:
+  burst_frames: 1          # 12M ZSL frames reprocessed per shot (SF)
+  yuv_pool: 3              # capture YUV buffer pool depth (bounds the footprint)
+  encode_ms: 30            # 12M JPEG / HEIF encode on the big cluster (assumed)
+  cpu_encode_mw: 600       # big-core power while encoding (assumed)
+  file_mb: 4               # 12M stored file: the JPEG (a RAW shot sets the DNG size)
+  mtnr_wdma_mb_s: 10000    # MTNR write-back of the merged frame (assumed)
+  preview_frame_ms: 33.3   # one preview frame at 30 fps (non-ZSL waits for new frames)
+  ufs_mb_s: 1200           # sequential write rate (assumed)
+  ufs_mw: 250              # storage write power (assumed)
+  full_frames: 1           # 200M frames read by the seamless mode change
+  full_pool: 1             # 200M buffer pool depth
+  mode_switch_ms: 33.3     # seamless mode change in / out, one preview frame each (assumed)
+  isp_line_px: 8192        # ISP line buffer width -> 200M runs in stripes (assumed)
+  stripe_overlap_px: 64
+  ai_mcycles_per_mp: 2     # AI remosaic NPU work (assumed)
+  encode_50m_ms: 120       # 50M encode (assumed)
+  jpeg_50m_mb: 15          # 50M file size
+  encode_200m_ms: 400      # 200M encode (assumed)
+  jpeg_200m_mb: 40         # 200M file size
+param_rules:
+- when: {subscenario: NIGHT_CAPTURE}
+  set: {burst_frames: 8}
+- when: {subscenario: [STILL_MF_CAPTURE, STILL_FLASH_MF_CAPTURE, STILL_HIGH_RES_MF_CAPTURE,
+                       STILL_MOTION_FREE_MF_CAPTURE, SRZOOM_CAPTURE]}
+  set: {burst_frames: 4}
+- when: {subscenario: [STILL_REMOSAIC_MF_CAPTURE, REMOSAIC_NIGHT_CAPTURE]}
+  set: {full_frames: 3, full_pool: 3}
+- when: {output_format: RAW_BAYER_16}
+  set: {file_mb: 24}       # 12M x 16-bit DNG

@@ -186,15 +186,531 @@ pipeline:
       format: BAYER
       bitdepth: 10
       compression: COMP_BAYER_LOSSLESS
+      size_ref: sensor_out
+      count: 8
+      lifetime: session
+      dma:
+        node_id: byrp
+        write_ports:
+        - BYRP_WDMA_BYR
       note: ZSL ring buffer (capture 직전 N프레임 보관). Bayer frames from the BYRP Bayer dump; no edge writes it yet.
     JPEG_BUF:
       format: JPEG
       bitdepth: 8
       compression: COMP_OFF
       note: JPEG encoded output
+  jobs:
+  - id: still_shot
+    label: 12M shot (ZSL / non-ZSL, SF / MF, JPEG / RAW)
+    when:
+      capture_readout: null
+    trigger:
+      kind: event
+      at_ms: 200
+    phases:
+    - acquire
+    - process
+    - encode
+    - store
+    buffers:
+      cap_yuv:
+        format: YUV420
+        bitdepth: 10
+        count: yuv_pool
+      mrg_yuv:
+        format: YUV420
+        bitdepth: 10
+      out_yuv:
+        format: YUV420
+        bitdepth: 10
+      raw16:
+        format: RAW
+        bitdepth: 16
+        mb: file_mb
+      jpeg:
+        mb: file_mb
+    stages:
+    - id: grab
+      phase: acquire
+      kind: fixed
+      nodes:
+      - sensor_rear
+      frames: burst_frames
+      chunk:
+        by: frame
+      work:
+        duration_ms: preview_frame_ms
+      when:
+        capture_type: non_ZSL
+      basis: non-ZSL waits for the frames exposed after the shutter (one preview frame period each)
+    - id: reproc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      - rgbp
+      - yuvsc
+      frames: burst_frames
+      reads:
+      - ZSL_RING_BUF
+      writes:
+      - cap_yuv
+      chunk:
+        by: frame
+      after:
+      - stage: grab
+        per: frame
+      when:
+        output_format: null
+    - id: raw_proc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      reads:
+      - ZSL_RING_BUF
+      writes:
+      - raw16
+      when:
+        output_format: RAW_BAYER_16
+    - id: merge
+      phase: process
+      clock: max
+      nodes:
+      - mtnr
+      frames: burst_frames
+      after:
+      - stage: reproc
+        per: frame
+      when:
+        subscenario: &id001
+        - STILL_MF_CAPTURE
+        - STILL_FLASH_MF_CAPTURE
+        - STILL_HIGH_RES_MF_CAPTURE
+        - NIGHT_CAPTURE
+        - STILL_MOTION_FREE_MF_CAPTURE
+        - SRZOOM_CAPTURE
+    - id: merge_out
+      phase: process
+      kind: transfer
+      nodes:
+      - mtnr
+      writes:
+      - mrg_yuv
+      after:
+      - merge
+      work:
+        mb: 22.5
+        mb_per_s: mtnr_wdma_mb_s
+      when:
+        subscenario: *id001
+      basis: write-back of the merged 12M YUV420 10-bit frame (22.5 MB) at the MTNR WDMA rate
+    - id: post
+      phase: process
+      clock: max
+      nodes:
+      - msnr
+      - yuvp
+      - mcsc
+      writes:
+      - out_yuv
+      after:
+      - merge_out
+      - reproc
+      when:
+        output_format: null
+    - id: enc
+      phase: encode
+      kind: sw
+      nodes:
+      - post_proc
+      writes:
+      - jpeg
+      after:
+      - post
+      work:
+        runtime_ms: encode_ms
+        cluster: big
+        power_mw: cpu_encode_mw
+      when:
+        output_format: null
+    - id: store
+      phase: store
+      kind: transfer
+      nodes:
+      - storage
+      after:
+      - enc
+      - raw_proc
+      work:
+        mb: file_mb
+        mb_per_s: ufs_mb_s
+        power_mw: ufs_mw
+    milestones:
+      thumbnail: post
+      saved: store
+    kpis:
+    - event_latency
+    - event_energy
+    - peak_power
+    - peak_bw
+    - peak_footprint
+  - id: still_shot_50m
+    label: 50M shot by seamless mode change (binning_2x2 readout)
+    when:
+      capture_readout: binning_2x2
+    trigger:
+      kind: event
+      at_ms: 200
+    phases:
+    - acquire
+    - process
+    - encode
+    - store
+    buffers:
+      cap_bayer:
+        format: BAYER
+        bitdepth: 10
+        count: yuv_pool
+      cap_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_50m
+        count: yuv_pool
+      mrg_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_50m
+      out_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_50m
+      jpeg:
+        mb: jpeg_50m_mb
+    stages:
+    - id: readout
+      phase: acquire
+      kind: sensor
+      nodes:
+      - sensor_rear
+      holds:
+      - csispdp
+      mode: binning_2x2
+      frames: burst_frames
+      writes:
+      - cap_bayer
+      work:
+        switch_in_ms: mode_switch_ms
+        switch_out_ms: mode_switch_ms
+    - id: reproc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      - rgbp
+      - yuvsc
+      size_ref: capture_50m
+      frames: burst_frames
+      writes:
+      - cap_yuv
+      chunk:
+        by: frame
+      after:
+      - stage: readout
+        per: frame
+    - id: merge
+      phase: process
+      clock: max
+      nodes:
+      - mtnr
+      size_ref: capture_50m
+      frames: burst_frames
+      after:
+      - stage: reproc
+        per: frame
+      when:
+        subscenario: *id001
+    - id: merge_out
+      phase: process
+      kind: transfer
+      nodes:
+      - mtnr
+      size_ref: capture_50m
+      writes:
+      - mrg_yuv
+      after:
+      - merge
+      work:
+        mb: 90
+        mb_per_s: mtnr_wdma_mb_s
+      when:
+        subscenario: *id001
+      basis: write-back of the merged 50M frame (90 MB)
+    - id: post
+      phase: process
+      clock: max
+      nodes:
+      - msnr
+      - yuvp
+      - mcsc
+      size_ref: capture_50m
+      writes:
+      - out_yuv
+      after:
+      - merge_out
+      - reproc
+    - id: enc
+      phase: encode
+      kind: sw
+      nodes:
+      - post_proc
+      writes:
+      - jpeg
+      after:
+      - post
+      work:
+        runtime_ms: encode_50m_ms
+        cluster: big
+        power_mw: cpu_encode_mw
+    - id: store
+      phase: store
+      kind: transfer
+      nodes:
+      - storage
+      after:
+      - enc
+      work:
+        mb: jpeg_50m_mb
+        mb_per_s: ufs_mb_s
+        power_mw: ufs_mw
+    milestones:
+      thumbnail: post
+      saved: store
+    kpis:
+    - event_latency
+    - event_energy
+    - peak_power
+    - peak_bw
+    - peak_footprint
+  - id: still_shot_200m
+    label: 200M shot by seamless mode change (full_remosaic readout)
+    when:
+      capture_readout: full_remosaic
+    trigger:
+      kind: event
+      at_ms: 200
+    phases:
+    - acquire
+    - process
+    - encode
+    - store
+    buffers:
+      cap_bayer:
+        format: BAYER
+        bitdepth: 12
+        size_ref: capture_full
+        count: full_pool
+      cap_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
+        count: full_pool
+      mrg_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
+      ai_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
+      out_yuv:
+        format: YUV420
+        bitdepth: 10
+        size_ref: capture_full
+      jpeg:
+        mb: jpeg_200m_mb
+    stages:
+    - id: readout
+      phase: acquire
+      kind: sensor
+      nodes:
+      - sensor_rear
+      holds:
+      - csispdp
+      mode: full_remosaic
+      frames: full_frames
+      writes:
+      - cap_bayer
+      work:
+        switch_in_ms: mode_switch_ms
+        switch_out_ms: mode_switch_ms
+    - id: reproc
+      phase: process
+      clock: max
+      nodes:
+      - byrp
+      - rgbp
+      - yuvsc
+      size_ref: capture_full
+      frames: full_frames
+      writes:
+      - cap_yuv
+      after:
+      - readout
+      chunk:
+        by: stripe
+        max_line_px: isp_line_px
+        overlap_px: stripe_overlap_px
+    - id: merge
+      phase: process
+      clock: max
+      nodes:
+      - mtnr
+      size_ref: capture_full
+      frames: full_frames
+      after:
+      - reproc
+      chunk:
+        by: stripe
+        max_line_px: isp_line_px
+        overlap_px: stripe_overlap_px
+      when:
+        subscenario: &id002
+        - STILL_REMOSAIC_MF_CAPTURE
+        - REMOSAIC_NIGHT_CAPTURE
+    - id: merge_out
+      phase: process
+      kind: transfer
+      nodes:
+      - mtnr
+      size_ref: capture_full
+      writes:
+      - mrg_yuv
+      after:
+      - merge
+      work:
+        mb: 377.487
+        mb_per_s: mtnr_wdma_mb_s
+      when:
+        subscenario: *id002
+      basis: write-back of the merged 200M frame (377.487 MB)
+    - id: ai
+      phase: process
+      kind: domain
+      nodes:
+      - npu
+      size_ref: capture_full
+      writes:
+      - ai_yuv
+      after:
+      - merge_out
+      - reproc
+      work:
+        mcycles_per_mp: ai_mcycles_per_mp
+      when:
+        extend_mode: EX_AI_REMOSAIC
+    - id: post
+      phase: process
+      clock: max
+      nodes:
+      - msnr
+      - yuvp
+      - mcsc
+      size_ref: capture_full
+      writes:
+      - out_yuv
+      after:
+      - ai
+      - merge_out
+      - reproc
+      chunk:
+        by: stripe
+        max_line_px: isp_line_px
+        overlap_px: stripe_overlap_px
+    - id: enc
+      phase: encode
+      kind: sw
+      nodes:
+      - post_proc
+      writes:
+      - jpeg
+      after:
+      - post
+      work:
+        runtime_ms: encode_200m_ms
+        cluster: big
+        power_mw: cpu_encode_mw
+    - id: store
+      phase: store
+      kind: transfer
+      nodes:
+      - storage
+      after:
+      - enc
+      work:
+        mb: jpeg_200m_mb
+        mb_per_s: ufs_mb_s
+        power_mw: ufs_mw
+    milestones:
+      thumbnail: post
+      saved: store
+    kpis:
+    - event_latency
+    - event_energy
+    - peak_power
+    - peak_bw
+    - peak_footprint
 size_profile:
   anchors:
     sensor_out: 4000x3000
+    capture_50m: 8000x6000
+    capture_full: 16384x12288
+power_options:
+  params:
+    burst_frames: 1
+    yuv_pool: 3
+    encode_ms: 30
+    cpu_encode_mw: 600
+    file_mb: 4
+    mtnr_wdma_mb_s: 10000
+    preview_frame_ms: 33.3
+    ufs_mb_s: 1200
+    ufs_mw: 250
+    full_frames: 1
+    full_pool: 1
+    mode_switch_ms: 33.3
+    isp_line_px: 8192
+    stripe_overlap_px: 64
+    ai_mcycles_per_mp: 2
+    encode_50m_ms: 120
+    jpeg_50m_mb: 15
+    encode_200m_ms: 400
+    jpeg_200m_mb: 40
+  param_rules:
+  - when:
+      subscenario: NIGHT_CAPTURE
+    set:
+      burst_frames: 8
+  - when:
+      subscenario:
+      - STILL_MF_CAPTURE
+      - STILL_FLASH_MF_CAPTURE
+      - STILL_HIGH_RES_MF_CAPTURE
+      - STILL_MOTION_FREE_MF_CAPTURE
+      - SRZOOM_CAPTURE
+    set:
+      burst_frames: 4
+  - when:
+      subscenario:
+      - STILL_REMOSAIC_MF_CAPTURE
+      - REMOSAIC_NIGHT_CAPTURE
+    set:
+      full_frames: 3
+      full_pool: 3
+  - when:
+      output_format: RAW_BAYER_16
+    set:
+      file_mb: 24
 variants:
 - id: cam-cap-r1-sf
   severity: light
@@ -221,6 +737,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       selected_mode: Normal
       sim:
@@ -256,7 +794,7 @@ variants:
     MCSC_WDMA_CAP_BUF:
       size_role: MCSC_OUTPUT2_FULL
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-burst
   severity: light
   design_conditions:
@@ -279,6 +817,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       selected_mode: Normal
       sim:
@@ -311,7 +871,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-single-take
   severity: light
   design_conditions:
@@ -332,6 +892,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -360,7 +942,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-agif
   severity: light
   design_conditions:
@@ -381,6 +963,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -409,7 +1013,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-flash
   severity: light
   design_conditions:
@@ -432,6 +1036,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -460,7 +1086,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-pro
   severity: light
   design_conditions:
@@ -483,6 +1109,8 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: wide_video_16_9_30
     mtnr:
       sim:
         inherit_shape: true
@@ -535,6 +1163,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -570,7 +1220,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
   buffer_overrides:
     YUVSC_MTNR_BUF:
       note: multi-frame accumulation — N×frame 입력
@@ -596,6 +1246,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -631,13 +1303,14 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-mf-high-res
   severity: light
   design_conditions:
     subscenario: STILL_HIGH_RES_MF_CAPTURE
     sensor_place: rear
     isp_features: MTNR,MSNR,DJAG
+    capture_readout: binning_2x2
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -653,6 +1326,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -689,17 +1384,17 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-remosaic-sf
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    capture_readout: full_remosaic
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_FULL_SIZE
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -715,6 +1410,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -746,10 +1463,8 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: YUV420
@@ -760,9 +1475,9 @@ variants:
   design_conditions:
     subscenario: STILL_REMOSAIC_MF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    capture_readout: full_remosaic
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     isp_features: MTNR,MSNR
   routing_switch:
     disabled_nodes:
@@ -779,6 +1494,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -810,18 +1547,16 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-ai-remosaic
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     extend_mode: EX_AI_REMOSAIC
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    capture_readout: full_remosaic
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     npu_used: true
   routing_switch:
     disabled_nodes:
@@ -833,6 +1568,28 @@ variants:
     - from: sensor_front
       to: csispdp
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -860,12 +1617,10 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
     npu:
       selected_mode: Normal
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-remosaic-cal
   severity: light
   design_conditions:
@@ -886,6 +1641,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -914,7 +1691,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-low-res-tetra
   severity: light
   design_conditions:
@@ -935,6 +1712,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -963,15 +1762,15 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-remosaic-pro
   severity: light
   design_conditions:
     subscenario: STILL_REMOSAIC_PRO_SF_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    capture_readout: full_remosaic
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_PRO_VIDEO
   routing_switch:
     disabled_nodes:
@@ -988,6 +1787,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1019,10 +1840,8 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-hhdr
   severity: light
   design_conditions:
@@ -1043,6 +1862,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1075,7 +1916,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-dcg
   severity: light
   design_conditions:
@@ -1096,6 +1937,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1124,7 +1987,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-night
   severity: light
   design_conditions:
@@ -1147,6 +2010,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1181,7 +2066,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-night-max
   severity: light
   design_conditions:
@@ -1203,6 +2088,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1231,15 +2138,15 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-night-remosaic
   severity: light
   design_conditions:
     subscenario: REMOSAIC_NIGHT_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
+    capture_readout: full_remosaic
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture
+      event job), C-2 decision 2026-11-21
     super_night: true
   routing_switch:
     disabled_nodes:
@@ -1256,6 +2163,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1283,10 +2212,8 @@ variants:
     mcsc:
       sim:
         inherit_shape: true
-    sensor_rear:
-      selected_mode: full_remosaic
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
 - id: cam-cap-r1-srzoom
   severity: light
   design_conditions:
@@ -1304,6 +2231,31 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: &id003
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id003
     csispdp:
       sim:
         inherit_shape: true
@@ -1332,7 +2284,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-motion-free-sf
   severity: light
   design_conditions:
@@ -1352,6 +2304,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1380,7 +2354,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-motion-free-mf
   severity: light
   design_conditions:
@@ -1401,6 +2375,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1436,7 +2432,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-high-res-raw
   severity: light
   design_conditions:
@@ -1458,6 +2454,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1486,7 +2504,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: RAW_BAYER
@@ -1517,6 +2535,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1545,7 +2585,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: RAW_BAYER
@@ -1569,6 +2609,31 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: &id004
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id004
     csispdp:
       sim:
         inherit_shape: true
@@ -1597,7 +2662,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-rtriple
   severity: light
   design_conditions:
@@ -1616,6 +2681,31 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: &id005
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id005
     csispdp:
       sim:
         inherit_shape: true
@@ -1644,7 +2734,7 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-f1
   severity: light
   design_conditions:
@@ -1666,6 +2756,28 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode:
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       sim:
         inherit_shape: true
@@ -1713,6 +2825,31 @@ variants:
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: &id006
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        active_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *id006
     csispdp:
       sim:
         inherit_shape: true
@@ -1741,4 +2878,4 @@ variants:
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000

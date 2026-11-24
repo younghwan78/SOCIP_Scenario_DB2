@@ -26,6 +26,24 @@
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: &hp2_12m_30   # binning_4x4 at the 30 fps session rate (frame-length extension, assumed; C-2)
+        mode_id: binning_4x4
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size: [4000, 3000]
+        active_size: [4000, 3000]
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+        place: rear
+        ip_ref: ip-sensor-rear-s5e9965
+        value_source: assumed
+        basis: catalog binning_4x4 (60 fps) with the frame length doubled for a 30 fps session
     mtnr:
       selected_mode: Normal
       sim:
@@ -61,7 +79,7 @@
     MCSC_WDMA_CAP_BUF:
       size_role: MCSC_OUTPUT2_FULL
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-sf-burst
   extends: cam-cap-r1-sf
   $unset:
@@ -110,6 +128,11 @@
     subscenario: STILL_PRO_SF_CAPTURE
     is_scenario: IS_SCENARIO_PRO_VIDEO
     extend_mode: EX_NONE
+  node_configs:
+    sensor_rear:
+      selected_mode: wide_video_16_9_30
+      $unset:
+      - resolved_sensor_mode     # the 12M 30 fps pin of the parent does not apply to the 16:9 crop mode
   size_overrides:
     sensor_out: 4080x2296
 - id: cam-cap-r1-mf
@@ -147,6 +170,7 @@
     - flash
     subscenario: STILL_HIGH_RES_MF_CAPTURE
     isp_features: MTNR,MSNR,DJAG
+    capture_readout: binning_2x2   # 50M frames read at the shot by a seamless mode change (C-2)
   node_configs:
     mtnr:
       isp_features:
@@ -161,10 +185,9 @@
     subscenario: STILL_REMOSAIC_SF_CAPTURE
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
     extend_mode: EX_SEAMLESS_TETRA
+    capture_readout: full_remosaic
+    preview_basis: preview session is 12M (binning_4x4); 50M / 200M are read only at capture by a seamless mode change (capture event job), C-2 decision 2026-11-21
     is_scenario: IS_SCENARIO_FULL_SIZE
-    fps: 10
-    fps_basis: full_remosaic streams at 10 fps (ip-sensor-rear catalog); the session is judged at the sensor rate, not at
-      30 fps
   node_configs:
     mtnr:
       selected_mode: Normal
@@ -172,9 +195,10 @@
       mode_note: IS v15 MTNR operating modes are Normal / Recording / HighSpeed / LowPower; the scenario label 'Remosaic'
         is kept in mode_label and the Normal coefficients are used (E2600 assumption).
     sensor_rear:
-      selected_mode: full_remosaic
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
   size_overrides:
-    sensor_out: 16384x12288
+    sensor_out: 4000x3000
   buffer_overrides:
     MCSC_WDMA_CAP_BUF:
       format: YUV420
@@ -255,6 +279,7 @@
   design_conditions:
     $unset:
     - sensor_place
+    - capture_readout
     subscenario: NIGHT_CAPTURE
     isp_features: MSNR
     extend_mode: EX_NIGHT
@@ -306,6 +331,12 @@
     - from: npu
       to: mtnr
   node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
+    sensor_rear2:
+      selected_mode: binning_4x4
+      resolved_sensor_mode: *hp2_12m_30
     csispdp:
       sim:
         inherit_shape: true
@@ -334,7 +365,7 @@
       sim:
         inherit_shape: true
   size_overrides:
-    sensor_out: 8000x6000
+    sensor_out: 4000x3000
 - id: cam-cap-r1-motion-free-sf
   extends: cam-cap-r1-remosaic-cal
   design_conditions:
