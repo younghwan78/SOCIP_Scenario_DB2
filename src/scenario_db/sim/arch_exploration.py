@@ -341,7 +341,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             opts = spec.timing.model_copy(
                 update={"statistic": stat, "runtime_scale": scale, "eis": axes.eis, "include_whatif": False}
             )
-            report = analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables)
+            report = analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables, jobs=False)
             slices.append(_slice(report, stat, scale))
             if spec.constraints.memory_on:
                 slices[-1]["memory_basis"] = _memory_basis(report, llc_allocation_mb(graph))
@@ -1546,7 +1546,7 @@ def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
         "statistic": case["statistic"], "runtime_scale": case["runtime_scale"],
         "eis": spec.axes.eis, "include_whatif": False,
     })
-    r = analyze_timing_budget(replace(graph, variant=variant), opts, config=cfg, dvfs_tables=tables)
+    r = analyze_timing_budget(replace(graph, variant=variant), opts, config=cfg, dvfs_tables=tables, jobs=False)
     tol = spec.verify_tolerance_pct
     sim_total = float(r["power"]["total_mw"])
     sim_bw = float(r["bw"]["total_mbs"])
@@ -2065,11 +2065,14 @@ def input_manifest(graph, config, tables, *, timing=None) -> tuple[dict[str, str
 
 
 def _variant_doc(variant) -> Any:
+    """The variant as steady results see it (job measured slots left out)."""
+    from scenario_db.sim.jobs import steady_variant_doc
+
     dump = getattr(variant, "model_dump", None)
     if callable(dump):
-        return dump(mode="json")
+        return steady_variant_doc(dump(mode="json"))
     if is_dataclass(variant) and not isinstance(variant, type):
-        return asdict(variant)
+        return steady_variant_doc(asdict(variant))
     return repr(variant)
 
 

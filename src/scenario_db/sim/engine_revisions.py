@@ -52,6 +52,9 @@ OPT_IN: list[dict[str, str]] = [
     {"since": "15", "change": "CPU OPP as a timing input: CPU SW runtime and CPU power at a declared cluster frequency "
                               "(lever cpu_opp)",
      "opt_in": "design_conditions.cpu_opp_mhz"},
+    {"since": "15", "change": "event jobs (job-v1): a shot / launch / switch on top of the steady frames - latency, "
+                              "event energy, peak power / BW / footprint, RT wait and dropped preview frames",
+     "opt_in": "pipeline.jobs (report.jobs)"},
 ]
 
 
