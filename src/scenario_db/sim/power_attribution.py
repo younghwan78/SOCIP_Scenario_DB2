@@ -99,6 +99,11 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
         detail = {(False, True): "compression ON", (True, False): "compression OFF"}.get((on0, on1), "ratio/traffic")
         add("Compression", buf, s1 - s0, detail)
 
+    # R-4 / M-5 wake residency (AP wake entry / exit + MIF state): its own term, absent = 0
+    r0 = float((old.get("power") or {}).get("residency_mw") or 0.0)
+    r1 = float((new.get("power") or {}).get("residency_mw") or 0.0)
+    add("Wake residency", "AP wake + MIF state", r1 - r0, "wake-residency-v1 (config.residency)")
+
     for category, delta in small.items():
         if abs(delta) >= 5e-4:
             factors.append({"category": category, "item": "(small terms)", "delta_mw": round(delta, 3),
@@ -118,7 +123,7 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
         } | {
             k: round(new["power"].get(k, 0.0) - old["power"].get(k, 0.0), 3)
             for k in ("bw_ip_mw", "bw_cpu_mw") if k in new["power"] and k in old["power"]
-        },
+        } | ({"residency_mw": round(r1 - r0, 3)} if r0 or r1 else {}),
         "by_category": {k: round(v, 3) for k, v in sorted(by_cat.items(), key=lambda x: -abs(x[1]))},
         "factors": sorted(factors, key=lambda f: -abs(f["delta_mw"])),
         "residual_mw": round(total - explained, 4),

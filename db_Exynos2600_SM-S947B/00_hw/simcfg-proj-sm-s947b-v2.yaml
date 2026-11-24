@@ -20,6 +20,15 @@ run_config:
   memory_rail: MIF
   power_params_ref: pmp-exynos2600-v2
   include_cpu_power: true
+  residency:                         # R-4 / M-5 wake-residency-v1 (SYNTHETIC: assumed, not measured)
+    e_wake_mj: 0.2                   # AP entry + exit per wake
+    t_exit_ms: 0.1                   # DRAM self-refresh exit + entry per busy burst
+    period_burst_ms: 0.2             # AP busy per period IRQ
+    refill_mb_s: 200                 # offload refill DRAM read rate
+    mif_active_mw: 40                # MIF active state (screen on, or a burst)
+    mif_self_refresh_mw: 2           # MIF self-refresh
+    value_source: assumed
+    basis: assumed E2600 coefficients (design §14.2 example); replace with rail / wakeup measurements in-house
 rail_domain_map:
   B5S4_VDDMIF_AP_L: MIF
   B3_4_5S2_VDD_CPUCL3_BIG_L: CPU

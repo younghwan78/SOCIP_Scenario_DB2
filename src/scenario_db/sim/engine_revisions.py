@@ -62,6 +62,10 @@ OPT_IN: list[dict[str, str]] = [
                               "interface unit without an active stage is gated (0 mW). The rule revision is in the "
                               "condition hash, so subsystem results of rule 1 are stale",
      "opt_in": "the pipeline node's subsystem (E2600 ABOX since R-4b)"},
+    {"since": "15", "change": "wake residency (wake-residency-v1): AP wake entry / exit and MIF active / self-refresh "
+                              "state power from the subsystems' wake sources",
+     "opt_in": "config.residency (sim.config_profile run_config.residency) with a subsystem wake source "
+               "(report.residency, power.residency_mw)"},
 ]
 
 

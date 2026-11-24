@@ -450,6 +450,11 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
         pb[key] = {**(pb.get(key) if isinstance(pb.get(key), dict) else {}), "total_mw": mw}
     pb["cpu"] = {"total_mw": power["cpu_mw"], "by_task": power["cpu_by_task"],
                  "model": power.get("cpu_profile") or power["cpu_model"]}
+    res = report.get("residency") or {}
+    if res.get("status") == "ok":     # R-4 / M-5: the term between the buckets and total_mw, with its basis
+        pb["residency"] = {"total_mw": power["residency_mw"], "model": res["model"],
+                           **{k: res[k] for k in ("wakeups_per_s", "cpu_wake_mw", "mif_active_ratio", "mif_state_mw",
+                                                  "screen_on", "value_source", "basis") if k in res}}
     pb.update(total_mw=power["total_mw"], source="timing_budget")
     evidence = evidence.model_copy(update={"kpi": kpi, "power_breakdown": pb})
     sources = [*evidence.derived_from, options.cpu_profile_ref if options.cpu_model == "profile" else None,

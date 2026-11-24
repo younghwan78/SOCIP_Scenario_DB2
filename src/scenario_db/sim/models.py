@@ -4,8 +4,9 @@ from enum import StrEnum
 import math
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_serializer, model_validator
 
+from scenario_db.sim.residency import ResidencyParams
 from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.clock_models import (
@@ -298,11 +299,23 @@ class SimulationRunConfig(BaseScenarioModel):
     # time meets the sensor read-out window. "sw_margin": legacy (1 - margin) rule.
     rt_clock_basis: Literal["sensor_readout", "sw_margin"] | None = Field(default=None, exclude_if=lambda v: v is None)
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
+    # R-4 / M-5 wake / MIF state coefficients (wake-residency-v1); None = not computed (hash unchanged)
+    # an explicit null (model off over a profile that declares it) is kept by the serializer below, so a request
+    # rebuilt from a dump (concurrent members, queued / stored exploration) keeps it; an unset one is dropped
+    residency: ResidencyParams | None = None
     include_timeline: bool = True
     timeline_frame_count: int = Field(default=4, ge=1)
     timeline_frame_period_ms: float | None = None
     debug_trace: bool = False
     debug_trace_level: Literal["summary", "formula", "full"] = "formula"
+
+    @model_serializer(mode="wrap")
+    def _residency_only_when_given(self, handler):
+        data = handler(self)
+        # unset residency stays out of every dump (request / condition hashes unchanged); an explicit null stays in
+        if isinstance(data, dict) and self.residency is None and "residency" not in self.model_fields_set:
+            data.pop("residency", None)
+        return data
 
 
 class SimulationInputs(BaseScenarioModel):

@@ -16,9 +16,9 @@ captures them:
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import field_validator, Field
 
 from scenario_db.models.common import (
     BaseScenarioModel,
@@ -58,6 +58,18 @@ class SimConfigRunDefaults(BaseScenarioModel):
     measured_clock_stat: MeasuredClockStat | None = None
     memory_rail: str | None = None
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
+    # R-4 / M-5 wake-residency-v1 coefficients (e_wake_mj, t_exit_ms, period_burst_ms, refill_mb_s,
+    # mif_active_mw, mif_self_refresh_mw); checked by sim.residency.ResidencyParams on use
+    residency: dict[str, Any] | None = None
+
+    @field_validator("residency")
+    @classmethod
+    def _residency(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is not None:
+            from scenario_db.sim.residency import ResidencyParams
+
+            ResidencyParams.model_validate(value)
+        return value
 
 
 class SimConfigProfile(BaseScenarioModel):

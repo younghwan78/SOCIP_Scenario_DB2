@@ -233,12 +233,22 @@ def analyze_timing_budget(
                   if "subsystem" in d}
     if subsystems:
         report["subsystems"] = subsystems
+        # R-4 / M-5: wake / MIF state power of the subsystems' wake sources (coefficients from the run config)
+        from scenario_db.sim.residency import evaluate_residency
+
+        screen_on = _flag((graph.variant.design_conditions or {}).get("screen_on"), default=True)
+        residency = evaluate_residency(subsystems, (config or SimulationRunConfig()).residency, screen_on)
+        if residency is not None:
+            report["residency"] = residency
     if opp is not None:  # S-05: CPU SW at the declared OPP (absent = not declared)
         report["cpu_opp"] = opp
     report["dvfs"]["overrides"] = dict(base_config.dvfs_overrides)
     report["dvfs"]["ladders"] = dvfs_ladders(report["ips"], dvfs_tables, base_config.asv_group)
     if options.cpu_model == "profile":
         _profile_cpu(report, options, params, config)
+    # after the CPU profile (it re-totals CPU + HW + BW): the residency term on top, shares over the final total
+    if (report.get("residency") or {}).get("status") == "ok":
+        add_residency_power(report["power"], report["residency"]["mw"])
     # R-3 event jobs (absent = unchanged); after the CPU profile so their background is the final steady power
     if jobs and (getattr(graph.scenario, "pipeline", None) or {}).get("jobs"):
         from scenario_db.sim.jobs import JobError, evaluate_jobs
@@ -1661,6 +1671,30 @@ def fleet_row(report: dict[str, Any]) -> dict[str, Any]:
         "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
         "verdict": report["verdict"],
     }
+
+
+def _flag(value: Any, *, default: bool) -> bool:
+    """A design-condition boolean as the viewer reads it: 'false' / '0' / 'no' / 'off' are false; absent = default."""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("false", "0", "no", "off"):
+            return False
+        if v in ("true", "1", "yes", "on"):
+            return True
+        raise ValueError(f"design_conditions.screen_on must be a boolean, got {value!r}")
+    return bool(value)
+
+
+def add_residency_power(power: dict[str, Any], mw: float) -> None:
+    """Add the wake-residency term (R-4 / M-5) as its own bucket: total and shares over CPU + HW + BW + residency."""
+    power["residency_mw"] = round(float(mw), 3)
+    total = float(power["cpu_mw"]) + float(power["hw_mw"]) + float(power["bw_mw"]) + float(mw)
+    power["total_mw"] = round(total, 2)
+    power["share_pct"] = {k: (round(100 * float(v) / total, 1) if total else 0.0)
+                          for k, v in (("cpu", power["cpu_mw"]), ("hw", power["hw_mw"]), ("bw", power["bw_mw"]),
+                                       ("residency", mw))}
 
 
 def _profile_cpu(report: dict[str, Any], options: TimingBudgetOptions, params: Any, config: SimulationRunConfig | None) -> None:
