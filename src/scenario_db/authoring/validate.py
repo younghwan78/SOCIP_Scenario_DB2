@@ -25,6 +25,7 @@ from scenario_db.models.capability.sim_config import SimConfigProfile
 from scenario_db.models.capability.sw import SwComponent, SwProfile
 from scenario_db.models.definition.project import Project
 from scenario_db.models.definition.usecase import Usecase
+from scenario_db.sim.judgement import rate_issues
 
 MODEL_BY_KIND: dict[str, type[BaseModel]] = {
     "ip": IpCatalog,
@@ -121,6 +122,9 @@ def validate_documents(docs: list[Any]) -> dict[str, list[str]]:
             if e.get("buffer") and e["buffer"] not in buffers:
                 warnings.append(f"{uid}: edge {e.get('from')}->{e.get('to')} buffer '{e['buffer']}' "
                                 "not in pipeline.buffers")
+        rate_errors, rate_warnings = rate_issues(uid, pipe, uc.get("variants") or [])   # R-1, effective variants
+        errors.extend(rate_errors)
+        warnings.extend(rate_warnings)
         anchors = set(((uc.get("size_profile") or {}).get("anchors") or {}).keys())
         for v in uc.get("variants") or []:
             anchors |= set((v.get("size_overrides") or {}).keys())
@@ -129,3 +133,4 @@ def validate_documents(docs: list[Any]) -> dict[str, list[str]]:
             if ref and ref not in anchors:
                 warnings.append(f"{uid}: buffer '{name}' size_ref '{ref}' not a known anchor")
     return {"errors": errors, "warnings": warnings}
+

@@ -18,7 +18,11 @@ def resolve_sensor_modes(db, graph, config):
     result = replace(graph, variant=variant)
     active = {str(n["id"]): n for n in active_sensor_nodes(graph)
               if ((variant.node_configs.get(str(n["id"])) or {}).get("sim") or {}).get("active") is not False}
-    fps = config.fps if config.fps is not None else (variant.design_conditions or {}).get("fps", 30)
+    from scenario_db.sim.judgement import baseline_fps
+
+    # R-1: the same rate the simulation uses (declared judgement.rate, else design_conditions.fps, else 30)
+    base = baseline_fps(graph)
+    fps = config.fps if config.fps is not None else (30 if base is None else base)
     if not positive(fps):
         raise ValueError("sensor projection requires positive finite scenario FPS")
     for node_id, binding in config.sensor_modes.items():

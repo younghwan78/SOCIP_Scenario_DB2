@@ -23,6 +23,11 @@ CONFLICT_PCT = 30.0
 
 
 def _fps(graph: CanonicalScenarioGraph) -> float | None:
+    from scenario_db.sim.judgement import declared_rate
+
+    declared = declared_rate(graph)
+    if declared is not None:
+        return declared[0]
     conditions = graph.variant.design_conditions or {}
     for key in ("fps", "sensor_input_fps"):
         try:

@@ -286,8 +286,15 @@ def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dic
                       "size_anchor_id": size_anchors[0] if size_supported else None,
                       "clock_supported": workload.sim_params.ppc > 0,
                       "input_size": [shape.input.width, shape.input.height] if shape else None})
-    fps = (config.fps if config is not None and getattr(config, "fps", None) else None) \
-        or (graph.variant.design_conditions or {}).get("fps")
+    from scenario_db.sim.judgement import declared_rate
+
+    # R-1: a declared stream rate (a design condition or a node's fps) before design_conditions.fps; a fixed
+    # ``hz`` (the audio mixer period) is not a frame-rate lever
+    declared = declared_rate(graph)
+    stream_rate = declared[0] if declared is not None and declared[1] != "contract.hz" else None
+    requested = config.fps if config is not None and getattr(config, "fps", None) else None
+    legacy = (graph.variant.design_conditions or {}).get("fps") if declared is None else None   # undeclared only
+    fps = requested or stream_rate or legacy
     out = {"anchors": rows, "nodes": nodes, "fps": float(fps) if fps else None,
            "output_targets": [r["id"] for r in rows if r["kind"] == "output" and r["supported"]],
            # streams only where the scenario has no size anchors (non-camera: playback, call, game…)
@@ -446,6 +453,15 @@ def _apply_stream(ctx: _Apply, data: dict) -> tuple:
 def _apply_fps(ctx: _Apply, data: dict) -> tuple:
     old = ctx.targets.get("fps")
     ctx.config.fps = data["value"]
+    from scenario_db.sim.judgement import judgement_contract
+
+    contract = judgement_contract(ctx.candidate)
+    if contract is not None and contract.rate is not None:
+        # R-1: the request fps is the rate; rate-following nodes have no pin and nodes with their own rate keep
+        # it, as a direct run with the same config.fps does (design fps follows so the replay baseline agrees)
+        if "fps" in ctx.variant.design_conditions:
+            ctx.variant.design_conditions["fps"] = data["value"]
+        return ("fps", None)
     ctx.variant.design_conditions["fps"] = data["value"]
     # Explicit node rates would otherwise override the selected scenario-wide FPS.
     for node_id, cfg in ctx.variant.node_configs.items():

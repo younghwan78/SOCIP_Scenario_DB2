@@ -29,7 +29,7 @@ def build_simulation_inputs(
     graph, inactive = _prepare_graph(graph, run_config)
     fps = _fps(graph, run_config)
     shapes = propagate_shapes(graph)
-    driver_report, calculated_driver_nodes = _driver_nodes(graph, run_config)
+    driver_report, calculated_driver_nodes = _driver_nodes(graph, run_config, fps)
     warnings: list[str] = []
     if calculated_driver_nodes:
         warnings.append("Driver BW/DVFS estimates are in calculation_trace.driver_models; endpoint values are not added to legacy DMA/power totals.")
@@ -141,7 +141,10 @@ def _prepare_graph(graph: CanonicalScenarioGraph, run_config: SimulationRunConfi
         pinned = run_config.timing_profile.baseline_sha256
         if pinned is not None and pinned != baseline_fingerprint(graph):
             raise ValueError("timing profile baseline changed; rebuild and review the profile")
-        if run_config.fps is not None and run_config.fps != (graph.variant.design_conditions or {}).get("fps"):
+        from scenario_db.sim.judgement import baseline_fps
+
+        # R-1: the rate a run without a request fps uses (declared judgement.rate, else design_conditions.fps)
+        if run_config.fps is not None and run_config.fps != baseline_fps(graph):
             raise ValueError("measured timing profile does not support FPS extrapolation")
         from copy import deepcopy
         from dataclasses import replace
@@ -193,9 +196,11 @@ def _prepare_graph(graph: CanonicalScenarioGraph, run_config: SimulationRunConfi
     return graph, inactive
 
 
-def _driver_nodes(graph: CanonicalScenarioGraph, run_config: SimulationRunConfig) -> tuple[dict, set[str]]:
+def _driver_nodes(graph: CanonicalScenarioGraph, run_config: SimulationRunConfig,
+                  fps: float | None = None) -> tuple[dict, set[str]]:
     from scenario_db.sim.driver_models import evaluate_graph
-    driver_report = evaluate_graph(graph, run_config.driver_model_overrides)
+    # R-1: rate-following driver inputs (no sim.fps) take the run's resolved rate, request fps included
+    driver_report = evaluate_graph(graph, run_config.driver_model_overrides, rate_hz=fps)
     return driver_report, {r["node_id"] for r in driver_report["rows"] if r["status"] in {"calculated", "partial", "infeasible"}}
 
 
@@ -270,7 +275,7 @@ def build_port_transfers(
     graph, _ = _prepare_graph(graph, run_config)
     fps = _fps(graph, run_config)
     shapes = propagate_shapes(graph)
-    _, calculated_driver_nodes = _driver_nodes(graph, run_config)
+    _, calculated_driver_nodes = _driver_nodes(graph, run_config, fps)
     workloads, transfers = _workloads_and_transfers(graph, run_config, fps, shapes, calculated_driver_nodes, [])
     return fps, workloads, transfers
 
@@ -313,10 +318,10 @@ def effective_configured_clocks(
 
 
 def _fps(graph: CanonicalScenarioGraph, config: SimulationRunConfig) -> float:
-    if config.fps is not None:
-        return float(config.fps)
-    design = graph.variant.design_conditions or {}
-    return float(design.get("fps") or 30.0)
+    # R-1: request fps > judgement.rate > design_conditions.fps > 30
+    from scenario_db.sim.judgement import rate_and_source
+
+    return rate_and_source(graph, config)[0]
 
 
 def _append_missing_ip_catalog_warnings(graph: CanonicalScenarioGraph, warnings: list[str]) -> None:

@@ -24,6 +24,7 @@ def _variants(scenario):
 def test_game_variants_are_judged_at_their_target_fps():
     for v in _variants("uc-game-play-e2600"):
         dc = v["design_conditions"]
+        # R-1: the rate comes from judgement.rate (target_fps); design fps stays equal (views / replay read it)
         assert dc["fps"] == dc["target_fps"], v["id"]
         report = analyze_timing_budget(_exynos2600_generated_graph("uc-game-play-e2600", v["id"]),
                                        TimingBudgetOptions(throughput_model="pipelined"))

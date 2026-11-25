@@ -124,6 +124,17 @@ pipeline:
       format: RGBA8888
       bitdepth: 8
       compression: COMP_OFF
+  judgement:
+    rate:
+      condition: target_fps
+    sinks:
+    - node: dpu
+      kind: display
+      label: panel
+    kpis:
+    - interval
+    - frame_pacing
+    - latency
 variants:
 - id: game-fhd-60fps-sdr
   severity: light
@@ -159,7 +170,6 @@ variants:
       sim:
         width: 1920
         height: 1080
-        fps: 60
         workload: render
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -238,7 +248,6 @@ variants:
         active: false
         width: 1920
         height: 1080
-        fps: 0
       dvfs: null
       dvfs_note: null
     cpu:
@@ -287,7 +296,6 @@ variants:
       sim:
         width: 1920
         height: 1080
-        fps: 90
         workload: render
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -371,7 +379,6 @@ variants:
         active: false
         width: 1920
         height: 1080
-        fps: 0
       dvfs: null
       dvfs_note: null
     cpu:
@@ -421,7 +428,6 @@ variants:
       sim:
         width: 1920
         height: 1080
-        fps: 120
         workload: render
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -505,7 +511,6 @@ variants:
         active: false
         width: 1920
         height: 1080
-        fps: 0
       dvfs: null
       dvfs_note: null
     cpu:
@@ -554,7 +559,6 @@ variants:
       sim:
         width: 3840
         height: 2160
-        fps: 60
         workload: render
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -633,7 +637,6 @@ variants:
         active: false
         width: 3840
         height: 2160
-        fps: 0
       dvfs: null
       dvfs_note: null
     cpu:
@@ -681,7 +684,6 @@ variants:
       sim:
         width: 1920
         height: 1080
-        fps: 60
         workload: render
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -760,7 +762,6 @@ variants:
         active: true
         width: 1920
         height: 1080
-        fps: 60
       dvfs:
         freq_core_khz: 664000
         freq_npucon_khz: 533000
@@ -815,7 +816,6 @@ variants:
       sim:
         width: 1920
         height: 1080
-        fps: 120
         workload: render
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -899,7 +899,6 @@ variants:
         active: false
         width: 1920
         height: 1080
-        fps: 0
       dvfs: null
       dvfs_note: null
     cpu:
@@ -951,7 +950,6 @@ variants:
       sim:
         width: 2560
         height: 1440
-        fps: 60
         workload: render
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -1035,7 +1033,6 @@ variants:
         dst:
         - 1440
         - 3120
-        fps: 60
         src_bpp: 12
         dst_bpp: 32
         ppc: 4.89
@@ -1055,7 +1052,6 @@ variants:
         active: false
         width: 2560
         height: 1440
-        fps: 0
       dvfs: null
       dvfs_note: null
     cpu:
@@ -1113,7 +1109,6 @@ variants:
       sim:
         width: 1920
         height: 1080
-        fps: 60
         workload: render
         input_layers: 13
       bw_kb_s:
@@ -1170,7 +1165,6 @@ variants:
         active: false
         width: 1920
         height: 1080
-        fps: 0
       dvfs: null
       dvfs_note: null
     cpu:

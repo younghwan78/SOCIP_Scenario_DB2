@@ -293,7 +293,14 @@ def _apply_sensor_binding(ctx: _Apply, data: dict) -> tuple:
 
 def validate_sensor_fps(ctx: _Apply) -> None:
     """Validate explicitly selected modes against the final cadence after all conditions."""
-    fps = ctx.config.fps or ctx.variant.design_conditions.get("fps")
+    from types import SimpleNamespace
+
+    from scenario_db.sim.judgement import baseline_fps
+
+    # R-1: the rate the candidate runs at (request, else its declared judgement.rate, else design fps)
+    candidate = SimpleNamespace(scenario=ctx.candidate.scenario, variant=ctx.variant,
+                                variant_id=getattr(ctx.candidate, "variant_id", ""))
+    fps = ctx.config.fps or baseline_fps(candidate)
     if not fps:
         return
     for row in ctx.targets.get("sensors") or []:

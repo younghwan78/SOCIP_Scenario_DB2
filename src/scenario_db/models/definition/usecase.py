@@ -77,12 +77,34 @@ JudgementKpi = Literal["interval", "latency", "underrun", "frame_pacing", "start
 MODELED_KPIS = ("interval", "latency")
 
 
+# sink kinds whose output interval is judged at the frame rate; audio (period buffers) and file (event outputs)
+# are judged by their own KPI models, never by the frame interval
+INTERVAL_SINK_KINDS = ("preview", "video", "display")
+
+
 class JudgementSink(BaseScenarioModel):
-    """An output the frame-cadence judgement checks (its interval at the variant fps)."""
+    """An output the judgement checks. preview / video / display: its interval at the judgement rate;
+    audio / file: not a frame interval (their KPI models judge them)."""
 
     node: str
-    kind: Literal["preview", "video"]
+    kind: Literal["preview", "video", "display", "audio", "file"]
     label: str | None = None
+
+
+class RateSpec(BaseScenarioModel):
+    """R-1: where the judgement rate comes from - exactly one of a fixed ``hz``, a ``design_conditions`` key
+    (``condition``) or a node's ``sim.fps`` (``node``)."""
+
+    condition: str | None = Field(default=None, min_length=1)
+    hz: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    node: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _one_source(self) -> RateSpec:
+        given = [k for k in ("condition", "hz", "node") if getattr(self, k) is not None]
+        if len(given) != 1:
+            raise ValueError(f"judgement.rate needs exactly one of condition / hz / node (got {given or 'none'})")
+        return self
 
 
 class JudgementContract(BaseScenarioModel):
@@ -98,6 +120,8 @@ class JudgementContract(BaseScenarioModel):
     sinks: list[JudgementSink] = Field(default_factory=list)
     stages: dict[str, JudgementStage] = Field(default_factory=dict)
     kpis: list[JudgementKpi] = Field(default_factory=lambda: ["interval"])
+    # R-1: the judgement rate (None = design_conditions.fps, else 30); a request fps still wins
+    rate: RateSpec | None = None
 
 def job_reference_errors(jobs: list[JobSpec], node_ids: set[str], buffers: set[str]) -> list[str]:
     """Pipeline-level job checks (shared by the model and the pipeline patch path): ids, nodes, session buffers."""
@@ -149,6 +173,9 @@ class Pipeline(BaseScenarioModel):
         for sink in (self.judgement.sinks if self.judgement else []):
             if sink.node not in node_ids:
                 raise ValueError(f"judgement sink '{sink.node}' not found in nodes {node_ids}")
+        rate = self.judgement.rate if self.judgement else None
+        if rate is not None and rate.node is not None and rate.node not in node_ids:
+            raise ValueError(f"judgement.rate node '{rate.node}' not found in nodes {node_ids}")
         for edge in self.edges:
             if edge.from_ not in node_ids:
                 raise ValueError(

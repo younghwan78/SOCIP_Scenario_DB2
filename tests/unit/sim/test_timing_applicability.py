@@ -24,7 +24,7 @@ def test_audio_has_no_timing_judgement(scenario, variant):
     report = tb.analyze_timing_budget(_exynos2600_generated_graph(scenario, variant))
     assert report["verdict"]["status"] == "not_applicable"
     assert report["verdict"]["reasons"] == []
-    assert report["verdict"]["notes"] == [tb.NOT_APPLICABLE_NOTE]
+    assert report["verdict"]["notes"][0] == tb.NOT_APPLICABLE_NOTE      # + the R-1 audio sink / KPI notes
 
 
 @pytest.mark.parametrize("scenario,variant", [
@@ -74,7 +74,7 @@ def test_audio_cannot_be_eligible_even_without_interval_or_power_constraints():
     assert report["recommended"] is None
     assert report["levers"] == {"status": "none"}
     assert report["sw_margin"]["growth_tolerance"] is None
-    assert report["sw_margin"]["recommendations"] == [tb.NOT_APPLICABLE_NOTE]
+    assert report["sw_margin"]["recommendations"][0] == tb.NOT_APPLICABLE_NOTE
     fixed = ax._fixed_growth(report["slices"], spec.objective, {"dvfs": {}})
     assert fixed["growth_tolerance_fixed"] is None
     assert all(not row["ok"] for row in fixed["growth_fixed_rows"])

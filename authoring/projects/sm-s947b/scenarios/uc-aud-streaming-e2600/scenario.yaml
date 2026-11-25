@@ -98,6 +98,19 @@ pipeline:
       format: AUDIO_PCM
       bitdepth: 16
       compression: COMP_OFF
+  # R-1 judgement contract: the audio "frame" is the AudioFlinger mixer period (20 ms). The audio outputs
+  # are not frame-interval outputs; underrun has no model yet (reported as such, never as passed).
+  judgement:
+    rate:
+      hz: 50
+    sinks:
+    - node: speaker
+      kind: audio
+    - node: bt_codec
+      kind: audio
+    kpis:
+    - underrun
+    - latency
 variants:
   $include: variants.yaml
 provenance:
