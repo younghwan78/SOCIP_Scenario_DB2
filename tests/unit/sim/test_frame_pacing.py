@@ -109,3 +109,56 @@ def test_a_sustained_shortfall_fails_the_verdict():
 def test_scenarios_without_a_workload_have_no_pacing():
     for uc, v in (("uc-vid-youtube-e2600", "yt-1080p30-h264-sdr"), ("uc-game-streaming-e2600", "game-stream-fhd60-hevc")):
         assert "pacing" not in analyze_timing_budget(_exynos2600_generated_graph(uc, v), OPTS)
+
+
+def _graph(variant="game-fhd-120fps-sdr"):
+    return _exynos2600_generated_graph(GAME, variant)
+
+
+def test_the_depth_follows_the_active_gpu_output():
+    graph = _graph("game-fhd-60fps-npu-ai")          # gpu -> npu is active, gpu -> dpu is switched off
+    pipe = dict(graph.scenario.pipeline)
+    pipe["buffers"] = {**pipe["buffers"], "GPU_NPU_BUF": {**pipe["buffers"]["GPU_NPU_BUF"], "count": 2}}
+    graph.scenario.pipeline = pipe
+    assert analyze_timing_budget(graph, OPTS)["pacing"]["depth"] == 2
+
+
+def test_the_cpu_upstream_comes_from_the_plan_edges():
+    from scenario_db.sim.frame_pacing import _ancestors
+
+    edges = [{"from": "cpu", "to": "dpu"}, {"from": "gpu", "to": "dpu"}]
+    assert _ancestors(edges, "gpu", {"cpu", "gpu", "dpu"}) == []
+    assert _ancestors([{"from": "cpu", "to": "gpu"}], "gpu", {"cpu", "gpu"}) == ["cpu"]
+
+
+def test_only_a_gpu_with_frame_time_opts_in():
+    graph = _graph()
+    gpu = graph.variant.node_configs["gpu"]
+    gpu["sim"]["workload"] = {"title_class": "x", "legacy_key": 1}        # no frame_time: not parsed, no pacing
+    assert "pacing" not in analyze_timing_budget(graph, OPTS)
+    graph = _graph("game-fhd-60fps-npu-ai")
+    graph.variant.node_configs["gpu"]["sim"]["workload"] = "render"
+    graph.variant.node_configs["npu"]["sim"]["workload"] = {"frame_time": {"p99_x": 1.2}}
+    assert "pacing" not in analyze_timing_budget(graph, OPTS)            # an NPU is not the GPU
+
+
+def test_a_measured_p50_alone_is_the_gpu_time():
+    sample, basis = gpu_sampler(6.61, FrameTime(p50_ms=12.0))
+    assert basis["from"] == "measured p50" and sample(None) == 12.0
+    out = _sim(frame_time=FrameTime(p50_ms=12.0))
+    assert out["gpu_ms"]["p50"] == 12.0 and out["achieved_fps"] < 100
+
+
+def test_zero_gpu_work_is_reported_not_raised():
+    graph = _graph()
+    pipe = dict(graph.scenario.pipeline)
+    pipe["nodes"] = [{**n, "domain_load": {**n["domain_load"], "mcycles_per_frame": 0}} if n["id"] == "gpu" else n
+                     for n in pipe["nodes"]]
+    graph.scenario.pipeline = pipe
+    r = analyze_timing_budget(graph, OPTS)
+    assert r["pacing"]["status"] == "no_gpu_time" and any("positive GPU work" in n for n in r["verdict"]["notes"])
+
+
+def test_very_slow_frames_are_a_shortfall_not_a_deadlock():
+    out = _sim(frame_time=FrameTime(histogram=[[30000.0, 1.0]]), frames=40, warmup=5)
+    assert out["achieved_fps"] < 1 and out["jank_pct"] == 100

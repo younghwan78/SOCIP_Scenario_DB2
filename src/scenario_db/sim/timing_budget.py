@@ -671,6 +671,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "h_blank": h_blank,
         "stage": stage,
         "tasks": tasks,
+        "edges": edges,      # the timeline edges this plan runs (frame pacing reads the GPU's upstream)
         "sw_items": sw_items,
         "own_sw": own_sw,
         "sw_order": sw_order,

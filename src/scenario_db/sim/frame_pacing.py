@@ -41,6 +41,8 @@ def gpu_sampler(median_ms: float, ft: FrameTime | None):
     center = median_ms
     sigma = None
     basis: dict[str, Any] = {}
+    if ft is not None and ft.p50_ms and not (ft.p99_ms or ft.p95_ms):
+        return (lambda rng: ft.p50_ms), {"distribution": "fixed", "from": "measured p50", "median_ms": round(ft.p50_ms, 4)}
     if ft is not None and (ft.p99_ms or ft.p95_ms):
         center = ft.p50_ms or median_ms
         sigma = (math.log(ft.p99_ms / center) / Z99 if ft.p99_ms else math.log(ft.p95_ms / center) / Z95)
@@ -90,10 +92,15 @@ def simulate(*, period_ms: float, vsync_ms: float, cpu_ranges: list[tuple[float,
     def advance_tick() -> None:
         """Process the next vsync latch over the frames computed so far."""
         t = state["tick"] * vsync_ms
-        state["tick"] += 1
         ready = [j for j in range(state["next"], state["computed"]) if gpu_end[j] <= t + 1e-9]
         if not ready:
+            pending = [gpu_end[j] for j in range(state["next"], state["computed"])]
+            if not pending:
+                raise RuntimeError("frame pacing: no frame left to present")
+            # nothing to latch until the next frame is done: jump to the first vsync after it (a slow frame)
+            state["tick"] = max(state["tick"] + 1, math.ceil(min(pending) / vsync_ms - 1e-9))
             return
+        state["tick"] += 1
         pick = ready[0] if present_mode == "fifo" else ready[-1]
         for j in ready:
             if j < pick or (present_mode == "mailbox" and j != pick):
@@ -109,12 +116,8 @@ def simulate(*, period_ms: float, vsync_ms: float, cpu_ranges: list[tuple[float,
     for k in range(frames):
         free = 0.0
         if k - depth >= 0:
-            guard = 0
             while release[k - depth] is None:
                 advance_tick()
-                guard += 1
-                if guard > 10 * frames * max(1.0, period_ms / vsync_ms) + 1000:
-                    raise RuntimeError("frame pacing: the BufferQueue never released a buffer")
             free = release[k - depth]
         start = max(k * period_ms, end_cpu, free)
         c = sum(_sample_sw(rng, *r) for r in cpu_ranges)
@@ -156,11 +159,11 @@ def simulate(*, period_ms: float, vsync_ms: float, cpu_ranges: list[tuple[float,
     }
 
 
-def _ancestors(graph, node_id: str, active: set[str]) -> list[str]:
-    edges = ((getattr(graph.scenario, "pipeline", None) or {}).get("edges") or [])
+def _ancestors(edges: list[dict], node_id: str, active: set[str]) -> list[str]:
+    """Upstream active tasks of ``node_id`` over the edges the Timing Budget plan runs (variant topology applied)."""
     pred: dict[str, set[str]] = {}
     for e in edges:
-        a, b = str(e.get("from") or e.get("from_") or ""), str(e.get("to") or "")
+        a, b = str(e.get("from") or e.get("source") or ""), str(e.get("to") or e.get("target") or "")
         pred.setdefault(b, set()).add(a)
     seen: list[str] = []
     stack = [node_id]
@@ -172,13 +175,26 @@ def _ancestors(graph, node_id: str, active: set[str]) -> list[str]:
     return seen
 
 
+def _is_gpu(graph, node: dict) -> bool:
+    ip = graph.ip_catalog.get(str(node.get("ip_ref") or ""))
+    text = " ".join(str(x or "").lower() for x in (getattr(ip, "category", None), node.get("ip_ref"), node.get("role")))
+    return "gpu" in text
+
+
 def pacing_report(graph, plan: dict, domain: dict, period_ms: float, ranges: dict, options) -> dict[str, Any] | None:
     """``report.pacing`` when a GPU node declares ``sim.workload.frame_time``; None otherwise."""
     from scenario_db.sim.workload_spec import workload_spec
 
     configs = graph.variant.node_configs or {}
-    gpu = next(((n, s) for n, cfg in configs.items() if isinstance(cfg, dict) and n in plan["tasks"]
-                for s in [workload_spec(cfg.get("sim"))] if s is not None and s.frame_time is not None), None)
+    gpu = None
+    for n in graph.pipeline_nodes:
+        nid = str(n.get("id"))
+        sim = (configs.get(nid) or {}).get("sim") if isinstance(configs.get(nid), dict) else None
+        raw = sim.get("workload") if isinstance(sim, dict) else None
+        # opt-in: an active GPU node whose workload mapping declares frame_time (other mappings are not parsed)
+        if nid in plan["tasks"] and _is_gpu(graph, n) and isinstance(raw, dict) and raw.get("frame_time") is not None:
+            gpu = (nid, workload_spec(sim))
+            break
     if gpu is None:
         return None
     node, spec = gpu
@@ -187,7 +203,10 @@ def pacing_report(graph, plan: dict, domain: dict, period_ms: float, ranges: dic
     if not est or not est.get("freq_mhz") or not est.get("rate_hz"):
         return {"model": MODEL, "node": node, "status": "no_gpu_time",
                 "reason": f"{node}: frame pacing needs the node's domain load (work and clock)"}
-    gpu_median = float(est["work_mcycles_s"]) / float(est["rate_hz"]) / float(est["freq_mhz"]) * 1000.0
+    gpu_median = float(est["work_mcycles_s"] or 0) / float(est["rate_hz"]) / float(est["freq_mhz"]) * 1000.0
+    if not gpu_median > 0:
+        return {"model": MODEL, "node": node, "status": "no_gpu_time",
+                "reason": f"{node}: frame pacing needs positive GPU work per frame (domain load gives 0)"}
     # vsync from the panel (display output role), else any active node with a refresh rate (DPU)
     panel_hz = None
     nodes = sorted(graph.pipeline_nodes, key=lambda n: str(n.get("role") or "") != "display_output")
@@ -198,11 +217,11 @@ def pacing_report(graph, plan: dict, domain: dict, period_ms: float, ranges: dic
             break
     vsync = 1000.0 / panel_hz if panel_hz else period_ms
     sw = {i["task"]: i for items in plan["sw_items"].values() for i in items if i["kind"] == "sw"}
-    cpu = [t for t in _ancestors(graph, node, set(plan["tasks"])) if t in sw]
+    cpu = [t for t in _ancestors(plan.get("edges") or graph.pipeline_edges, node, set(plan["tasks"])) if t in sw]
     cpu_ranges = [ranges.get(t) or (sw[t]["runtime_ms"],) * 3 for t in cpu]
     depth = DEFAULT_DEPTH
     buffers = (getattr(graph.scenario, "pipeline", None) or {}).get("buffers") or {}
-    for e in (getattr(graph.scenario, "pipeline", None) or {}).get("edges") or []:
+    for e in graph.pipeline_edges:      # the variant's active GPU output edge (routing switch / patch applied)
         if str(e.get("from")) == node and e.get("buffer") and str(e.get("to")) in plan["tasks"]:
             count = (buffers.get(e["buffer"]) or {}).get("count")
             if count is not None:
