@@ -453,6 +453,15 @@ def _apply_stream(ctx: _Apply, data: dict) -> tuple:
 def _apply_fps(ctx: _Apply, data: dict) -> tuple:
     old = ctx.targets.get("fps")
     ctx.config.fps = data["value"]
+    from scenario_db.sim.judgement import judgement_contract
+
+    contract = judgement_contract(ctx.candidate)
+    if contract is not None and contract.rate is not None:
+        # R-1: the request fps is the rate; rate-following nodes have no pin and nodes with their own rate keep
+        # it, as a direct run with the same config.fps does (design fps follows so the replay baseline agrees)
+        if "fps" in ctx.variant.design_conditions:
+            ctx.variant.design_conditions["fps"] = data["value"]
+        return ("fps", None)
     ctx.variant.design_conditions["fps"] = data["value"]
     # Explicit node rates would otherwise override the selected scenario-wide FPS.
     for node_id, cfg in ctx.variant.node_configs.items():

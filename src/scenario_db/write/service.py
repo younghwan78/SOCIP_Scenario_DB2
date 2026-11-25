@@ -587,7 +587,26 @@ def validate_variant_overlay(db: Session, normalized: dict[str, Any]) -> list[Va
     if not any(issue.severity == "error" for issue in issues):
         candidate = _variant_pipeline_for_compression_validation(scenario.pipeline or {}, variant)
         issues.extend(_validate_pipeline_compression(db, candidate, path_prefix="buffer_overrides"))
+    # R-1: the declared judgement.rate must resolve on the staged variant (inheritance applied)
+    staged_id = str(variant.get("id") or "staged")
+    stored = [v for v in db.query(ScenarioVariant).filter_by(scenario_id=scenario_ref).all() if v.id != staged_id]
+    issues.extend(_rate_write_issues(scenario_ref, scenario.pipeline or {}, [*stored, {**variant, "id": staged_id}],
+                                     "payload.variant", only={staged_id}))
     return issues
+
+
+def _rate_write_issues(scenario_id: str, pipeline: dict[str, Any], variants: list, path: str,
+                       only: set[str] | None = None) -> list[ValidationIssue]:
+    """R-1 rate checks (``sim.judgement.rate_issues``) as Write API issues; ``only`` limits them to these variants."""
+    from scenario_db.sim.judgement import rate_issues
+
+    errors, warnings = rate_issues(scenario_id, pipeline, variants)
+
+    def keep(line: str) -> bool:
+        return only is None or line.split(":", 1)[0].split("/", 1)[-1] in only
+
+    return ([_issue("error", "judgement_rate_invalid", e, path) for e in errors if keep(e)]
+            + [_issue("warning", "judgement_rate_repeated", w, path) for w in warnings if keep(w)])
 
 
 def validate_pipeline_patch(db: Session, normalized: dict[str, Any]) -> list[ValidationIssue]:
@@ -1166,6 +1185,12 @@ def _pipeline_patch_impact(db: Session, scenario_ref: str, candidate: dict[str, 
                 warnings.append(f"topology_patch.add_nodes now duplicates base node '{node.get('id')}'")
 
         affected.append({"variant_id": variant.id, "warnings": warnings, "errors": errors})
+    # R-1: a patched judgement.rate must still resolve in every stored variant
+    from scenario_db.sim.judgement import rate_issues
+
+    rate_errors, _ = rate_issues(scenario_ref, candidate, variants)
+    for row in affected:
+        row["errors"].extend(e.split(": ", 1)[-1] for e in rate_errors if e.split(":", 1)[0] == f"{scenario_ref}/{row['variant_id']}")
     return {
         "variant_count": len(affected),
         "affected_variants": affected,
@@ -1315,6 +1340,8 @@ def _validate_import_usecase_refs(
             _import_issue_from_integrity(issue)
             for issue in validate_variant_overlay_targets([target], ip_mode_catalog)
         )
+    if isinstance(doc.get("pipeline"), dict) and isinstance(doc.get("id"), str):   # R-1 judgement.rate
+        issues.extend(_rate_write_issues(doc["id"], doc["pipeline"], list(doc.get("variants") or []), f"{path}.variants"))
     return issues
 
 

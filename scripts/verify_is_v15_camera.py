@@ -61,7 +61,9 @@ def assess(result, fps: float, latency_frames: float, sinks: set[str] | frozense
     None = undeclared, the camera recording outputs. An empty set has no output and is never accepted.
     """
     names = set(sinks) if sinks is not None else DEFAULT_SINKS
-    sinks = [e for e in result.timeline_events if e.node_id in names]
+    # frame events only: an own-cadence sink (vsync / period) has no frame index and is not frame-judged (R-1);
+    # no frame event left = nothing to accept on (latency inf, never accepted)
+    sinks = [e for e in result.timeline_events if e.node_id in names and e.frame_index is not None]
     latency = max((e.end_ms - e.frame_index * 1000 / fps for e in sinks), default=float("inf"))
     cadence = max((e.cadence_avg_interval_ms or 0 for e in sinks), default=float("inf"))
     cadence_ok = cadence <= 1000 / fps + 1e-5

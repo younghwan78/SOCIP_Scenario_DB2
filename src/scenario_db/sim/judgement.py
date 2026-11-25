@@ -45,7 +45,8 @@ def declared_rate(graph) -> tuple[float, str] | None:
         if value is None:
             raise ValueError(f"judgement.rate: design_conditions.{rate.condition} missing in variant {graph.variant_id}")
         return _positive(value, f"design_conditions.{rate.condition}"), f"contract.condition:{rate.condition}"
-    sim = ((graph.variant.node_configs or {}).get(rate.node) or {}).get("sim") or {}
+    cfg = (graph.variant.node_configs or {}).get(rate.node)
+    sim = (cfg.get("sim") if isinstance(cfg, dict) else None) or {}
     if not isinstance(sim, dict) or sim.get("fps") is None:
         raise ValueError(f"judgement.rate: node {rate.node} has no sim.fps in variant {graph.variant_id}")
     return _positive(sim["fps"], f"{rate.node}.sim.fps"), f"contract.node:{rate.node}"

@@ -172,3 +172,46 @@ def test_judgement_does_not_import_the_adapter():
     code = ("import sys, scenario_db.sim.judgement; "
             "assert 'scenario_db.sim.adapter' not in sys.modules and 'scenario_db.sim.timing_budget' not in sys.modules")
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_the_write_api_reports_an_unresolved_rate_on_the_staged_variant():
+    from scenario_db.write.service import _rate_write_issues
+
+    variants = [{"id": "a", "design_conditions": {"target_fps": 60}}, {"id": "b", "design_conditions": {}}]
+    issues = _rate_write_issues("uc", PIPE, variants, "payload.variant", only={"b"})
+    assert [(i.severity, i.code) for i in issues] == [("error", "judgement_rate_invalid")]
+    assert _rate_write_issues("uc", PIPE, variants, "payload.variant", only={"a"}) == []
+
+
+def test_a_non_mapping_rate_node_config_is_a_check_error_not_a_crash():
+    pipe = {"judgement": {"rate": {"node": "gpu"}}}
+    errors, _ = rate_issues("uc", pipe, [{"id": "a", "node_configs": {"gpu": "60fps"}}])
+    assert errors and "has no sim.fps" in errors[0]
+
+
+def test_a_whatif_fps_change_keeps_a_node_with_its_own_rate():
+    from types import SimpleNamespace
+
+    from scenario_db.api.services.whatif_conditions import _Apply, _apply_fps
+
+    variant = SimpleNamespace(design_conditions={"target_fps": 60, "fps": 60},
+                              node_configs={"panel": {"sim": {"fps": 90}}, "gpu": {"sim": {"width": 1920}}})
+    candidate = SimpleNamespace(scenario=SimpleNamespace(pipeline=PIPE), variant=variant)
+    ctx = _Apply(candidate=candidate, variant=variant, config=SimulationRunConfig(), targets={"fps": 60})
+    _apply_fps(ctx, {"value": 45})
+    assert ctx.config.fps == 45 and variant.node_configs["panel"]["sim"]["fps"] == 90
+    assert variant.design_conditions["fps"] == 45
+
+
+def test_the_evidence_check_skips_own_cadence_sink_events():
+    import importlib.util
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    path = Path(__file__).resolve().parents[3] / "scripts" / "verify_is_v15_camera.py"
+    spec = importlib.util.spec_from_file_location("verify_is_v15_camera", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    vsync = SimpleNamespace(node_id="panel", frame_index=None, end_ms=5.0, cadence_avg_interval_ms=16.6)
+    out = mod.assess(SimpleNamespace(feasible=True, timeline_events=[vsync]), 60.0, 3.0, {"panel"})
+    assert out["accepted"] is False and out["max_frame_latency_ms"] == float("inf")
