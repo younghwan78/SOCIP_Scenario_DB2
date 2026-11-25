@@ -7,9 +7,8 @@ from copy import deepcopy
 import pytest
 from pydantic import ValidationError
 
-from scenario_db.authoring.validate import _rate_errors
 from scenario_db.models.definition.usecase import JudgementContract, Pipeline, RateSpec
-from scenario_db.sim.judgement import declared_rate, rate_and_source
+from scenario_db.sim.judgement import baseline_fps, declared_rate, rate_and_source, rate_issues
 from scenario_db.sim.models import SimulationRunConfig
 from scenario_db.sim.timing_budget import TimingBudgetOptions, analyze_timing_budget
 from tests.unit.sim.test_adapter_runner import _exynos2600_generated_graph
@@ -40,7 +39,6 @@ def test_the_game_is_judged_at_its_target_fps():
         r = _run(GAME, variant)
         assert r["fps"] == fps and r["fps_source"] == "contract.condition:target_fps"
         assert r["intervals"]["preview"]["node"] == "dpu"            # the display sink takes the preview slot
-        assert "fps" not in (r.get("design_conditions") or {})
         assert any("frame_pacing" in n for n in r["verdict"]["notes"])
 
 
@@ -115,15 +113,54 @@ def test_the_measured_inputs_read_the_declared_rate():
     assert _fps(_exynos2600_generated_graph(GAME, "game-fhd-90fps-sdr")) == 90.0
 
 
-def test_authoring_checks_the_rate_and_warns_on_a_repeated_pin():
-    uc = {"id": "uc", "pipeline": {"judgement": {"rate": {"condition": "target_fps"}}},
-          "variants": [{"id": "a", "design_conditions": {"target_fps": 60},
-                        "node_configs": {"gpu": {"sim": {"fps": 60}}, "panel": {"sim": {"fps": 120}}}},
-                       {"id": "b", "design_conditions": {}}]}
-    warnings: list[str] = []
-    errors = _rate_errors(uc, warnings)
-    assert errors == ["uc/b: judgement.rate condition 'target_fps' missing in design_conditions"]
-    assert len(warnings) == 1 and "'gpu' sim.fps 60" in warnings[0]
+PIPE = {"judgement": {"rate": {"condition": "target_fps"}}}
+
+
+def test_the_rate_is_checked_on_the_effective_variants():
+    variants = [{"id": "a", "design_conditions": {"target_fps": 60, "fps": 60},
+                 "node_configs": {"gpu": {"sim": {"fps": 60}}, "panel": {"sim": {"fps": 120}}}},
+                {"id": "child", "derived_from_variant": "a", "design_conditions_override": {"target_fps": 90}},
+                {"id": "b", "design_conditions": {}}]
+    errors, warnings = rate_issues("uc", PIPE, variants)
+    # the child inherits fps 60 but overrides the rate to 90: a mismatch; b has no rate at all
+    assert any(e.startswith("uc/child: design_conditions.fps 60") for e in errors)
+    assert any(e.startswith("uc/b: judgement.rate") for e in errors) and len(errors) == 2
+    assert all("'gpu' sim.fps 60" in w for w in warnings if w.startswith("uc/a:")) and len(warnings) >= 1
+
+
+def test_an_inherited_rate_resolves():
+    variants = [{"id": "a", "design_conditions": {"target_fps": 60}}, {"id": "c", "derived_from_variant": "a"}]
+    assert rate_issues("uc", PIPE, variants) == ([], [])
+
+
+def test_a_badly_typed_rate_is_left_to_the_schema_check():
+    assert rate_issues("uc", {"judgement": {"rate": {"condition": ["target_fps"]}}}, [{"id": "a"}]) == ([], [])
+
+
+def test_the_e2600_game_and_audio_rates_resolve_in_every_variant():
+    import yaml
+
+    for uc in (GAME, MP3, "uc-aud-streaming-e2600"):
+        with open(f"db_Exynos2600_SM-S947B/02_definition/{uc}.yaml", encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh)
+        assert rate_issues(uc, doc["pipeline"], doc["variants"]) == ([], []), uc
+
+
+def test_measured_replay_and_sensor_modes_compare_the_declared_rate():
+    graph = _exynos2600_generated_graph(GAME, "game-fhd-90fps-sdr")
+    assert baseline_fps(graph) == 90.0
+    graph.variant.design_conditions = {k: v for k, v in graph.variant.design_conditions.items() if k != "fps"}
+    assert baseline_fps(graph) == 90.0                     # the contract, not the stored design fps
+    yt = _exynos2600_generated_graph("uc-vid-youtube-e2600", "yt-1080p30-h264-sdr")
+    assert baseline_fps(yt) == yt.variant.design_conditions.get("fps")
+
+
+def test_a_request_fps_moves_the_rate_following_m2m_driver():
+    from scenario_db.sim.adapter import build_simulation_inputs
+
+    graph = _exynos2600_generated_graph(GAME, "game-fhd-60fps-m2m-upscale")
+    rows = {r["node_id"]: r for r in build_simulation_inputs(graph, SimulationRunConfig(fps=45)).driver_model_report["rows"]}
+    assert rows["m2m_scaler"]["inputs"]["fps"] == 45.0
 
 
 def test_the_contract_default_has_no_rate():

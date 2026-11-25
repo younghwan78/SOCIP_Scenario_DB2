@@ -97,6 +97,9 @@ def test_a_declared_stream_rate_is_the_fps_lever():
     assert game["fps"] == 90.0 and "fps" in game["supported_changes"]
     audio = whatif_targets(_g("db_Exynos2600_SM-S947B", "uc-aud-mp3-playback-e2600", "audio-mp3-screen-on", "soc-exynos2600"))
     assert audio["fps"] is None
+    legacy = _g("db_Exynos2600_SM-S947B", "uc-aud-mp3-playback-e2600", "audio-mp3-screen-on", "soc-exynos2600")
+    legacy.variant.design_conditions = {**legacy.variant.design_conditions, "fps": 30}
+    assert whatif_targets(legacy)["fps"] is None          # a declared rate: no fallback to a stale design fps
 
 
 def test_new_change_kind_is_one_registration(e2700):

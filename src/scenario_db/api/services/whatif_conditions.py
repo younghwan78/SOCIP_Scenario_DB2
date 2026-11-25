@@ -292,9 +292,9 @@ def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dic
     # ``hz`` (the audio mixer period) is not a frame-rate lever
     declared = declared_rate(graph)
     stream_rate = declared[0] if declared is not None and declared[1] != "contract.hz" else None
-    fps = (config.fps if config is not None and getattr(config, "fps", None) else None) \
-        or stream_rate \
-        or (graph.variant.design_conditions or {}).get("fps")
+    requested = config.fps if config is not None and getattr(config, "fps", None) else None
+    legacy = (graph.variant.design_conditions or {}).get("fps") if declared is None else None   # undeclared only
+    fps = requested or stream_rate or legacy
     out = {"anchors": rows, "nodes": nodes, "fps": float(fps) if fps else None,
            "output_targets": [r["id"] for r in rows if r["kind"] == "output" and r["supported"]],
            # streams only where the scenario has no size anchors (non-camera: playback, call, game…)

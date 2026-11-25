@@ -235,7 +235,9 @@ def inputs_from_config(model: str, config: dict[str, Any], caps: dict[str, Any])
     return raw
 
 
-def evaluate_graph(graph, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+def evaluate_graph(graph, overrides: dict[str, Any] | None = None, rate_hz: float | None = None) -> dict[str, Any]:
+    """``rate_hz``: the run's resolved rate for rate-following inputs (no ``sim.fps``) of a scenario that
+    declares ``judgement.rate``; None = the declared rate itself."""
     overrides = overrides or {}
     rows = []
     # kept out of ``rows``: evidence calculation_trace only carries evaluated endpoints
@@ -268,7 +270,7 @@ def evaluate_graph(graph, overrides: dict[str, Any] | None = None) -> dict[str, 
 
                 declared = declared_rate(graph)
                 if declared is not None:
-                    raw["fps"] = declared[0]
+                    raw["fps"] = rate_hz if rate_hz is not None else declared[0]
             if node_id in overrides:
                 override = overrides[node_id]
                 raw = override.model_dump() if hasattr(override, "model_dump") else override

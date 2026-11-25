@@ -108,8 +108,9 @@ export function DvfsOverrideTable({ report, overrides, onChange }: { report: Tim
 /** ⑤ interval / latency box plot from the per-frame SW variance trials. */
 export function IntervalBoxes({ data }: { data: IntervalDistribution }) {
   const P = data.period_ms
-  const COLOR: Record<string, string> = { preview: '#2F6F68', video: '#4C5E8C' }
-  const label = (s: IntervalDistribution['streams'][number]) => `${s.kind === 'preview' ? 'Preview' : 'Video'} · ${s.node}`
+  const COLOR: Record<string, string> = { preview: '#2F6F68', video: '#4C5E8C', display: '#8A5A2B' }
+  const KIND_LABEL: Record<string, string> = { preview: 'Preview', video: 'Video', display: 'Display' }
+  const label = (s: IntervalDistribution['streams'][number]) => `${KIND_LABEL[s.kind] ?? s.kind} · ${s.node}`
   return <div style={{ marginTop: 10 }}>
     <div style={{ fontSize: 12, fontWeight: 600 }}>SW 편차 반영 분포 <span className="faint" style={{ fontWeight: 400 }} title={data.method}>— SW task별 runtime을 frame마다 min~max에서 추출 (기대 평균 유지) · {data.trials}회 × {data.frames} frame · 앞 {data.warmup_excluded}개 제외</span></div>
     <div className="faint" style={{ fontSize: 11.5, margin: '2px 0 4px' }}>출력 간격</div>
