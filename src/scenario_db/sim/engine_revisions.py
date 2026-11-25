@@ -66,6 +66,12 @@ OPT_IN: list[dict[str, str]] = [
                               "state power from the subsystems' wake sources",
      "opt_in": "config.residency (sim.config_profile run_config.residency) with a subsystem wake source "
                "(report.residency, power.residency_mw)"},
+    {"since": "15", "change": "judgement rate (R-1): request fps > judgement.rate > design_conditions.fps > 30; "
+                              "display / audio / file sink kinds",
+     "opt_in": "pipeline.judgement.rate (report.fps_source)"},
+    {"since": "15", "change": "frame pacing (frame-pacing-v1): CPU / GPU frame chain, BufferQueue back-pressure and "
+                              "panel latch (FIFO / mailbox) Monte Carlo - achieved fps, jank, frame time, latency",
+     "opt_in": "node_configs.<gpu>.sim.workload.frame_time (report.pacing)"},
 ]
 
 

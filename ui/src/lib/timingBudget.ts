@@ -150,6 +150,8 @@ export interface TimingReport {
   scenario_id: string; variant_id: string; fps: number; period_ms: number; statistic: Statistic
   /** R-1: where the judgement rate came from (only when the scenario declares `judgement.rate`) */
   fps_source?: string
+  /** R-5 / M-6: frame pacing (only when the GPU node declares sim.workload.frame_time) */
+  pacing?: FramePacing
   eis: { on: boolean; auto: boolean; mode: EisMode; stabilization: unknown }
   mfc_dual: Record<string, number>; growth: { runtime_scale: number; latency_scale: number }
   dvfs: { tables: string[]; applied: boolean; table_ref?: string | null
@@ -459,4 +461,17 @@ export function otfPacers(ips: IpRow[]): Map<string, string[]> {
   const out = new Map<string, string[]>()
   for (const ip of ips) if (ip.otf_group && (ip.standalone_hw_ms === null || ip.standalone_hw_ms === undefined)) out.set(ip.otf_group, [...(out.get(ip.otf_group) ?? []), ip.node])
   return out
+}
+
+/** R-5 / M-6 frame-pacing-v1 report (``report.pacing``). */
+export interface FramePacing {
+  model: string; node: string; status: 'ok' | 'fail' | 'no_gpu_time'; reason?: string
+  target_fps?: number; refresh_hz?: number; achieved_fps?: number | null; fail_below_fps?: number
+  jank_pct?: number | null; janks?: number; drops?: number; expected_interval_ms?: number
+  present_interval_cov?: number | null; depth?: number; present_mode?: string; frames?: number; seed?: number
+  gpu_ms?: { p50: number | null; p95: number | null; p99: number | null; median_computed: number | null }
+  frame_ms?: { p50: number | null; p95: number | null; p99: number | null }
+  latency_ms?: { p50: number | null; p99: number | null }
+  gpu_basis?: { distribution: string; sigma?: number; p95_x_gap?: number; [k: string]: unknown }
+  gpu_clock_mhz?: number; cpu_tasks?: string[]; value_source?: string; title_class?: string
 }

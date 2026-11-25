@@ -35,7 +35,14 @@
       sim:
         width: 1920
         height: 1080
-        workload: render
+        # R-5 / M-6: GPU frame-time spread for frame-pacing-v1 (assumed; replace with Perfetto FrameTimeline P50/P95/P99)
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -407,6 +414,10 @@
     gpu:
       sim:
         input_layers: 13
+        workload:
+          frame_time:
+            p99_x: 1.6    # assumed: SurfaceFlinger GPU composition adds a longer tail
+            p95_x: 1.3
       bw_kb_s:
         composition_write: 1053000
     dpu:

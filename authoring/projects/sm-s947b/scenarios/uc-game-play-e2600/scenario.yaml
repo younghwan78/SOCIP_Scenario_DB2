@@ -97,10 +97,12 @@ pipeline:
   buffers:
     GPU_NPU_BUF:
       format: RGBA8888
+      count: 3   # BufferQueue depth (R-5 frame pacing; assumed triple buffering)
       bitdepth: 8
       compression: COMP_OFF
     GPU_DPU_BUF:
       format: RGBA8888
+      count: 3   # BufferQueue depth (R-5 frame pacing; assumed triple buffering)
       bitdepth: 8
       compression: COMP_OFF
     NPU_DPU_BUF:
@@ -109,6 +111,7 @@ pipeline:
       compression: COMP_OFF
     GPU_M2M_BUF:
       format: RGBA8888
+      count: 3   # BufferQueue depth (R-5 frame pacing; assumed triple buffering)
       bitdepth: 8
       compression: COMP_OFF
     M2M_DPU_BUF:
