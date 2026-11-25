@@ -313,10 +313,10 @@ def effective_configured_clocks(
 
 
 def _fps(graph: CanonicalScenarioGraph, config: SimulationRunConfig) -> float:
-    if config.fps is not None:
-        return float(config.fps)
-    design = graph.variant.design_conditions or {}
-    return float(design.get("fps") or 30.0)
+    # R-1: request fps > judgement.rate > design_conditions.fps > 30
+    from scenario_db.sim.judgement import rate_and_source
+
+    return rate_and_source(graph, config)[0]
 
 
 def _append_missing_ip_catalog_warnings(graph: CanonicalScenarioGraph, warnings: list[str]) -> None:

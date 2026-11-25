@@ -242,13 +242,22 @@ pipeline:
     stages:                # node role -> rt | nrt | post | output (before the name rule)
       decoder: output
     kpis: [interval, latency]   # also: underrun, frame_pacing, start_time (declared, not modeled yet)
+    rate: {condition: target_fps}   # R-1, optional: exactly one of condition | hz | node
 ```
 
 | Field | Rule |
 | --- | --- |
-| `sinks[]` | `node` must be a pipeline node; `kind` is `preview` or `video`. The first of each kind is the preview / video interval, the rest are extra streams. A sink inactive in a variant (routing switch, `sim.active: false`) is not judged there; nothing judged and no RT node → `not_applicable`. |
+| `sinks[]` | `node` must be a pipeline node; `kind` is `preview`, `video`, `display`, `audio` or `file`. preview / video / display are judged by their interval: the first preview (else the first display) is the preview interval, the first video the video interval, the rest extra streams. audio (period buffers) and file (event outputs) are never judged by the frame interval; they are listed in the verdict notes until their KPI models exist. A sink inactive in a variant (routing switch, `sim.active: false`) is not judged there; nothing judged and no RT node → `not_applicable`. |
 | `stages` | Role → stage, applied before the name rule; Timing Budget `stage_overrides` still win. |
-| `kpis` | KPIs without a model are listed in the verdict notes (`판정 계약 KPI 미모델: …`), never counted as passed. |
+| `kpis` | KPIs without a model are listed in the verdict notes (`판정 계약 KPI 미모델: …`), never counted as passed. With no interval-judged output, `interval` / `latency` are listed there too. |
+| `rate` | The judgement rate (`sim/judgement.py`). Order: request `config.fps` > `rate` > `design_conditions.fps` > 30. `hz`: a fixed rate (the audio mixer period); `condition`: a `design_conditions` key (missing in a variant = error); `node`: that node's `sim.fps`. The value must be a finite positive number. The report adds `fps_source` (`contract.hz`, `contract.condition:<key>`, `contract.node:<id>`, `request`) only when `rate` is declared. |
+
+**Rate-following nodes.** With a declared `rate`, a node whose work follows the scenario rate leaves `sim.fps` /
+`sim.domain_load.rate_hz` unset, so a request fps (sweep) moves its workload, domain load and driver model
+(`mscl` takes the declared rate when `sim.fps` is absent). Nodes with their own rate keep their value: panel / DPU
+`refresh_hz`, an own-cadence SW task (`timeline.cadence: period`). Authoring warns when a node repeats the rate
+in `sim.fps` / `rate_hz`, and refuses a variant where the rate does not resolve. Known limit: the driver model
+reads the declared rate, not a request fps.
 
 The evidence generator (`scripts/generate_simulation_evidence.py`) accepts a run on the declared sinks
 active in the variant, so screen-off playback is judged on its decoder output.

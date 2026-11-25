@@ -91,6 +91,14 @@ def test_variant_without_modelable_conditions_says_so():
     assert out["status"] == "unsupported" and out["ignored"]
 
 
+def test_a_declared_stream_rate_is_the_fps_lever():
+    # R-1: the game declares judgement.rate = target_fps (no design_conditions.fps); the audio mixer hz is no lever
+    game = whatif_targets(_g("db_Exynos2600_SM-S947B", "uc-game-play-e2600", "game-fhd-90fps-sdr", "soc-exynos2600"))
+    assert game["fps"] == 90.0 and "fps" in game["supported_changes"]
+    audio = whatif_targets(_g("db_Exynos2600_SM-S947B", "uc-aud-mp3-playback-e2600", "audio-mp3-screen-on", "soc-exynos2600"))
+    assert audio["fps"] is None
+
+
 def test_new_change_kind_is_one_registration(e2700):
     kind = register(ChangeKind("demo_scale", "데모", "value", None, max_value=2.0,
                                discover=lambda t: [{"id": "demo"}], apply=lambda ctx, data: ("demo_scale", None)))

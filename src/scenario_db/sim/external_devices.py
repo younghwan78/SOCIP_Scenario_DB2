@@ -529,8 +529,9 @@ def _float_or_none(value: Any) -> float | None:
 
 
 def _variant_fps(graph: CanonicalScenarioGraph) -> float:
-    design = graph.variant.design_conditions or {}
-    return float(design.get("fps") or 30.0)
+    from scenario_db.sim.judgement import variant_rate
+
+    return variant_rate(graph)
 
 
 def _design_size(graph: CanonicalScenarioGraph) -> tuple[int, int]:

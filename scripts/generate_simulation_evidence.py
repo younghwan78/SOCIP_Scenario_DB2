@@ -67,13 +67,15 @@ def expected_params_hash(db: Path, scenario: str, evidence: dict) -> str:
 def declared_sinks(graph, inputs) -> set[str] | None:
     """The scenario's judgement sinks active in this variant; None = undeclared (the camera default).
     Declared but none active = an empty set: nothing to accept on, never the camera default."""
-    from scenario_db.sim.timing_budget import judgement_contract
+    from scenario_db.models.definition.usecase import INTERVAL_SINK_KINDS
+    from scenario_db.sim.judgement import judgement_contract
 
     contract = judgement_contract(graph)
     if contract is None or not contract.sinks:
         return None
     active = {str(t["id"]) for t in inputs.timeline_tasks}
-    return {x.node for x in contract.sinks if x.node in active}
+    # audio / file sinks are not frame-interval outputs (R-1)
+    return {x.node for x in contract.sinks if x.node in active and x.kind in INTERVAL_SINK_KINDS}
 
 
 def simulate(raw: dict, vid: str, catalog) -> tuple:
@@ -81,7 +83,7 @@ def simulate(raw: dict, vid: str, catalog) -> tuple:
     for clock in CLOCKS:
         graph, inputs = build_inputs(raw, vid, catalog, clock)
         result = run_simulation(inputs, dvfs_tables={})
-        fps = float((graph.variant.design_conditions or {}).get("fps") or inputs.config.fps)
+        fps = float(inputs.config.fps)      # R-1: the resolved judgement rate (design fps, else 30, when undeclared)
         check = {"clock_mhz": clock, **assess(result, fps, 3.0, declared_sinks(graph, inputs))}
         last = (inputs, result, check)
         if check["accepted"]:

@@ -121,6 +121,7 @@ def validate_documents(docs: list[Any]) -> dict[str, list[str]]:
             if e.get("buffer") and e["buffer"] not in buffers:
                 warnings.append(f"{uid}: edge {e.get('from')}->{e.get('to')} buffer '{e['buffer']}' "
                                 "not in pipeline.buffers")
+        errors.extend(_rate_errors(uc, warnings))
         anchors = set(((uc.get("size_profile") or {}).get("anchors") or {}).keys())
         for v in uc.get("variants") or []:
             anchors |= set((v.get("size_overrides") or {}).keys())
@@ -129,3 +130,50 @@ def validate_documents(docs: list[Any]) -> dict[str, list[str]]:
             if ref and ref not in anchors:
                 warnings.append(f"{uid}: buffer '{name}' size_ref '{ref}' not a known anchor")
     return {"errors": errors, "warnings": warnings}
+
+
+def _rate_errors(uc: dict, warnings: list[str]) -> list[str]:
+    """R-1: a declared ``judgement.rate`` must resolve in every variant. A node that follows the scenario rate
+    but pins the same value in ``sim.fps`` / ``domain_load.rate_hz`` is warned: a request fps (sweep) would not
+    move it. Nodes with their own rate (panel refresh, audio period) declare a different value."""
+    rate = ((uc.get("pipeline") or {}).get("judgement") or {}).get("rate")
+    if not isinstance(rate, dict):
+        return []
+    uid = uc["id"]
+    out: list[str] = []
+    for v in uc.get("variants") or []:
+        vid = v.get("id")
+        configs = v.get("node_configs") or {}
+        value = rate.get("hz")
+        if rate.get("condition"):
+            value = (v.get("design_conditions") or {}).get(rate["condition"])
+            if value is None:
+                out.append(f"{uid}/{vid}: judgement.rate condition '{rate['condition']}' missing in design_conditions")
+                continue
+        elif rate.get("node"):
+            value = (((configs.get(rate["node"]) or {}).get("sim")) or {}).get("fps")
+            if value is None:
+                out.append(f"{uid}/{vid}: judgement.rate node '{rate['node']}' has no sim.fps")
+                continue
+        try:
+            hz = float(value)
+        except (TypeError, ValueError):
+            out.append(f"{uid}/{vid}: judgement.rate = {value!r} is not a number")
+            continue
+        if not hz > 0 or hz == float("inf"):
+            out.append(f"{uid}/{vid}: judgement.rate = {value!r} must be a finite positive rate")
+            continue
+        for node_id, cfg in configs.items():
+            if node_id == rate.get("node") or not isinstance(cfg, dict):
+                continue
+            sim = cfg.get("sim") if isinstance(cfg.get("sim"), dict) else {}
+            load = sim.get("domain_load") if isinstance(sim.get("domain_load"), dict) else {}
+            for key, pinned in (("sim.fps", sim.get("fps")), ("sim.domain_load.rate_hz", load.get("rate_hz"))):
+                try:
+                    same = pinned is not None and abs(float(pinned) - hz) < 1e-9
+                except (TypeError, ValueError):
+                    same = False
+                if same:
+                    warnings.append(f"{uid}/{vid}: node '{node_id}' {key} {pinned} repeats judgement.rate "
+                                    "(a rate-following node should leave it unset so a request fps moves it)")
+    return out

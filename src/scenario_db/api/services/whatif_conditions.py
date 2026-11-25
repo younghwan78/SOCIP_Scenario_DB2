@@ -286,7 +286,14 @@ def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dic
                       "size_anchor_id": size_anchors[0] if size_supported else None,
                       "clock_supported": workload.sim_params.ppc > 0,
                       "input_size": [shape.input.width, shape.input.height] if shape else None})
+    from scenario_db.sim.judgement import declared_rate
+
+    # R-1: a declared stream rate (a design condition or a node's fps) before design_conditions.fps; a fixed
+    # ``hz`` (the audio mixer period) is not a frame-rate lever
+    declared = declared_rate(graph)
+    stream_rate = declared[0] if declared is not None and declared[1] != "contract.hz" else None
     fps = (config.fps if config is not None and getattr(config, "fps", None) else None) \
+        or stream_rate \
         or (graph.variant.design_conditions or {}).get("fps")
     out = {"anchors": rows, "nodes": nodes, "fps": float(fps) if fps else None,
            "output_targets": [r["id"] for r in rows if r["kind"] == "output" and r["supported"]],

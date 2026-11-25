@@ -260,6 +260,17 @@ pipeline:
       format: AUDIO_PCM
       bitdepth: 16
       compression: COMP_OFF
+  judgement:
+    rate:
+      hz: 50
+    sinks:
+    - node: speaker
+      kind: audio
+    - node: bt_codec
+      kind: audio
+    kpis:
+    - underrun
+    - latency
 variants:
 - id: audio-mp3-screen-on
   severity: light

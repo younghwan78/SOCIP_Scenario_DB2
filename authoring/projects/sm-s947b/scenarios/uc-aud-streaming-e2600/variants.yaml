@@ -28,6 +28,12 @@
       model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
       bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
         not to a codec or display IP.
+      timeline:
+        cadence: period
+        period_ms: 33.333
+        value_source: assumed
+        note: Packet receive at its sw_timing rate (30 Hz), independent of the 20 ms mixer period that judgement.rate
+          sets; the CPU work counts at this rate.
     abox:
       selected_mode: Normal
       sim:

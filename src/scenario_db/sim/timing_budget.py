@@ -34,6 +34,7 @@ from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.assumed_loads import assumed_loads
 from scenario_db.sim.domain_loads import domain_loads
+from scenario_db.sim.judgement import judgement_contract, rate_and_source  # judgement_contract re-exported (R-1)
 from scenario_db.sim.cpu_power import PROFILER_COEFF as _CPU_PROFILER_COEFF
 from scenario_db.sim.models import CpuProfile, DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.power_params import effective_power_params
@@ -649,7 +650,9 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
                 dual[node] = 2
     sw_order = _sw_order(sw_items, edges)
     stage_paths = _stage_paths(sw_items, stage, workloads, edges)
-    if any(i["source"] == "assumed" for items in sw_items.values() for i in items):
+    # own-cadence SW counts too (its CPU work is in the power, R-1 moved audio packet receive there)
+    if any(i["source"] == "assumed" for items in sw_items.values() for i in items) or any(
+            str(profiles.get(t, {}).get("value_source") or "") == "assumed" for t in own_sw):
         warnings.append(
             "SW timing contains 'assumed' values; replace with previous-project measurements."
         )
@@ -659,6 +662,8 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
     }
     return {
         "contract": contract,
+        # R-1: where the judgement rate came from; None for scenarios that declare no rate (report shape kept)
+        "fps_source": rate_and_source(probe, config)[1],
         "explicit_resource": explicit_resource,
         "shared": shared,
         "eis_tasks": eis_tasks,
@@ -685,18 +690,14 @@ def judged_outputs(nodes: list[str], contract) -> list[tuple[str, str]]:
     """(node, kind) of the outputs whose interval is judged, in order: declared sinks active in this
     variant (``pipeline.judgement``), else the name rule (DPU = preview, MFC / APV = video)."""
     if contract is not None and contract.sinks:
+        from scenario_db.models.definition.usecase import INTERVAL_SINK_KINDS
+
         present = set(nodes)
-        return [(x.node, x.kind) for x in contract.sinks if x.node in present]
+        # audio / file sinks are not frame-interval outputs (R-1): their KPI models judge them
+        return [(x.node, x.kind) for x in contract.sinks if x.node in present and x.kind in INTERVAL_SINK_KINDS]
     return [(n, "preview" if _DISPLAY_RE.search(n) else "video") for n in nodes
             if _DISPLAY_RE.search(n) or _ENCODER_RE.search(n)]
 
-
-def judgement_contract(graph):
-    """The scenario's declared judgement contract (``pipeline.judgement``), or None (name rules)."""
-    from scenario_db.models.definition.usecase import JudgementContract
-
-    raw = (getattr(graph.scenario, "pipeline", None) or {}).get("judgement")
-    return JudgementContract.model_validate(raw) if raw else None
 
 
 def _classify(tasks, edges, workloads, overrides) -> dict[str, Stage]:
@@ -1130,6 +1131,12 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         from scenario_db.models.definition.usecase import MODELED_KPIS
 
         missing = [k for k in contract.kpis if k not in MODELED_KPIS]
+        if intervals["preview"]["ok"] is None and intervals["video"]["ok"] is None and not intervals.get("streams"):
+            # no output judged by the frame interval: interval / latency were not evaluated either
+            missing = [k for k in contract.kpis if k not in missing and k in ("interval", "latency")] + missing
+        unjudged = [f"{x.node} ({x.kind})" for x in contract.sinks if x.kind in ("audio", "file") and x.node in plan["tasks"]]
+        if unjudged:
+            verdict["notes"].append("frame interval로 판정하지 않는 sink: " + ", ".join(unjudged))
         if missing:
             # declared requirements the engine does not evaluate yet: stated, never counted as passed
             verdict["notes"].append("판정 계약 KPI 미모델: " + ", ".join(missing))
@@ -1137,6 +1144,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         "scenario_id": graph.scenario_id,
         "variant_id": graph.variant_id,
         "fps": round(1000.0 / period, 4),
+        **({"fps_source": plan["fps_source"]} if plan.get("fps_source") else {}),
         "period_ms": round(period, 4),
         "statistic": options.statistic,
         "eis": {
@@ -1188,7 +1196,8 @@ def _cadence(
     nodes = [str(t["id"]) for t in inputs.timeline_tasks]
     # declared sinks (D-02; inactive ones in this variant are not judged) or the name rule
     outputs = judged_outputs(nodes, plan.get("contract"))
-    preview = next((n for n, k in outputs if k == "preview"), None)
+    # a display sink (R-1) takes the preview slot when the scenario declares no preview sink
+    preview = next((n for n, k in outputs if k == "preview"), None) or next((n for n, k in outputs if k == "display"), None)
     video = next((n for n, k in outputs if k == "video"), None)
     tol = options.interval_tolerance
 

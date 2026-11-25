@@ -115,6 +115,19 @@ pipeline:
       format: RGBA8888
       bitdepth: 8
       compression: COMP_OFF
+  # R-1 judgement contract: the frame rate is the variant's target_fps (a request fps still wins).
+  # gpu / npu / m2m follow it (no sim.fps); panel and dpu keep their own refresh_hz.
+  judgement:
+    rate:
+      condition: target_fps
+    sinks:
+    - node: dpu
+      kind: display
+      label: panel
+    kpis:
+    - interval
+    - frame_pacing
+    - latency
 variants:
   $include: variants.yaml
 provenance:

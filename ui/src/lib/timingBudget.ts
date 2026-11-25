@@ -148,6 +148,8 @@ export interface WhatIfRow {
 export interface TimingReport {
   condition_hash?: string
   scenario_id: string; variant_id: string; fps: number; period_ms: number; statistic: Statistic
+  /** R-1: where the judgement rate came from (only when the scenario declares `judgement.rate`) */
+  fps_source?: string
   eis: { on: boolean; auto: boolean; mode: EisMode; stabilization: unknown }
   mfc_dual: Record<string, number>; growth: { runtime_scale: number; latency_scale: number }
   dvfs: { tables: string[]; applied: boolean; table_ref?: string | null
@@ -264,7 +266,7 @@ export const formatMeasuredFlags = (m: MeasuredInputs | null) => (m ? (['sw', 'c
 export interface IntervalDistribution {
   period_ms: number; trials: number; frames: number; warmup_excluded: number; tolerance: number; method: string
   varied: string[]; fixed: string[]
-  streams: { node: string; kind: 'preview' | 'video'; intervals: number[]; latency: number[]; drops: number; off_cadence_pct: number | null }[]
+  streams: { node: string; kind: 'preview' | 'video' | 'display'; intervals: number[]; latency: number[]; drops: number; off_cadence_pct: number | null }[]
 }
 export interface RegisterResult { run_id: string; promoted: { id: string; variant_id: string }[]; skipped: { variant_id: string; reason: string }[]; total_mw?: number }
 export interface EvidenceResult { evidence_id: string; existed: boolean; params_hash: string; total_mw: number | null }

@@ -262,6 +262,13 @@ def evaluate_graph(graph, overrides: dict[str, Any] | None = None) -> dict[str, 
         raw: dict[str, Any] = {}
         try:
             raw = inputs_from_config(model, cfg, caps)
+            if "fps" in MODELS[model].model_fields and raw.get("fps") is None:
+                # R-1: a rate-following node (no sim.fps) runs at the declared judgement rate
+                from scenario_db.sim.judgement import declared_rate
+
+                declared = declared_rate(graph)
+                if declared is not None:
+                    raw["fps"] = declared[0]
             if node_id in overrides:
                 override = overrides[node_id]
                 raw = override.model_dump() if hasattr(override, "model_dump") else override
