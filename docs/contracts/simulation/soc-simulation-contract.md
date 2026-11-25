@@ -286,10 +286,10 @@ pipeline:
 | Step | Rule |
 | --- | --- |
 | CPU | SW tasks upstream of the GPU in the frame DAG, sampled from their sw_timing min / mean / max |
-| GPU | median = domain load work per frame / its clock; spread: histogram > measured percentiles > `p99_x` log-normal (sigma = ln p99_x / 2.326; the `p95_x` gap is reported) > fixed |
+| GPU | median = domain load work per frame / its clock; spread: histogram > measured P50 alone (fixed) > measured P99 (else P95) log-normal over P50 (a measured P95 next to P99 is compared, gap reported) > `p99_x` log-normal (sigma = ln p99_x / 2.326; the `p95_x` gap is reported) > fixed |
 | Chain | `cpu_start_k = max(k*T, cpu_end_{k-1}, release(k - depth))`, GPU after CPU and the previous frame |
 | Latch | panel `sim.refresh_hz` ticks; FIFO presents the oldest ready frame, mailbox the newest (the rest drop); a buffer is released when replaced on screen |
-| Metrics | achieved fps, jank % (present interval > ceil(T / V) vsyncs, so 45 fps on 120 Hz is no jank), drops, GPU / frame time P50 / P95 / P99, present interval CoV, render-to-photon latency |
+| Metrics | achieved fps, jank % (present interval > ceil(T / V) vsyncs, so 45 fps on 120 Hz is no jank), drops, GPU time and frame time (CPU start to GPU done, queue wait included) P50 / P95 / P99, present interval CoV, render-to-photon latency. The latch rate is the panel refresh the timeline resolved; the depth follows `buffer_overrides`; the pacing inputs are in the condition hash |
 | Verdict | `frame_pacing` counts as evaluated. Achieved fps below the target by more than 2 % (or the interval tolerance) fails; jank % is reported until KPI targets exist (R-6) |
 
 Limits: stages after the GPU (NPU, M2M scaler, DPU composition) are not in the chain; the timeline token

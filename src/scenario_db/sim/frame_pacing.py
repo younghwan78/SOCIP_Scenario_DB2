@@ -46,7 +46,13 @@ def gpu_sampler(median_ms: float, ft: FrameTime | None):
     if ft is not None and (ft.p99_ms or ft.p95_ms):
         center = ft.p50_ms or median_ms
         sigma = (math.log(ft.p99_ms / center) / Z99 if ft.p99_ms else math.log(ft.p95_ms / center) / Z95)
-        basis = {"distribution": "lognormal", "from": "measured percentiles", "median_ms": round(center, 4)}
+        basis = {"distribution": "lognormal", "from": "measured p99" if ft.p99_ms else "measured p95",
+                 "median_ms": round(center, 4)}
+        if ft.p99_ms and ft.p95_ms:
+            # one log-normal cannot match both: P99 sets sigma, the measured P95 is compared (gap reported)
+            implied = center * math.exp(Z95 * sigma) if sigma > 0 else center
+            basis.update({"p95_ms_measured": ft.p95_ms, "p95_ms_implied": round(implied, 4),
+                          "p95_ms_gap": round(implied - ft.p95_ms, 4)})
     elif ft is not None and ft.p99_x:
         sigma = math.log(ft.p99_x) / Z99
         basis = {"distribution": "lognormal", "from": "p99_x", "median_ms": round(center, 4)}
@@ -137,7 +143,7 @@ def simulate(*, period_ms: float, vsync_ms: float, cpu_ranges: list[tuple[float,
     span = (times[-1] - times[0]) if len(times) > 1 else 0.0
     mean_gap = sum(gaps) / len(gaps) if gaps else None
     judged = range(warmup, frames)
-    frame = [cpu_ms[k] + gpu_ms[k] for k in judged]
+    frame = [gpu_end[k] - cpu_start[k] for k in judged]      # CPU start -> GPU done, GPU queue wait included
     latency = [present[k] - cpu_start[k] + vsync_ms for k in shown]       # + one scan-out to photon
     r = lambda v: None if v is None else round(v, 4)  # noqa: E731
     return {
@@ -175,8 +181,51 @@ def _ancestors(edges: list[dict], node_id: str, active: set[str]) -> list[str]:
     return seen
 
 
+def vsync_hz(graph, plan: dict) -> float | None:
+    """The latch rate: the refresh the timeline resolved for the panel task (catalog / variant), else a declared
+    ``sim.refresh_hz`` on the display output, else None (the judgement rate)."""
+    configs = graph.variant.node_configs or {}
+    nodes = sorted(graph.pipeline_nodes, key=lambda n: str(n.get("role") or "") != "display_output")
+    for n in nodes:
+        task = plan["tasks"].get(str(n.get("id")))
+        if task and task.get("refresh_hz"):
+            return float(task["refresh_hz"])
+    for n in nodes:
+        sim = (configs.get(str(n.get("id"))) or {}).get("sim")
+        if str(n.get("id")) in plan["tasks"] and isinstance(sim, dict) and sim.get("refresh_hz"):
+            return float(sim["refresh_hz"])
+    return None
+
+
+def queue_depth(graph, node: str, active: set[str]) -> tuple[int, str | None]:
+    """(BufferQueue depth, buffer id) of the active GPU output edge, variant ``buffer_overrides`` applied."""
+    from scenario_db.sim.transfers import _effective_buffer
+
+    for e in graph.pipeline_edges:      # the variant's active GPU output edge (routing switch / patch applied)
+        if str(e.get("from")) == node and e.get("buffer") and str(e.get("to")) in active:
+            count = _effective_buffer(graph, str(e["buffer"])).get("count")
+            return (int(count) if count is not None else DEFAULT_DEPTH), str(e["buffer"])
+    return DEFAULT_DEPTH, None
+
+
+def pacing_inputs(graph) -> dict:
+    """What frame pacing reads beyond the simulation inputs, for the condition hash; {} when not declared."""
+    configs = getattr(graph.variant, "node_configs", None) or {}
+    nodes = getattr(graph, "pipeline_nodes", None) or []
+    active = {str(n.get("id")) for n in nodes}
+    out = {}
+    for n in nodes:
+        nid = str(n.get("id"))
+        sim = (configs.get(nid) or {}).get("sim") if isinstance(configs.get(nid), dict) else None
+        raw = sim.get("workload") if isinstance(sim, dict) else None
+        if _is_gpu(graph, n) and isinstance(raw, dict) and raw.get("frame_time") is not None:
+            depth, buffer = queue_depth(graph, nid, active)
+            out[nid] = {"workload": raw, "depth": depth, "buffer": buffer, "model": MODEL}
+    return out
+
+
 def _is_gpu(graph, node: dict) -> bool:
-    ip = graph.ip_catalog.get(str(node.get("ip_ref") or ""))
+    ip = (getattr(graph, "ip_catalog", None) or {}).get(str(node.get("ip_ref") or ""))
     text = " ".join(str(x or "").lower() for x in (getattr(ip, "category", None), node.get("ip_ref"), node.get("role")))
     return "gpu" in text
 
@@ -207,26 +256,12 @@ def pacing_report(graph, plan: dict, domain: dict, period_ms: float, ranges: dic
     if not gpu_median > 0:
         return {"model": MODEL, "node": node, "status": "no_gpu_time",
                 "reason": f"{node}: frame pacing needs positive GPU work per frame (domain load gives 0)"}
-    # vsync from the panel (display output role), else any active node with a refresh rate (DPU)
-    panel_hz = None
-    nodes = sorted(graph.pipeline_nodes, key=lambda n: str(n.get("role") or "") != "display_output")
-    for n in nodes:
-        sim = (configs.get(str(n.get("id"))) or {}).get("sim")
-        if str(n.get("id")) in plan["tasks"] and isinstance(sim, dict) and sim.get("refresh_hz"):
-            panel_hz = float(sim["refresh_hz"])
-            break
+    panel_hz = vsync_hz(graph, plan)
     vsync = 1000.0 / panel_hz if panel_hz else period_ms
     sw = {i["task"]: i for items in plan["sw_items"].values() for i in items if i["kind"] == "sw"}
     cpu = [t for t in _ancestors(plan.get("edges") or graph.pipeline_edges, node, set(plan["tasks"])) if t in sw]
     cpu_ranges = [ranges.get(t) or (sw[t]["runtime_ms"],) * 3 for t in cpu]
-    depth = DEFAULT_DEPTH
-    buffers = (getattr(graph.scenario, "pipeline", None) or {}).get("buffers") or {}
-    for e in graph.pipeline_edges:      # the variant's active GPU output edge (routing switch / patch applied)
-        if str(e.get("from")) == node and e.get("buffer") and str(e.get("to")) in plan["tasks"]:
-            count = (buffers.get(e["buffer"]) or {}).get("count")
-            if count is not None:
-                depth = int(count)
-                break
+    depth, _ = queue_depth(graph, node, set(plan["tasks"]))
     out = simulate(period_ms=period_ms, vsync_ms=vsync, cpu_ranges=cpu_ranges, gpu_median_ms=gpu_median,
                    frame_time=spec.frame_time, depth=depth, present_mode=spec.present_mode)
     target = 1000.0 / period_ms

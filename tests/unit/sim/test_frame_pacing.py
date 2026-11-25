@@ -44,7 +44,7 @@ def test_the_p99_ratio_sets_the_sigma_and_reports_the_p95_gap():
 def test_measured_values_win_over_the_ratio():
     assert gpu_sampler(6.61, FrameTime(histogram=[[7, 1], [9, 1]], p99_x=1.4))[1]["distribution"] == "histogram"
     _, basis = gpu_sampler(6.61, FrameTime(p50_ms=7.0, p99_ms=10.0, p99_x=1.1))
-    assert basis["from"] == "measured percentiles" and basis["median_ms"] == 7.0
+    assert basis["from"] == "measured p99" and basis["median_ms"] == 7.0
     assert gpu_sampler(6.61, None)[1]["distribution"] == "fixed"
 
 
@@ -162,3 +162,45 @@ def test_zero_gpu_work_is_reported_not_raised():
 def test_very_slow_frames_are_a_shortfall_not_a_deadlock():
     out = _sim(frame_time=FrameTime(histogram=[[30000.0, 1.0]]), frames=40, warmup=5)
     assert out["achieved_fps"] < 1 and out["jank_pct"] == 100
+
+
+def test_a_buffer_override_sets_the_depth():
+    graph = _graph()
+    graph.variant.buffer_overrides = {**(graph.variant.buffer_overrides or {}), "GPU_DPU_BUF": {"count": 2}}
+    p = analyze_timing_budget(graph, OPTS)["pacing"]
+    assert p["depth"] == 2 and p["achieved_fps"] < 119
+
+
+def test_the_latch_uses_the_refresh_the_timeline_resolved():
+    from scenario_db.sim.frame_pacing import vsync_hz
+
+    plan = {"tasks": {"panel": {"refresh_hz": 60.0}, "dpu": {}}}
+    assert vsync_hz(_graph(), plan) == 60.0
+    assert analyze_timing_budget(_graph(), OPTS)["pacing"]["refresh_hz"] == 120
+
+
+def test_a_measured_p95_next_to_p99_is_compared_not_dropped():
+    _, basis = gpu_sampler(6.61, FrameTime(p50_ms=7.0, p95_ms=13.0, p99_ms=15.0))
+    assert basis["from"] == "measured p99" and basis["p95_ms_measured"] == 13.0
+    assert basis["p95_ms_gap"] == pytest.approx(basis["p95_ms_implied"] - 13.0, abs=1e-4)
+
+
+def test_frame_time_counts_the_gpu_queue_wait():
+    out = _sim(period_ms=10.0, vsync_ms=10.0, gpu_median_ms=12.0, frame_time=None, cpu_ranges=[(2.0, 2.0, 2.0)])
+    assert out["frame_ms"]["p50"] > 14.0          # CPU 2 + GPU 12 + the wait behind the previous frame
+
+
+def test_the_condition_hash_follows_the_pacing_inputs(monkeypatch):
+    from types import SimpleNamespace
+
+    from scenario_db.api.services import timing_budget as svc
+
+    monkeypatch.setattr(svc, "build_simulation_inputs", lambda graph, config: None)
+    monkeypatch.setattr(svc, "_request_hash", lambda *a, **k: "same-simulation-inputs")
+    shim = SimpleNamespace(config=None)
+    base = svc._condition_hash(_graph(), OPTS, shim, {})
+    deeper = _graph()
+    deeper.variant.buffer_overrides = {**(deeper.variant.buffer_overrides or {}), "GPU_DPU_BUF": {"count": 2}}
+    tail = _graph()
+    tail.variant.node_configs["gpu"]["sim"]["workload"]["frame_time"] = {"p99_x": 2.0}
+    assert len({base, svc._condition_hash(deeper, OPTS, shim, {}), svc._condition_hash(tail, OPTS, shim, {})}) == 3

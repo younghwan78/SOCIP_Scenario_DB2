@@ -116,6 +116,12 @@ def _condition_hash(graph, options, shim, tables) -> str:
     domain = _domain_load_inputs(graph)
     if domain:
         payload["domain_loads"] = domain
+    # R-5 frame pacing reads the GPU workload and the BufferQueue depth (overrides applied); absent = unchanged
+    from scenario_db.sim.frame_pacing import pacing_inputs
+
+    pacing = pacing_inputs(graph)
+    if pacing:
+        payload["pacing"] = pacing
     # R-3 event jobs read their knob parameters from power_options; absent = hash unchanged
     jobs = (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("jobs")
     if jobs:
