@@ -262,6 +262,39 @@ reads the declared rate, not a request fps.
 The evidence generator (`scripts/generate_simulation_evidence.py`) accepts a run on the declared sinks
 active in the variant, so screen-off playback is judged on its decoder output.
 
+## GPU Workload and Frame Pacing (`sim.workload`, `frame-pacing-v1`)
+
+A GPU node may declare its workload as a mapping at `node_configs.<gpu>.sim.workload` (a string stays a free
+label). The model choice stays the node's `domain_load.model`; the workload holds inputs only.
+
+```yaml
+node_configs:
+  gpu:
+    sim:
+      workload:
+        title_class: action_3d
+        frame_time: {p99_x: 1.45, p95_x: 1.25}   # or p50/p95/p99_ms, or histogram [[ms, share], ...]
+        present_mode: fifo                        # fifo | mailbox
+        value_source: assumed
+pipeline:
+  buffers:
+    GPU_DPU_BUF: {count: 3}                       # BufferQueue depth (>= 2; default 3)
+```
+
+`frame_time` turns on `frame-pacing-v1` (`report.pacing`), a seeded Monte Carlo (600 frames, warm-up 30):
+
+| Step | Rule |
+| --- | --- |
+| CPU | SW tasks upstream of the GPU in the frame DAG, sampled from their sw_timing min / mean / max |
+| GPU | median = domain load work per frame / its clock; spread: histogram > measured P50 alone (fixed) > measured P99 (else P95) log-normal over P50 (a measured P95 next to P99 is compared, gap reported) > `p99_x` log-normal (sigma = ln p99_x / 2.326; the `p95_x` gap is reported) > fixed |
+| Chain | `cpu_start_k = max(k*T, cpu_end_{k-1}, release(k - depth))`, GPU after CPU and the previous frame |
+| Latch | panel `sim.refresh_hz` ticks; FIFO presents the oldest ready frame, mailbox the newest (the rest drop); a buffer is released when replaced on screen |
+| Metrics | achieved fps, jank % (present interval > ceil(T / V) vsyncs, so 45 fps on 120 Hz is no jank), drops, GPU time and frame time (CPU start to GPU done, queue wait included) P50 / P95 / P99, present interval CoV, render-to-photon latency. The latch rate is the panel refresh the timeline resolved; the depth follows `buffer_overrides`; the pacing inputs are in the condition hash |
+| Verdict | `frame_pacing` counts as evaluated. Achieved fps below the target by more than 2 % (or the interval tolerance) fails; jank % is reported until KPI targets exist (R-6) |
+
+Limits: stages after the GPU (NPU, M2M scaler, DPU composition) are not in the chain; the timeline token
+capacity does not follow `count`; exploration and concurrent sets do not carry `pacing` yet.
+
 ## Event Jobs (`pipeline.jobs`)
 
 A one-off or burst piece of work on top of the steady frame DAG (capture shot, camera launch, lens switch, seek)

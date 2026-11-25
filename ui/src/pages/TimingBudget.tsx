@@ -20,6 +20,7 @@ import { calibrationApi } from '../lib/calibration'
 import { useRegistrationGuard } from '../lib/registration'
 import { RegistrationBasis } from '../components/RegistrationBasis'
 import { ConcurrentCard } from '../components/ConcurrentCard'
+import { PacingSummary } from '../components/PacingCard'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -231,6 +232,7 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
         actions={<div className="seg sm" role="group" aria-label="warm-up 제외" title="앞쪽 출력 간격 N개를 판정에서 제외 (pipeline fill · AE/AWB 안정화). 0 = 모두 판정">{[0, 1, 2, 4].map((n) => <button key={n} className={warmup === n ? 'on' : ''} onClick={() => setWarmup(n)}>{n ? `warm-up ${n}` : 'warm-up 없음'}</button>)}</div>}><Intervals report={r} />
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
         {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>
+      {r.pacing && <Card id="pacing" title="⑤-b Frame pacing (panel latch)" note="CPU → GPU frame chain · BufferQueue back-pressure · panel vsync latch Monte Carlo · jank = 기대 vsync 간격 초과 (목표값은 R-6 전까지 참고)"><PacingSummary pacing={r.pacing} /></Card>}
       <Card id="whatif" title="⑥ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
         {!extrasOn ? <div className="empty">위의 보조 탐색 계산을 켜면 SW 증가 조건을 비교합니다.</div> : whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
       </Card>

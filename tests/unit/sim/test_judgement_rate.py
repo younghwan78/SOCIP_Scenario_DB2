@@ -39,7 +39,7 @@ def test_the_game_is_judged_at_its_target_fps():
         r = _run(GAME, variant)
         assert r["fps"] == fps and r["fps_source"] == "contract.condition:target_fps"
         assert r["intervals"]["preview"]["node"] == "dpu"            # the display sink takes the preview slot
-        assert any("frame_pacing" in n for n in r["verdict"]["notes"])
+        assert "pacing" in r and not any("frame_pacing" in n for n in r["verdict"]["notes"])   # R-5: evaluated
 
 
 def test_a_request_fps_wins_and_moves_the_rate_following_gpu():

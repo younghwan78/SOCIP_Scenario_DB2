@@ -671,6 +671,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "h_blank": h_blank,
         "stage": stage,
         "tasks": tasks,
+        "edges": edges,      # the timeline edges this plan runs (frame pacing reads the GPU's upstream)
         "sw_items": sw_items,
         "own_sw": own_sw,
         "sw_order": sw_order,
@@ -1126,11 +1127,22 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         if not est["feasible"]:
             verdict["reasons"].append(est["reason"])
             verdict["status"] = "fail"
+    # M-6: frame pacing when a GPU node declares sim.workload.frame_time (opt-in; None otherwise)
+    from scenario_db.sim.frame_pacing import pacing_report
+
+    pacing = pacing_report(graph, plan, domain, period, _sw_ranges(plan, options), options)
+    if pacing is not None and pacing["status"] == "fail":
+        verdict["reasons"].append(f"frame pacing: {pacing['achieved_fps']} fps < target {pacing['target_fps']:g} fps"
+                                  f" (jank {pacing['jank_pct']} %)")
+        verdict["status"] = "fail"
+    elif pacing is not None and pacing["status"] == "no_gpu_time":
+        verdict["notes"].append(pacing["reason"])
     contract = plan.get("contract")
     if contract is not None:
         from scenario_db.models.definition.usecase import MODELED_KPIS
 
-        missing = [k for k in contract.kpis if k not in MODELED_KPIS]
+        evaluated = {"frame_pacing"} if pacing is not None and pacing["status"] in ("ok", "fail") else set()
+        missing = [k for k in contract.kpis if k not in MODELED_KPIS and k not in evaluated]
         if intervals["preview"]["ok"] is None and intervals["video"]["ok"] is None and not intervals.get("streams"):
             # no output judged by the frame interval: interval / latency were not evaluated either
             missing = [k for k in contract.kpis if k not in missing and k in ("interval", "latency")] + missing
@@ -1145,6 +1157,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         "variant_id": graph.variant_id,
         "fps": round(1000.0 / period, 4),
         **({"fps_source": plan["fps_source"]} if plan.get("fps_source") else {}),
+        **({"pacing": pacing} if pacing is not None else {}),
         "period_ms": round(period, 4),
         "statistic": options.statistic,
         "eis": {

@@ -106,10 +106,12 @@ pipeline:
   buffers:
     GPU_NPU_BUF:
       format: RGBA8888
+      count: 3
       bitdepth: 8
       compression: COMP_OFF
     GPU_DPU_BUF:
       format: RGBA8888
+      count: 3
       bitdepth: 8
       compression: COMP_OFF
     NPU_DPU_BUF:
@@ -118,6 +120,7 @@ pipeline:
       compression: COMP_OFF
     GPU_M2M_BUF:
       format: RGBA8888
+      count: 3
       bitdepth: 8
       compression: COMP_OFF
     M2M_DPU_BUF:
@@ -170,7 +173,13 @@ variants:
       sim:
         width: 1920
         height: 1080
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -296,7 +305,13 @@ variants:
       sim:
         width: 1920
         height: 1080
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -428,7 +443,13 @@ variants:
       sim:
         width: 1920
         height: 1080
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -559,7 +580,13 @@ variants:
       sim:
         width: 3840
         height: 2160
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -684,7 +711,13 @@ variants:
       sim:
         width: 1920
         height: 1080
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -816,7 +849,13 @@ variants:
       sim:
         width: 1920
         height: 1080
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -950,7 +989,13 @@ variants:
       sim:
         width: 2560
         height: 1440
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.45
+            p95_x: 1.25
+          present_mode: fifo
+          value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
         composition_write: 0
@@ -1109,7 +1154,13 @@ variants:
       sim:
         width: 1920
         height: 1080
-        workload: render
+        workload:
+          title_class: action_3d
+          frame_time:
+            p99_x: 1.6
+            p95_x: 1.3
+          present_mode: fifo
+          value_source: assumed
         input_layers: 13
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
