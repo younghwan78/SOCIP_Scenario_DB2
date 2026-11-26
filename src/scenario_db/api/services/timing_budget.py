@@ -136,6 +136,12 @@ def _condition_hash(graph, options, shim, tables) -> str:
     pacing = pacing_inputs(graph)
     if pacing:
         payload["pacing"] = pacing
+    # M-7 MIF floor reads the GPU workload mapping and the catalog min-lock table; absent = unchanged
+    from scenario_db.sim.gpu_memory import mif_inputs
+
+    mif = mif_inputs(graph)
+    if mif:
+        payload["gpu_mif"] = mif
     # R-3 event jobs read their knob parameters from power_options; absent = hash unchanged
     jobs = (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("jobs")
     if jobs:

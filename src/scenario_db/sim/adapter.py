@@ -12,6 +12,7 @@ from scenario_db.sim.external_devices import (
 from scenario_db.sim.models import IPWorkload, PortTransferSpec, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
 from scenario_db.sim.timeline_adapter import timeline_edges, timeline_tasks
+from scenario_db.sim.gpu_memory import gpu_workload_transfers
 from scenario_db.sim.transfers import apply_peak_ratio, compression_catalog, edge_port_transfers, history_port_transfers, port_transfers_for_node, standalone_port_transfers, sw_timed_dma_nodes
 from scenario_db.sim.stream_io import supplemental_transfers
 from scenario_db.sim.timing_profiles import timing_case, timing_profiles
@@ -262,6 +263,7 @@ def _workloads_and_transfers(
     transfers.extend(history_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
     transfers.extend(standalone_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
     transfers.extend(supplemental)
+    transfers.extend(gpu_workload_transfers(graph, {**by_node, **standins}))   # M-7: declared GPU DRAM traffic (opt-in)
     transfers = apply_peak_ratio(transfers, compression_catalog(graph.soc, purpose="peak"))
     return workloads, transfers
 

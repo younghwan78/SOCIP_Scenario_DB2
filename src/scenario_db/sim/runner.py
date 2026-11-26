@@ -15,7 +15,7 @@ from scenario_db.models.evidence.resolution import (
 from scenario_db.models.evidence.simulation import IpBreakdown, SimulationEvidence
 from scenario_db.sim.bw_calc import calc_port_bw
 from scenario_db.sim.constants import BPP_RULE, bpp_rule_moves
-from scenario_db.sim.bw_power import BwPowerContext, bw_model_from_config
+from scenario_db.sim.bw_power import bw_model_from_config, dma_context
 from scenario_db.sim.cpu_power import CpuPowerModel, profile_cpu_power, sw_task_cpu_power
 from scenario_db.sim.debug_trace import build_calculation_trace
 from scenario_db.sim.dvfs_resolver import DvfsResolver
@@ -122,18 +122,7 @@ def run_simulation(
         bw_power_mw = sum(item.bw_power_mw for item in dma_breakdown)
     else:
         # Aggregate hook: a MIF-level / residual model may replace the port sum.
-        bw_context = BwPowerContext(
-            memory_rail=config.memory_rail,
-            total_bw_mbs=bw_total_mbs,
-            extra={
-                "read_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "read"),
-                "write_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "write"),
-                # DRAM-side traffic: LLC hits never reach the memory controller.
-                "dram_mbs": sum(d.bw_mbs * (d.llc_weight if d.llc_enabled and d.llc_weight is not None else 1.0)
-                                for d in dma_breakdown),
-                "dvfs_sn": inputs.dvfs_sn,
-            },
-        )
+        bw_context = dma_context(dma_breakdown, memory_rail=config.memory_rail, dvfs_sn=inputs.dvfs_sn)
         bw_power_mw = bw_model.aggregate_power_mw(
             [item.bw_power_mw for item in dma_breakdown], context=bw_context)
         mif_state = getattr(bw_model, "mif_state", None)

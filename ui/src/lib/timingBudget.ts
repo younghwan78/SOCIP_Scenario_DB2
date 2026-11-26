@@ -135,7 +135,19 @@ export function cpuTileNote(p: PowerSplit): string {
   }
   return `${fmt(p.cpu_busy_ms, 1)} ms/frame · CL${p.cpu_model.cluster} ${p.cpu_model.freq_mhz} MHz ${p.cpu_model.volt_v} V${c?.note ? ` · ${c.note}` : ''}`
 }
-export interface BwSplit { total_mbs: number; hw_mbs: number; sw_mbs: number; hw_by_ip: Record<string, number>; sw_by_task: Record<string, number>; share_pct: { hw: number; sw: number } }
+export interface BwSplit { total_mbs: number; hw_mbs: number; sw_mbs: number; hw_by_ip: Record<string, number>; sw_by_task: Record<string, number>; share_pct: { hw: number; sw: number }
+  /** M-7: MIF level and the GPU min-lock floor (only when a GPU node declares a sim.workload mapping) */
+  mif?: GpuMif }
+/** M-7 gpu-mif-floor-v1: catalog mif_min_lock at the GPU clock; the level only under the mif-linear BW model */
+export interface GpuMif {
+  model: string; node: string; gpu_mhz: number | null; source: 'catalog' | 'none'
+  status: 'ok' | 'off' | 'no_gpu_clock' | 'no_table'; reason?: string
+  floor_mhz?: number; floor_key_khz?: string
+  bw_model: string; applied: boolean
+  level_mhz?: number | null; level_without_floor_mhz?: number | null; level_reason?: string
+  base_mw?: number; dram_mbs?: number; utilization?: number | null; floor_extra_mw?: number
+  gpu_workload_mbs?: Record<string, number>; warning?: string; double_count?: string
+}
 export interface Verdict { status: TimingVerdictStatus; reasons: string[]; notes?: string[]; nrt_clock_factor: number | null }
 export interface WhatIfRow {
   statistic: Statistic; eis: boolean; scale: number; verdict: Verdict

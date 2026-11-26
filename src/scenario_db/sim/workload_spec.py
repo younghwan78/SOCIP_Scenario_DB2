@@ -51,12 +51,24 @@ class FrameTime(BaseScenarioModel):
         return self
 
 
+class GpuTraffic(BaseScenarioModel):
+    """M-7 L0 GPU DRAM traffic per frame, DRAM side (after compression), MB. Excludes the buffers the scenario
+    already carries as pipeline buffers (the framebuffer GPU_DPU_BUF …): those keep their own ports."""
+
+    read: float = Field(ge=0, allow_inf_nan=False)
+    write: float = Field(ge=0, allow_inf_nan=False)
+    llc_weight: float | None = Field(default=None, gt=0, le=1, allow_inf_nan=False)   # DRAM share; None = no LLC
+
+
 class WorkloadSpec(BaseScenarioModel):
-    """``node_configs.<gpu>.sim.workload`` as a mapping (R-5). ``frame_time`` turns on frame-pacing-v1."""
+    """``node_configs.<gpu>.sim.workload`` as a mapping (R-5). ``frame_time`` turns on frame-pacing-v1;
+    ``mb_per_frame`` adds the GPU's own DRAM traffic (M-7); ``mif_floor`` picks the MIF min-lock source."""
 
     title_class: str | None = None
     frame_time: FrameTime | None = None
     present_mode: Literal["fifo", "mailbox"] = "fifo"
+    mb_per_frame: GpuTraffic | None = None
+    mif_floor: Literal["catalog", "none"] = "catalog"
     value_source: str = "assumed"
     note: str | None = None
 

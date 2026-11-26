@@ -63,6 +63,8 @@ class PortTransferSpec(BaseScenarioModel):
     port: str
     port_type: PortType
     bitrate_mbps: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    # M-7: a declared per-frame volume (MB, DRAM side) instead of a surface (GPU workload traffic)
+    mb_per_frame: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     width: int
     height: int
     format: str | None = None

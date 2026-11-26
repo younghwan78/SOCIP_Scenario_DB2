@@ -23,6 +23,14 @@ from scenario_db.sim.models import (
 )
 
 
+def _port_formula(spec) -> str:
+    if spec.bitrate_mbps is not None:
+        return "bitrate_mbps / 8 * r_w_rate"
+    if spec.mb_per_frame is not None:
+        return "mb_per_frame * fps * r_w_rate"
+    return BW_MBS_FORMULA
+
+
 def build_calculation_trace(
     inputs: SimulationInputs,
     *,
@@ -335,8 +343,8 @@ def _dma_traces(
                 "hw_name": spec.hw_name,
                 "port": spec.port,
                 "direction": result.direction,
-                "formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
-                "bw_formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
+                "formula": _port_formula(spec),
+                "bw_formula": _port_formula(spec),
                 "bw_power_formula": (
                     bw_model.formula() if bw_model else "bw_mbs * bw_power_coeff / 1000 * llc_weight"
                 ),

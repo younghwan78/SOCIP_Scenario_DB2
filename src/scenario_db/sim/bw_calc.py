@@ -31,7 +31,8 @@ def calc_port_bw(
     """
 
     direction = _direction(spec.port_type)
-    if direction == "otf" or (spec.bitrate_mbps is None and (spec.width <= 0 or spec.height <= 0)):
+    if direction == "otf" or (spec.bitrate_mbps is None and spec.mb_per_frame is None
+                              and (spec.width <= 0 or spec.height <= 0)):
         return PortBWResult(
             node_id=spec.node_id,
             ip_ref=spec.ip_ref,
@@ -112,6 +113,8 @@ def _bw_mbs(
 ) -> float:
     if spec.bitrate_mbps is not None:
         return spec.bitrate_mbps / 8.0 * spec.r_w_rate
+    if spec.mb_per_frame is not None:
+        return spec.mb_per_frame * fps * spec.r_w_rate
     return (
         comp_ratio
         * fps

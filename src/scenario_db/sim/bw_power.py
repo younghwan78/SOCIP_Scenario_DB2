@@ -46,6 +46,24 @@ class BwPowerContext:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+def dma_context(dma_breakdown: Sequence[Any], *, memory_rail: str, dvfs_sn: str | None,
+                **extra: Any) -> BwPowerContext:
+    """The run-level BW context of a DMA breakdown (runner aggregate, Timing Budget MIF state)."""
+    return BwPowerContext(
+        memory_rail=memory_rail,
+        total_bw_mbs=sum(d.bw_mbs for d in dma_breakdown),
+        extra={
+            "read_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "read"),
+            "write_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "write"),
+            # DRAM-side traffic: LLC hits never reach the memory controller.
+            "dram_mbs": sum(d.bw_mbs * (d.llc_weight if d.llc_enabled and d.llc_weight is not None else 1.0)
+                            for d in dma_breakdown),
+            "dvfs_sn": dvfs_sn,
+            **extra,
+        },
+    )
+
+
 class BwPowerModel(Protocol):
     @property
     def model_id(self) -> str: ...
@@ -212,6 +230,16 @@ class MifLinearBwModel:
         if level is not None and lock > level[0]:
             level = next((o for o in self.opps if o[0] >= lock - 1e-9), self.opps[-1])
             reason = "qos_lock"
+        # M-7: a master's MIF min lock (GPU f -> catalog mif_min_lock); absent key = as before (bit-exact)
+        floor = extra.get("min_lock_mhz")
+        floor_state: dict[str, Any] = {}
+        if floor is not None and level is not None:
+            floor = float(floor)
+            above_top = floor > self.opps[-1][0] + 1e-9
+            if floor > level[0] + 1e-9:
+                level = next((o for o in self.opps if o[0] >= floor - 1e-9), self.opps[-1])
+                reason = "saturated" if above_top else "min_lock"
+            floor_state = {"min_lock_mhz": floor, "min_lock_above_top": above_top}
         return {
             "mif_mhz": level[0] if level else None,
             "base_mw": level[1] if level else 0.0,
@@ -223,6 +251,7 @@ class MifLinearBwModel:
             "qos_lock_mhz": lock or None,
             "utilization": round(load / level[2], 4) if level and level[2] else None,
             "other_masters_mw": round(self.other_masters_mbs / MBS_PER_GBPS * self.e_read, 6),
+            **floor_state,
         }
 
     def aggregate_power_mw(self, port_power_mw: Sequence[float], *, context: BwPowerContext | None = None) -> float:

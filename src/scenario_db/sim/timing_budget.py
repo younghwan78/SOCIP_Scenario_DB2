@@ -1115,7 +1115,11 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     # (an own-cadence task such as the ABOX period IRQ is a timeline task, not a resolved workload)
     active = set(result.resolved) | set(plan["tasks"])
     domain = domain_loads(graph, active, 1000.0 / period if period else 0.0)
-    power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain)
+    # M-7: MIF level / GPU min-lock floor when a GPU node declares a workload mapping (None otherwise)
+    from scenario_db.sim.gpu_memory import mif_report
+
+    mif = mif_report(graph, active, domain, result, run["inputs"])
+    power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain, mif)
     for ip in ips:  # R-4: a subsystem is its node's whole power, in the IP detail as in the totals
         if (domain.get(ip["node"]) or {}).get("model") == "mcps-v1":
             ip["power_mw"] = round(domain[ip["node"]]["mw"], 3)
@@ -1131,6 +1135,9 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     from scenario_db.sim.frame_pacing import pacing_report
 
     pacing = pacing_report(graph, plan, domain, period, _sw_ranges(plan, options), options)
+    for key in ("warning", "double_count"):
+        if mif is not None and mif.get(key):
+            verdict["notes"].append(mif[key])
     if pacing is not None and pacing["status"] == "fail":
         verdict["reasons"].append(f"frame pacing: {pacing['achieved_fps']} fps < target {pacing['target_fps']:g} fps"
                                   f" (jank {pacing['jank_pct']} %)")
@@ -1299,7 +1306,7 @@ def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> di
 
 def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, period: float,
               assumed: dict[str, dict[str, Any]] | None = None,
-              domain: dict[str, dict[str, Any]] | None = None):
+              domain: dict[str, dict[str, Any]] | None = None, mif: dict[str, Any] | None = None):
     stage = plan["stage"]
     tasks = plan["tasks"]
     hw_by_ip = {n: r.total_power_mw * plan["dual"].get(n, 1) for n, r in result.resolved.items()}
@@ -1336,6 +1343,9 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     # declared assumed loads (GPU / NPU …) are IP power with no pipeline node: kept apart from hw_by_ip (real nodes)
     assumed_by_ip = {ip: a["mw"] for ip, a in (assumed or {}).items()}
     hw = sum(hw_by_ip.values()) + sum(assumed_by_ip.values())
+    # M-7: what the GPU MIF floor adds to the memory rail (mif-linear only; 0 otherwise)
+    floor_mw = float((mif or {}).get("floor_extra_mw") or 0.0)
+    bw_power_hw += floor_mw
     bwp = bw_power_hw + bw_power_sw
     total = cpu + hw + bwp
     share = {
@@ -1368,6 +1378,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         power["assumed_basis"] = {ip: a["basis"] for ip, a in (assumed or {}).items() if a.get("basis")}
     if domain:  # absent key = no domain load declared
         power["domain_loads"] = domain
+    if floor_mw:
+        power["mif_floor_mw"] = round(floor_mw, 3)
     bw = {
         "total_mbs": round(bw_total, 1),
         "hw_mbs": round(sum(bw_hw.values()), 1),
@@ -1382,6 +1394,8 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         # compression) = the DRAM one frame occupies; frames in flight x this sizes the buffers (report only)
         "write_mb_frame": round(sum(d.bw_mbs for d in result.dma_breakdown if d.direction == "write") * period / 1000.0, 3),
     }
+    if mif is not None:  # absent key = no GPU workload mapping
+        bw["mif"] = mif
     return power, bw
 
 
