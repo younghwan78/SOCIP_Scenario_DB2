@@ -1112,11 +1112,17 @@ variants:
         source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
           internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
           cluster/frequency x exec_ms x rate_hz.
+  size_overrides:
+    gpu_render: 2560x1440
+    m2m_out: 1440x3120
   buffer_overrides:
     GPU_M2M_BUF:
       format: RGBA8888
       bitdepth: 8
       compression: COMP_OFF
+      size_ref: gpu_render
+    M2M_DPU_BUF:
+      size_ref: m2m_out
 - id: game-fhd-60fps-gpu-heavy-overlay
   severity: light
   design_conditions:

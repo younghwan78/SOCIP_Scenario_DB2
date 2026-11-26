@@ -1,6 +1,6 @@
 # Exploration engine revisions
 
-Status: current · Last verified: 2026-11-14 (`arch-exploration/15`)
+Status: current · Last verified: 2026-11-27 (`arch-exploration/16`)
 
 `ENGINE_REV` (`src/scenario_db/sim/arch_exploration.py`) names the revision a run, a prediction and a report row
 were computed with. A result from an older revision is flagged "이전 engine". The flag shows the
@@ -35,6 +35,7 @@ ejected Exynos2700 fixture, also run `python -m scenario_db.authoring check sm-s
 | 13 | the v2-vf clock term uses the work clock (busy share no longer follows the SW margin) | IP power under the v2-vf power model when SW growth changed |
 | 14 | profile CPU model (`cpu_sched`): opt-in RT cpupri placement; a task's threads on one CPU run in sequence | CPU power / slack with the profile CPU model |
 | 15 | SW margin follows the throughput model (pipelined: longest task / shared-CPU load; the stage chain gives the frames in flight) | SW margin and SW growth tolerance under the pipelined model (recording: the NRT margin) |
+| 16 | one bytes-per-pixel lookup (`format_bpp_factor`: packed RGBA = 4 B/px whatever the bitdepth; steady BW, debug trace and event jobs agree); an IP node timed by `sw_timing` keeps its M2M buffer DMA; a buffer with no size or an unknown pixel format is reported | BW / BW power of RGBA buffers (E2600 game FHD 120: 497.7 → 1990.7 MB/s, +119 mW; gallery ×4), the game m2m-upscale path (0 → 3926 MB/s), GPU fallback and SW demux buffer writes (SW BW). E2700: no change |
 
 ## Opt-in since rev 15 (no bump)
 

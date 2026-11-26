@@ -12,7 +12,7 @@ from scenario_db.sim.external_devices import (
 from scenario_db.sim.models import IPWorkload, PortTransferSpec, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
 from scenario_db.sim.timeline_adapter import timeline_edges, timeline_tasks
-from scenario_db.sim.transfers import apply_peak_ratio, compression_catalog, edge_port_transfers, history_port_transfers, port_transfers_for_node, standalone_port_transfers
+from scenario_db.sim.transfers import apply_peak_ratio, compression_catalog, edge_port_transfers, history_port_transfers, port_transfers_for_node, standalone_port_transfers, sw_timed_dma_nodes
 from scenario_db.sim.stream_io import supplemental_transfers
 from scenario_db.sim.timing_profiles import timing_case, timing_profiles
 from scenario_db.sim.workloads import build_workload_for_node, node_sim_block
@@ -246,9 +246,10 @@ def _workloads_and_transfers(
         )
 
     explicit_nodes = {item.node_id for item in transfers}
+    by_node = {item.node_id: item for item in workloads}
     transfers.extend(item for item in edge_port_transfers(
             graph,
-            {item.node_id: item for item in workloads},
+            {**by_node, **sw_timed_dma_nodes(graph, by_node)},
             comp_catalog=comp_catalog,
             warnings=warnings,
         ) if item.node_id not in explicit_nodes)

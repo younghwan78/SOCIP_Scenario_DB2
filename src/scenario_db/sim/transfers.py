@@ -5,8 +5,9 @@ from typing import Any, Literal, cast
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.sim.bw_calc import compression_enabled, normalize_compression, resolve_comp_ratio
+from scenario_db.sim.constants import BPP_DEFAULT, format_bpp_factor
 from scenario_db.sim.graph_edges import edge_source, edge_target, edge_type
-from scenario_db.sim.models import IPWorkload, PortTransferSpec, PortType
+from scenario_db.sim.models import IPSimParams, IPWorkload, PortTransferSpec, PortType
 from scenario_db.sim.shape_propagation import NodeShape, SurfaceShape
 from scenario_db.sim.workloads import buffer_size, design_size_for_graph, port_size
 
@@ -172,6 +173,11 @@ def _buffer_transfers(
     if width == 0 or height == 0:
         width, height = design_size_for_graph(graph)
     if width == 0 or height == 0:
+        if warnings is not None and names:
+            message = (f"{buffer_id}: no size (size_ref / design resolution); its DMA is excluded from bandwidth "
+                       "totals.")
+            if message not in warnings:
+                warnings.append(message)
         return []
     compression = str(buffer.get("compression") or "disable")
     comp_ratio = _resolve_port_comp_ratio(
@@ -184,6 +190,11 @@ def _buffer_transfers(
     if not math.isfinite(llc_weight) or not 0 < llc_weight <= 1:
         raise ValueError(f"buffer.{buffer_id}: llc_weight must be finite and in (0, 1]")
     fmt = buffer.get("format")
+    if warnings is not None and names and buffer.get("bitrate_mbps") is None and format_bpp_factor(fmt)[1] == "default":
+        message = (f"{buffer_id}: format {fmt!r} has no bytes-per-pixel entry; counted as "
+                   f"{BPP_DEFAULT:g} x bitdepth / 8 bytes per pixel.")
+        if message not in warnings:
+            warnings.append(message)
     # A planar YUV444 buffer has three full-size single-component planes.
     # Names remain physical driver DMA identifiers while BW counts each plane once.
     if len(names) == 3 and str(fmt).upper() == "YUV444":
@@ -197,11 +208,33 @@ def _buffer_transfers(
     ) for name in names]
 
 
+def sw_timed_dma_nodes(graph: CanonicalScenarioGraph, workloads: dict[str, IPWorkload]) -> dict[str, IPWorkload]:
+    """IP nodes timed by ``sw_timing`` (GPU fallback composition, SW demux / DRM / decoder): not pixel workloads,
+    but their M2M buffers still reach DRAM. A DMA-only stand-in (no clock, no power) per node, so
+    ``edge_port_transfers`` counts the write / read on their side of the buffer (R-5b F-3)."""
+    from scenario_db.sim.workloads import fallback_hw_name, is_external_non_compute_node
+
+    out: dict[str, IPWorkload] = {}
+    configs = graph.variant.node_configs or {}
+    for node in graph.pipeline_nodes:
+        node_id, ip_ref = str(node.get("id") or ""), node.get("ip_ref")
+        if not node_id or not ip_ref or node_id in workloads or not (configs.get(node_id) or {}).get("sw_timing"):
+            continue
+        ip_row = graph.ip_catalog.get(str(ip_ref))
+        if ip_row is None or is_external_non_compute_node(node, ip_row):
+            continue
+        hw_name = fallback_hw_name(str(ip_ref))
+        out[node_id] = IPWorkload(node_id=node_id, ip_ref=str(ip_ref), hw_name=hw_name, fps=0.0,
+                                  sim_params=IPSimParams(hw_name=hw_name))
+    return out
+
+
 def dma_buffer_ids(graph: CanonicalScenarioGraph, workloads: dict[str, IPWorkload]) -> set[str]:
     """Buffers whose placement / compression reaches DRAM traffic: the buffer-derived DMA of
     ``edge_port_transfers`` (endpoints without explicit sim ports), history and standalone DMA."""
     from scenario_db.sim.workloads import node_sim_block
     explicit = {n for n in workloads if any((node_sim_block(graph, n) or {}).get(k) for k in ("inputs", "outputs"))}
+    workloads = {**workloads, **sw_timed_dma_nodes(graph, workloads)}
     out = set()
     for edge in graph.pipeline_edges:
         bid = str(edge.get("buffer") or "")

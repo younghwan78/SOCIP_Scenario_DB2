@@ -394,11 +394,17 @@
       sim:
         width: 2560
         height: 1440
+  size_overrides:
+    gpu_render: 2560x1440        # QHD render (render_resolution)
+    m2m_out: 1440x3120           # scaler dst = panel
   buffer_overrides:
     GPU_M2M_BUF:
       format: RGBA8888
       bitdepth: 8
       compression: COMP_OFF
+      size_ref: gpu_render
+    M2M_DPU_BUF:
+      size_ref: m2m_out
 - id: game-fhd-60fps-gpu-heavy-overlay
   extends: game-fhd-60fps-sdr
   design_conditions:

@@ -35,6 +35,10 @@ ENGINE_REVISIONS: list[Revision] = [
      "moves": "CPU power / slack with the profile CPU model"},
     {"rev": 15, "change": "SW margin follows the throughput model (pipelined: longest task / shared-CPU load; the stage chain gives the frames in flight)",
      "moves": "SW margin and SW growth tolerance under the pipelined model (recording: the NRT margin)"},
+    {"rev": 16, "change": "one bytes-per-pixel lookup (packed RGBA = 4 B/px; steady, trace and jobs agree); a "
+                          "sw_timing IP node's M2M buffer DMA is counted; a buffer with no size is reported",
+     "moves": "BW / BW power of RGBA buffers (E2600 game FHD 120: 497.7 -> 1990.7 MB/s, +119 mW; gallery x4), "
+              "the m2m-upscale path (0 -> 3926 MB/s), GPU fallback / SW demux writes (SW BW)"},
 ]
 
 # Opt-in model changes since the last bump: undeclared data gives identical results (check_engine_equivalence:

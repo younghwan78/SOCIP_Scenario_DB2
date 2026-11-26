@@ -53,7 +53,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog, compression_typical
 
-ENGINE_REV = "arch-exploration/15"  # what each revision changed: sim/engine_revisions.py (S-10)
+ENGINE_REV = "arch-exploration/16"  # what each revision changed: sim/engine_revisions.py (S-10)
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0

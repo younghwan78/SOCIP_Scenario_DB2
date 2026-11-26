@@ -32,7 +32,7 @@ from typing import Any
 from scenario_db.authoring.knobs import KnobError, _match, eval_expr, variant_params
 from scenario_db.models.definition.job import AfterRef, JobSpec, JobStage, range_error
 from scenario_db.sim.bw_calc import compression_enabled, resolve_comp_ratio
-from scenario_db.sim.constants import BPP_DEFAULT, BPP_MAP
+from scenario_db.sim.constants import format_bpp_factor
 from scenario_db.sim.domain_loads import DOMAIN_MODELS, domain_load_config
 from scenario_db.sim.power_calc import calc_active_power_mw
 from scenario_db.sim.timeline_adapter import own_cadence
@@ -141,13 +141,9 @@ def _size(text: Any) -> tuple[int, int] | None:
 
 
 def _bytes_per_px(fmt: str | None, bitdepth: float | None) -> float:
-    """The shared format factors (sim.constants.BPP_MAP: exact name, else the longest matching prefix)."""
-    name = str(fmt or "").upper()
-    factor = BPP_MAP.get(name)
-    if factor is None:
-        keys = [k for k in BPP_MAP if name.startswith(k)]
-        factor = BPP_MAP[max(keys, key=len)] if keys else BPP_DEFAULT
-    return factor * (float(bitdepth or 8) / 8.0)
+    """The shared format factors (sim.constants.format_bpp_factor, as steady BW)."""
+    width = float(bitdepth or 8)
+    return format_bpp_factor(fmt, width)[0] * (width / 8.0)
 
 
 # --------------------------------------------------------------------------- evaluation
