@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from scenario_db.sim.constants import (
-    BPP_DEFAULT,
-    BPP_MAP,
     BW_POWER_COEFF_DEFAULT,
     PMIC_EFFICIENCY_DEFAULT,
     VBAT_DEFAULT,
+    format_bpp_factor,
 )
 from scenario_db.sim.bw_power import BwPowerModel
 from scenario_db.sim.models import PortBWResult, PortTransferSpec, PortType
@@ -55,7 +54,7 @@ def calc_port_bw(
             llc_enabled=spec.llc_enabled,
         )
 
-    bpp = BPP_MAP.get((spec.format or "").upper(), BPP_DEFAULT)
+    bpp, _ = format_bpp_factor(spec.format, spec.bitwidth)
     comp_ratio = effective_comp_ratio(spec)
     llc_weight = spec.llc_weight if spec.llc_enabled else 1.0
     bw_mbs = _bw_mbs(spec, fps=fps, bpp=bpp, comp_ratio=comp_ratio)

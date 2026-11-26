@@ -5,10 +5,9 @@ from typing import Any
 from scenario_db.sim.bw_calc import BW_MBS_FORMULA, effective_comp_ratio
 from scenario_db.sim.bw_power import BwPowerModel, bw_model_from_config
 from scenario_db.sim.constants import (
-    BPP_DEFAULT,
-    BPP_MAP,
     REFERENCE_FPS,
     REFERENCE_VOLTAGE_MV,
+    format_bpp_factor,
 )
 from scenario_db.sim.power_model import resolve_power_model
 from scenario_db.sim.power_params import effective_power_params
@@ -326,7 +325,7 @@ def _dma_traces(
         if result is None:
             continue
         effective_fps = float(fps)
-        bpp_factor = BPP_MAP.get((spec.format or "").upper(), BPP_DEFAULT)
+        bpp_factor, _ = format_bpp_factor(spec.format, spec.bitwidth)
         comp_ratio = effective_comp_ratio(spec)
         llc_weight = spec.llc_weight if spec.llc_enabled else 1.0
         traces.append(

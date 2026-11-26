@@ -5,8 +5,9 @@ from typing import Any, Literal, cast
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.sim.bw_calc import compression_enabled, normalize_compression, resolve_comp_ratio
+from scenario_db.sim.constants import BPP_DEFAULT, format_bpp_factor
 from scenario_db.sim.graph_edges import edge_source, edge_target, edge_type
-from scenario_db.sim.models import IPWorkload, PortTransferSpec, PortType
+from scenario_db.sim.models import IPSimParams, IPWorkload, PortTransferSpec, PortType
 from scenario_db.sim.shape_propagation import NodeShape, SurfaceShape
 from scenario_db.sim.workloads import buffer_size, design_size_for_graph, port_size
 
@@ -160,8 +161,12 @@ def _buffer_transfers(
     comp_catalog: dict[str, float] | None,
     warnings: list[str] | None,
     rate: float = 1.0,
+    fallback_size: tuple[int, int] | None = None,
+    by_bitrate: bool = False,
 ) -> list[PortTransferSpec]:
     buffer = _effective_buffer(graph, buffer_id)
+    if by_bitrate and str(buffer.get("format") or "").upper() == "BITSTREAM":
+        return _bitstream_transfers(graph, workload, buffer_id, buffer, names, direction, warnings)
     if buffer.get("size_status") == "unknown":
         if warnings is not None and names:
             message = f"{buffer_id}: DMA size/format unknown; excluded from bandwidth totals."
@@ -171,19 +176,28 @@ def _buffer_transfers(
     width, height = buffer_size(graph, buffer)
     if width == 0 or height == 0:
         width, height = design_size_for_graph(graph)
+    if (width == 0 or height == 0) and fallback_size:
+        # R-5b: no anchor and no design resolution: the producer's declared surface (sim width/height, else the
+        # scaler dst) - only where the buffer was dropped before, so sized buffers keep their values
+        width, height = fallback_size
     if width == 0 or height == 0:
+        if warnings is not None and names:
+            message = (f"{buffer_id}: no size (size_ref / design resolution); its DMA is excluded from bandwidth "
+                       "totals.")
+            if message not in warnings:
+                warnings.append(message)
         return []
     compression = str(buffer.get("compression") or "disable")
     comp_ratio = _resolve_port_comp_ratio(
         compression, buffer.get("comp_ratio"), comp_catalog, warnings, f"buffer.{buffer_id}"
     )
-    placement = buffer.get("placement") or {}
-    llc_on = enabled(placement.get("llc_allocated", False))
-    raw_weight = placement.get("llc_weight")
-    llc_weight = float(raw_weight) if llc_on and raw_weight is not None else 1.0
-    if not math.isfinite(llc_weight) or not 0 < llc_weight <= 1:
-        raise ValueError(f"buffer.{buffer_id}: llc_weight must be finite and in (0, 1]")
+    llc_on, llc_weight = _placement(buffer, buffer_id)
     fmt = buffer.get("format")
+    if warnings is not None and names and buffer.get("bitrate_mbps") is None and format_bpp_factor(fmt)[1] == "default":
+        message = (f"{buffer_id}: format {fmt!r} has no bytes-per-pixel entry; counted as "
+                   f"{BPP_DEFAULT:g} x bitdepth / 8 bytes per pixel.")
+        if message not in warnings:
+            warnings.append(message)
     # A planar YUV444 buffer has three full-size single-component planes.
     # Names remain physical driver DMA identifiers while BW counts each plane once.
     if len(names) == 3 and str(fmt).upper() == "YUV444":
@@ -197,16 +211,101 @@ def _buffer_transfers(
     ) for name in names]
 
 
+DMA_ONLY = "dma_only"   # IPWorkload.mode of a SW-timed stand-in (fps 0 = the run rate)
+
+
+def _node_surface(graph: CanonicalScenarioGraph, node_id: str) -> tuple[int, int] | None:
+    """The surface a node writes, from its variant sim block: a 2-int ``dst`` (scaler output), else width/height."""
+    sim = ((graph.variant.node_configs or {}).get(node_id) or {}).get("sim") or {}
+    if not isinstance(sim, dict):
+        return None
+    dst = sim.get("dst")   # a scaler's declared output wins over its working (input) size
+    if isinstance(dst, list) and len(dst) == 2 and all(isinstance(v, int) and v > 0 for v in dst):
+        return dst[0], dst[1]
+    w, h = sim.get("width"), sim.get("height")
+    if isinstance(w, int) and isinstance(h, int) and w > 0 and h > 0:
+        return w, h
+    return None
+
+
+def _placement(buffer: dict[str, Any], buffer_id: str) -> tuple[bool, float]:
+    """(LLC allocated, DRAM share) of a buffer's placement."""
+    placement = buffer.get("placement") or {}
+    llc_on = enabled(placement.get("llc_allocated", False))
+    raw_weight = placement.get("llc_weight")
+    llc_weight = float(raw_weight) if llc_on and raw_weight is not None else 1.0
+    if not math.isfinite(llc_weight) or not 0 < llc_weight <= 1:
+        raise ValueError(f"buffer.{buffer_id}: llc_weight must be finite and in (0, 1]")
+    return llc_on, llc_weight
+
+
+def stream_bitrate_mbps(graph: CanonicalScenarioGraph, buffer: dict[str, Any], *nodes: str) -> float | None:
+    """A compressed stream's bitrate: the buffer, then the endpoint nodes' sim, then the design condition."""
+    configs = graph.variant.node_configs or {}
+    sims = [((configs.get(n) or {}).get("sim") or {}) for n in nodes]
+    for raw in (buffer.get("bitrate_mbps"), *[s.get("bitrate_mbps") for s in sims if isinstance(s, dict)],
+                (graph.variant.design_conditions or {}).get("bitrate_mbps")):
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool) and math.isfinite(raw) and raw > 0:
+            return float(raw)
+    return None
+
+
+def _bitstream_transfers(graph: CanonicalScenarioGraph, workload: IPWorkload, buffer_id: str, buffer: dict[str, Any],
+                         names: list[str], direction: PortType,
+                         warnings: list[str] | None) -> list[PortTransferSpec]:
+    """Both ends of a compressed stream a SW-timed node touches: its bitrate (already per second, so no frame-rate
+    scaling), with the buffer's LLC placement; without a bitrate the transfer is left out and reported."""
+    edge_nodes = [n for e in graph.pipeline_edges if str(e.get("buffer") or "") == buffer_id
+                  for n in (str(edge_source(e) or ""), str(edge_target(e) or ""))]
+    rate = stream_bitrate_mbps(graph, buffer, workload.node_id, *edge_nodes)
+    if rate is not None:
+        llc_on, llc_weight = _placement(buffer, buffer_id)
+        return [PortTransferSpec(
+            node_id=workload.node_id, ip_ref=workload.ip_ref, hw_name=workload.hw_name, port=name,
+            port_type=direction, bitrate_mbps=rate, width=0, height=0, format="BITSTREAM",
+            llc_enabled=llc_on, llc_weight=llc_weight) for name in names]
+    if warnings is not None and names:
+        message = f"{buffer_id}: {workload.node_id} bitstream has no bitrate_mbps; its DMA is excluded."
+        if message not in warnings:
+            warnings.append(message)
+    return []
+
+
+def sw_timed_dma_nodes(graph: CanonicalScenarioGraph, workloads: dict[str, IPWorkload]) -> dict[str, IPWorkload]:
+    """IP nodes timed by ``sw_timing`` (GPU fallback composition, SW demux / DRM / decoder): not pixel workloads,
+    but their M2M buffers still reach DRAM. A DMA-only stand-in (no clock, no power) per node, so
+    ``edge_port_transfers`` counts the write / read on their side of the buffer (R-5b F-3)."""
+    from scenario_db.sim.workloads import fallback_hw_name, is_external_non_compute_node
+
+    out: dict[str, IPWorkload] = {}
+    configs = graph.variant.node_configs or {}
+    for node in graph.pipeline_nodes:
+        node_id, ip_ref = str(node.get("id") or ""), node.get("ip_ref")
+        if not node_id or not ip_ref or node_id in workloads or not (configs.get(node_id) or {}).get("sw_timing"):
+            continue
+        ip_row = graph.ip_catalog.get(str(ip_ref))
+        if ip_row is None or is_external_non_compute_node(node, ip_row):
+            continue
+        hw_name = fallback_hw_name(str(ip_ref))
+        sim = (configs.get(node_id) or {}).get("sim") or {}
+        fps = sim.get("fps") if isinstance(sim, dict) else None
+        own = float(fps) if isinstance(fps, (int, float)) and not isinstance(fps, bool) and fps > 0 else 0.0
+        out[node_id] = IPWorkload(node_id=node_id, ip_ref=str(ip_ref), hw_name=hw_name, mode=DMA_ONLY, fps=own,
+                                  sim_params=IPSimParams(hw_name=hw_name))
+    return out
+
+
 def dma_buffer_ids(graph: CanonicalScenarioGraph, workloads: dict[str, IPWorkload]) -> set[str]:
     """Buffers whose placement / compression reaches DRAM traffic: the buffer-derived DMA of
     ``edge_port_transfers`` (endpoints without explicit sim ports), history and standalone DMA."""
     from scenario_db.sim.workloads import node_sim_block
     explicit = {n for n in workloads if any((node_sim_block(graph, n) or {}).get(k) for k in ("inputs", "outputs"))}
+    edge_nodes = {**workloads, **sw_timed_dma_nodes(graph, workloads)}   # SW-timed nodes move M2M buffers only
     out = set()
     for edge in graph.pipeline_edges:
         bid = str(edge.get("buffer") or "")
         if bid and edge_type(edge) == "M2M" and any(
-                str(n or "") in workloads and str(n or "") not in explicit for n in (edge_source(edge), edge_target(edge))):
+                str(n or "") in edge_nodes and str(n or "") not in explicit for n in (edge_source(edge), edge_target(edge))):
             out.add(bid)
     for bid in (cast(dict[str, Any], graph.scenario.pipeline or {}).get("buffers") or {}):
         b = _effective_buffer(graph, bid)
@@ -227,6 +326,7 @@ def edge_port_transfers(
     *,
     comp_catalog: dict[str, float] | None = None,
     warnings: list[str] | None = None,
+    run_fps: float | None = None,
 ) -> list[PortTransferSpec]:
     specs: list[PortTransferSpec] = []
     seen: set[tuple[str, str, str, str]] = set()
@@ -236,6 +336,10 @@ def edge_port_transfers(
         source, target = str(edge_source(edge) or ""), str(edge_target(edge) or "")
         buffer_id = str(edge.get("buffer") or "")
         pairs = edge.get("port_pairs") or []
+        surface = _node_surface(graph, source)
+        # a SW-timed end (stand-in) puts a stream on its bitrate at both ends; workload-only edges keep the pixel
+        # sizing they had (E2700 has no SW-timed IP endpoints)
+        by_bitrate = any(getattr(workloads.get(n), "mode", None) == DMA_ONLY for n in (source, target))
         for node_id, direction, key, fallback in (
             (source, PortType.DMA_WRITE, "src", f"{buffer_id or target}_WDMA"),
             (target, PortType.DMA_READ, "dst", f"{buffer_id or source}_RDMA"),
@@ -243,7 +347,11 @@ def edge_port_transfers(
             if node_id not in workloads:
                 continue
             names = list(dict.fromkeys(str(pair[key]) for pair in pairs if pair.get(key))) or [fallback]
-            for spec in _buffer_transfers(graph, workloads[node_id], buffer_id, names, direction, comp_catalog, warnings):
+            node = workloads[node_id]
+            # a SW-timed stand-in moves the buffer at its own declared rate (sim.fps), not the run rate
+            rate = node.fps / run_fps if getattr(node, "mode", None) == DMA_ONLY and node.fps > 0 and run_fps else 1.0
+            for spec in _buffer_transfers(graph, node, buffer_id, names, direction, comp_catalog, warnings,
+                                          rate=rate, fallback_size=surface, by_bitrate=by_bitrate):
                 identity = (node_id, spec.port, buffer_id, direction)
                 # Fan-out from the same MCSC buffer writes once, reads once per consumer.
                 if identity not in seen:

@@ -94,6 +94,20 @@ def _cpu_opp_inputs(graph) -> dict:
     return {**keys, **({"mem_bound": mem} if mem else {})}
 
 
+def _bpp_rule_moves_any(node: Any) -> bool:
+    """Any ``format`` (with its ``bitdepth``) in a nested declaration that the rev 16 bytes-per-pixel rule moves."""
+    from scenario_db.sim.constants import bpp_rule_moves
+
+    if isinstance(node, dict):
+        fmt = node.get("format")
+        if isinstance(fmt, str) and bpp_rule_moves(fmt, node.get("bitdepth") or node.get("bitwidth") or 8):
+            return True
+        return any(_bpp_rule_moves_any(v) for v in node.values())
+    if isinstance(node, (list, tuple)):
+        return any(_bpp_rule_moves_any(v) for v in node)
+    return False
+
+
 def _condition_hash(graph, options, shim, tables) -> str:
     """Fingerprint resolved inputs, tables and timing choices; display-only options do not change the condition."""
     import hashlib
@@ -143,6 +157,11 @@ def _condition_hash(graph, options, shim, tables) -> str:
                            "anchors": anchors, "buffer_overrides": getattr(graph.variant, "buffer_overrides", None),
                            "session_buffers": (graph.scenario.pipeline or {}).get("buffers"),
                            "compression": getattr(getattr(graph, "soc", None), "compression_modes", None)}
+        # rev 16 bytes-per-pixel rule: job buffers it moves must not reuse results priced under the old rule
+        if _bpp_rule_moves_any(payload["jobs"]):
+            from scenario_db.sim.constants import BPP_RULE
+
+            payload["jobs"]["bpp_rule"] = BPP_RULE
     opp = _cpu_opp_inputs(graph)
     if opp:
         payload["cpu_opp"] = opp

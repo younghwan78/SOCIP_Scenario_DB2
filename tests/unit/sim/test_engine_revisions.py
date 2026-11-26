@@ -12,7 +12,7 @@ def test_the_log_ends_at_the_current_revision_and_is_ordered():
 
 
 def test_changes_since_an_older_engine():
-    assert [r["rev"] for r in changes_since("arch-exploration/13", "arch-exploration/15")] == [14, 15]
+    assert [r["rev"] for r in changes_since("arch-exploration/13", "arch-exploration/16")] == [14, 15, 16]
     assert changes_since(ENGINE_REV, ENGINE_REV) == []
-    assert [r["rev"] for r in changes_since("legacy", "arch-exploration/15")][-1] == 15  # unparsable: all known
+    assert [r["rev"] for r in changes_since("legacy", "arch-exploration/16")][-1] == 16  # unparsable: all known
     assert rev_number("arch-exploration/9") == 9 and rev_number(None) is None

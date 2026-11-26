@@ -14,6 +14,7 @@ from scenario_db.models.evidence.resolution import (
 )
 from scenario_db.models.evidence.simulation import IpBreakdown, SimulationEvidence
 from scenario_db.sim.bw_calc import calc_port_bw
+from scenario_db.sim.constants import BPP_RULE, bpp_rule_moves
 from scenario_db.sim.bw_power import BwPowerContext, bw_model_from_config
 from scenario_db.sim.cpu_power import CpuPowerModel, profile_cpu_power, sw_task_cpu_power
 from scenario_db.sim.debug_trace import build_calculation_trace
@@ -357,6 +358,9 @@ def params_hash(inputs: SimulationInputs) -> str:
     # the corresponding model is disabled.
     if _cpu_power_model(inputs.config, effective_power_params(inputs.config)) is not None:
         payload["sw_timing_case"] = inputs.sw_timing_case
+    # rev 16 bytes-per-pixel rule: only requests with a port it moves get a new hash (others keep theirs)
+    if any(t.bitrate_mbps is None and bpp_rule_moves(t.format, t.bitwidth) for t in inputs.port_transfers):
+        payload["bpp_rule"] = BPP_RULE
     bw_model = bw_model_from_config(inputs.config)
     if bw_model is not None and bw_model.model_id == "mif-linear":
         payload["dvfs_sn"] = inputs.dvfs_sn
