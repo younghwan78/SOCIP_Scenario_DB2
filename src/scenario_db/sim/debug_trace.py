@@ -356,6 +356,7 @@ def _dma_traces(
                     "format": spec.format,
                     "bitwidth": spec.bitwidth,
                     "bitrate_mbps": spec.bitrate_mbps,
+                    "mb_per_frame": spec.mb_per_frame,
                     "compression": spec.compression,
                     "comp_ratio": comp_ratio,
                     "r_w_rate": spec.r_w_rate,

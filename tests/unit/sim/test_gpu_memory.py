@@ -38,7 +38,7 @@ def test_no_table_gives_no_floor():
 
 
 @pytest.mark.parametrize("raw", [{"mb_per_frame": {"read": -1, "write": 0}}, {"mb_per_frame": {"read": 1}},
-                                 {"mb_per_frame": {"read": 1, "write": 1, "llc_weight": 0}}, {"mif_floor": "kernel"}])
+                                 {"mb_per_frame": {"read": 1, "write": 1, "llc_weight": 0.5}}, {"mif_floor": "kernel"}])
 def test_the_traffic_is_checked(raw):
     with pytest.raises(ValidationError):
         WorkloadSpec.model_validate(raw)
@@ -127,3 +127,35 @@ def test_the_condition_hash_follows_the_floor_inputs(monkeypatch):
     off = _exynos2600_generated_graph(GAME, "game-fhd-120fps-sdr")
     off.variant.node_configs["gpu"]["sim"]["workload"]["mif_floor"] = "none"
     assert svc._condition_hash(base, OPTS, shim, {}) != svc._condition_hash(off, OPTS, shim, {})
+
+
+def test_the_gpu_peak_uses_its_domain_busy_time():
+    r = analyze_timing_budget(_exynos2600_generated_graph(GAME, "game-fhd-120fps-sdr"), OPTS)
+    util = r["power"]["domain_loads"]["gpu"]["util"]
+    assert r["bw"]["peak"]["by_ip"]["gpu"] == pytest.approx(r["bw"]["hw_by_ip"]["gpu"] / util, rel=1e-3)
+
+
+def test_more_traffic_never_lowers_the_mif_linear_bw_power():
+    powers = []
+    for read in (13, 14):
+        graph = _exynos2600_generated_graph(GAME, "game-fhd-120fps-sdr")
+        graph.variant.node_configs["gpu"]["sim"]["workload"]["mb_per_frame"] = {"read": read, "write": 1}
+        r = analyze_timing_budget(graph, OPTS, config=_v2())
+        powers.append(r["power"]["bw_mw"])
+        assert r["power"]["mif_base_mw"] == pytest.approx(r["bw"]["mif"]["base_mw"])
+    assert powers[1] > powers[0]
+
+
+def test_gpu_traffic_is_not_held_frame_memory():
+    graph = _exynos2600_generated_graph(GAME, "game-fhd-60fps-sdr")
+    with_traffic = analyze_timing_budget(graph, OPTS)["bw"]["write_mb_frame"]
+    graph.variant.node_configs["gpu"]["sim"]["workload"].pop("mb_per_frame")
+    assert analyze_timing_budget(graph, OPTS)["bw"]["write_mb_frame"] == pytest.approx(with_traffic)
+
+
+def test_no_mif_levels_means_the_floor_is_not_applied():
+    cfg = _v2()
+    cfg = cfg.model_copy(update={"power_params": cfg.power_params.model_copy(
+        update={"bw": cfg.power_params.bw.model_copy(update={"mif_opps": []})})})
+    m = analyze_timing_budget(_exynos2600_generated_graph(GAME, "game-fhd-120fps-sdr"), OPTS, config=cfg)["bw"]["mif"]
+    assert m["applied"] is False and m["level_mhz"] is None and "mif_opps" in m["not_applied"]

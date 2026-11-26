@@ -57,7 +57,6 @@ class GpuTraffic(BaseScenarioModel):
 
     read: float = Field(ge=0, allow_inf_nan=False)
     write: float = Field(ge=0, allow_inf_nan=False)
-    llc_weight: float | None = Field(default=None, gt=0, le=1, allow_inf_nan=False)   # DRAM share; None = no LLC
 
 
 class WorkloadSpec(BaseScenarioModel):

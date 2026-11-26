@@ -1,6 +1,6 @@
 """M-7: the GPU's own DRAM traffic (L0 ``mb_per_frame``) and the MIF min-lock floor its clock sets.
 
-- ``node_configs.<gpu>.sim.workload.mb_per_frame: {read, write, llc_weight}`` (MB / frame, DRAM side, after
+- ``node_configs.<gpu>.sim.workload.mb_per_frame: {read, write}`` (MB / frame, DRAM side, after
   compression) becomes two DMA ports ``GPU_WORKLOAD_RD`` / ``GPU_WORKLOAD_WR`` at the run fps. The scenario's
   pipeline buffers (framebuffer ``GPU_DPU_BUF`` …) keep their own ports and are not in this volume.
 - The kernel ties the MIF minimum to the GPU clock (``dvfs_model.mif_min_lock_khz`` of the GPU catalog:
@@ -57,7 +57,6 @@ def gpu_workload_transfers(graph, nodes: dict[str, IPWorkload]) -> list[PortTran
         if traffic is None:
             continue
         node = nodes[nid]
-        llc = traffic.llc_weight is not None
         for port, direction, key in PORTS:
             mb = float(getattr(traffic, key))
             if mb <= 0:
@@ -65,7 +64,8 @@ def gpu_workload_transfers(graph, nodes: dict[str, IPWorkload]) -> list[PortTran
             specs.append(PortTransferSpec(
                 node_id=nid, ip_ref=node.ip_ref, hw_name=node.hw_name, port=port, port_type=direction,
                 mb_per_frame=mb, width=0, height=0, format="GPU_WORKLOAD",
-                llc_enabled=llc, llc_weight=traffic.llc_weight if llc else 1.0))
+                # DRAM side already: no LLC discount on top
+                llc_enabled=False, llc_weight=1.0))
     return specs
 
 
@@ -148,10 +148,16 @@ def mif_report(graph, active: set[str], domain: dict[str, dict], result, inputs)
     state = plain if floor_mhz is None else state_of(
         dma_context(result.dma_breakdown, memory_rail=rail, dvfs_sn=sn, min_lock_mhz=floor_mhz))
     extra = float(state["base_mw"]) - float(plain["base_mw"])
-    out.update({"bw_model": model.model_id, "applied": floor_mhz is not None,  # type: ignore[union-attr]
+    has_level = state["mif_mhz"] is not None
+    out.update({"bw_model": model.model_id, "applied": floor_mhz is not None and has_level,  # type: ignore[union-attr]
                 "level_mhz": state["mif_mhz"], "level_reason": state["reason"], "base_mw": state["base_mw"],
                 "level_without_floor_mhz": plain["mif_mhz"], "dram_mbs": state["dram_mbs"],
-                "utilization": state["utilization"], "floor_extra_mw": round(extra, 6)})
+                "utilization": state["utilization"], "floor_extra_mw": round(extra, 6),
+                # the memory rail beyond the port energy, once: base(applied level) + unmodelled masters
+                "mif_mw": round(float(state["base_mw"]) + float(state.get("other_masters_mw") or 0.0), 6),
+                "state": state})
+    if not has_level:
+        out["not_applied"] = "power params declare no MIF OPPs (mif_opps): no level to lift"
     if spec.mb_per_frame is not None and float(state.get("other_masters_mbs") or 0) > 0:
         out["double_count"] = (f"power params other_masters_mbs {state['other_masters_mbs']:g} MB/s (unmodelled "
                                f"masters, GPU included) is added on top of the declared GPU workload traffic")
