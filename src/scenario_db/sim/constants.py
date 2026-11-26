@@ -65,6 +65,13 @@ PACKED_BYTES_PER_PIXEL: dict[str, float] = {
 }
 
 
+# Names the fixtures use for a BPP_MAP format (no prefix matching: a typo reaches the warned default).
+# RAW_BAYER_16 is a 16-bit container: factor 1.0 x bitdepth 16 / 8 = 2 bytes, as before.
+BPP_ALIASES: dict[str, str] = {
+    "RAW_BAYER": "RAW",
+    "RAW_BAYER_16": "RAW",
+}
+
 BPP_RULE = 16   # the engine revision that introduced format_bpp_factor (packed / prefix / YUV422_10BIT)
 
 
@@ -74,15 +81,14 @@ def bpp_rule_moves(fmt: str | None, bitwidth: float | None = 8) -> bool:
     factor, basis = format_bpp_factor(fmt, bitwidth)
     if str(fmt or "").upper() == "YUV422_10BIT":
         return factor != BPP_DEFAULT
-    return basis != "exact" and factor != BPP_DEFAULT
+    return basis not in ("exact", "default") and factor != BPP_DEFAULT
 
 
 def format_bpp_factor(fmt: str | None, bitwidth: float | None = 8) -> tuple[float, str]:
     """The ``format_bpp_factor`` of the BW formula (bytes / pixel = factor x bitwidth / 8) and how it was found.
 
     Order: a packed format (factor = its bytes over bitwidth / 8, so the product is the packed size), the exact
-    ``BPP_MAP`` name, the longest ``BPP_MAP`` prefix (``RAW_BAYER_16`` -> ``RAW``), else ``BPP_DEFAULT``
-    (basis ``default``: callers warn). Steady BW, the debug trace and event jobs share this lookup.
+    ``BPP_MAP`` name, a ``BPP_ALIASES`` name, else ``BPP_DEFAULT`` (basis ``default``: callers warn). Steady BW, the debug trace and event jobs share this lookup.
     """
     name = str(fmt or "").upper()
     width = float(bitwidth or 8)
@@ -90,10 +96,8 @@ def format_bpp_factor(fmt: str | None, bitwidth: float | None = 8) -> tuple[floa
         return PACKED_BYTES_PER_PIXEL[name] / (width / 8.0), "packed"
     if name in BPP_MAP:
         return BPP_MAP[name], "exact"
-    keys = [k for k in BPP_MAP if name.startswith(k)]
-    if keys:
-        key = max(keys, key=len)
-        return BPP_MAP[key], f"prefix:{key}"
+    if name in BPP_ALIASES:
+        return BPP_MAP[BPP_ALIASES[name]], f"alias:{BPP_ALIASES[name]}"
     return BPP_DEFAULT, "default"
 
 BW_POWER_COEFF_DEFAULT = 80.0

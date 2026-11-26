@@ -894,6 +894,9 @@ def _case_reasons(case: dict[str, Any], c: ExplorationConstraints) -> list[str]:
         reasons.append("메모리 한도 판정 불가: 이 조합의 memory 값 없음 (메모리 한도를 넣고 다시 탐색)")
     if c.peak_bw_limit_mbs is not None and mem.get("peak_stage_mbs", 0.0) > c.peak_bw_limit_mbs:
         reasons.append(f"BW 포화: peak {mem['peak_stage_mbs']:.0f} MB/s ({mem.get('peak_stage')}) > MIF 한도 {c.peak_bw_limit_mbs:g} MB/s")
+    elif c.peak_bw_limit_mbs is not None and mem and not mem.get("peak_stage_mbs") and float(case.get("bw_mbs") or 0) > 0:
+        # DMA on IPs without active time (ppc 0): no peak to compare, so the limit is not met (not passed as 0)
+        reasons.append(f"peak BW 판정 불가: 평균 {float(case['bw_mbs']):.0f} MB/s의 IP 활성 시간이 없어 peak를 계산할 수 없음")
     if c.dram_footprint_limit_mb is not None and mem.get("dram_footprint_mb", 0.0) > c.dram_footprint_limit_mb:
         reasons.append(f"DRAM footprint 초과: {mem['dram_footprint_mb']:.1f} MB ({mem.get('frames_held')} frame 보유) "
                        f"> {c.dram_footprint_limit_mb:g} MB")

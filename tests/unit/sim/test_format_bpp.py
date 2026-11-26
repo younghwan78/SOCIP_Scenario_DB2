@@ -18,8 +18,9 @@ GAME = "uc-game-play-e2600"
     ("NV12", 8, 1.5, "exact"),
     ("YUV420_10BIT", 16, 3.0, "exact"),
     ("YUV422_10BIT", 10, 2.5, "exact"),
-    ("RAW_BAYER_16", 16, 2.0, "prefix:RAW"),
+    ("RAW_BAYER_16", 16, 2.0, "alias:RAW"),
     ("SOMETHING", 8, 1.0, "default"),
+    ("RGBA_TYPO", 8, 1.0, "default"),            # no prefix matching: a typo reaches the warned default
 ])
 def test_one_lookup_gives_the_bytes_per_pixel(fmt, bitwidth, bytes_px, basis):
     factor, how = format_bpp_factor(fmt, bitwidth)
@@ -116,6 +117,7 @@ def test_the_bpp_rule_is_in_the_params_hash_only_where_it_moves():
 
     assert bpp_rule_moves("RGBA8888") and bpp_rule_moves("YUV422_10BIT", 10)
     assert not bpp_rule_moves("NV12") and not bpp_rule_moves("RAW_BAYER_16", 16) and not bpp_rule_moves("BITSTREAM")
+    assert not bpp_rule_moves("RGBA_TYPO")
     game = build_simulation_inputs(_exynos2600_generated_graph(GAME, "game-fhd-120fps-sdr"), None)
     plain = build_simulation_inputs(_exynos2600_generated_graph("uc-vid-youtube-e2600", "yt-1080p30-h264-sdr"), None)
     assert "bpp_rule" in _payload(runner, game) and "bpp_rule" not in _payload(runner, plain)
@@ -137,3 +139,57 @@ def _payload(runner, inputs):
     finally:
         runner.json.dumps = real
     return seen
+
+
+def test_both_ends_of_a_sw_timed_stream_use_its_bitrate_per_second():
+    from scenario_db.sim.models import SimulationRunConfig
+    from scenario_db.sim.runner import run_simulation
+
+    rows = {}
+    for fps in (30, 60):
+        r = run_simulation(build_simulation_inputs(_exynos2600_generated_graph(*YT), SimulationRunConfig(fps=fps)))
+        rows[fps] = {(d.node_id, d.port): d.bw_mbs for d in r.dma_breakdown}
+    write, read = rows[30]["sw_demux", "NET_ES_BUF_WDMA"], rows[30]["mfc_dec", "NET_ES_BUF_RDMA"]
+    assert write == pytest.approx(read) and write < 5          # 10 Mbps = 1.25 MB/s, not an FHD surface
+    assert rows[60]["sw_demux", "NET_ES_BUF_WDMA"] == pytest.approx(write)   # a bitrate is not scaled by fps
+
+
+def test_a_sw_timed_stream_keeps_its_llc_placement():
+    graph = _exynos2600_generated_graph(*YT)
+    graph.variant.buffer_overrides = {**(graph.variant.buffer_overrides or {}),
+                                      "NET_ES_BUF": {"placement": {"llc_allocated": True, "llc_weight": 0.25}}}
+    ports, _ = _ports_of(graph)
+    assert ports["sw_demux", "NET_ES_BUF_WDMA"].llc_enabled and ports["sw_demux", "NET_ES_BUF_WDMA"].llc_weight == 0.25
+
+
+def test_a_declared_memory_io_port_wins_over_the_inferred_one():
+    graph = _exynos2600_generated_graph(*YT)
+    cfg = graph.variant.node_configs.setdefault("sw_demux", {})
+    graph.variant.design_conditions = {**graph.variant.design_conditions, "es_rate": 10}
+    cfg["memory_io"] = [{"port": "NET_ES_BUF_WDMA", "direction": "write", "bitrate_condition": "es_rate"}]
+    inputs = build_simulation_inputs(graph, None)
+    rows = [p for p in inputs.port_transfers if (p.node_id, p.port) == ("sw_demux", "NET_ES_BUF_WDMA")]
+    assert len(rows) == 1 and rows[0].format == "BITSTREAM" and rows[0].r_w_rate == 1   # the memory_io row
+
+
+def test_a_scaler_output_buffer_takes_its_dst_over_its_working_size():
+    graph = _exynos2600_generated_graph(GAME, "game-fhd-60fps-m2m-upscale")
+    graph.variant.node_configs["m2m_scaler"]["sim"].update(width=2560, height=1440)
+    ports, _ = _ports_of(graph)
+    assert (ports["dpu", "M2M_DPU_BUF_RDMA"].width, ports["dpu", "M2M_DPU_BUF_RDMA"].height) == (1440, 3120)
+
+
+def test_an_unknown_peak_does_not_pass_a_peak_limit():
+    from scenario_db.sim.arch_exploration import ExplorationConstraints, _case_reasons
+
+    c = ExplorationConstraints(peak_bw_limit_mbs=500)
+    case = {"lossy": False, "total_mw": 1.0, "bw_mbs": 3926.0, "memory": {"peak_stage_mbs": 0.0, "peak_stage": None}}
+    assert any("peak BW 판정 불가" in r for r in _case_reasons(case, c))
+    assert not _case_reasons({**case, "bw_mbs": 0.0}, c)
+
+
+def test_the_job_hash_follows_the_bpp_rule():
+    from scenario_db.api.services.timing_budget import _bpp_rule_moves_any
+
+    assert _bpp_rule_moves_any({"buffers": {"X": {"format": "RGBA1010102", "bitdepth": 10}}})
+    assert not _bpp_rule_moves_any({"buffers": {"X": {"format": "NV12", "bitdepth": 8}}})
