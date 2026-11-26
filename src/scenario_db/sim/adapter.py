@@ -252,6 +252,7 @@ def _workloads_and_transfers(
             {**by_node, **sw_timed_dma_nodes(graph, by_node)},
             comp_catalog=comp_catalog,
             warnings=warnings,
+            run_fps=fps,
         ) if item.node_id not in explicit_nodes)
     transfers.extend(history_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
     transfers.extend(standalone_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))

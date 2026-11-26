@@ -161,8 +161,11 @@ def _buffer_transfers(
     comp_catalog: dict[str, float] | None,
     warnings: list[str] | None,
     rate: float = 1.0,
+    fallback_size: tuple[int, int] | None = None,
 ) -> list[PortTransferSpec]:
     buffer = _effective_buffer(graph, buffer_id)
+    if getattr(workload, "mode", None) == DMA_ONLY and str(buffer.get("format") or "").upper() == "BITSTREAM":
+        return _bitstream_transfers(graph, workload, buffer_id, buffer, names, direction, rate, warnings)
     if buffer.get("size_status") == "unknown":
         if warnings is not None and names:
             message = f"{buffer_id}: DMA size/format unknown; excluded from bandwidth totals."
@@ -172,6 +175,10 @@ def _buffer_transfers(
     width, height = buffer_size(graph, buffer)
     if width == 0 or height == 0:
         width, height = design_size_for_graph(graph)
+    if (width == 0 or height == 0) and fallback_size:
+        # R-5b: no anchor and no design resolution: the producer's declared surface (sim width/height, else the
+        # scaler dst) - only where the buffer was dropped before, so sized buffers keep their values
+        width, height = fallback_size
     if width == 0 or height == 0:
         if warnings is not None and names:
             message = (f"{buffer_id}: no size (size_ref / design resolution); its DMA is excluded from bandwidth "
@@ -208,6 +215,44 @@ def _buffer_transfers(
     ) for name in names]
 
 
+DMA_ONLY = "dma_only"   # IPWorkload.mode of a SW-timed stand-in (fps 0 = the run rate)
+
+
+def _node_surface(graph: CanonicalScenarioGraph, node_id: str) -> tuple[int, int] | None:
+    """The surface a node declares in its variant sim block: width/height, else a 2-int ``dst`` (scaler output)."""
+    sim = ((graph.variant.node_configs or {}).get(node_id) or {}).get("sim") or {}
+    if not isinstance(sim, dict):
+        return None
+    w, h = sim.get("width"), sim.get("height")
+    if isinstance(w, int) and isinstance(h, int) and w > 0 and h > 0:
+        return w, h
+    dst = sim.get("dst")
+    if isinstance(dst, list) and len(dst) == 2 and all(isinstance(v, int) and v > 0 for v in dst):
+        return dst[0], dst[1]
+    return None
+
+
+def _bitstream_transfers(graph: CanonicalScenarioGraph, workload: IPWorkload, buffer_id: str, buffer: dict[str, Any],
+                         names: list[str], direction: PortType, rate: float,
+                         warnings: list[str] | None) -> list[PortTransferSpec]:
+    """A SW-timed node's side of a compressed stream: its bitrate (buffer, node sim, design condition), not a
+    pixel surface; without one the transfer is left out and reported."""
+    sim = ((graph.variant.node_configs or {}).get(workload.node_id) or {}).get("sim") or {}
+    design = graph.variant.design_conditions or {}
+    for raw in (buffer.get("bitrate_mbps"), sim.get("bitrate_mbps") if isinstance(sim, dict) else None,
+                design.get("bitrate_mbps")):
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool) and math.isfinite(raw) and raw > 0:
+            return [PortTransferSpec(
+                node_id=workload.node_id, ip_ref=workload.ip_ref, hw_name=workload.hw_name, port=name,
+                port_type=direction, bitrate_mbps=float(raw), width=0, height=0, format="BITSTREAM",
+                r_w_rate=rate) for name in names]
+    if warnings is not None and names:
+        message = f"{buffer_id}: {workload.node_id} bitstream has no bitrate_mbps; its DMA is excluded."
+        if message not in warnings:
+            warnings.append(message)
+    return []
+
+
 def sw_timed_dma_nodes(graph: CanonicalScenarioGraph, workloads: dict[str, IPWorkload]) -> dict[str, IPWorkload]:
     """IP nodes timed by ``sw_timing`` (GPU fallback composition, SW demux / DRM / decoder): not pixel workloads,
     but their M2M buffers still reach DRAM. A DMA-only stand-in (no clock, no power) per node, so
@@ -224,7 +269,10 @@ def sw_timed_dma_nodes(graph: CanonicalScenarioGraph, workloads: dict[str, IPWor
         if ip_row is None or is_external_non_compute_node(node, ip_row):
             continue
         hw_name = fallback_hw_name(str(ip_ref))
-        out[node_id] = IPWorkload(node_id=node_id, ip_ref=str(ip_ref), hw_name=hw_name, fps=0.0,
+        sim = (configs.get(node_id) or {}).get("sim") or {}
+        fps = sim.get("fps") if isinstance(sim, dict) else None
+        own = float(fps) if isinstance(fps, (int, float)) and not isinstance(fps, bool) and fps > 0 else 0.0
+        out[node_id] = IPWorkload(node_id=node_id, ip_ref=str(ip_ref), hw_name=hw_name, mode=DMA_ONLY, fps=own,
                                   sim_params=IPSimParams(hw_name=hw_name))
     return out
 
@@ -260,6 +308,7 @@ def edge_port_transfers(
     *,
     comp_catalog: dict[str, float] | None = None,
     warnings: list[str] | None = None,
+    run_fps: float | None = None,
 ) -> list[PortTransferSpec]:
     specs: list[PortTransferSpec] = []
     seen: set[tuple[str, str, str, str]] = set()
@@ -269,6 +318,7 @@ def edge_port_transfers(
         source, target = str(edge_source(edge) or ""), str(edge_target(edge) or "")
         buffer_id = str(edge.get("buffer") or "")
         pairs = edge.get("port_pairs") or []
+        surface = _node_surface(graph, source)
         for node_id, direction, key, fallback in (
             (source, PortType.DMA_WRITE, "src", f"{buffer_id or target}_WDMA"),
             (target, PortType.DMA_READ, "dst", f"{buffer_id or source}_RDMA"),
@@ -276,7 +326,11 @@ def edge_port_transfers(
             if node_id not in workloads:
                 continue
             names = list(dict.fromkeys(str(pair[key]) for pair in pairs if pair.get(key))) or [fallback]
-            for spec in _buffer_transfers(graph, workloads[node_id], buffer_id, names, direction, comp_catalog, warnings):
+            node = workloads[node_id]
+            # a SW-timed stand-in moves the buffer at its own declared rate (sim.fps), not the run rate
+            rate = node.fps / run_fps if getattr(node, "mode", None) == DMA_ONLY and node.fps > 0 and run_fps else 1.0
+            for spec in _buffer_transfers(graph, node, buffer_id, names, direction, comp_catalog, warnings,
+                                          rate=rate, fallback_size=surface):
                 identity = (node_id, spec.port, buffer_id, direction)
                 # Fan-out from the same MCSC buffer writes once, reads once per consumer.
                 if identity not in seen:

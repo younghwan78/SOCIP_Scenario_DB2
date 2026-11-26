@@ -65,6 +65,18 @@ PACKED_BYTES_PER_PIXEL: dict[str, float] = {
 }
 
 
+BPP_RULE = 16   # the engine revision that introduced format_bpp_factor (packed / prefix / YUV422_10BIT)
+
+
+def bpp_rule_moves(fmt: str | None, bitwidth: float | None = 8) -> bool:
+    """True when ``format_bpp_factor`` gives a different factor than the exact-match lookup before rev 16
+    (unknown name -> 1.0), so results cached under the old rule must not be reused."""
+    factor, basis = format_bpp_factor(fmt, bitwidth)
+    if str(fmt or "").upper() == "YUV422_10BIT":
+        return factor != BPP_DEFAULT
+    return basis != "exact" and factor != BPP_DEFAULT
+
+
 def format_bpp_factor(fmt: str | None, bitwidth: float | None = 8) -> tuple[float, str]:
     """The ``format_bpp_factor`` of the BW formula (bytes / pixel = factor x bitwidth / 8) and how it was found.
 
