@@ -42,6 +42,12 @@
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          # M-7: GPU's own DRAM traffic per frame (texture / geometry / G-buffer / depth), after compression,
+          # framebuffer excluded (GPU_DPU_BUF has its own port). Assumed; replace with MIF counters per frame.
+          mb_per_frame:
+            read: 36
+            write: 12
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -184,6 +190,10 @@
       sim:
         width: 3840
         height: 2160
+        workload:
+          mb_per_frame:   # assumed: UHD render, 4x pixels, x3.6 traffic (cache reuse)
+            read: 130
+            write: 44
     dpu:
       sim:
         layers:
@@ -278,6 +288,12 @@
       bitdepth: 10
       compression: COMP_OFF
   node_configs:
+    gpu:
+      sim:
+        workload:
+          mb_per_frame:   # assumed: FP16 / 10-bit render targets
+            read: 40
+            write: 16
     dpu:
       sim:
         ip_params:
@@ -310,6 +326,10 @@
       sim:
         width: 2560
         height: 1440
+        workload:
+          mb_per_frame:   # assumed: QHD render = FHD x 1.78
+            read: 64
+            write: 21
     dpu:
       sim:
         composer: M2M_SCALER_FALLBACK

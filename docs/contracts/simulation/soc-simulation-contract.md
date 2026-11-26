@@ -295,6 +295,18 @@ pipeline:
 Limits: stages after the GPU (NPU, M2M scaler, DPU composition) are not in the chain; the timeline token
 capacity does not follow `count`; exploration and concurrent sets do not carry `pacing` yet.
 
+### GPU memory traffic and the MIF floor (`gpu-mif-floor-v1`, M-7)
+
+| Field / rule | Meaning |
+| --- | --- |
+| `workload.mb_per_frame: {read, write}` | the GPU's own DRAM traffic per frame (MB, DRAM side, after compression and LLC: no LLC discount on top): texture / geometry / G-buffer / depth. The pipeline buffers (framebuffer `GPU_DPU_BUF` …) keep their own ports and are not in it. Two DMA ports `GPU_WORKLOAD_RD` / `GPU_WORKLOAD_WR` at the run fps (`mb_per_frame × fps`); steady BW, BW power, exploration and the MIF load all see them. It is moved, not held: not in `write_mb_frame` (footprint). The GPU peak uses its domain busy time (util × period) |
+| `workload.mif_floor: catalog \| none` | `catalog` (default): the MIF floor at the GPU clock f is the value of the largest key ≤ f in the GPU catalog `dvfs_model.mif_min_lock_khz` (`base` below the smallest key). `mif_cl_boost_min_lock_khz` is not applied (CPU boost is not modelled) |
+| `bw.mif` (Timing Budget) | GPU clock (its domain load), floor, and with the `mif-linear` BW model the MIF level = max(governor, QoS lock, floor) snapped up to a modelled MIF OPP, its reason (`governor` / `qos_lock` / `min_lock` / `saturated`), and the level without the floor |
+| Power | `mif-linear`: the BW power adds the MIF base of the applied level once, plus unmodelled masters (`power.mif_base_mw`); `power.mif_floor_mw` = `base(level) − base(level without floor)` explains the floor's share. Without MIF OPPs the floor is not applied (`not_applied`). Other BW models report the floor only. Saved Timing Budget evidence keeps the applied state in `power_breakdown.memory.mif`. A floor above the highest modelled MIF OPP, or `other_masters_mbs` next to declared GPU traffic, is a verdict note |
+
+Opt-in: an active GPU node with a `sim.workload` mapping; the workload mapping and the catalog table are in the
+condition hash. `/simulate` (no domain load there) has no floor.
+
 ## Event Jobs (`pipeline.jobs`)
 
 A one-off or burst piece of work on top of the steady frame DAG (capture shot, camera launch, lens switch, seek)

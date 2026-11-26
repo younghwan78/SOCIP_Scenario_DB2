@@ -136,6 +136,12 @@ def _condition_hash(graph, options, shim, tables) -> str:
     pacing = pacing_inputs(graph)
     if pacing:
         payload["pacing"] = pacing
+    # M-7 MIF floor reads the GPU workload mapping and the catalog min-lock table; absent = unchanged
+    from scenario_db.sim.gpu_memory import mif_inputs
+
+    mif = mif_inputs(graph)
+    if mif:
+        payload["gpu_mif"] = mif
     # R-3 event jobs read their knob parameters from power_options; absent = hash unchanged
     jobs = (getattr(getattr(graph, "scenario", None), "pipeline", None) or {}).get("jobs")
     if jobs:
@@ -473,6 +479,10 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
     pb = dict(evidence.power_breakdown or {})
     for key, mw in (("ip", power["hw_mw"]), ("memory", power["bw_mw"])):
         pb[key] = {**(pb.get(key) if isinstance(pb.get(key), dict) else {}), "total_mw": mw}
+    mif = report["bw"].get("mif") or {}
+    if mif.get("state"):   # M-7: the MIF state the report applied (GPU floor), with the total computed from it
+        pb["memory"]["mif"] = {**mif["state"], "gpu_floor": {k: mif.get(k) for k in (
+            "node", "gpu_mhz", "floor_mhz", "floor_key_khz", "level_without_floor_mhz", "floor_extra_mw", "model")}}
     pb["cpu"] = {"total_mw": power["cpu_mw"], "by_task": power["cpu_by_task"],
                  "model": power.get("cpu_profile") or power["cpu_model"]}
     res = report.get("residency") or {}

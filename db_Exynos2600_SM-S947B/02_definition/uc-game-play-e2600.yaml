@@ -179,6 +179,10 @@ variants:
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          mb_per_frame:
+            read: 36
+            write: 12
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -311,6 +315,10 @@ variants:
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          mb_per_frame:
+            read: 36
+            write: 12
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -449,6 +457,10 @@ variants:
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          mb_per_frame:
+            read: 36
+            write: 12
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -586,6 +598,10 @@ variants:
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          mb_per_frame:
+            read: 130
+            write: 44
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -717,6 +733,10 @@ variants:
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          mb_per_frame:
+            read: 36
+            write: 12
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -855,6 +875,10 @@ variants:
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          mb_per_frame:
+            read: 40
+            write: 16
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -995,6 +1019,10 @@ variants:
             p99_x: 1.45
             p95_x: 1.25
           present_mode: fifo
+          mb_per_frame:
+            read: 64
+            write: 21
+          mif_floor: catalog
           value_source: assumed
       bw_kb_s:
         note: GPU traffic is not kernel-declared; see ip-gpu bw_model
@@ -1160,6 +1188,10 @@ variants:
             p99_x: 1.6
             p95_x: 1.3
           present_mode: fifo
+          mb_per_frame:
+            read: 36
+            write: 12
+          mif_floor: catalog
           value_source: assumed
         input_layers: 13
       bw_kb_s:

@@ -76,6 +76,10 @@ OPT_IN: list[dict[str, str]] = [
     {"since": "15", "change": "frame pacing (frame-pacing-v1): CPU / GPU frame chain, BufferQueue back-pressure and "
                               "panel latch (FIFO / mailbox) Monte Carlo - achieved fps, jank, frame time, latency",
      "opt_in": "node_configs.<gpu>.sim.workload.frame_time (report.pacing)"},
+    {"since": "16", "change": "GPU memory (gpu-mif-floor-v1): declared GPU DRAM traffic per frame as DMA ports; the "
+                              "catalog MIF min lock at the GPU clock as a MIF floor (mif-linear: level and the added "
+                              "power; otherwise reported)",
+     "opt_in": "node_configs.<gpu>.sim.workload mapping: mb_per_frame / mif_floor (report.bw.mif)"},
 ]
 
 

@@ -34,6 +34,9 @@ from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.assumed_loads import assumed_loads
 from scenario_db.sim.domain_loads import domain_loads
+from scenario_db.sim.gpu_memory import PORTS as _GPU_PORTS
+
+GPU_TRAFFIC_PORTS = {p for p, _, _ in _GPU_PORTS}
 from scenario_db.sim.judgement import judgement_contract, rate_and_source  # judgement_contract re-exported (R-1)
 from scenario_db.sim.cpu_power import PROFILER_COEFF as _CPU_PROFILER_COEFF
 from scenario_db.sim.models import CpuProfile, DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
@@ -1115,11 +1118,15 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     # (an own-cadence task such as the ABOX period IRQ is a timeline task, not a resolved workload)
     active = set(result.resolved) | set(plan["tasks"])
     domain = domain_loads(graph, active, 1000.0 / period if period else 0.0)
-    power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain)
+    # M-7: MIF level / GPU min-lock floor when a GPU node declares a workload mapping (None otherwise)
+    from scenario_db.sim.gpu_memory import mif_report
+
+    mif = mif_report(graph, active, domain, result, run["inputs"])
+    power, bw = _power_bw(result, plan, options, period, assumed_loads(graph.variant.design_conditions), domain, mif)
     for ip in ips:  # R-4: a subsystem is its node's whole power, in the IP detail as in the totals
         if (domain.get(ip["node"]) or {}).get("model") == "mcps-v1":
             ip["power_mw"] = round(domain[ip["node"]]["mw"], 3)
-    bw["peak"] = _peak_bw(ips, bw, period)
+    bw["peak"] = _peak_bw(ips, bw, period, domain)
     domains = {st: stage_domains(ips, st) for st in STAGES}
     own = own_cadence_rows(result.timeline_events)
     verdict = _verdict(stages, intervals, ips, domains, period, own)
@@ -1131,6 +1138,9 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     from scenario_db.sim.frame_pacing import pacing_report
 
     pacing = pacing_report(graph, plan, domain, period, _sw_ranges(plan, options), options)
+    for key in ("warning", "double_count"):
+        if mif is not None and mif.get(key):
+            verdict["notes"].append(mif[key])
     if pacing is not None and pacing["status"] == "fail":
         verdict["reasons"].append(f"frame pacing: {pacing['achieved_fps']} fps < target {pacing['target_fps']:g} fps"
                                   f" (jank {pacing['jank_pct']} %)")
@@ -1277,7 +1287,8 @@ def _interval_stats(gaps: list[float], period: float, tol: float, skip: int) -> 
             "warmup_observed": lead, "warmup_excluded": skip}
 
 
-def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> dict[str, Any]:
+def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float,
+             domain: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """Average vs peak traffic (TIM-08). Average = bytes/frame x fps; an IP moves the same bytes inside its active
     time, so its peak ~ average x period / hw_ms. Raising its clock shortens hw_ms: average unchanged, peak up.
     ``stage_mbs`` = the stage's IPs streaming together; ``upper_mbs`` = all stages overlapping (pipelined bound)."""
@@ -1286,6 +1297,9 @@ def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> di
     for ip in ips:
         avg = bw["hw_by_ip"].get(ip["node"])
         hw = ip.get("standalone_hw_ms") or ip.get("hw_ms")
+        util = float(((domain or {}).get(ip["node"]) or {}).get("util") or 0.0)
+        if not (hw and hw > 0) and util > 0 and (domain or {}).get(ip["node"], {}).get("model") != "mcps-v1":
+            hw = min(util, 1.0) * period   # M-7: a domain-load node (GPU) is busy util x period per frame
         if avg and hw and hw > 0:
             by_ip[ip["node"]] = round(avg * min(period / hw, 1000.0), 1)
             stage_of[ip["node"]] = ip["stage"]
@@ -1299,7 +1313,7 @@ def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> di
 
 def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, period: float,
               assumed: dict[str, dict[str, Any]] | None = None,
-              domain: dict[str, dict[str, Any]] | None = None):
+              domain: dict[str, dict[str, Any]] | None = None, mif: dict[str, Any] | None = None):
     stage = plan["stage"]
     tasks = plan["tasks"]
     hw_by_ip = {n: r.total_power_mw * plan["dual"].get(n, 1) for n, r in result.resolved.items()}
@@ -1336,6 +1350,11 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     # declared assumed loads (GPU / NPU …) are IP power with no pipeline node: kept apart from hw_by_ip (real nodes)
     assumed_by_ip = {ip: a["mw"] for ip, a in (assumed or {}).items()}
     hw = sum(hw_by_ip.values()) + sum(assumed_by_ip.values())
+    # M-7 (mif-linear, a GPU workload mapping): the memory rail's MIF base of the applied level, once (the floor's
+    # share of it is power.mif_floor_mw); 0 otherwise, so other variants keep the port sum
+    mif_mw = float((mif or {}).get("mif_mw") or 0.0)
+    floor_mw = float((mif or {}).get("floor_extra_mw") or 0.0)
+    bw_power_hw += mif_mw
     bwp = bw_power_hw + bw_power_sw
     total = cpu + hw + bwp
     share = {
@@ -1368,6 +1387,10 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         power["assumed_basis"] = {ip: a["basis"] for ip, a in (assumed or {}).items() if a.get("basis")}
     if domain:  # absent key = no domain load declared
         power["domain_loads"] = domain
+    if mif_mw:
+        power["mif_base_mw"] = round(mif_mw, 3)
+    if floor_mw:
+        power["mif_floor_mw"] = round(floor_mw, 3)
     bw = {
         "total_mbs": round(bw_total, 1),
         "hw_mbs": round(sum(bw_hw.values()), 1),
@@ -1380,8 +1403,12 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
         },
         # DRAM written per frame (every write port: each plane and each M2M buffer once a frame, after its
         # compression) = the DRAM one frame occupies; frames in flight x this sizes the buffers (report only)
-        "write_mb_frame": round(sum(d.bw_mbs for d in result.dma_breakdown if d.direction == "write") * period / 1000.0, 3),
+        # GPU workload traffic (mb_per_frame) is moved, not held: not in the footprint
+        "write_mb_frame": round(sum(d.bw_mbs for d in result.dma_breakdown if d.direction == "write"
+                                    and d.port not in GPU_TRAFFIC_PORTS) * period / 1000.0, 3),
     }
+    if mif is not None:  # absent key = no GPU workload mapping
+        bw["mif"] = mif
     return power, bw
 
 
