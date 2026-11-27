@@ -88,9 +88,13 @@ def test_role_stages_and_unmodeled_kpis(env):
     graph = graph_from_fixture(raw, "yt-1080p30-h264-sdr", catalog)
     stages = lambda rep: {s["id"]: s["nodes"] for s in rep["stages"]}  # noqa: E731
     assert "mfc_dec" in stages(run(with_contract(graph, None), tables))["output"]
-    r = run(with_contract(graph, {"stages": {"decoder": "nrt"}, "kpis": ["interval", "underrun", "frame_pacing"]}), tables)
+    r = run(with_contract(graph, {"stages": {"decoder": "nrt"},
+                                  "kpis": ["interval", "underrun", "frame_pacing", "start_time"]}), tables)
     assert "mfc_dec" in stages(r)["nrt"] and "mfc_dec" not in stages(r)["output"]
-    assert "판정 계약 KPI 미모델: underrun, frame_pacing" in r["verdict"]["notes"]
+    # M-10: modelled KPIs without their section are no_input (never passed); start_time has no model
+    assert "판정 계약 KPI 미모델: start_time" in r["verdict"]["notes"]
+    assert "KPI 입력 없음(통과로 세지 않음): underrun, frame_pacing.jank_pct" in r["verdict"]["notes"]
+    assert r["verdict"]["kpis"] == {"status": "no_input", "no_input": 2, "unmodeled": 1}
 
 
 def test_evidence_assess_uses_the_declared_sinks(env):

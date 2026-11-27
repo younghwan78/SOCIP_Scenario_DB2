@@ -89,7 +89,12 @@ def test_audio_is_judged_at_the_mixer_period_but_not_by_frame_interval():
         assert r["verdict"]["status"] == "not_applicable"
         notes = " ".join(r["verdict"]["notes"])
         assert "speaker (audio)" in notes and "bt_codec" not in notes         # inactive sink not listed
-        assert "underrun" in notes and "latency" in notes                   # neither evaluated, never passed
+        # M-10: underrun (deadline slack, no target yet) and the ABOX route latency (its own 60 ms target)
+        assert "미모델" not in notes
+        rows = {r["kpi"]: r for r in r["kpis"]}
+        assert rows["underrun"]["status"] == "no_target" and rows["underrun"]["value"] > 0
+        assert rows["latency"]["status"] == "pass" and rows["latency"]["target"] == 60.0
+        assert r["verdict"]["kpis"]["status"] == "no_target"       # a pass never lifts not_applicable
 
 
 def test_streaming_packet_receive_keeps_its_own_rate():

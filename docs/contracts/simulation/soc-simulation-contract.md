@@ -241,7 +241,7 @@ pipeline:
     - {node: mfc_dec, kind: video, label: decode}
     stages:                # node role -> rt | nrt | post | output (before the name rule)
       decoder: output
-    kpis: [interval, latency]   # also: underrun, frame_pacing, start_time (declared, not modeled yet)
+    kpis: [interval, latency]   # also: underrun, frame_pacing, start_time, event_* / peak_* (see KPI registry)
     rate: {condition: target_fps}   # R-1, optional: exactly one of condition | hz | node
 ```
 
@@ -249,7 +249,8 @@ pipeline:
 | --- | --- |
 | `sinks[]` | `node` must be a pipeline node; `kind` is `preview`, `video`, `display`, `audio` or `file`. preview / video / display are judged by their interval: the first preview (else the first display) is the preview interval, the first video the video interval, the rest extra streams. audio (period buffers) and file (event outputs) are never judged by the frame interval; they are listed in the verdict notes until their KPI models exist. A sink inactive in a variant (routing switch, `sim.active: false`) is not judged there; nothing judged and no RT node → `not_applicable`. |
 | `stages` | Role → stage, applied before the name rule; Timing Budget `stage_overrides` still win. |
-| `kpis` | KPIs without a model are listed in the verdict notes (`판정 계약 KPI 미모델: …`), never counted as passed. With no interval-judged output, `interval` / `latency` are listed there too. |
+| `kpis` | `interval` / `latency` of the frame outputs: the frame-interval path. The others: the KPI registry below. KPIs without a model are listed in the verdict notes (`판정 계약 KPI 미모델: …`), never counted as passed; with no interval-judged output `interval` is listed there too. |
+| `targets[]` | R-6 KPI targets, judged by the KPI registry below. |
 | `rate` | The judgement rate (`sim/judgement.py`). Order: request `config.fps` > `rate` > `design_conditions.fps` > 30. `hz`: a fixed rate (the audio mixer period); `condition`: a `design_conditions` key (missing in a variant = error); `node`: that node's `sim.fps`. The value must be a finite positive number. The report adds `fps_source` (`contract.hz`, `contract.condition:<key>`, `contract.node:<id>`, `request`) only when `rate` is declared. |
 
 **Rate-following nodes.** With a declared `rate`, a node whose work follows the scenario rate leaves `sim.fps` /
@@ -261,6 +262,53 @@ reads the declared rate, not a request fps.
 
 The evidence generator (`scripts/generate_simulation_evidence.py`) accepts a run on the declared sinks
 active in the variant, so screen-off playback is judged on its decoder output.
+
+### KPI targets and the KPI registry (R-6, M-10)
+
+```yaml
+pipeline:
+  judgement:
+    kpis: [underrun, latency]
+    targets:
+    - {id: aud-slack, kpi: underrun, min: 0.5, basis: "assumed deadline margin"}
+  jobs:
+  - id: still_shot
+    milestones: {thumbnail: post, saved: store}
+    kpis: [event_latency, peak_footprint]
+# targets of job KPIs name the job (or none = every active job declaring the KPI)
+#   - {id: thumb-12m, kpi: event_latency, job: still_shot, milestone: thumbnail, max: 300}
+#   - {id: heap, kpi: peak_footprint, max: 2048, when: {capture_readout: full_remosaic}}
+```
+
+| Field | Rule |
+| --- | --- |
+| `id` | Unique in the contract. |
+| `kpi` | Declared in `judgement.kpis`, or (event / peak KPIs) in the `kpis` of the job it names - of some job when `job` is omitted. `interval` takes no target. |
+| `metric` | `frame_pacing` only: `jank_pct` (default, %), `achieved_fps` (min), `frame_p99_ms`, `present_cov`. |
+| `job` / `milestone` | Event / peak KPIs: the job (must exist). `event_latency` needs a milestone of that job (of every declaring job when `job` is omitted). |
+| `max` / `min` | Exactly one, in the KPI's direction: `underrun` and `frame_pacing.achieved_fps` take `min`, the rest `max`. Units are fixed: ms, mJ, mW, MB/s, MB, %, fps. |
+| `window_ms` | Peak KPIs only, and only 10 (the job evaluator's window). |
+| `when` / `when_node_enabled` | Variant selection (the knob rule). Of the targets of one (kpi, metric, job, milestone) matching a variant, the one with the most `when` keys wins; a tie is an authoring / strict ETL error. |
+| `value_source` | `assumed` (default; shown as 가정 목표) or `spec`. |
+
+The registry (`sim/kpis.py`) reads the sections other models produced and adds `report.kpis[]`
+(`{id, kpi, metric, job, milestone, status, value, target, bound, unit, value_source, basis, sources}`) and
+`verdict.kpis` (worst status and counts):
+
+| KPI | Value |
+| --- | --- |
+| `event_latency` | `report.jobs[].milestones[m]` (ms after the trigger), one row per milestone |
+| `event_energy` / `peak_power` / `peak_bw` / `peak_footprint` | `jobs[].energy_mj.event`, `jobs[].peak` (10 ms window) |
+| `frame_pacing` | `report.pacing` (a jank_pct row always, plus one per targeted metric) |
+| `underrun` | the smallest `report.subsystems[*].deadline_slack[].slack_ms` (v1: deadline margin, not an underrun count) |
+| `latency` | `report.subsystems[*].route.latency_ms`, only when no frame output is judged by the interval path; the route's `latency_target_ms` is the target unless a target is declared |
+| `start_time` / `event_rate` | no model: `unmodeled` |
+
+Status: `pass` / `fail` with a target, `no_target` (value only), `no_input` (section or value missing - noted
+`KPI 입력 없음`, never passed), `unmodeled`. A fail fails the verdict with a reason (`KPI <id>: <value> > <target>`,
+`(가정 목표)` for assumed targets); a pass never lifts `not_applicable`. Job KPIs are judged only by runs that
+evaluate the jobs: steady-only callers (fleet rows, what-if grids, exploration) skip them. Without KPI
+declarations nothing is added. The targets are part of the judgement contract and so of the condition hash.
 
 ## GPU Workload and Frame Pacing (`sim.workload`, `frame-pacing-v1`)
 

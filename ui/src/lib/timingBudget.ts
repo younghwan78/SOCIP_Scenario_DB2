@@ -148,7 +148,16 @@ export interface GpuMif {
   base_mw?: number; dram_mbs?: number; utilization?: number | null; floor_extra_mw?: number
   gpu_workload_mbs?: Record<string, number>; warning?: string; double_count?: string
 }
-export interface Verdict { status: TimingVerdictStatus; reasons: string[]; notes?: string[]; nrt_clock_factor: number | null }
+export type KpiStatus = 'pass' | 'fail' | 'no_target' | 'no_input' | 'unmodeled'
+/** M-10 KPI registry row (report.kpis): a declared KPI against its R-6 target */
+export interface KpiResult {
+  id: string | null; kpi: string; metric: string | null; job: string | null; milestone: string | null
+  status: KpiStatus; value: number | null; target: number | null; bound: 'max' | 'min' | null; unit: string
+  value_source: string | null; basis: string | null; sources: string[]
+}
+export interface Verdict { status: TimingVerdictStatus; reasons: string[]; notes?: string[]; nrt_clock_factor: number | null
+  /** M-10: worst KPI status and the count per status (absent = no KPI declared) */
+  kpis?: { status: KpiStatus } & Partial<Record<KpiStatus, number>> }
 export interface WhatIfRow {
   statistic: Statistic; eis: boolean; scale: number; verdict: Verdict
   stages: Record<StageId, { sw_ms: number; budget_ms: number; hw_ms: number; feasible: boolean }>
@@ -164,6 +173,8 @@ export interface TimingReport {
   fps_source?: string
   /** R-5 / M-6: frame pacing (only when the GPU node declares sim.workload.frame_time) */
   pacing?: FramePacing
+  /** M-10 declared KPIs against the R-6 targets (absent = none declared) */
+  kpis?: KpiResult[]
   eis: { on: boolean; auto: boolean; mode: EisMode; stabilization: unknown }
   mfc_dual: Record<string, number>; growth: { runtime_scale: number; latency_scale: number }
   dvfs: { tables: string[]; applied: boolean; table_ref?: string | null

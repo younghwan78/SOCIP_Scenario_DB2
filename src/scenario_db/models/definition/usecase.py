@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from scenario_db.models.definition.job import JobSpec, expression_names
+from scenario_db.models.definition.job import JobSpec, Selector, expression_names
 from scenario_db.models.definition.subsystem import SubsystemSpec
 from scenario_db.models.common import (
     BaseScenarioModel,
@@ -72,9 +72,31 @@ class PipelineEdge(BaseModel):
 
 
 JudgementStage = Literal["rt", "nrt", "post", "output"]
-JudgementKpi = Literal["interval", "latency", "underrun", "frame_pacing", "start_time"]
-# the KPIs the Timing Budget evaluates today; the others are declared requirements without a model yet
-MODELED_KPIS = ("interval", "latency")
+JudgementKpi = Literal["interval", "latency", "underrun", "frame_pacing", "start_time",
+                       # R-6: the event job KPIs (declared per job in ``pipeline.jobs[].kpis``)
+                       "event_latency", "event_rate", "event_energy", "peak_power", "peak_bw", "peak_footprint"]
+# the KPIs the Timing Budget evaluates: interval / latency by the frame-interval path, the rest by the M-10
+# registry (sim/kpis.py KPI_MODELS; a test keeps the two equal). Declared KPIs outside it are reported unmodelled.
+MODELED_KPIS = ("interval", "latency", "underrun", "frame_pacing",
+                "event_latency", "event_energy", "peak_power", "peak_bw", "peak_footprint")
+
+# R-6 target vocabulary: KPI -> {metric: (unit, bound)}; None = the KPI's single value
+KPI_METRICS: dict[str, dict[str | None, tuple[str, str]]] = {
+    "latency": {None: ("ms", "max")},
+    "underrun": {None: ("ms", "min")},             # v1: the smallest deadline slack of a period stream
+    "frame_pacing": {None: ("%", "max"), "jank_pct": ("%", "max"), "achieved_fps": ("fps", "min"),
+                     "frame_p99_ms": ("ms", "max"), "present_cov": ("ratio", "max")},
+    "start_time": {None: ("ms", "max")},
+    "event_latency": {None: ("ms", "max")},
+    "event_rate": {None: ("1/s", "min")},
+    "event_energy": {None: ("mJ", "max")},
+    "peak_power": {None: ("mW", "max")},
+    "peak_bw": {None: ("MB/s", "max")},
+    "peak_footprint": {None: ("MB", "max")},
+}
+JOB_KPIS = ("event_latency", "event_rate", "event_energy", "peak_power", "peak_bw", "peak_footprint")
+PEAK_KPIS = ("peak_power", "peak_bw", "peak_footprint")
+TARGET_PEAK_WINDOW_MS = 10.0     # sim/jobs.py PEAK_WINDOW_MS (a test keeps them equal)
 
 
 # sink kinds whose output interval is judged at the frame rate; audio (period buffers) and file (event outputs)
@@ -107,6 +129,53 @@ class RateSpec(BaseScenarioModel):
         return self
 
 
+class KpiTarget(Selector):
+    """R-6: a KPI target of the judgement contract. ``when`` / ``when_node_enabled`` select the variants; of the
+    targets matching one (kpi, metric, job, milestone) the one with the most ``when`` keys wins."""
+
+    id: str = Field(min_length=1)
+    kpi: JudgementKpi
+    metric: str | None = None         # frame_pacing: jank_pct (default) | achieved_fps | frame_p99_ms | present_cov
+    job: str | None = None            # event / peak KPIs: one job (None = every active job declaring the KPI)
+    milestone: str | None = None      # event_latency: which milestone (required)
+    max: float | None = Field(default=None, allow_inf_nan=False)
+    min: float | None = Field(default=None, allow_inf_nan=False)
+    window_ms: float | None = Field(default=None, gt=0, allow_inf_nan=False)   # peak KPIs: v1 = 10 ms only
+    value_source: Literal["spec", "assumed"] = "assumed"
+    basis: str | None = None
+
+    @model_validator(mode="after")
+    def _shape(self) -> KpiTarget:
+        where = f"judgement.targets.{self.id}"
+        if self.kpi == "interval":
+            raise ValueError(f"{where}: interval is judged by the frame-interval path; it takes no target")
+        metrics = KPI_METRICS[self.kpi]
+        if self.metric not in metrics:
+            named = sorted(m for m in metrics if m)
+            raise ValueError(f"{where}: metric {self.metric!r} is not one of {named} for {self.kpi}" if named
+                             else f"{where}: {self.kpi} takes no metric")
+        if (self.max is None) == (self.min is None):
+            raise ValueError(f"{where}: give exactly one of max / min")
+        bound = metrics[self.metric][1]
+        if (self.max if bound == "min" else self.min) is not None:
+            raise ValueError(f"{where}: {self.kpi}{'.' + self.metric if self.metric else ''} is bounded by {bound}")
+        if self.milestone is not None and self.kpi != "event_latency":
+            raise ValueError(f"{where}: milestone applies to event_latency only")
+        if self.kpi == "event_latency" and self.milestone is None:
+            raise ValueError(f"{where}: event_latency needs a milestone")
+        if self.job is not None and self.kpi not in JOB_KPIS:
+            raise ValueError(f"{where}: job applies to the event job KPIs only")
+        if self.window_ms is not None and (self.kpi not in PEAK_KPIS or self.window_ms != TARGET_PEAK_WINDOW_MS):
+            raise ValueError(f"{where}: window_ms applies to peak KPIs and must be {TARGET_PEAK_WINDOW_MS:g} "
+                             "(the job evaluator's window)")
+        return self
+
+    def key(self) -> tuple[str, str | None, str | None, str | None]:
+        """What a target judges; the metric defaults to the KPI's first one (frame_pacing: jank_pct)."""
+        metric = self.metric or ("jank_pct" if self.kpi == "frame_pacing" else None)
+        return self.kpi, metric, self.job, self.milestone
+
+
 class JudgementContract(BaseScenarioModel):
     """What the Timing Budget judges for this scenario (D-02).
 
@@ -122,6 +191,36 @@ class JudgementContract(BaseScenarioModel):
     kpis: list[JudgementKpi] = Field(default_factory=lambda: ["interval"])
     # R-1: the judgement rate (None = design_conditions.fps, else 30); a request fps still wins
     rate: RateSpec | None = None
+    # R-6: KPI targets (None = none: values only, report and hash unchanged)
+    targets: list[KpiTarget] | None = None
+
+
+def target_reference_errors(contract: JudgementContract | None, jobs: list[JobSpec]) -> list[str]:
+    """R-6 target checks against the pipeline (shared by the model and the pipeline patch path): unique ids, a
+    declared KPI (``judgement.kpis`` or a job's ``kpis``), known jobs and milestones."""
+    targets = (contract.targets if contract else None) or []
+    errors: list[str] = []
+    ids = [t.id for t in targets]
+    if len(ids) != len(set(ids)):
+        errors.append(f"duplicate judgement target ids {sorted({i for i in ids if ids.count(i) > 1})}")
+    by_id = {j.id: j for j in jobs}
+    for t in targets:
+        where = f"judgement.targets.{t.id}"
+        if t.kpi not in JOB_KPIS:
+            if contract is None or t.kpi not in contract.kpis:
+                errors.append(f"{where}: kpi {t.kpi} is not declared in judgement.kpis")
+            continue
+        if t.job is not None and t.job not in by_id:
+            errors.append(f"{where}: job '{t.job}' not found in pipeline.jobs")
+            continue
+        declaring = [j for j in ([by_id[t.job]] if t.job else jobs) if t.kpi in (j.kpis or [])]
+        if not declaring:
+            errors.append(f"{where}: no job{' ' + t.job if t.job else ''} declares kpi {t.kpi}")
+        elif t.milestone is not None:
+            missing = [j.id for j in declaring if t.milestone not in (j.milestones or {})]
+            if missing:
+                errors.append(f"{where}: milestone '{t.milestone}' not found in job(s) {missing}")
+    return errors
 
 def job_reference_errors(jobs: list[JobSpec], node_ids: set[str], buffers: set[str]) -> list[str]:
     """Pipeline-level job checks (shared by the model and the pipeline patch path): ids, nodes, session buffers."""
@@ -168,6 +267,7 @@ class Pipeline(BaseScenarioModel):
             if unknown:
                 raise ValueError(f"node {node.id}: subsystem names unknown nodes {unknown} (bind / when_node_enabled)")
         errors = job_reference_errors(self.jobs or [], node_ids, set(self.buffers))
+        errors += target_reference_errors(self.judgement, self.jobs or [])
         if errors:
             raise ValueError(errors[0])
         for sink in (self.judgement.sinks if self.judgement else []):
