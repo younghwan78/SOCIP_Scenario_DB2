@@ -17,13 +17,28 @@ revisions in between, taken from `src/scenario_db/sim/engine_revisions.py`, in t
 | New data opts in; undeclared data gives identical results | keep | an `OPT_IN` entry |
 | Refactor, speed-up | keep | — |
 
-Run `scripts/check_engine_equivalence.py dump` on main and on the branch, then `compare`. A change that should keep
-the revision has 0 differences. A bump lists the moved variants in its PR.
+Run the change gate from the repository root:
 
-The fixed cases cover every E2600 scenario (a test fails when a fixture scenario has none). The comparison includes
-the input hashes, so 0 differences also means registered predictions of those scenarios stay fresh. For the
-ejected Exynos2700 fixture, also run `python -m scenario_db.authoring check sm-s957b --against db_Exynos2700_SM-S957B`
-(0 differences) and `tests/unit/authoring` (the inherited-2700 compile test).
+```
+uv run python scripts/check_change_gate.py run --base main
+```
+
+It checks the base out into a temporary worktree and dumps both trees with no database. It then compares them in
+three groups and checks the ejected Exynos2700 documents (`authoring check sm-s957b --against
+db_Exynos2700_SM-S957B`):
+
+| Group | Compared | Gate |
+|---|---|---|
+| E2600 results | the `check_engine_equivalence` fixed cases, outside the input hash | reported (`--strict` fails) |
+| E2600 input hash | `input_hash` / `input_sections` / `_manifest_blobs` of those cases: a change makes their registered predictions stale | reported (`--strict` fails) |
+| E2700 | every E2700 variant: the Timing Budget report and the DMA breakdown, plus the documents | **any difference fails** |
+
+A change that should keep the revision has no E2600 result difference. A bump lists the moved variants in its PR.
+An opt-in change lists the cases whose input hash moved (only the scenarios that declare it).
+
+The fixed cases cover every E2600 scenario (a test fails when a fixture scenario has none). `dump --root` /
+`compare` run the two halves by hand (`scripts/check_engine_equivalence.py` still dumps the E2600 cases alone).
+`tests/unit/authoring` (the inherited-2700 compile test) also stays green.
 
 ## Revisions
 
