@@ -283,11 +283,27 @@ derived:
 | 방법 | 절차 |
 |---|---|
 | 기존 2700 scenario 복제 | `cp -r authoring/projects/sm-s957b/scenarios/uc-cam-recording-e2700 authoring/projects/sm-s957b/scenarios/uc-cam-recording-night-e2700` → 새 폴더의 `scenario.yaml`에서 `id`, `metadata.name`, `metadata.canonical_usecase`(과제 간 비교 키, 예: `uc-cam-recording-night`)를 바꾼다. `sw_timing.measured.yaml`의 `scenario:`도 새 id로 바꾸고, `variants.yaml`을 편집한다 |
-| 2600의 다른 scenario 가져오기 (예: preview) | 1) `authoring/projects/sm-s947b/scenarios/uc-cam-preview-e2600`을 `.../sm-s957b/scenarios/uc-cam-preview-e2700`으로 복사한다. 2) 파일 안의 id를 바꾼다: `sed -i 's/-e2600/-e2700/g; s/s5e9965/s5e9975/g; s/proj-sm-s947b/proj-sm-s957b/g' <폴더>/*.yaml`. 3) sensor / SW profile 참조가 있으면 2700 id(`...-s5e9975`)인지 확인한다. 4) `retired.yaml`에서 해당 id를 **먼저** 뺀다 |
+| 2600의 다른 scenario 가져오기 (예: capture) — **port 도구 (R-8)** | `python -m scenario_db.authoring port-scenario uc-cam-capture-e2600 --from sm-s947b --to sm-s957b` (아래 설명). `retired.yaml`에 해당 id가 있으면 **먼저** 뺀다 |
 | 완전히 새 scenario | 위 폴더 구조(`scenario.yaml` + `variants.yaml` + `sizes.yaml` + `sw_timing.yaml`)를 새로 만든다 |
 
 - compile이 참조 오류(없는 IP, node)를 알려 준다.
 - id 규칙은 `uc-<domain>-<use case>-e2700`이다.
+
+**port 도구 (`port-scenario`, R-8).** 공개 E2600 scenario source를 eject된 root project(사내 E2700)로 복사합니다.
+
+1. scenario 폴더의 `*.yaml`을 모두 복사합니다: scenario, variants, knobs, sizes, sw_timing, 실측 slot.
+2. **id 변환:** 대상 project의 `ejected-from.yaml` `id_map`(그 기록의 `parent_project`가 `--from`이어야 함)으로 id를 바꿉니다. `uc-…-e2600`은 `uc-…-e2700`이 되고, `--suffix`를 주면 뒤에 붙입니다. id 토큰만 바꾸므로 주석은 그대로 남습니다.
+3. **기록:** `ported-from.yaml`에 원본 project · scenario · commit · 파일 hash를 남깁니다.
+4. **검사:** 대상 project를 compile · validate합니다.
+5. **smoke:** variant마다 Timing Budget을 한 번 돌립니다. 대상 catalog에 없는 값이 있으면 오류 메시지와 그 오류로 멈춘 variant 목록이 나오고, 종료 코드가 1이 됩니다. 예: `gpu: domain load util-vf-v1 needs coeff_uw_per_mhz_v2` → 2700 GPU catalog의 `power_model`을 채웁니다.
+
+```bash
+python -m scenario_db.authoring port-scenario uc-cam-capture-e2600 --from sm-s947b --to sm-s957b
+python -m scenario_db.authoring port-status sm-s957b uc-cam-capture-e2700   # 원본이 port 뒤 바뀌었는지 (hash)
+```
+
+- **이미 있는 폴더:** port를 거부합니다. 다시 port하려면 `--replace`를 씁니다. 이때 사본에서 채운 값(KPI 목표 · 실측 slot)이 덮이므로, 먼저 따로 보관합니다.
+- **채울 값:** 솔루션 표 내용, KPI 목표(`judgement.targets`, `value_source: spec`), `jobs.measured.yaml` 실측 slot은 사본에서만 채웁니다.
 
 ---
 

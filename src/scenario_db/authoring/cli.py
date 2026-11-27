@@ -5,6 +5,9 @@
   check     <project key>  --against <fixture_dir> [--root authoring]
   worksheet <project key>  [--root authoring]   write sw_timing.measured.yaml slots
   sync      <project key>  --fixture DIR --to fixture|authoring [--prune] [--dry-run]
+  port-scenario <uc> --from K --to K [--suffix S] [--replace] [--no-smoke]   copy a scenario source into
+                                   an ejected root project (R-8: eject id map, port record, compile + smoke)
+  port-status   <project key> <scenario>   source changes since the port
 
 Transition (both directions supported):
   fixture edited by generators  -> sync --to authoring  (root projects only; keeps hand-authored
@@ -198,6 +201,17 @@ def main(argv: list[str] | None = None) -> int:
     sh.add_argument("variant")
     w = sub.add_parser("worksheet")
     w.add_argument("project")
+    po = sub.add_parser("port-scenario", help="copy a scenario source into an ejected root project (R-8)")
+    po.add_argument("scenario")
+    po.add_argument("--from", dest="src", required=True)
+    po.add_argument("--to", dest="dst", required=True)
+    po.add_argument("--suffix", default="")
+    po.add_argument("--commit", help="source commit to record (default: git rev-parse HEAD)")
+    po.add_argument("--replace", action="store_true", help="re-port over an existing ported scenario")
+    po.add_argument("--no-smoke", action="store_true", help="skip the per-variant Timing Budget run")
+    ps = sub.add_parser("port-status", help="source changes since a port")
+    ps.add_argument("project")
+    ps.add_argument("scenario")
     y = sub.add_parser("sync")
     y.add_argument("project")
     y.add_argument("--fixture", type=Path, required=True)
@@ -247,6 +261,18 @@ def main(argv: list[str] | None = None) -> int:
                               "scenarios": len(stats["scenarios"]), "not_authored": len(stats["skipped"]),
                               "stale_scenarios": stats["stale_scenarios"]}, indent=2, ensure_ascii=False))
             return 0
+        if args.cmd == "port-scenario":
+            from scenario_db.authoring.port import port_scenario
+            res = port_scenario(args.root, args.scenario, src=args.src, dst=args.dst, suffix=args.suffix,
+                                commit=args.commit or _git_head(args.root), replace=args.replace,
+                                smoke=not args.no_smoke)
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+            return 1 if res["problems"] or (res.get("smoke") or {}).get("errors") else 0
+        if args.cmd == "port-status":
+            from scenario_db.authoring.port import port_status
+            res = port_status(args.root, args.project, args.scenario)
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+            return 1 if res["changed"] or res["added"] or res["removed"] or res["source_missing"] else 0
         if args.cmd == "eject":
             from scenario_db.authoring.eject import eject_project
             commit = args.commit or _git_head(args.root)
