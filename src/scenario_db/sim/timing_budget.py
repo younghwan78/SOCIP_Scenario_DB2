@@ -211,7 +211,8 @@ def analyze_timing_budget(
     dvfs_tables: dict[str, DVFSTable] | None = None,
     jobs: bool = True,
 ) -> dict[str, Any]:
-    """``jobs=False``: steady-only callers (summaries, what-if grids, fleet rows) skip the R-3 event jobs."""
+    """``jobs=False``: steady-only callers (summaries, what-if grids) skip the R-3 event jobs; fleet rows evaluate
+    them (M-12: the row verdict carries the job KPI targets)."""
     options = options or TimingBudgetOptions()
     params = effective_power_params(config) if config is not None else None
     if params is not None and "cpu" not in options.model_fields_set:
@@ -1702,6 +1703,7 @@ def _clock_basis(res, workload, stage: str, dvfs_tables: dict[str, DVFSTable]) -
 
 
 DERIVED_VARIANT_MARKERS = ("-explored-", "-timing-min", "-timing-max")
+FLEET_KPI_KEYS = ("id", "kpi", "metric", "job", "milestone", "status", "value", "target", "bound", "unit", "value_source")
 
 
 def fleet_row(report: dict[str, Any]) -> dict[str, Any]:
@@ -1757,6 +1759,9 @@ def fleet_row(report: dict[str, Any]) -> dict[str, Any]:
         },
         "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
         "verdict": report["verdict"],
+        # M-12: the KPI rows with a target (the full list is on the variant page); absent = no KPI declared
+        **({"kpis": [{k: r[k] for k in FLEET_KPI_KEYS} for r in report["kpis"] if r.get("target") is not None]}
+           if report.get("kpis") is not None else {}),
     }
 
 

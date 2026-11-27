@@ -204,3 +204,19 @@ def test_integer_frame_latency_and_engine_tolerance():
     assert o["preview_ok"] and o["video_ok"] and not o["drop"]
     a["intervals_ok_by"] = {"preview": True, "video": False}
     assert next(x for x in output_rows(s) if x["variant_id"] == "cam-rec-a30")["video_ok"] is False
+
+
+def test_kpi_block_lists_reported_kpi_judgements_worst_first():
+    from scenario_db.reporting.perf_sections import kpi_block, kpi_rows
+
+    snap = {"scenarios": [
+        {"scenario_id": "uc-aud", "variant_id": "a1", "kpis": {"status": "pass", "pass": 2}, "reasons": []},
+        {"scenario_id": "uc-game", "variant_id": "g1", "kpis": {"status": "fail", "fail": 1, "pass": 1},
+         "reasons_explained": [{"text": "KPI jank: 1.2 % > 1 % (가정 목표)"}, {"text": "other"}]},
+        {"scenario_id": "uc-rec", "variant_id": "r1"},
+    ]}
+    rows = kpi_rows(snap)
+    assert [r["variant_id"] for r in rows] == ["g1", "a1"] and rows[0]["reasons"] == ["KPI jank: 1.2 % > 1 % (가정 목표)"]
+    html = kpi_block(snap)
+    assert "KPI 판정" in html and "미달 1 · 통과 1" in html and "r1" not in html
+    assert kpi_block({"scenarios": [{"scenario_id": "uc-rec", "variant_id": "r1"}]}) == ""

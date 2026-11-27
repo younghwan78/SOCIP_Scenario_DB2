@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { ExperimentEntry } from '../components/CandidateReview'
 import { useAsync } from '../lib/route'
-import { fmt, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, DEFAULT_STATISTIC, STAT_TIP, statParam, type CpuModel, type FleetRow, type Statistic, type ThroughputModel } from '../lib/timingBudget'
+import { fmt, kpiTitle, KPI_RANK, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, DEFAULT_STATISTIC, STAT_TIP, statParam, type CpuModel, type FleetRow, type Statistic, type ThroughputModel } from '../lib/timingBudget'
 import { Card, FleetRank } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { SW_COLOR } from '../lib/timingBudget'
@@ -11,6 +11,7 @@ import { ProvBadge } from '../components/Provenance'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
 import { ISSUE_LABEL, ISSUE_ORDER, issueCounts, verdictIssues, type IssueCode } from '../lib/provenance'
+import { KpiCell } from '../components/KpiTable'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 
 type Filter = 'all' | 'ok' | 'clock_up' | 'fail' | 'not_applicable'
@@ -53,6 +54,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     { key: 'pw', label: 'Power mW', width: 160, firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <PowerMini r={r} /> },
     { key: 'cpu', label: 'CPU %', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.share_pct.cpu, render: (r) => fmt(r.power.share_pct.cpu, 0) },
     { key: 'bw', label: 'BW MB/s', width: 90, align: 'right', firstDir: -1, sort: (r) => r.bw.total_mbs, render: (r) => fmt(r.bw.total_mbs, 0) },
+    { key: 'kpi', label: 'KPI', width: 120, sort: (r) => KPI_RANK[r.verdict.kpis?.status ?? 'none'], title: (r) => kpiTitle(r), render: (r) => <KpiCell r={r} /> },
     { key: 'verdict', label: '판정', width: 200, sort: (r) => ({ not_applicable: -1, fail: 0, clock_up: 1, ok: 2 }[r.verdict.status]), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <TimingVerdictBadge status={r.verdict.status} /> },
     { key: 'why', label: '원인', width: 260, sort: (r) => verdictIssues(r.verdict.reasons).map((i) => i.code).join(','), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <Issues r={r} /> },
   ]

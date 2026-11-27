@@ -33,7 +33,12 @@ describe('verdictIssues (U4)', () => {
     expect(i).toMatchObject({ code: 'rt_budget', label: 'RT 23.4>21.7 ms · readout' })
   })
   it('counts rows once per code', () => {
-    expect(issueCounts([reasons, [reasons[2]], []])).toEqual({ sw_budget: 1, rt_budget: 1, interval: 2, ip_clock: 1, other: 0 })
+    expect(issueCounts([reasons, [reasons[2]], []])).toEqual({ sw_budget: 1, rt_budget: 1, interval: 2, ip_clock: 1, kpi: 0, other: 0 })
+  })
+  it('reads an M-10 KPI fail as a KPI issue, not an IP clock one', () => {
+    const [i] = verdictIssues(['KPI heap: 2128.43 MB > 2048 MB (가정 목표)'])
+    expect(i).toMatchObject({ code: 'kpi', label: 'heap 2128>2048 MB' })
+    expect(verdictIssues(['KPI aud-slack: 0.3 ms < 0.5 ms'])[0]).toMatchObject({ code: 'kpi', label: 'aud-slack 0<1 ms' })
   })
 })
 

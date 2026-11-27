@@ -13,7 +13,7 @@ from html import escape
 from typing import Any
 
 from scenario_db.reporting import arch_report as ar
-from scenario_db.reporting.perf_sections import latency_buffer_block, output_fps_block, sw_request_block, sw_requests
+from scenario_db.reporting.perf_sections import kpi_block, latency_buffer_block, output_fps_block, sw_request_block, sw_requests
 from scenario_db.reporting.power_groups import heatmap_block, ranking_block
 from scenario_db.reporting.sustained_section import sustained_block, sustained_lead
 from scenario_db.reporting.risk_rules import cpu_tolerance_min
@@ -586,7 +586,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
             key = (d["scenario_id"], d["variant_id"])
             dom_head[key] = min(dom_head.get(key, 1e9), d["headroom_pct"])
     tight = set(sorted(dom_head, key=lambda v: dom_head[v])[:TOP_N])
-    perf = (_lead_perf(snap) + output_fps_block(snap) + ar._spec(s)
+    perf = (_lead_perf(snap) + output_fps_block(snap) + kpi_block(snap) + ar._spec(s)
             + sw_request_block(snap) + latency_buffer_block(snap)
             + (_more(f"Latency · 출력 간격 상세 {len(lat_rows)}개", ar._latency(lat_rows)) if lat_rows else "")
             + sw_table(snap)

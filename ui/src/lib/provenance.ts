@@ -55,18 +55,20 @@ export function reportsForProject(list: ReportMeta[], project: string): { mine: 
 }
 
 // ------------------------------------------------------------------ U4 verdict
-export type IssueCode = 'sw_budget' | 'rt_budget' | 'interval' | 'ip_clock' | 'other'
+export type IssueCode = 'sw_budget' | 'rt_budget' | 'interval' | 'ip_clock' | 'kpi' | 'other'
 export interface Issue { code: IssueCode; label: string; detail: string }
 export const ISSUE_LABEL: Record<IssueCode, string> = {
-  sw_budget: 'SW > 예산', rt_budget: 'RT HW > 예산', interval: '출력 간격', ip_clock: 'IP clock 불가', other: '기타',
+  sw_budget: 'SW > 예산', rt_budget: 'RT HW > 예산', interval: '출력 간격', ip_clock: 'IP clock 불가', kpi: 'KPI 미달', other: '기타',
 }
-export const ISSUE_ORDER: IssueCode[] = ['sw_budget', 'rt_budget', 'interval', 'ip_clock', 'other']
+export const ISSUE_ORDER: IssueCode[] = ['sw_budget', 'rt_budget', 'interval', 'ip_clock', 'kpi', 'other']
 
 const RE_SW = /^(.+?): SW ([\d.]+) ms leaves no HW budget$/
 // optional suffix: "— sensor readout N ms …" when the read-out stream, not the clock, sets the RT time
 const RE_RT = /^RT HW ([\d.]+) ms > \d+% budget ([\d.]+) ms( — sensor readout [\d.]+ ms.*)?$/
 const RE_IV = /^(preview|video) interval ([\d.]+) ms != ([\d.]+) ms$/
 const RE_IP = /^([A-Za-z0-9_.-]+): (.+)$/
+// M-10 KPI fail (sim/kpis.py fail_reason): "KPI heap: 2128.43 MB > 2048 MB (가정 목표)"
+const RE_KPI = /^KPI (.+?): (-?[\d.e+-]+) (\S+) ([<>]) (-?[\d.e+-]+) \S+/
 
 /** Structured issues from timing-budget verdict reasons (sim/timing_budget.py `_verdict`). */
 export function verdictIssues(reasons: string[]): Issue[] {
@@ -79,6 +81,7 @@ export function verdictIssues(reasons: string[]): Issue[] {
     if ((m = RE_SW.exec(r))) push({ code: 'sw_budget', label: `${m[1]} SW ${Number(m[2]).toFixed(1)} ms`, detail: r })
     else if ((m = RE_RT.exec(r))) push({ code: 'rt_budget', label: `RT ${Number(m[1]).toFixed(1)}>${Number(m[2]).toFixed(1)} ms${m[3] ? ' · readout' : ''}`, detail: r })
     else if ((m = RE_IV.exec(r))) push({ code: 'interval', label: `${m[1]} ${Number(m[2]).toFixed(2)}≠${Number(m[3]).toFixed(2)} ms`, detail: r })
+    else if ((m = RE_KPI.exec(r))) push({ code: 'kpi', label: `${m[1]} ${Number(m[2]).toFixed(0)}${m[4]}${Number(m[5]).toFixed(0)} ${m[3]}`, detail: r })
     else if ((m = RE_IP.exec(r))) { const k = ipKind(m[2]); (ip[k] ??= []).push({ node: m[1], detail: r }) }
     else push({ code: 'other', label: r.length > 24 ? `${r.slice(0, 24)}…` : r, detail: r })
   }
@@ -100,7 +103,7 @@ function ipKind(msg: string): string {
 
 /** Count of rows per issue code (a row with two interval issues counts once). */
 export function issueCounts(rowsReasons: string[][]): Record<IssueCode, number> {
-  const c: Record<IssueCode, number> = { sw_budget: 0, rt_budget: 0, interval: 0, ip_clock: 0, other: 0 }
+  const c: Record<IssueCode, number> = { sw_budget: 0, rt_budget: 0, interval: 0, ip_clock: 0, kpi: 0, other: 0 }
   for (const rs of rowsReasons) for (const code of new Set(verdictIssues(rs).map((i) => i.code))) c[code] += 1
   return c
 }

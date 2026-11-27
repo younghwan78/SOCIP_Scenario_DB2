@@ -123,6 +123,40 @@ def output_fps_block(snap: dict[str, Any], top: int = 10) -> str:
     return h
 
 
+KPI_STATUS_LABEL = {"fail": "미달", "no_input": "입력 없음", "unmodeled": "모델 없음", "no_target": "목표 없음", "pass": "통과"}
+KPI_STATUS_CLASS = {"fail": "fail", "no_input": "warn", "unmodeled": "meta", "no_target": "meta", "pass": "ok"}
+
+
+def kpi_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """M-12: report rows with an R-6 KPI summary (``verdict.kpis``), worst first."""
+    order = {s: i for i, s in enumerate(KPI_STATUS_LABEL)}
+    rows = [{"scenario_id": r["scenario_id"], "variant_id": r["variant_id"], "kpis": r["kpis"],
+             "reasons": [x for x in ((x.get("text") if isinstance(x, dict) else str(x))
+                                     for x in (r.get("reasons_explained") or r.get("reasons") or [])) if x.startswith("KPI ")]}
+            for r in snap.get("scenarios") or [] if isinstance(r.get("kpis"), dict) and r["kpis"].get("status")]
+    rows.sort(key=lambda o: (order.get(o["kpis"]["status"], 9), o["scenario_id"], o["variant_id"]))
+    return rows
+
+
+def kpi_block(snap: dict[str, Any]) -> str:
+    """M-12: the KPI judgement of the reported cases; nothing when no reported case declares a KPI."""
+    rows = kpi_rows(snap)
+    if not rows:
+        return ""
+    h = ("<h3 style='margin:12px 0 4px'>KPI 판정 — 판정 계약 목표</h3>"
+         "<p class=meta>선언한 KPI를 R-6 목표와 비교합니다. 미달이면 판정이 fail이고, 입력 없음은 통과로 세지 않습니다. "
+         "가정 목표는 제품 요구가 아닙니다. 등록 예측은 steady 계산이라 event job KPI(촬영 thumbnail · heap 등)는 "
+         "Timing Budget · fleet 화면에서 봅니다.</p>"
+         "<table><tr><th>Scenario</th><th>Variant</th><th>KPI 판정</th><th>건수</th><th>미달 사유</th></tr>")
+    for o in rows:
+        k = o["kpis"]
+        counts = " · ".join(f"{KPI_STATUS_LABEL[s]} {k[s]}" for s in KPI_STATUS_LABEL if k.get(s))
+        h += (f"<tr><td>{escape(o['scenario_id'])}</td><td>{escape(_short(o['variant_id']))}</td>"
+              f"<td class={KPI_STATUS_CLASS.get(k['status'], 'meta')}>{escape(KPI_STATUS_LABEL.get(k['status'], k['status']))}</td>"
+              f"<td class=meta>{escape(counts)}</td><td class=meta>{escape(' · '.join(o['reasons']))}</td></tr>")
+    return h + "</table>"
+
+
 def buffer_rows(snap: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for r in snap.get("scenarios") or []:
