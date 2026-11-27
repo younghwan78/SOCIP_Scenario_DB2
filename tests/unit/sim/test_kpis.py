@@ -82,6 +82,13 @@ def test_target_references():
     assert not any(".e:" in e or ".f:" in e for e in errors)
 
 
+def test_a_job_kpi_declared_scenario_wide_covers_every_job():
+    jobs = [_job(kpis=None)]
+    c = JudgementContract.model_validate({"kpis": ["peak_bw"], "targets": [{"id": "bw", "kpi": "peak_bw", "max": 1}]})
+    assert target_reference_errors(c, jobs) == []
+    assert target_reference_errors(c.model_copy(update={"kpis": ["interval"]}), jobs)   # nobody declares it
+
+
 def test_the_pipeline_model_refuses_dangling_targets():
     raw = {"nodes": [{"id": "n", "ip_ref": "ip-x"}], "judgement": {"kpis": ["interval"], "targets": [
         {"id": "a", "kpi": "underrun", "min": 0}]}}

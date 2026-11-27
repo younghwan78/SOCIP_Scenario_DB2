@@ -213,7 +213,9 @@ def target_reference_errors(contract: JudgementContract | None, jobs: list[JobSp
         if t.job is not None and t.job not in by_id:
             errors.append(f"{where}: job '{t.job}' not found in pipeline.jobs")
             continue
-        declaring = [j for j in ([by_id[t.job]] if t.job else jobs) if t.kpi in (j.kpis or [])]
+        # a job KPI in judgement.kpis applies to every job (as the registry evaluates it)
+        scenario_wide = contract is not None and t.kpi in contract.kpis
+        declaring = [j for j in ([by_id[t.job]] if t.job else jobs) if scenario_wide or t.kpi in (j.kpis or [])]
         if not declaring:
             errors.append(f"{where}: no job{' ' + t.job if t.job else ''} declares kpi {t.kpi}")
         elif t.milestone is not None:
