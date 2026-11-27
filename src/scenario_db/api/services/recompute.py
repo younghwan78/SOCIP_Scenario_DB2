@@ -28,7 +28,25 @@ def variant_spec(stored: dict) -> dict:
 
         spec["axes"] = {k: v for k, v in spec["axes"].items() if k not in LEVER_AXIS_KEYS}
     return spec
-_SEL_KEYS = ("config_profile_ref", "dvfs_tables", "dvfs_table_ref", "soc_ref", "dvfs_version", "use_default_dvfs", "basis_ref")
+
+
+def rerun_timing(spec: dict) -> dict:
+    """The stored spec with its timing options as a re-run passes them (a copy)."""
+    spec = dict(spec)
+    if isinstance(spec.get("timing"), dict):
+        # the run stores the full option dump; a field left at its default must stay "unset" (e.g. ``cpu``: unset =
+        # coefficients from the power params, set = the code default)
+        from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+        defaults = TimingBudgetOptions().model_dump(mode="json")
+        spec["timing"] = {k: v for k, v in spec["timing"].items() if k not in defaults or v != defaults[k]}
+    if spec.get("throughput_from_policy") and isinstance(spec.get("timing"), dict):
+        # the judgement followed the project policy: follow today's policy, not the frozen value
+        spec["timing"] = {k: v for k, v in spec["timing"].items() if k != "throughput_model"}
+    return spec
+
+
+_SEL_KEYS =("config_profile_ref", "dvfs_tables", "dvfs_table_ref", "soc_ref", "dvfs_version", "use_default_dvfs", "basis_ref")
 
 
 def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: str | None = None,
@@ -61,16 +79,7 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
         config.pop("power_params", None)
         config["power_params_ref"] = power_params_ref
     old_total = ((pred.metrics or {}).get("power") or {}).get("total_mw")
-    if isinstance(spec.get("timing"), dict):
-        # the run stores the full option dump; a field left at its default must stay "unset" (e.g. ``cpu``: unset =
-        # coefficients from the power params, set = the code default)
-        from scenario_db.sim.timing_budget import TimingBudgetOptions
-
-        defaults = TimingBudgetOptions().model_dump(mode="json")
-        spec["timing"] = {k: v for k, v in spec["timing"].items() if k not in defaults or v != defaults[k]}
-    if spec.get("throughput_from_policy") and isinstance(spec.get("timing"), dict):
-        # the judgement followed the project policy: follow today's policy, not the frozen value
-        spec["timing"] = {k: v for k, v in spec["timing"].items() if k != "throughput_model"}
+    spec = rerun_timing(spec)
     why = reason or (f"재계산 · power params {power_params_ref}" if power_params_ref else "재계산 (입력 변경 반영)")
     if run.scenario_type == "timing-budget":
         from scenario_db.api.schemas.timing_budget import TimingBudgetRegisterRequest

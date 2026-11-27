@@ -40,6 +40,22 @@ The fixed cases cover every E2600 scenario (a test fails when a fixture scenario
 `compare` run the two halves by hand (`scripts/check_engine_equivalence.py` still dumps the E2600 cases alone).
 `tests/unit/authoring` (the inherited-2700 compile test) also stays green.
 
+### After a bump or an input-hash change: refresh the predictions
+
+A bump (or a moved input hash) leaves the project's registered predictions stale (`GET
+/api/v1/arch/predictions/freshness`). Refresh one project at a time, then regenerate its review report:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\refresh_predictions.py --project proj-sm-s947b --check   # compute, store nothing
+.\.venv\Scripts\python.exe scripts\refresh_predictions.py --project proj-sm-s947b
+```
+
+`api/services/prediction_refresh.py` re-runs each registered exploration run once under its stored condition and
+promotes its variants by the default rule (expected current = today's prediction, one transaction). Variants with
+no current prediction are re-evaluated under the newest run that has them, so the project report has no
+old-engine rows. Timing Budget registrations go through `recompute_prediction`. Hand-picked (`user:` / `lever:`)
+registrations are listed as skipped (exit 1) and need a new selection.
+
 ## Revisions
 
 | rev | change | what moves |
