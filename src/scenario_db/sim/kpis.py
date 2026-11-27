@@ -6,8 +6,9 @@ outputs. This registry reads the report sections other models already produced a
 * ``event_latency`` / ``event_energy`` / ``peak_*``: ``report.jobs`` (job-v1), per active job declaring the KPI
 * ``frame_pacing``: ``report.pacing`` (frame-pacing-v1)
 * ``underrun``: ``report.subsystems[*].deadline_slack`` (mcps-v1; v1 = the smallest deadline slack, not a count)
-* ``latency``: ``report.subsystems[*].route`` - only when no frame output is judged by the interval path; the
-  route's own ``latency_target_ms`` is the target unless a ``judgement.targets`` entry gives one
+* ``latency``: ``report.subsystems[*].route`` - only when no frame output is judged by the interval path; once the
+  scenario declares ``judgement.targets`` (the opt-in) the route's own ``latency_target_ms`` is the target unless a
+  latency target gives one - without targets the value is reported only
 
 Status: pass / fail with a target, ``no_target`` (value only), ``no_input`` (the section or value is missing;
 never a pass), ``unmodeled`` (no evaluator). A fail fails the verdict; a pass never lifts a ``not_applicable``
@@ -70,8 +71,10 @@ def _frame_interval_judged(report: dict[str, Any]) -> bool:
                 and not intervals.get("streams"))
 
 
-def _scenario_rows(kpi: str, report: dict[str, Any], targets: list[KpiTarget]) -> list[dict[str, Any]]:
-    """Rows of a scenario-level KPI (``judgement.kpis``); [] when another path judges it."""
+def _scenario_rows(kpi: str, report: dict[str, Any], targets: list[KpiTarget], *,
+                   route_targets: bool = False) -> list[dict[str, Any]]:
+    """Rows of a scenario-level KPI (``judgement.kpis``); [] when another path judges it. ``route_targets``: the
+    contract declares targets, so a route's own ``latency_target_ms`` judges its latency (opt-in)."""
     mine = [t for t in targets if t.kpi == kpi]
     if kpi == "interval":
         return []
@@ -87,7 +90,7 @@ def _scenario_rows(kpi: str, report: dict[str, Any], targets: list[KpiTarget]) -
         for node, route, source in routes:
             own = route.get("latency_target_ms")
             fallback = (float(own), str(source or "assumed"), f"{node} route {route.get('id')} latency_target_ms") \
-                if isinstance(own, (int, float)) else None
+                if route_targets and isinstance(own, (int, float)) else None
             rows.append(_row(kpi, _dig(route, ("latency_ms",)), mine[0] if mine else None, fallback=fallback,
                              sources=[str(source)] if source else []))
         return rows
@@ -96,7 +99,7 @@ def _scenario_rows(kpi: str, report: dict[str, Any], targets: list[KpiTarget]) -
         slack = [float(r["slack_ms"]) for s in subs for r in s.get("deadline_slack") or []
                  if isinstance(r.get("slack_ms"), (int, float))]
         return [_row(kpi, min(slack) if slack else None, mine[0] if mine else None,
-                     sources=[str(s["value_source"]) for s in subs if s.get("value_source")])]
+                     sources=[str(s["value_source"]) for s in subs if s.get("value_source") and s.get("deadline_slack")])]
     if kpi == "frame_pacing":
         pacing = report.get("pacing")
         usable = isinstance(pacing, dict) and pacing.get("status") in ("ok", "fail")
@@ -139,12 +142,15 @@ def evaluate_kpis(graph, report: dict[str, Any], contract: JudgementContract | N
     declared = list(dict.fromkeys(contract.kpis)) if contract is not None else []
     for kpi in declared:
         if kpi not in JOB_KPIS:
-            rows += _scenario_rows(kpi, report, targets)
-    if jobs_evaluated and not report.get("jobs_error"):
+            rows += _scenario_rows(kpi, report, targets, route_targets=bool(contract and contract.targets))
+    if jobs_evaluated:
         specs = {str(j.get("id")): j for j in (getattr(graph.scenario, "pipeline", None) or {}).get("jobs") or []
                  if isinstance(j, dict)}
         scenario_job_kpis = [k for k in declared if k in JOB_KPIS]
-        for job in report.get("jobs") or []:
+        # a job definition error leaves no job results: the declared job KPIs are no_input, never dropped
+        results = (report.get("jobs") or []) if not report.get("jobs_error") else [
+            {"id": sid, "milestones": dict.fromkeys(spec.get("milestones") or {})} for sid, spec in specs.items()]
+        for job in results:
             kpis = list(dict.fromkeys([*((specs.get(job["id"]) or {}).get("kpis") or []), *scenario_job_kpis]))
             rows += _job_rows(job, [k for k in kpis if k in JOB_KPIS], targets)
     return rows or None

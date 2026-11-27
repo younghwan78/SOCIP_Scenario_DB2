@@ -605,7 +605,10 @@ def _rate_write_issues(scenario_id: str, pipeline: dict[str, Any], variants: lis
     def keep(line: str) -> bool:
         return only is None or line.split(":", 1)[0].split("/", 1)[-1] in only
 
-    return ([_issue("error", "judgement_rate_invalid", e, path) for e in errors if keep(e)]
+    def code(line: str) -> str:   # R-6 target ties come through the same per-variant check
+        return "judgement_target_invalid" if "judgement targets " in line else "judgement_rate_invalid"
+
+    return ([_issue("error", code(e), e, path) for e in errors if keep(e)]
             + [_issue("warning", "judgement_rate_repeated", w, path) for w in warnings if keep(w)])
 
 

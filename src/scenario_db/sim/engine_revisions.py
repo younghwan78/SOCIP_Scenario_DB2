@@ -82,7 +82,8 @@ OPT_IN: list[dict[str, str]] = [
      "opt_in": "node_configs.<gpu>.sim.workload mapping: mb_per_frame / mif_floor (report.bw.mif)"},
     {"since": "16", "change": "KPI registry (M-10): declared KPIs judged against judgement.targets - event latency / "
                               "energy, peak power / BW / footprint (jobs), frame pacing, deadline slack and subsystem "
-                              "route latency; a fail fails the verdict, a pass never lifts not_applicable",
+                              "route latency (its own latency_target_ms once targets are declared); a fail fails the "
+                              "verdict, a pass never lifts not_applicable",
      "opt_in": "pipeline.judgement.kpis / pipeline.jobs[].kpis / pipeline.judgement.targets (report.kpis, "
                "verdict.kpis)"},
 ]

@@ -301,14 +301,15 @@ The registry (`sim/kpis.py`) reads the sections other models produced and adds `
 | `event_energy` / `peak_power` / `peak_bw` / `peak_footprint` | `jobs[].energy_mj.event`, `jobs[].peak` (10 ms window) |
 | `frame_pacing` | `report.pacing` (a jank_pct row always, plus one per targeted metric) |
 | `underrun` | the smallest `report.subsystems[*].deadline_slack[].slack_ms` (v1: deadline margin, not an underrun count) |
-| `latency` | `report.subsystems[*].route.latency_ms`, only when no frame output is judged by the interval path; the route's `latency_target_ms` is the target unless a target is declared |
+| `latency` | `report.subsystems[*].route.latency_ms`, only when no frame output is judged by the interval path (a latency target there is not applied and is noted `KPI 목표 미적용`). Once the scenario declares `judgement.targets` (the opt-in), the route's `latency_target_ms` is the target unless a latency target is declared; without targets the value is reported only |
 | `start_time` / `event_rate` | no model: `unmodeled` |
 
 Status: `pass` / `fail` with a target, `no_target` (value only), `no_input` (section or value missing - noted
 `KPI 입력 없음`, never passed), `unmodeled`. A fail fails the verdict with a reason (`KPI <id>: <value> > <target>`,
 `(가정 목표)` for assumed targets); a pass never lifts `not_applicable`. Job KPIs are judged only by runs that
-evaluate the jobs: steady-only callers (fleet rows, what-if grids, exploration) skip them. Without KPI
-declarations nothing is added. The targets are part of the judgement contract and so of the condition hash.
+evaluate the jobs: steady-only callers (fleet rows, what-if grids, exploration) skip them; a job definition error
+(`jobs_error`) leaves the declared job KPIs `no_input`. The `report.whatif` rows carry the steady verdict only (no
+KPI judgement). Without KPI declarations nothing is added. The targets are part of the judgement contract and so of the condition hash.
 
 ## GPU Workload and Frame Pacing (`sim.workload`, `frame-pacing-v1`)
 

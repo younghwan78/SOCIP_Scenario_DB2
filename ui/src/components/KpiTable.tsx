@@ -21,10 +21,12 @@ export function KpiTable({ rows }: { rows: KpiResult[] }) {
             <td className="mono" style={{ textAlign: 'right' }}>{r.target == null ? '—' : `${r.bound === 'min' ? '≥' : '≤'} ${num(r.target)} ${r.unit}`}</td>
             <td><span className={`badge ${BADGE[r.status]}`}>{LABEL[r.status]}</span></td>
             <td className="faint">
-              {r.value_source === 'assumed' && r.target != null && <span title="E2600 가정 목표 (제품 요구 아님)">가정 목표</span>}
-              {r.value_source === 'spec' && <span>spec</span>}
-              {r.basis && <span>{r.value_source ? ' · ' : ''}{r.basis}</span>}
-              {r.sources.length > 0 && <span> · 입력 {r.sources.join(' / ')}</span>}
+              {[
+                r.value_source === 'assumed' && r.target != null ? <span key="a" title="E2600 가정 목표 (제품 요구 아님)">가정 목표</span> : null,
+                r.value_source === 'spec' ? <span key="s">spec</span> : null,
+                r.basis ? <span key="b">{r.basis}</span> : null,
+                r.sources.length > 0 ? <span key="i">입력 {r.sources.join(' / ')}</span> : null,
+              ].filter(Boolean).flatMap((el, k) => (k ? [<span key={`sep${k}`}> · </span>, el] : [el]))}
             </td>
           </tr>
         ))}

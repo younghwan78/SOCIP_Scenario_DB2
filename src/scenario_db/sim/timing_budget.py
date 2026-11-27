@@ -283,6 +283,12 @@ def _judge_kpis(graph, report: dict[str, Any], contract, *, jobs_evaluated: bool
         if missing:
             # declared requirements the engine does not evaluate: stated, never counted as passed
             verdict["notes"].append("판정 계약 KPI 미모델: " + ", ".join(missing))
+        ignored = [t.id for t in contract.targets or [] if t.kpi == "latency"] if _frame_interval_judged(report) else []
+        if ignored:
+            # the frame-interval path judges latency by its own budget; a latency target is not applied there
+            verdict["notes"].append("KPI 목표 미적용(frame interval 판정이 latency 판정): " + ", ".join(ignored))
+        if report.get("jobs_error") and any(r["job"] for r in rows or []):
+            verdict["notes"].append("job 평가 오류로 job KPI 판정 불가: " + str(report["jobs_error"]))
     if not rows:
         return
     from scenario_db.sim.kpis import describe

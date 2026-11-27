@@ -120,6 +120,10 @@ def test_rate_issues_reports_a_target_tie_per_variant():
     variants = [{"id": "v1", "design_conditions": {"x": 1, "y": 1}}, {"id": "v2", "design_conditions": {"x": 1}}]
     errors, _ = rate_issues("uc", pipeline, variants)
     assert len(errors) == 1 and errors[0].startswith("uc/v1:") and "equally" in errors[0]
+    from scenario_db.write.service import _rate_write_issues
+
+    issues = _rate_write_issues("uc", pipeline, variants, "payload.variant")
+    assert [i.code for i in issues] == ["judgement_target_invalid"]
 
 
 # ---------------------------------------------------------------- registry on synthetic reports
@@ -177,9 +181,34 @@ def test_scenario_rows():
     assert by[("underrun", None)]["value"] == 0.3 and by[("underrun", None)]["status"] == "fail"
     assert by[("frame_pacing", "jank_pct")]["status"] == "no_target"
     assert by[("frame_pacing", "achieved_fps")]["status"] == "fail"
+    # without declared targets the route's own latency target is not applied (opt-in): value only
+    bare = contract.model_copy(update={"targets": None})
+    latency = next(r for r in evaluate_kpis(_graph({}), report, bare, jobs_evaluated=False) if r["kpi"] == "latency")
+    assert latency["status"] == "no_target" and latency["target"] is None and latency["value"] == 53.4
     # a frame output judged by the interval path keeps latency there
     report["intervals"]["preview"]["ok"] = True
     assert "latency" not in {r["kpi"] for r in evaluate_kpis(_graph({}), report, contract, jobs_evaluated=False)}
+
+
+def test_a_latency_target_on_a_frame_judged_scenario_is_noted_not_applied():
+    contract = JudgementContract.model_validate({"kpis": ["interval", "latency"], "targets": [
+        {"id": "lat", "kpi": "latency", "max": 100}]})
+    report = _shot_report()
+    _judge_kpis(_graph({}), report, contract, jobs_evaluated=False)
+    assert "KPI 목표 미적용(frame interval 판정이 latency 판정): lat" in report["verdict"]["notes"]
+    assert report["verdict"]["status"] == "ok"
+
+
+def test_a_job_error_leaves_the_declared_job_kpis_no_input():
+    pipeline = {"jobs": [{"id": "shot", "milestones": {"thumbnail": "s"}, "kpis": ["event_latency", "peak_footprint"]}]}
+    contract = JudgementContract.model_validate({"kpis": ["interval"], "targets": [
+        {"id": "heap", "kpi": "peak_footprint", "max": 2048}]})
+    report = {**_shot_report(), "jobs": [], "jobs_error": "stage s: no clock"}
+    _judge_kpis(_graph(pipeline), report, contract, jobs_evaluated=True)
+    assert {(r["kpi"], r["milestone"], r["status"]) for r in report["kpis"]} == {
+        ("event_latency", "thumbnail", "no_input"), ("peak_footprint", None, "no_input")}
+    assert report["verdict"]["kpis"]["status"] == "no_input" and report["verdict"]["status"] == "ok"
+    assert "job 평가 오류로 job KPI 판정 불가: stage s: no clock" in report["verdict"]["notes"]
 
 
 def test_a_fail_fails_the_verdict_and_a_pass_does_not_lift_not_applicable():
