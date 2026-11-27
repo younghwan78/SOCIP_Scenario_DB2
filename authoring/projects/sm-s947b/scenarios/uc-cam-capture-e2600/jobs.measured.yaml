@@ -1,0 +1,47 @@
+# R-7 measured slots of the capture event jobs (E2600: slots only, every value pending).
+# The in-house port fills `value` (and `evidence_ref`) from capture traces; compile writes a filled slot to
+# node_configs.<first stage node>.sim.jobs.<job>.<stage>.<field> of every variant in scope where the job and
+# the stage are active, with value_source: measured. Later entries win. `field`: service_ms (the uncontended
+# stage time) | clock_mhz | mb; a sensor stage takes only service_ms. Inputs only: results (milestone latency,
+# peak, energy) are compared through measurement evidence, never written here.
+kind: authoring.jobs_measured
+scenario: uc-cam-capture-e2600
+entries:
+- target: {job: still_shot, stage: post, field: service_ms}
+  when: {subscenario: STILL_SF_CAPTURE}
+  statistic: p50
+  unit: ms
+  value: null
+  evidence_ref: null
+- target: {job: still_shot, stage: merge, field: service_ms}
+  when: {subscenario: [STILL_MF_CAPTURE, STILL_FLASH_MF_CAPTURE]}
+  statistic: p50
+  unit: ms
+  value: null
+  evidence_ref: null
+- target: {job: still_shot, stage: enc, field: service_ms}
+  statistic: p50
+  unit: ms
+  value: null
+  evidence_ref: null
+- target: {job: still_shot_50m, stage: post, field: service_ms}
+  statistic: p50
+  unit: ms
+  value: null
+  evidence_ref: null
+- target: {job: still_shot_200m, stage: readout, field: service_ms}
+  statistic: p50
+  unit: ms
+  value: null
+  evidence_ref: null
+- target: {job: still_shot_200m, stage: merge, field: service_ms}
+  when: {subscenario: [STILL_REMOSAIC_MF_CAPTURE, REMOSAIC_NIGHT_CAPTURE]}
+  statistic: p50
+  unit: ms
+  value: null
+  evidence_ref: null
+- target: {job: still_shot_200m, stage: post, field: clock_mhz}
+  statistic: p50
+  unit: MHz
+  value: null
+  evidence_ref: null

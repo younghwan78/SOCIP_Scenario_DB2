@@ -225,8 +225,9 @@ def load_scenario_sources(src_dir: Path) -> dict[str, Any]:
     sizes = yamlio.load(src_dir / "sizes.yaml") if (src_dir / "sizes.yaml").exists() else {}
     sw = yamlio.load(src_dir / "sw_timing.yaml") if (src_dir / "sw_timing.yaml").exists() else {}
     knobs = yamlio.load(src_dir / "knobs.yaml") if (src_dir / "knobs.yaml").exists() else {}
+    jobs_measured = yamlio.load(src_dir / JOBS_MEASURED) if (src_dir / JOBS_MEASURED).exists() else None
     return {"base": base, "variants": variants, "sizes": sizes or {}, "sw_timing": sw or {},
-            "knobs": knobs or {}}
+            "knobs": knobs or {}, **({"jobs_measured": jobs_measured} if jobs_measured else {})}
 
 
 def variant_parents(entries: list[dict]) -> dict[str, str | None]:
@@ -384,6 +385,73 @@ def apply_sw_measurements(variants: list[dict], measured: dict, table: dict | No
             base = node.get("sw_timing") or {}
             node["sw_timing"] = deep_merge(base, entry["timing"]) if mode == "merge" else copy.deepcopy(entry["timing"])
         stats["applied"] += 1
+    return stats
+
+
+JOBS_MEASURED = "jobs.measured.yaml"
+# R-7 job slot fields -> unit (sim/jobs.py OVERRIDE_FIELDS: the values a measured slot may replace)
+JOB_SLOT_FIELDS = {"service_ms": "ms", "clock_mhz": "MHz", "mb": "MB"}
+JOB_SLOT_STATISTICS = ("min", "mean", "p50", "p90", "p99", "max")
+
+
+def apply_job_measurements(variants: list[dict], measured: dict, jobs: list[dict] | None) -> dict[str, Any]:
+    """R-7: ``jobs.measured.yaml`` entries -> the variant-local job slots
+    ``node_configs.<first stage node>.sim.jobs.<job>.<stage>.<field>`` (in order; later entries win).
+
+    An entry: ``target: {job, stage, field}`` (field: service_ms | clock_mhz | mb), scope ``variants`` (list or
+    '*') and / or ``when`` (the knob match rule, lists allowed), ``value`` (null = pending), ``unit`` (must be
+    the field's), ``statistic``, ``value_source`` (default measured), ``evidence_ref``, ``baseline`` (reference
+    only). A job / stage / field that does not exist is an error; a variant where the job or the stage is not
+    active is skipped. Returns the coverage: applied (variant slots written), pending, skipped."""
+    from scenario_db.authoring.knobs import _match
+
+    if (measured or {}).get("kind") not in (None, "authoring.jobs_measured"):
+        raise AuthoringError(f"{JOBS_MEASURED}: kind must be authoring.jobs_measured")
+    by_job = {str(j.get("id")): j for j in jobs or [] if isinstance(j, dict)}
+    ids = [v["id"] for v in variants]
+    by_id = {v["id"]: v for v in variants}
+    stats: dict[str, Any] = {"applied": 0, "pending": 0, "skipped": 0, "slots": 0}
+    for n, entry in enumerate((measured or {}).get("entries") or []):
+        where = f"{JOBS_MEASURED} entries[{n}]"
+        target = entry.get("target") or {}
+        job_id, stage_id, fld = target.get("job"), target.get("stage"), target.get("field")
+        job = by_job.get(str(job_id))
+        if job is None:
+            raise AuthoringError(f"{where}: job '{job_id}' not found in pipeline.jobs")
+        stage = next((s for s in job.get("stages") or [] if s.get("id") == stage_id), None)
+        if stage is None:
+            raise AuthoringError(f"{where}: job {job_id} has no stage '{stage_id}'")
+        if fld not in JOB_SLOT_FIELDS:
+            raise AuthoringError(f"{where}: field must be one of {sorted(JOB_SLOT_FIELDS)}")
+        if stage.get("kind") == "sensor" and fld != "service_ms":
+            raise AuthoringError(f"{where}: sensor stage {stage_id} takes only service_ms")
+        if entry.get("unit") not in (None, JOB_SLOT_FIELDS[fld]):
+            raise AuthoringError(f"{where}: {fld} is in {JOB_SLOT_FIELDS[fld]}, not {entry['unit']}")
+        if entry.get("statistic") not in (None, *JOB_SLOT_STATISTICS):
+            raise AuthoringError(f"{where}: statistic must be one of {list(JOB_SLOT_STATISTICS)}")
+        stats["slots"] += 1
+        value = entry.get("value")
+        if value is None:
+            stats["pending"] += 1
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            raise AuthoringError(f"{where}: value must be a positive number (or null = pending)")
+        scope = select_variants(entry.get("variants", ALL), ids)
+        if entry.get("when"):
+            scope = [i for i in scope if _match(by_id[i], {"when": entry["when"]})]
+        node = (stage.get("nodes") or [None])[0]
+        for vid in scope:
+            v = by_id[vid]
+            if not (_match(v, job) and _match(v, stage)):   # the job / stage is not active in that variant
+                stats["skipped"] += 1
+                continue
+            slot = (v.setdefault("node_configs", {}).setdefault(node, {}).setdefault("sim", {})
+                    .setdefault("jobs", {}).setdefault(job_id, {}).setdefault(stage_id, {}))
+            slot[fld] = value
+            slot["value_source"] = entry.get("value_source", "measured")
+            if entry.get("evidence_ref"):
+                slot["evidence_ref"] = entry["evidence_ref"]
+            stats["applied"] += 1
     return stats
 
 
