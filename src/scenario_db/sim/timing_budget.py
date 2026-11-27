@@ -261,9 +261,56 @@ def analyze_timing_budget(
             report["jobs"] = evaluate_jobs(graph, report, budget["inputs"], dvfs_tables, base_config)
         except JobError as exc:           # a job definition error must not fail the steady report
             report["jobs"], report["jobs_error"] = [], str(exc)
+    _judge_kpis(graph, report, plan.get("contract"), jobs_evaluated="jobs" in report)
     if options.include_whatif:
         report["whatif"] = whatif(graph, options, config=config, dvfs_tables=dvfs_tables)
     return report
+
+
+def _judge_kpis(graph, report: dict[str, Any], contract, *, jobs_evaluated: bool) -> None:
+    """M-10: the declared KPIs against the R-6 targets (``report.kpis``, ``verdict.kpis``), and the notes of the
+    declared KPIs nothing evaluates. A fail fails the verdict; a pass never lifts ``not_applicable``. Nothing is
+    added without KPI declarations (the report keeps its shape)."""
+    from scenario_db.sim.kpis import evaluate_kpis, fail_reason, summary
+
+    rows = evaluate_kpis(graph, report, contract, jobs_evaluated)
+    verdict = report["verdict"]
+    if contract is not None:
+        declared = list(dict.fromkeys(contract.kpis))
+        unmodeled = [] if _frame_interval_judged(report) else [k for k in declared if k == "interval"]
+        unmodeled += [r["kpi"] for r in rows or [] if r["status"] == "unmodeled" and r["job"] is None]
+        missing = [k for k in declared if k in unmodeled]
+        if missing:
+            # declared requirements the engine does not evaluate: stated, never counted as passed
+            verdict["notes"].append("판정 계약 KPI 미모델: " + ", ".join(missing))
+        ignored = [t.id for t in contract.targets or [] if t.kpi == "latency"] if _frame_interval_judged(report) else []
+        if ignored:
+            # the frame-interval path judges latency by its own budget; a latency target is not applied there
+            verdict["notes"].append("KPI 목표 미적용(frame interval 판정이 latency 판정): " + ", ".join(ignored))
+        if report.get("jobs_error") and any(r["job"] for r in rows or []):
+            verdict["notes"].append("job 평가 오류로 job KPI 판정 불가: " + str(report["jobs_error"]))
+    if not rows:
+        return
+    from scenario_db.sim.kpis import describe
+
+    report["kpis"] = rows
+    verdict["kpis"] = summary(rows)
+    no_input = list(dict.fromkeys(describe(r) for r in rows if r["status"] == "no_input"))
+    if no_input:
+        verdict["notes"].append("KPI 입력 없음(통과로 세지 않음): " + ", ".join(no_input))
+    unmodeled_jobs = list(dict.fromkeys(describe(r) for r in rows if r["status"] == "unmodeled" and r["job"]))
+    if unmodeled_jobs:
+        verdict["notes"].append("job KPI 미모델: " + ", ".join(unmodeled_jobs))
+    fails = [r for r in rows if r["status"] == "fail"]
+    if fails:
+        verdict["reasons"].extend(fail_reason(r) for r in fails)
+        verdict["status"] = "fail"
+
+
+def _frame_interval_judged(report: dict[str, Any]) -> bool:
+    from scenario_db.sim.kpis import _frame_interval_judged as judged
+
+    return judged(report)
 
 
 def budget_simulation(graph, options: TimingBudgetOptions, *, config: SimulationRunConfig | None = None,
@@ -1149,19 +1196,10 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         verdict["notes"].append(pacing["reason"])
     contract = plan.get("contract")
     if contract is not None:
-        from scenario_db.models.definition.usecase import MODELED_KPIS
-
-        evaluated = {"frame_pacing"} if pacing is not None and pacing["status"] in ("ok", "fail") else set()
-        missing = [k for k in contract.kpis if k not in MODELED_KPIS and k not in evaluated]
-        if intervals["preview"]["ok"] is None and intervals["video"]["ok"] is None and not intervals.get("streams"):
-            # no output judged by the frame interval: interval / latency were not evaluated either
-            missing = [k for k in contract.kpis if k not in missing and k in ("interval", "latency")] + missing
         unjudged = [f"{x.node} ({x.kind})" for x in contract.sinks if x.kind in ("audio", "file") and x.node in plan["tasks"]]
         if unjudged:
             verdict["notes"].append("frame interval로 판정하지 않는 sink: " + ", ".join(unjudged))
-        if missing:
-            # declared requirements the engine does not evaluate yet: stated, never counted as passed
-            verdict["notes"].append("판정 계약 KPI 미모델: " + ", ".join(missing))
+        # the declared-KPI notes / M-10 judgement follow in _judge_kpis, once the subsystem and job sections exist
     return {
         "scenario_id": graph.scenario_id,
         "variant_id": graph.variant_id,

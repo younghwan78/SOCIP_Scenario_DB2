@@ -50,7 +50,7 @@ from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
 from scenario_db.models.definition.project import Project as PydanticProject
 from scenario_db.models.definition.job import JobSpec
 from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
-from scenario_db.models.definition.usecase import job_reference_errors
+from scenario_db.models.definition.usecase import JudgementContract, job_reference_errors, target_reference_errors
 
 logger = logging.getLogger(__name__)
 
@@ -605,7 +605,10 @@ def _rate_write_issues(scenario_id: str, pipeline: dict[str, Any], variants: lis
     def keep(line: str) -> bool:
         return only is None or line.split(":", 1)[0].split("/", 1)[-1] in only
 
-    return ([_issue("error", "judgement_rate_invalid", e, path) for e in errors if keep(e)]
+    def code(line: str) -> str:   # R-6 target ties come through the same per-variant check
+        return "judgement_target_invalid" if "judgement targets " in line else "judgement_rate_invalid"
+
+    return ([_issue("error", code(e), e, path) for e in errors if keep(e)]
             + [_issue("warning", "judgement_rate_repeated", w, path) for w in warnings if keep(w)])
 
 
@@ -1107,16 +1110,24 @@ def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[
 
 
 def _validate_candidate_jobs(pipeline: dict[str, Any], node_ids: set[str], buffers: set[str]) -> list[ValidationIssue]:
-    """R-3 jobs reference pipeline nodes and session buffers: a patch must not leave them dangling."""
+    """R-3 jobs reference pipeline nodes and session buffers, R-6 targets declared KPIs, jobs and milestones:
+    a patch must not leave them dangling."""
     raw = pipeline.get("jobs")
-    if not raw:
-        return []
     try:
-        jobs = [JobSpec.model_validate(job) for job in raw]
+        jobs = [JobSpec.model_validate(job) for job in raw or []]
     except Exception as exc:
         return [_issue("error", "job_invalid", str(exc), "pipeline.jobs")]
-    return [_issue("error", "job_reference_invalid", message, "pipeline.jobs")
-            for message in job_reference_errors(jobs, node_ids, buffers)]
+    issues = [_issue("error", "job_reference_invalid", message, "pipeline.jobs")
+              for message in job_reference_errors(jobs, node_ids, buffers)]
+    judgement = pipeline.get("judgement")
+    if isinstance(judgement, dict) and judgement.get("targets"):
+        try:
+            contract = JudgementContract.model_validate(judgement)
+        except Exception as exc:
+            return [*issues, _issue("error", "judgement_invalid", str(exc), "pipeline.judgement")]
+        issues += [_issue("error", "judgement_target_invalid", message, "pipeline.judgement.targets")
+                   for message in target_reference_errors(contract, jobs)]
+    return issues
 
 
 def _pipeline_patch_impact(db: Session, scenario_ref: str, candidate: dict[str, Any]) -> dict[str, Any]:

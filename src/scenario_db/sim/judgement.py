@@ -76,6 +76,32 @@ def baseline_fps(graph) -> Any:
     return declared[0] if declared is not None else (graph.variant.design_conditions or {}).get("fps")
 
 
+def select_targets(targets, variant) -> list:
+    """R-6: the targets a variant uses - those whose ``when`` / ``when_node_enabled`` match it, one per
+    (kpi, metric, job, milestone): the one with the most ``when`` keys. A tie is an error (ValueError)."""
+    from scenario_db.authoring.knobs import _match
+
+    vdict = {"design_conditions": dict(getattr(variant, "design_conditions", None) or {}),
+             "routing_switch": dict(getattr(variant, "routing_switch", None) or {})}
+    best: dict[tuple, list] = {}
+    for t in targets or []:
+        if not _match(vdict, {"when": t.when or {}, "when_node_enabled": t.when_node_enabled}):
+            continue
+        rank = len(t.when or {}) + (1 if t.when_node_enabled else 0)
+        held = best.get(t.key())
+        if held is None or rank > held[0]:
+            best[t.key()] = [rank, t]
+        elif rank == held[0]:
+            held.append(t)
+    out = []
+    for key, (rank, *picked) in best.items():
+        if len(picked) > 1:
+            raise ValueError(f"judgement targets {[t.id for t in picked]} match {key[0]} equally specifically "
+                             "(give one more when keys)")
+        out.append(picked[0])
+    return out
+
+
 def rate_issues(scenario_id: str, pipeline: dict | None, variants: list) -> tuple[list[str], list[str]]:
     """(errors, warnings) of a declared ``judgement.rate`` over the effective variants (inheritance and
     ``design_conditions_override`` applied), shared by authoring and the strict ETL.
@@ -90,13 +116,13 @@ def rate_issues(scenario_id: str, pipeline: dict | None, variants: list) -> tupl
     from scenario_db.models.definition.usecase import JudgementContract
 
     raw = (pipeline or {}).get("judgement")
-    if not isinstance(raw, dict) or raw.get("rate") is None:
+    if not isinstance(raw, dict) or (raw.get("rate") is None and not raw.get("targets")):
         return [], []
     try:
         contract = JudgementContract.model_validate(raw)
     except ValidationError:
         return [], []          # the schema check reports it, with its file and field
-    if contract.rate is None:
+    if contract.rate is None and not contract.targets:
         return [], []
     from scenario_db.db.models.definition import ScenarioVariant
     from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
@@ -119,6 +145,13 @@ def rate_issues(scenario_id: str, pipeline: dict | None, variants: list) -> tupl
             errors.append(f"{scenario_id}/{vid}: variant does not resolve: {exc}")
             continue
         graph = SimpleNamespace(scenario=scenario, variant=variant, variant_id=vid)
+        if contract.targets:   # R-6: one target per (kpi, metric, job, milestone) in every variant
+            try:
+                select_targets(contract.targets, variant)
+            except ValueError as exc:
+                errors.append(f"{scenario_id}/{vid}: {exc}")
+        if contract.rate is None:
+            continue
         try:
             hz, _ = declared_rate(graph)  # type: ignore[misc]
         except ValueError as exc:

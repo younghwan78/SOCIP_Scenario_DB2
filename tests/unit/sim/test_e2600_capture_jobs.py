@@ -96,6 +96,8 @@ def test_a_shot_leaves_the_steady_preview_unchanged(tables):
     with_job = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables)
     graph.scenario.pipeline = {k: v for k, v in graph.scenario.pipeline.items() if k != "jobs"}
     plain = analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables)
+    # the job KPIs (M-10) are judged on the job results only
+    assert with_job["verdict"].pop("kpis")["status"] == "no_target" and with_job.pop("kpis")
     assert {k: v for k, v in with_job.items() if k != "jobs"} == plain
 
 
