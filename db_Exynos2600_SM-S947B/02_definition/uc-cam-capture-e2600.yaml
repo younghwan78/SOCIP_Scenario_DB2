@@ -199,6 +199,43 @@ pipeline:
       bitdepth: 8
       compression: COMP_OFF
       note: JPEG encoded output
+  judgement:
+    kpis: []
+    targets:
+    - id: thumb-12m
+      kpi: event_latency
+      job: still_shot
+      milestone: thumbnail
+      max: 300
+      basis: 12M shot-to-thumbnail (assumed)
+    - id: saved-12m
+      kpi: event_latency
+      job: still_shot
+      milestone: saved
+      max: 500
+      basis: 12M shot-to-saved (assumed)
+    - id: thumb-50m
+      kpi: event_latency
+      job: still_shot_50m
+      milestone: thumbnail
+      max: 800
+      basis: 50M shot-to-thumbnail (assumed)
+    - id: thumb-200m
+      kpi: event_latency
+      job: still_shot_200m
+      milestone: thumbnail
+      max: 2000
+      basis: 200M shot-to-thumbnail (assumed)
+    - id: bw-10ms
+      kpi: peak_bw
+      max: 50000
+      window_ms: 10
+      basis: about 65 % of an assumed LPDDR5X 9600 MT/s x 64 bit (76.8 GB/s); the fixture has no DRAM bandwidth
+    - id: heap
+      kpi: peak_footprint
+      max: 2048
+      window_ms: 10
+      basis: camera heap (assumed); the 200M MF 3-buffer pool exceeds it
   jobs:
   - id: still_shot
     label: 12M shot (ZSL / non-ZSL, SF / MF, JPEG / RAW)

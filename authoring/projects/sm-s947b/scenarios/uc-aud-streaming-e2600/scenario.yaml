@@ -99,7 +99,7 @@ pipeline:
       bitdepth: 16
       compression: COMP_OFF
   # R-1 judgement contract: the audio "frame" is the AudioFlinger mixer period (20 ms). The audio outputs
-  # are not frame-interval outputs; underrun has no model yet (reported as such, never as passed).
+  # are not frame-interval outputs; underrun is the smallest deadline slack (M-10 KPI registry).
   judgement:
     rate:
       hz: 50
@@ -111,6 +111,9 @@ pipeline:
     kpis:
     - underrun
     - latency
+    # R-6 KPI targets (E2600 assumed). With targets declared, the ABOX route's own latency_target_ms judges latency.
+    targets:
+    - {id: aud-slack, kpi: underrun, min: 0.5, basis: smallest period deadline margin (assumed; v1 is not a count)}
 variants:
   $include: variants.yaml
 provenance:

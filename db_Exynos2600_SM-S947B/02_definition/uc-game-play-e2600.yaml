@@ -138,6 +138,12 @@ pipeline:
     - interval
     - frame_pacing
     - latency
+    targets:
+    - id: jank
+      kpi: frame_pacing
+      metric: jank_pct
+      max: 1.0
+      basis: jank frames per presented frame (assumed)
 variants:
 - id: game-fhd-60fps-sdr
   severity: light

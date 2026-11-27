@@ -132,6 +132,9 @@ pipeline:
     - interval
     - frame_pacing
     - latency
+    # R-6 KPI target (E2600 assumed): jank share of the presented frames
+    targets:
+    - {id: jank, kpi: frame_pacing, metric: jank_pct, max: 1.0, basis: jank frames per presented frame (assumed)}
 variants:
   $include: variants.yaml
 provenance:
