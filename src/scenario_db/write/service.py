@@ -592,7 +592,19 @@ def validate_variant_overlay(db: Session, normalized: dict[str, Any]) -> list[Va
     stored = [v for v in db.query(ScenarioVariant).filter_by(scenario_id=scenario_ref).all() if v.id != staged_id]
     issues.extend(_rate_write_issues(scenario_ref, scenario.pipeline or {}, [*stored, {**variant, "id": staged_id}],
                                      "payload.variant", only={staged_id}))
+    issues.extend(_constraint_write_issues(scenario_ref, scenario.power_options, [*stored, {**variant, "id": staged_id}],
+                                           "payload.variant", only={staged_id}))
     return issues
+
+
+def _constraint_write_issues(scenario_id: str, power_options: dict[str, Any] | None, variants: list, path: str,
+                             only: set[str] | None = None) -> list[ValidationIssue]:
+    """R-2 knob constraints (``sim.judgement.constraint_issues``) as Write API issues."""
+    from scenario_db.sim.judgement import constraint_issues
+
+    return [_issue("error", "knob_constraint_violated", e, path)
+            for e in constraint_issues(scenario_id, power_options, variants)
+            if only is None or e.split(":", 1)[0].split("/", 1)[-1] in only]
 
 
 def _rate_write_issues(scenario_id: str, pipeline: dict[str, Any], variants: list, path: str,
@@ -1353,6 +1365,9 @@ def _validate_import_usecase_refs(
         )
     if isinstance(doc.get("pipeline"), dict) and isinstance(doc.get("id"), str):   # R-1 judgement.rate
         issues.extend(_rate_write_issues(doc["id"], doc["pipeline"], list(doc.get("variants") or []), f"{path}.variants"))
+    if isinstance(doc.get("power_options"), dict) and isinstance(doc.get("id"), str):   # R-2 knob constraints
+        issues.extend(_constraint_write_issues(doc["id"], doc["power_options"], list(doc.get("variants") or []),
+                                               f"{path}.variants"))
     return issues
 
 

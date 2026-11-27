@@ -306,6 +306,29 @@ authoring compile은 `knobs.yaml`을 usecase의 `power_options`로 싣는다(DB 
 탐색은 authoring과 같은 knob 엔진으로 compile된 variant 위에 값을 다시 적용한다. 결과는 같은 값을 선택한 variant를
 compile한 것과 동일하다(`test_runtime_power_option_equals_compiled_knob_variant`).
 
+**유효 조합 — `constraints` (R-2).** `knobs.yaml`에 둘 수 있습니다. 규칙의 뜻은 이렇습니다.
+- variant의 effective `design_conditions`가 `when` / `when_node_enabled`에 맞으면, `require`의 모든 key도 맞아야 합니다.
+- 비교 규칙은 `param_rules`와 같은 knob `_match`입니다. 값 하나나 목록을 쓸 수 있고, `null`은 "key 없음"입니다.
+
+같은 함수로 네 곳에서 검사합니다. 어긴 variant는 그곳에서 오류가 됩니다.
+- authoring compile
+- strict ETL
+- Write API: 오류 코드 `knob_constraint_violated`
+- What-if: 조건을 바꾼 결과가 규칙을 어기면 거부
+
+```yaml
+constraints:
+- id: remosaic-needs-full-readout          # 고유 id
+  when: {subscenario: [STILL_REMOSAIC_SF_CAPTURE, REMOSAIC_NIGHT_CAPTURE]}
+  require: {capture_readout: full_remosaic}
+  reason: a 200M shot reads the sensor by the seamless full_remosaic mode change
+- id: raw-is-12m
+  when: {output_format: RAW_BAYER_16}
+  require: {capture_readout: null}         # key가 없어야 함
+```
+
+knob이 없어도 `power_options.constraints`로 함께 내보냅니다. 선언하지 않으면 export와 input hash는 그대로입니다.
+
 **2) IP mode — IP `capabilities.sim.modes`**
 
 mode별 `unit_power_mw_mp` / `ppc` / `idc`가 다르면 mode를 추가하고, 어느 mode를 대체할 수 있는지 `substitutes`로 선언한다.
