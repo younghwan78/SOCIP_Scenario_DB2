@@ -273,3 +273,18 @@ def test_e2600_targets_fail_only_the_200m_mf_heap(tables):
     assert fails == {"cam-cap-r1-remosaic-mf": ["heap"], "cam-cap-r1-night-remosaic": ["heap"]}
     # RAW shots have no thumbnail stage: never a pass, reported as no input
     assert no_input == {("cam-cap-r1-high-res-raw", "thumb-12m"), ("cam-cap-r1-expert-raw", "thumb-12m")}
+
+
+def test_the_fleet_row_carries_the_targeted_kpis_and_the_job_verdict(tables):
+    """M-12: a fleet row evaluates the jobs (its verdict matches the variant page) and lists the targeted KPIs."""
+    from scenario_db.sim.timing_budget import fleet_row
+
+    graph = _exynos2600_generated_graph("uc-cam-capture-e2600", "cam-cap-r1-remosaic-mf")
+    row = fleet_row(analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables))
+    assert row["verdict"]["status"] == "fail" and row["verdict"]["kpis"]["fail"] == 1
+    assert {k["id"]: k["status"] for k in row["kpis"]} == {"thumb-200m": "pass", "bw-10ms": "pass", "heap": "fail"}
+    assert set(row["kpis"][0]) == {"id", "kpi", "metric", "job", "milestone", "status", "value", "target", "bound",
+                                   "unit", "value_source"}
+    steady = fleet_row(analyze_timing_budget(graph, TimingBudgetOptions(throughput_model="pipelined"),
+                                             dvfs_tables=tables, jobs=False))
+    assert "kpis" not in steady       # capture declares no scenario-level KPI: nothing without the jobs

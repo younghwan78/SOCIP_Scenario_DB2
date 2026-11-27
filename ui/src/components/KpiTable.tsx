@@ -1,4 +1,4 @@
-import type { KpiResult, KpiStatus } from '../lib/timingBudget'
+import { KPI_CHIP, type FleetRow, type KpiResult, type KpiStatus } from '../lib/timingBudget'
 
 const LABEL: Record<KpiStatus, string> = { pass: '통과', fail: '미달', no_target: '목표 없음', no_input: '입력 없음', unmodeled: '모델 없음' }
 const BADGE: Record<KpiStatus, string> = { pass: 'v-ok', fail: 'v-fail', no_target: 'v-info', no_input: 'v-na', unmodeled: 'v-na' }
@@ -33,4 +33,13 @@ export function KpiTable({ rows }: { rows: KpiResult[] }) {
       </tbody>
     </table>
   )
+}
+
+/** M-12: the worst KPI status of a fleet row and how many targeted KPIs pass (absent = no KPI declared). */
+export function KpiCell({ r }: { r: FleetRow }) {
+  const s = r.verdict.kpis?.status
+  if (!s) return <span className="faint">—</span>
+  const [cls, label] = KPI_CHIP[s] ?? ['v-na', s]
+  const n = (r.kpis ?? []).filter((x) => x.status === 'pass').length
+  return <span data-testid={`fleet-kpi-${s}`}><span className={`badge ${cls}`}>{label}</span>{r.kpis?.length ? <span className="faint"> {n}/{r.kpis.length}</span> : null}</span>
 }

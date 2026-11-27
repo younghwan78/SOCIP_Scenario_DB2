@@ -264,10 +264,12 @@ def analyze_timing_budget_fleet(
             graph, tables, ref = inputs.graph, inputs.tables, inputs.dvfs_table_ref
             stage = "timing_budget"
             opts = with_cpu_profile(db, options, request.scenario_id, variant_id)
-            # O-04: the same resolved inputs + engine give the same row (shared content-addressed cache)
-            key = result_cache.calculation_key("timing-fleet-row", graph, config=shim.config, options=opts, tables=tables)
+            # O-04: the same resolved inputs + engine give the same row (shared content-addressed cache). M-12: the
+            # row evaluates the declared event jobs too, so its verdict (job KPI targets) matches the variant page;
+            # "/2" keeps rows cached before that (steady-only) from being reused.
+            key = result_cache.calculation_key("timing-fleet-row/2", graph, config=shim.config, options=opts, tables=tables)
             row, _ = result_cache.cached(key, lambda: _jsonable_row(
-                fleet_row(analyze_timing_budget(graph, opts, config=shim.config, dvfs_tables=tables, jobs=False))))
+                fleet_row(analyze_timing_budget(graph, opts, config=shim.config, dvfs_tables=tables))))
             out.append(row)
         except Exception as exc:  # noqa: BLE001 - one variant must not abort the fleet
             errors.append(variant_failure(exc, variant_id=variant_id, stage=stage))

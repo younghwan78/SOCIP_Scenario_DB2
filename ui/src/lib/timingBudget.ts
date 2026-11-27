@@ -203,6 +203,8 @@ export interface FleetRow {
   power: { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; share_pct: { cpu: number; hw: number; bw: number } }
   bw: { total_mbs: number; hw_mbs: number; sw_mbs: number }
   verdict: Verdict
+  /** M-12: the KPI rows with a target (absent = no KPI declared) */
+  kpis?: Pick<KpiResult, 'id' | 'kpi' | 'metric' | 'job' | 'milestone' | 'status' | 'value' | 'target' | 'bound' | 'unit' | 'value_source'>[]
 }
 export interface TimingOptions {
   statistic: Statistic; eis: EisMode; runtime_scale: number; include_whatif?: boolean
@@ -497,4 +499,17 @@ export interface FramePacing {
   latency_ms?: { p50: number | null; p99: number | null }
   gpu_basis?: { distribution: string; sigma?: number; p95_x_gap?: number; [k: string]: unknown }
   gpu_clock_mhz?: number; cpu_tasks?: string[]; value_source?: string; title_class?: string
+}
+
+/** M-12: fleet KPI sort rank (worst first) and labels. */
+export const KPI_RANK: Record<string, number> = { fail: 0, no_input: 1, unmodeled: 2, no_target: 3, pass: 4, none: 5 }
+export const KPI_CHIP: Record<string, [string, string]> = {
+  fail: ['v-fail', '미달'], no_input: ['v-na', '입력 없음'], unmodeled: ['v-na', '모델 없음'], no_target: ['v-info', '목표 없음'], pass: ['v-ok', '통과'],
+}
+
+/** M-12: one line per fleet KPI row with a target (the KPI cell tooltip). */
+export function kpiTitle(r: FleetRow): string {
+  return (r.kpis ?? []).map((k) => `${k.id ?? k.kpi}${k.job ? ` (${k.job}${k.milestone ? ` ${k.milestone}` : ''})` : ''}: `
+    + `${k.value == null ? '—' : fmt(k.value, 1)} ${k.bound === 'min' ? '≥' : '≤'} ${fmt(k.target, 1)} ${k.unit} → ${KPI_CHIP[k.status]?.[1] ?? k.status}`
+    + (k.value_source === 'assumed' ? ' (가정 목표)' : '')).join('\n')
 }

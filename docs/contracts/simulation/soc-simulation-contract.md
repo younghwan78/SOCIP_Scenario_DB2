@@ -307,7 +307,8 @@ The registry (`sim/kpis.py`) reads the sections other models produced and adds `
 Status: `pass` / `fail` with a target, `no_target` (value only), `no_input` (section or value missing - noted
 `KPI 입력 없음`, never passed), `unmodeled`. A fail fails the verdict with a reason (`KPI <id>: <value> > <target>`,
 `(가정 목표)` for assumed targets); a pass never lifts `not_applicable`. Job KPIs are judged only by runs that
-evaluate the jobs: steady-only callers (fleet rows, what-if grids, exploration) skip them; a job definition error
+evaluate the jobs: steady-only callers (what-if grids, exploration) skip them, fleet rows evaluate them (M-12;
+`rows[].kpis` = the rows with a target); a job definition error
 (`jobs_error`) leaves the declared job KPIs `no_input`. The `report.whatif` rows carry the steady verdict only (no
 KPI judgement). Without KPI declarations nothing is added. The targets are part of the judgement contract and so of the condition hash.
 
@@ -443,8 +444,8 @@ unattributed stages), `peak` (exact over the run intervals: the best 10 ms-windo
 power / BW over the steady values, with the steady values before / after the job inside the window; footprint),
 `background`, `series` (1 ms), `basis`. The Timing Budget condition hash includes the jobs, `power_options`, the
 resolved params, the selection fields, the catalog rows of the job nodes, the size anchors and the buffer overrides
-when jobs are declared. Steady-only callers (summaries, what-if grids and cases, fleet rows, architecture
-exploration) skip the jobs.
+when jobs are declared. Steady-only callers (summaries, what-if grids and cases, architecture
+exploration) skip the jobs; fleet rows evaluate them (M-12).
 ## Task Cadence (`node_configs.<node>.timeline`)
 
 The hand-off cadence vocabulary (`sdb.handoff/1`) is also the simulation task model. A node released on
