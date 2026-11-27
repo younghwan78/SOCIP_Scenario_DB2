@@ -240,6 +240,11 @@ pipeline:
     kpis:
     - underrun
     - latency
+    targets:
+    - id: aud-slack
+      kpi: underrun
+      min: 0.5
+      basis: smallest period deadline margin (assumed; v1 is not a count)
 variants:
 - id: audio-stream-aac-screen-on
   severity: light

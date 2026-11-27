@@ -253,3 +253,23 @@ def test_e2600_200m_mf_footprint_against_a_heap_target(tables):
     assert by["heap"]["status"] == "fail" and by["heap"]["value"] > 2048
     assert by["thumb-200m"]["status"] == "pass"
     assert r["verdict"]["status"] == "fail" and any(x.startswith("KPI heap:") for x in r["verdict"]["reasons"])
+
+
+def test_e2600_targets_fail_only_the_200m_mf_heap(tables):
+    """R-6b data: with the DVFS tables the assumed targets pass except the 200M MF heap (decision 2)."""
+    from tests.unit.sim.test_e2600_step0_rates import _variants
+
+    fails, no_input = {}, set()
+    for scenario in ("uc-cam-capture-e2600", "uc-aud-mp3-playback-e2600", "uc-aud-streaming-e2600",
+                     "uc-game-play-e2600"):
+        for v in _variants(scenario):
+            r = analyze_timing_budget(_exynos2600_generated_graph(scenario, v["id"]),
+                                      TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=tables)
+            rows = r.get("kpis") or []
+            assert rows and any(x["status"] == "pass" for x in rows), (scenario, v["id"])
+            fails.update({v["id"]: [x["id"] for x in rows if x["status"] == "fail"]} if any(
+                x["status"] == "fail" for x in rows) else {})
+            no_input |= {(v["id"], x["id"]) for x in rows if x["status"] == "no_input"}
+    assert fails == {"cam-cap-r1-remosaic-mf": ["heap"], "cam-cap-r1-night-remosaic": ["heap"]}
+    # RAW shots have no thumbnail stage: never a pass, reported as no input
+    assert no_input == {("cam-cap-r1-high-res-raw", "thumb-12m"), ("cam-cap-r1-expert-raw", "thumb-12m")}

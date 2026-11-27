@@ -190,6 +190,24 @@ pipeline:
       bitdepth: 8
       compression: COMP_OFF
       note: JPEG encoded output
+  # R-6 KPI targets: E2600 assumed values (format examples, not product requirements; an E2700 port replaces them
+  # with spec values). The KPIs are the jobs' own; the steady preview has no interval-judged output here, so
+  # kpis is empty (the preview keeps the name rule) rather than the default [interval].
+  judgement:
+    kpis: []
+    targets:
+    - {id: thumb-12m, kpi: event_latency, job: still_shot, milestone: thumbnail, max: 300,
+       basis: 12M shot-to-thumbnail (assumed)}
+    - {id: saved-12m, kpi: event_latency, job: still_shot, milestone: saved, max: 500,
+       basis: 12M shot-to-saved (assumed)}
+    - {id: thumb-50m, kpi: event_latency, job: still_shot_50m, milestone: thumbnail, max: 800,
+       basis: 50M shot-to-thumbnail (assumed)}
+    - {id: thumb-200m, kpi: event_latency, job: still_shot_200m, milestone: thumbnail, max: 2000,
+       basis: 200M shot-to-thumbnail (assumed)}
+    - {id: bw-10ms, kpi: peak_bw, max: 50000, window_ms: 10,
+       basis: about 65 % of an assumed LPDDR5X 9600 MT/s x 64 bit (76.8 GB/s); the fixture has no DRAM bandwidth}
+    - {id: heap, kpi: peak_footprint, max: 2048, window_ms: 10,
+       basis: camera heap (assumed); the 200M MF 3-buffer pool exceeds it}
   # R-3 event jobs (E2600 assumed values; params in knobs.yaml). The steady session is the 12M preview (C-2);
   # a shot runs on the same ISP resources at job priority, preview RT first. ISP stages run at the top DVFS level
   # (capture DVFS SN, assumed); the preview background keeps its steady clock (job-v1).
