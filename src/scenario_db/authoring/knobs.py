@@ -117,6 +117,28 @@ def _match(variant: dict, rule: dict) -> bool:
     return True
 
 
+def constraint_violations(constraints: list | None, variant: Any) -> list[str]:
+    """R-2: the ``constraints`` a variant breaks (dict rules or ``KnobConstraint``; variant = dict or ORM row),
+    as messages. A rule applies when ``when`` / ``when_node_enabled`` match; then every ``require`` key must match."""
+    def get(obj: Any, key: str) -> Any:
+        return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+    vdict = {"design_conditions": dict(get(variant, "design_conditions") or {}),
+             "routing_switch": dict(get(variant, "routing_switch") or {})}
+    out = []
+    for rule in constraints or []:
+        when = {"when": get(rule, "when") or {}, "when_node_enabled": get(rule, "when_node_enabled")}
+        if not _match(vdict, when):
+            continue
+        require = get(rule, "require") or {}
+        bad = {k: want for k, want in require.items() if not _match(vdict, {"when": {k: want}})}
+        if bad:
+            have = {k: vdict["design_conditions"].get(k) for k in bad}
+            reason = get(rule, "reason")
+            out.append(f"constraint {get(rule, 'id')}: {have} must be {bad}" + (f" ({reason})" if reason else ""))
+    return out
+
+
 def variant_params(spec: dict, variant: dict) -> dict[str, Any]:
     params = dict(spec.get("params") or {})
     fixed: set[str] = set()

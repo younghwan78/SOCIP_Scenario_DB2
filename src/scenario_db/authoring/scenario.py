@@ -476,7 +476,7 @@ def compile_usecase(sources: dict[str, Any]) -> dict:
     return doc
 
 
-POWER_OPTION_KEYS = ("params", "param_rules", "knobs")
+POWER_OPTION_KEYS = ("params", "param_rules", "knobs", "constraints")
 
 
 def power_options_doc(knobs: dict) -> dict | None:

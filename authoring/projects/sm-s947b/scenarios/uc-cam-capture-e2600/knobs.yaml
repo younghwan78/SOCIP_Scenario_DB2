@@ -31,3 +31,28 @@ param_rules:
   set: {full_frames: 3, full_pool: 3}
 - when: {output_format: RAW_BAYER_16}
   set: {file_mb: 24}       # 12M x 16-bit DNG
+# R-2 valid combinations (E2600 assumed): a variant matching `when` must match every `require` key
+# (value or list; null = the key is absent). Checked by compile, the strict ETL, the Write API and What-if.
+constraints:
+- id: remosaic-needs-full-readout
+  when: {subscenario: [STILL_REMOSAIC_SF_CAPTURE, STILL_REMOSAIC_MF_CAPTURE, STILL_REMOSAIC_PRO_SF_CAPTURE,
+                       REMOSAIC_NIGHT_CAPTURE]}
+  require: {capture_readout: full_remosaic}
+  reason: a 200M shot reads the sensor by the seamless full_remosaic mode change
+- id: full-readout-is-a-200m-shot
+  when: {capture_readout: full_remosaic}
+  require: {subscenario: [STILL_REMOSAIC_SF_CAPTURE, STILL_REMOSAIC_MF_CAPTURE, STILL_REMOSAIC_PRO_SF_CAPTURE,
+                          REMOSAIC_NIGHT_CAPTURE]}
+  reason: the full_remosaic readout runs only for the 200M subscenarios
+- id: high-res-mf-is-50m
+  when: {subscenario: STILL_HIGH_RES_MF_CAPTURE}
+  require: {capture_readout: binning_2x2}
+  reason: the 50M high-res MF shot reads binning_2x2
+- id: ai-remosaic-is-200m
+  when: {extend_mode: EX_AI_REMOSAIC}
+  require: {capture_readout: full_remosaic}
+  reason: AI remosaic (NPU) works on the 200M frame
+- id: raw-is-12m
+  when: {output_format: RAW_BAYER_16}
+  require: {capture_readout: null}
+  reason: the 16-bit DNG comes straight from BYRP at the preview readout (no remosaic)

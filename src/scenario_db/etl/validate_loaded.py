@@ -79,13 +79,14 @@ def validate_loaded_db(db: Session) -> ValidationReport:
                     f"Scenario {scenario.id} node {node.get('id')} references missing IP {ip_ref}"
                 )
 
-    from scenario_db.sim.judgement import rate_issues
+    from scenario_db.sim.judgement import constraint_issues, rate_issues
 
     for scenario in scenarios:   # R-1: a declared judgement.rate resolves in every effective variant
-        errors, warnings = rate_issues(scenario.id, scenario.pipeline,
-                                       [v for v in variants if v.scenario_id == scenario.id])
+        mine = [v for v in variants if v.scenario_id == scenario.id]
+        errors, warnings = rate_issues(scenario.id, scenario.pipeline, mine)
         report.errors.extend(errors)
         report.warnings.extend(warnings)
+        report.errors.extend(constraint_issues(scenario.id, scenario.power_options, mine))   # R-2
 
     for variant in variants:
         if variant.scenario_id not in scenario_ids:

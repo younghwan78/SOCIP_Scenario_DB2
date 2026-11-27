@@ -102,6 +102,46 @@ def select_targets(targets, variant) -> list:
     return out
 
 
+def _variant_rows(scenario_id: str, variants: list) -> dict:
+    from scenario_db.db.models.definition import ScenarioVariant
+
+    fields = set(ScenarioVariant.__table__.columns.keys())
+    rows = {}
+    for v in variants:          # compiled documents (authoring) or loaded rows (strict ETL)
+        if isinstance(v, ScenarioVariant):
+            rows[str(v.id)] = v
+        elif isinstance(v, dict) and v.get("id"):
+            rows[str(v["id"])] = ScenarioVariant(**{k: val for k, val in v.items() if k in fields},
+                                                 scenario_id=scenario_id)
+    return rows
+
+
+def constraint_issues(scenario_id: str, power_options: dict | None, variants: list) -> list[str]:
+    """R-2: ``power_options.constraints`` broken by an effective variant (inheritance applied), shared by
+    authoring, the strict ETL and the Write API. A malformed block is left to the schema check."""
+    from pydantic import ValidationError
+
+    from scenario_db.authoring.knobs import constraint_violations
+    from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
+    from scenario_db.models.definition.usecase import PowerOptionSpec
+
+    if not isinstance(power_options, dict) or not power_options.get("constraints"):
+        return []
+    try:
+        constraints = PowerOptionSpec.model_validate(power_options).constraints
+    except ValidationError:
+        return []
+    rows = _variant_rows(scenario_id, variants)
+    errors = []
+    for vid in rows:
+        try:
+            variant = resolve_variant_from_rows(rows, scenario_id, vid)
+        except Exception:  # noqa: BLE001 - an inheritance error is reported by its own check
+            continue
+        errors += [f"{scenario_id}/{vid}: {m}" for m in constraint_violations(constraints, variant)]
+    return errors
+
+
 def rate_issues(scenario_id: str, pipeline: dict | None, variants: list) -> tuple[list[str], list[str]]:
     """(errors, warnings) of a declared ``judgement.rate`` over the effective variants (inheritance and
     ``design_conditions_override`` applied), shared by authoring and the strict ETL.
@@ -124,17 +164,9 @@ def rate_issues(scenario_id: str, pipeline: dict | None, variants: list) -> tupl
         return [], []          # the schema check reports it, with its file and field
     if contract.rate is None and not contract.targets:
         return [], []
-    from scenario_db.db.models.definition import ScenarioVariant
     from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
 
-    fields = set(ScenarioVariant.__table__.columns.keys())
-    rows = {}
-    for v in variants:          # compiled documents (authoring) or loaded rows (strict ETL)
-        if isinstance(v, ScenarioVariant):
-            rows[str(v.id)] = v
-        elif isinstance(v, dict) and v.get("id"):
-            rows[str(v["id"])] = ScenarioVariant(**{k: val for k, val in v.items() if k in fields},
-                                                 scenario_id=scenario_id)
+    rows = _variant_rows(scenario_id, variants)
     errors: list[str] = []
     warnings: list[str] = []
     scenario = SimpleNamespace(pipeline={**(pipeline or {}), "judgement": raw})

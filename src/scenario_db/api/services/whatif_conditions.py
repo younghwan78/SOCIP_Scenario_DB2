@@ -659,6 +659,12 @@ def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = No
         ctx.variant = ctx.candidate.variant
     _levers.validate_sensor_fps(ctx)
     _levers.validate_ip_modes(ctx)
+    from scenario_db.authoring.knobs import constraint_violations
+
+    broken = constraint_violations((getattr(ctx.candidate.scenario, "power_options", None) or {}).get("constraints"),
+                                   ctx.variant)
+    if broken:   # R-2: the changed condition leaves the scenario's valid combinations
+        raise ValueError("What-if condition breaks a knob constraint: " + "; ".join(broken))
     if notes is not None:
         notes.extend(ctx.notes)
     return ctx.candidate, ctx.config, normalized

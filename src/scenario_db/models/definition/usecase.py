@@ -431,6 +431,17 @@ class ArchKnob(BaseScenarioModel):
         return self
 
 
+class KnobConstraint(Selector):
+    """R-2: a valid-combination rule of the knob conditions. A variant whose effective ``design_conditions`` match
+    ``when`` / ``when_node_enabled`` must also match every ``require`` key (a value or a list of values; null =
+    the key is absent) - the knob ``_match`` rule. Checked by authoring compile, the strict ETL, the Write API
+    and What-if."""
+
+    id: str = Field(min_length=1)
+    require: dict[str, Any] = Field(min_length=1)
+    reason: str | None = None
+
+
 class PowerOptionSpec(BaseScenarioModel):
     """Architecture knobs of a scenario (compiled from authoring knobs.yaml).
 
@@ -440,6 +451,15 @@ class PowerOptionSpec(BaseScenarioModel):
     params: dict[str, float | int | str] = Field(default_factory=dict)
     param_rules: list[dict[str, Any]] = Field(default_factory=list)
     knobs: dict[str, ArchKnob] = Field(default_factory=dict)
+    # R-2: valid combinations (None = none: export and hash unchanged)
+    constraints: list[KnobConstraint] | None = None
+
+    @model_validator(mode="after")
+    def _unique_constraint_ids(self) -> PowerOptionSpec:
+        ids = [c.id for c in self.constraints or []]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"duplicate power_options.constraints ids {sorted({i for i in ids if ids.count(i) > 1})}")
+        return self
 
 
 class UsecaseReferences(BaseScenarioModel):

@@ -25,7 +25,7 @@ from scenario_db.models.capability.sim_config import SimConfigProfile
 from scenario_db.models.capability.sw import SwComponent, SwProfile
 from scenario_db.models.definition.project import Project
 from scenario_db.models.definition.usecase import Usecase
-from scenario_db.sim.judgement import rate_issues
+from scenario_db.sim.judgement import constraint_issues, rate_issues
 
 MODEL_BY_KIND: dict[str, type[BaseModel]] = {
     "ip": IpCatalog,
@@ -125,6 +125,7 @@ def validate_documents(docs: list[Any]) -> dict[str, list[str]]:
         rate_errors, rate_warnings = rate_issues(uid, pipe, uc.get("variants") or [])   # R-1, effective variants
         errors.extend(rate_errors)
         warnings.extend(rate_warnings)
+        errors.extend(constraint_issues(uid, uc.get("power_options"), uc.get("variants") or []))   # R-2
         anchors = set(((uc.get("size_profile") or {}).get("anchors") or {}).keys())
         for v in uc.get("variants") or []:
             anchors |= set((v.get("size_overrides") or {}).keys())
