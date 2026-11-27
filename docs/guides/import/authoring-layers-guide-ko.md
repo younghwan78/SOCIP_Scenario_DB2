@@ -105,6 +105,7 @@ db_Exynos2700_SM-S957B/           2700 DB 원본
 | `project.yaml` | `kind`, `key`, `platform`, (root) `document` / (파생) `extends` | `rename`, `document_patch`, `scenarios.include/exclude` | 〃 |
 | `overlay.yaml` (파생 과제) | — | `scenario_patch`, `pipeline`, `variants`, `sizes`, `sw_timing`, `knobs`, `prune_missing_nodes` | §6 |
 | `sw_timing.measured.yaml` | `entries[].task`, `entries[].timing` | `group`, `variants`, `when`, `mode` | 예제 4 |
+| `jobs.measured.yaml` (R-7) | `entries[].target: {job, stage, field}`, `entries[].value` (null = 대기) | `variants`, `when` (knob 규칙, 목록 가능), `unit`, `statistic`, `value_source`, `evidence_ref` | 아래 |
 | `retired.yaml` | `retire[]` | `projects`, `socs`, `ips`, `scenarios`, `variants` | 예제 3 |
 | `id-renames.yaml` | `renames: {old: new}` | — | 예제 8 |
 
@@ -251,6 +252,30 @@ API 확인: `http://127.0.0.1:18000/api/v1/explorer/scenario-catalog`, `.../scen
 | `variants` | variant 단위 행 (variants, evidence, predictions, reviews, sweep_jobs) |
 
 여러 variant를 함께 담은 탐색 run 이력은 과제 전체를 retire할 때만 지운다.
+
+### 예제 4b — event job 실측 slot (`jobs.measured.yaml`, R-7)
+
+capture 같은 event job의 stage 실측 값을 넣는 자리입니다.
+
+- **compile 순서:** SW timing 다음에 적용합니다.
+- **적용 위치:** 범위 안 variant 중 job과 stage가 활성인 variant만 대상입니다. 그 variant의 `node_configs.<stage 첫 node>.sim.jobs.<job>.<stage>.<field>`에 값을 쓰고, `value_source: measured`를 붙입니다.
+- **field:** `service_ms`(경합 없는 stage 시간), `clock_mhz`, `mb` 중 하나입니다. sensor stage는 `service_ms`만 받습니다.
+- **검사:** job · stage · field가 없거나 단위가 맞지 않으면 compile 오류입니다.
+- **보고:** compile 보고 `job_measurements`에 채움 · 대기 · 건너뜀 개수가 나옵니다.
+- **넣지 않는 값:** 결과 값(milestone latency · peak · energy)은 여기에 넣지 않습니다. measurement evidence로 비교합니다.
+- **E2600:** 공개 repo에는 대기 slot(`value: null`)만 둡니다.
+
+```yaml
+kind: authoring.jobs_measured
+scenario: uc-cam-capture-e2600
+entries:
+- target: {job: still_shot, stage: merge, field: service_ms}
+  when: {subscenario: [STILL_MF_CAPTURE, STILL_FLASH_MF_CAPTURE]}
+  statistic: p50
+  unit: ms
+  value: null          # 사내 사본에서 채움
+  evidence_ref: null
+```
 
 ### 예제 4 — SW timing 실측 입력 (Perfetto)
 

@@ -33,6 +33,8 @@ from scenario_db.authoring.scenario import (
     GENERATED_FILES,
     AuthoringError,
     variant_parents,
+    JOBS_MEASURED,
+    apply_job_measurements,
     apply_sw_measurements,
     compile_usecase,
     decompile_usecase,
@@ -290,7 +292,8 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
     for uc, src in parent.scenarios.items():
         if uc in exclude or (include != "*" and uc not in include):
             continue
-        new = {k: rename_value(copy.deepcopy(v), id_map) for k, v in src.items()}
+        # measured values stay with the project that measured them (R-7): a child keeps only its own slots
+        new = {k: rename_value(copy.deepcopy(v), id_map) for k, v in src.items() if k != "jobs_measured"}
         meta = new["base"].setdefault("metadata", {})
         meta.setdefault("canonical_usecase", uc)
         odir = sdir / uc
@@ -302,6 +305,8 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
         origins[new["base"]["id"]] = uc
         if (odir / "sw_timing.measured.yaml").exists():
             measured[new["base"]["id"]] = yamlio.load(odir / "sw_timing.measured.yaml") or {}
+        if (odir / JOBS_MEASURED).exists():
+            new["jobs_measured"] = yamlio.load(odir / JOBS_MEASURED) or {}
     if sdir.exists():   # brand-new scenarios in the child project
         for sd in sorted(p for p in sdir.iterdir() if p.is_dir()):
             clone = _clone_spec(sd, parent.scenarios)
@@ -373,6 +378,9 @@ def compile_project(authoring_root: Path, key: str, out_dir: Path | None = None)
             report["measurements"][uc] = apply_sw_measurements(
                 doc.get("variants") or [], bundle.measured[uc], src.get("sw_timing"),
                 variant_parents(src["variants"]))
+        if src.get("jobs_measured"):   # R-7 job slots, after the SW timing
+            report.setdefault("job_measurements", {})[uc] = apply_job_measurements(
+                doc.get("variants") or [], src["jobs_measured"], (doc.get("pipeline") or {}).get("jobs"))
         report["scenarios"][uc] = {"variants": len(doc.get("variants") or [])}
         outputs.append(Doc(rel=f"02_definition/{uc}.yaml", data=doc))
     if out_dir is not None:
