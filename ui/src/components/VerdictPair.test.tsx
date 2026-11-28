@@ -3,7 +3,7 @@ import { act, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it } from 'vitest'
 import { VerdictPair, kpiPairText } from './VerdictPair'
-import { groupNotes, noteKind, scopeText, unjudgedSinks } from '../lib/verdictNotes'
+import { groupNotes, noteKind, scopeText, timingAxis, unjudgedSinks } from '../lib/verdictNotes'
 import { KpiTable, splitKpiRows } from './KpiTable'
 import { SubsystemCard } from './SubsystemCard'
 import type { KpiResult, Subsystem, Verdict } from '../lib/timingBudget'
@@ -55,6 +55,27 @@ describe('VerdictPair (X-04)', () => {
     const { container } = render(<VerdictPair verdict={{ status: 'ok', reasons: [], nrt_clock_factor: 1 }} />)
     expect(container.querySelector('[data-testid^="verdict-kpi"]')).toBeNull()
     expect(byLabel('판정 범위')).toBeNull()
+  })
+})
+
+describe('timing axis vs a KPI fail (review P1)', () => {
+  const heap = 'KPI peak_footprint: 2400 MB > 2048 MB (가정 목표)'
+  it('keeps ok / not_applicable in the Timing cell when only a KPI fails', () => {
+    const ok: Verdict = { status: 'fail', reasons: [heap], notes: [], nrt_clock_factor: 1, kpis: { status: 'fail', fail: 1, pass: 3 } }
+    expect(timingAxis(ok)).toEqual({ status: 'ok', reasons: [] })
+    expect(timingAxis({ ...ok, nrt_clock_factor: 1.2 }).status).toBe('clock_up')
+    const na: Verdict = { ...ok, notes: AUDIO_NOTES, reasons: ['KPI underrun: 0.2 ms < 0.5 ms (가정 목표)'] }
+    expect(timingAxis(na).status).toBe('not_applicable')
+    render(<VerdictPair verdict={ok} kpis={[kpi({ kpi: 'peak_footprint', milestone: null, status: 'fail' })]} />)
+    expect(byId('verdict-timing').textContent).toBe('OK')
+    expect(byId('verdict-kpi-fail').textContent).toContain('미달 1')
+    expect(byId('verdict-kpi-fail').getAttribute('title')).toBe(heap)
+  })
+  it('keeps fail when a timing reason is there too, and files KPI notes under KPI', () => {
+    const both: Verdict = { status: 'fail', reasons: ['mcsc: infeasible', heap], nrt_clock_factor: 1, kpis: { status: 'fail', fail: 1 } }
+    expect(timingAxis(both)).toEqual({ status: 'fail', reasons: ['mcsc: infeasible'] })
+    expect(noteKind('KPI 입력 없음(통과로 세지 않음): heap')).toBe('kpi')
+    expect(noteKind('판정 계약 KPI 미모델: interval')).toBe('kpi')
   })
 })
 

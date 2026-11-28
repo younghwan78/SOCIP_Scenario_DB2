@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { updateExperimentContext } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
-import { summaryTiles } from '../lib/timingTiles'
+import { hasIntervalJudgement, summaryTiles } from '../lib/timingTiles'
 import { JobCard } from '../components/JobCard'
 import { SW_MARGINS, runtimeScaleOf, fmt, marginOf, marginOpts, pct0, timingApi, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { VerdictPair } from '../components/VerdictPair'
@@ -77,14 +77,14 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const mainReady = mainReadyKey === mainKey && sp.ready
   const [extrasOn, setExtrasOn] = useState(false)
   const wq = useAsync(() => (variant && extrasOn && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, config) : Promise.resolve(null)), [scenario, variant, extrasOn, mainReady, cfg, margin, cpuModel, tpParam, warmup, condKey])
-  // ⑦ DVFS level ±1/±2 per domain — runs after ⑥ so at most one simulation slot is held
+  // DVFS level ±1/±2 per domain — runs after the SW-growth what-if so at most one simulation slot is held
   const dq = useAsync(() => (variant && extrasOn && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, baseOpts, cfg, undefined, DEFAULT_COMBOS, config) : Promise.resolve(null)),
     [scenario, variant, extrasOn, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
-  // ⑤ SW-variance box plot: last, after ⑦ (one simulation slot at a time)
+  // SW-variance box plot: last, after the DVFS what-if (one simulation slot at a time); only when an output is judged by interval (the card holding it is hidden otherwise)
   const [distOn, setDistOn] = usePref<boolean>('tb.dist', false)
   // X-10: the condition controls fold behind one button; the ConditionBar chips are the summary
   const [condOpen, setCondOpen] = usePref<boolean>('tb.cond.open', false)
-  const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
+  const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !!q.data && hasIntervalJudgement(q.data.report) && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
     [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   const r = q.data?.report
   const guard = useRegistrationGuard([{ scenario_id: scenario, variant_id: variant }], ctx.project, r?.condition_hash ?? '')
@@ -112,7 +112,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         <button className="btn" disabled={!r || !!experimentBlocked} title={experimentBlocked ?? '현재 SW·DVFS·power 설정을 한 조건 바꿔보기의 기준으로 전달'} onClick={startExperiment}>이 조건으로 한 조건 바꿔보기 →</button>
         <button className="btn" aria-expanded={condOpen} data-testid="tb-cond-toggle" onClick={() => setCondOpen(!condOpen)}
           title="SW 통계 · EIS · SW 증가 · CPU 모델 · 처리량 · margin · 설정 profile · 실측 입력 · power params. 지금 값은 아래 예측 조건 줄에 요약">{condOpen ? '조건 접기 ▴' : '조건 바꾸기 ▾'}</button>
-        {condOpen && <>
+        {(condOpen || !!q.error) && <>
         <span title={STAT_TIP}><Seg label="SW 통계" value={statistic} options={[['mean', 'mean (기본)'], ['max', 'max']]} onPick={(v) => set('stat', v === DEFAULT_STATISTIC ? undefined : v)} /></span>
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
@@ -179,10 +179,6 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   )
 }
 
-/** X-10: interval card only when an output is judged by frame interval (camera / video sinks, extra streams). */
-export function hasIntervalJudgement(r: TimingReport): boolean {
-  return r.intervals.preview.ok !== null || r.intervals.video.ok !== null || (r.intervals.streams?.length ?? 0) > 0
-}
 
 function Group({ title, note, children }: { title: string; note: string; children: ReactNode }) {
   return <>

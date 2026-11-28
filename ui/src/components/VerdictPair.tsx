@@ -1,5 +1,5 @@
 import { KPI_CHIP, verdictChip, type KpiResult, type KpiStatus, type Verdict } from '../lib/timingBudget'
-import { scopeText } from '../lib/verdictNotes'
+import { isKpiReason, scopeText, timingAxis } from '../lib/verdictNotes'
 import { kpiLabel } from '../lib/timingTiles'
 import { Hint } from './Hint'
 import { Term } from './Term'
@@ -27,19 +27,22 @@ export function kpiPairText(k: Verdict['kpis'], rows?: KpiResult[] | null): { cl
 /** X-04: the verdict has two axes — timing and KPI — so the badge has two cells. The timing cell keeps the
  * TimingVerdictBadge words; the scope explanation (why timing does not apply) sits in a Hint next to it. */
 export function VerdictPair({ verdict, kpis, fpsSource, compact = false }: { verdict: Verdict; kpis?: KpiResult[] | null; fpsSource?: string | null; compact?: boolean }) {
-  const chip = verdictChip(verdict.status)
+  // the Timing cell shows the timing axis only: a KPI fail is the KPI cell's (the server folds it into status)
+  const axis = timingAxis(verdict)
+  const chip = verdictChip(axis.status)
   const t = { ...chip, label: chip.label.replace(/^timing /, '') }
   const k = kpiPairText(verdict.kpis, kpis)
   const scope = scopeText(verdict.notes, fpsSource)
+  const kpiReasons = verdict.reasons.filter(isKpiReason)
   return <span className="verdict-pair" data-testid="verdict-pair">
     <span className="verdict-cell">
       {!compact && <span className="faint t-caption"><Term id="timing-verdict">Timing</Term></span>}
-      <span className={`badge ${t.cls}`} title={verdict.reasons.join('\n') || undefined} data-testid="verdict-timing">{compact ? `Timing ${t.label}` : t.label}</span>
+      <span className={`badge ${t.cls}`} title={axis.reasons.join('\n') || undefined} data-testid="verdict-timing">{compact ? `Timing ${t.label}` : t.label}</span>
       {scope && !compact && <Hint label="판정 범위" text={scope} />}
     </span>
     {k && <span className="verdict-cell">
       {!compact && <span className="faint t-caption"><Term id="kpi-verdict">KPI</Term></span>}
-      <span className={`badge ${k.cls}`} data-testid={`verdict-kpi-${k.status}`}>{compact ? k.text : k.text.replace(/^KPI /, '')}</span>
+      <span className={`badge ${k.cls}`} title={kpiReasons.join('\n') || undefined} data-testid={`verdict-kpi-${k.status}`}>{compact ? k.text : k.text.replace(/^KPI /, '')}</span>
     </span>}
   </span>
 }

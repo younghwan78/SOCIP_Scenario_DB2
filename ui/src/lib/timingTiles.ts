@@ -129,7 +129,7 @@ export function summaryTiles(r: TimingReport, margin: number, battery: Battery, 
   kp.shown.forEach((k, i) => {
     const last = i === kp.shown.length - 1 && kp.rest > 0
     out.push({ id: `kpi-${i}`, label: kpiLabel(k), value: num(k.value), unit: k.unit,
-      note: `목표 ${k.bound === 'min' ? '≥' : '≤'} ${num(k.target)} ${k.unit}${k.job ? ` · ${k.job}` : ''}${k.value_source === 'assumed' ? ' · 가정 목표' : ''}${k.status === 'fail' ? ' · 미달' : ''}${last ? ` · 외 KPI ${kp.rest}개 (⑤-a)` : ''}`,
+      note: `목표 ${k.bound === 'min' ? '≥' : '≤'} ${num(k.target)} ${k.unit}${k.job ? ` · ${k.job}` : ''}${k.value_source === 'assumed' ? ' · 가정 목표' : ''}${k.status === 'fail' ? ' · 미달' : ''}${last ? ` · 외 KPI ${kp.rest}개 (KPI 카드)` : ''}`,
       bad: k.status === 'fail' })
   })
   // infeasible loads first so a red one is never cut
@@ -143,4 +143,9 @@ export function summaryTiles(r: TimingReport, margin: number, battery: Battery, 
   out.push({ id: 'power', label: 'Power · BW', value: fmt(p.total_mw, 0), unit: `mW · ${maText(p.total_mw, battery)}@Vbat`,
     note: `CPU ${fmt(p.cpu_mw, 0)} · HW ${fmt(p.hw_mw, 0)} · BW ${fmt(p.bw_mw, 0)}${p.residency_mw != null ? ` · wake ${fmt(p.residency_mw, 0)}` : ''} · ${fmt(r.bw.total_mbs / 1000, 2)} GB/s`, bad: false, prov })
   return out
+}
+
+/** X-10: interval card only when an output is judged by frame interval (camera / video sinks, extra streams). */
+export function hasIntervalJudgement(r: TimingReport): boolean {
+  return r.intervals.preview.ok !== null || r.intervals.video.ok !== null || (r.intervals.streams?.length ?? 0) > 0
 }

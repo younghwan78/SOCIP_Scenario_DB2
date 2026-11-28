@@ -41,7 +41,7 @@ export function SubsystemView({ node, s }: { node: string; s: Subsystem }) {
           </tbody>
         </table>
       </div>
-      {(s.unattributed_units?.length ?? 0) > 0 && <div className="faint t-caption">stage가 없는 unit: {s.unattributed_units!.join(', ')}</div>}
+      {(s.unattributed_units?.length ?? 0) > 0 && <div className="faint t-caption">power 모델 없는 unit (mW 합계 제외): {s.unattributed_units!.join(', ')}</div>}
     </div>
     <div style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
       {Object.entries(s.domains ?? {}).map(([d, v]) => (
