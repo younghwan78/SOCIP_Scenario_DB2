@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { updateExperimentContext } from '../lib/experimentContext'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
+import { summaryTiles } from '../lib/timingTiles'
+import { JobCard } from '../components/JobCard'
+import { SW_MARGINS, runtimeScaleOf, fmt, marginOf, marginOpts, pct0, timingApi, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
@@ -10,7 +12,7 @@ import { powerScope, type Prov } from '../lib/provenance'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { DEFAULT_POWER_MODEL, defaultPowerParams, effectiveProfile, useSimProfiles } from '../lib/simProfile'
 import { TimingInputsHelp } from '../components/TimingInputsHelp'
-import { maText, useBattery, batteryNote, type Battery } from '../lib/battery'
+import { useBattery, batteryNote, type Battery } from '../lib/battery'
 import { DvfsWhatIfTable } from '../components/DvfsWhatIf'
 import { useReferences } from '../lib/review'
 import { usePref } from '../components/Layout'
@@ -173,12 +175,6 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
   overrides: Record<string, number>; setOverrides: (o: Record<string, number>) => void
   dist: IntervalDistribution | null; distLoading: boolean; distError: string | null; distOn: boolean; setDistOn: (v: boolean) => void }) {
   const [ganttDetail, setGanttDetail] = usePref<boolean>('tb.gantt.detail', true)
-  const st = useMemo(() => Object.fromEntries(r.stages.map((s) => [s.id, s])), [r])
-  // one clock per DVFS domain: a stage can span several (NRT = CAM + INTCAM); never mix them in one number
-  const nrtDomains = useMemo(() => stageDomainsOf(r, 'nrt'), [r])
-  const rtReadout = useMemo(() => r.ips.find((i) => i.stage === 'rt' && i.sensor_readout_ms)?.sensor_readout_ms ?? null, [r])
-  const iv = r.intervals
-  const slack = useMemo(() => stageSlack(r), [r])
   const pipelined = r.stages.some((s) => s.throughput === 'pipelined')
   const prov: Prov = {
     kind: 'recalc', engine: 'Timing Budget (analytic)', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
@@ -190,25 +186,11 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
       '현재 조건으로 즉석 계산한 값 — 등록 예측(예측 현황)·Simulation evidence와 다를 수 있음',
     ],
   }
-  const kpis: { label: string; value: string; unit: string; note: string; bad: boolean; prov?: Prov; small?: boolean }[] = [
-    { label: `RT HW / ${pct0(1 - margin)} 예산`, value: `${fmt(st.rt.hw_ms, 2)}`, unit: `/ ${fmt(st.rt.budget_ms, 2)} ms`,
-      note: rtReadout ? `sensor readout ${fmt(rtReadout, 2)} ms에 종속 · clock = readout 만족 최소 (margin 무관)` : `SW margin ${pct0(margin)} rule${Math.abs(margin - 0.25) > 1e-9 ? ' (기본 25%에서 변경)' : ''}`,
-      bad: st.rt.hw_ms > st.rt.budget_ms },
-    { label: 'NRT SW (runtime+latency)', value: fmt(st.nrt.sw_ms, 2), unit: 'ms', note: `HW 예산 ${fmt(st.nrt.budget_ms, 2)} ms`, bad: !st.nrt.feasible },
-    { label: 'Post SW (EIS 등)', value: fmt(st.post.sw_ms, 2), unit: 'ms', note: r.eis.on ? 'EIS ON' : 'EIS OFF', bad: !st.post.feasible },
-    { label: 'NRT clock · DVFS domain별', value: nrtDomains.map((d) => `${d.domain} ${fmt(d.set_mhz, 0)}`).join(' · ') || '—', unit: 'MHz',
-      note: nrtDomains.map((d) => `${d.domain} 필요 ${fmt(d.required_mhz, 0)}${d.level !== null ? `→L${d.level}` : ''}${d.headroom_pct !== null ? ` 여유 ${fmt(d.headroom_pct, 0)}%` : ''}${d.set_reason === 'domain' && d.domain_leader ? ` (${d.domain_leader.toUpperCase()}가 결정)` : ''}`).join(' · ') || '—',
-      bad: nrtDomains.some((d) => d.rule_mhz !== null && d.set_mhz > d.rule_mhz * 1.05), small: nrtDomains.length > 1 },
-    { label: 'SW 여유 · 현재 clock', value: (['rt', 'nrt', 'post'] as const).map((s) => fmt(slack[s], 1)).join(' / '), unit: 'ms',
-      note: `RT / NRT / Post — SW가 더 쓸 수 있는 시간${pipelined ? ' (NRT·Post = period − 최장 SW task)' : ' (NRT·Post = period − SW − HW)'}`,
-      bad: (['rt', 'nrt', 'post'] as const).some((s) => slack[s] < 0), small: true },
-    { label: 'Preview / Video 간격', value: `${fmt(iv.preview.max_ms, 2)} / ${fmt(iv.video.max_ms, 2)}`, unit: 'ms', note: iv.ok ? `목표 ${fmt(iv.target_ms, 2)} ±${fmt(iv.tolerance * 100, 1)}% ✓` : '목표 이탈', bad: !iv.ok },
-    { label: 'Power · BW', value: fmt(r.power.total_mw, 0), unit: `mW · ${maText(r.power.total_mw, battery)}@Vbat`, note: `CPU ${fmt(r.power.cpu_mw, 0)} · HW ${fmt(r.power.hw_mw, 0)} · BW ${fmt(r.power.bw_mw, 0)} · ${fmt(r.bw.total_mbs / 1000, 2)} GB/s`, bad: false, prov },
-  ]
+  const kpis = summaryTiles(r, margin, battery, prov)
   return <>
     <section className="tb-kpis" aria-label="요약">
       {kpis.map((k) => (
-        <div key={k.label} className="panel tb-kpi">
+        <div key={k.id} className="panel tb-kpi" data-testid={`tile-${k.id}`}>
           <div className="faint" style={{ fontSize: 12 }}>{k.label}{k.prov && <> <ProvBadge prov={k.prov} compact /></>}</div>
           <div><span className="mono" style={{ fontSize: k.small ? 16 : 20, fontWeight: 600, color: k.bad ? 'var(--del-text)' : 'var(--text)' }}>{k.value}</span> <span className="faint" style={{ fontSize: 12 }}>{k.unit}</span></div>
           <div className="faint" style={{ fontSize: 11 }}>{k.note}</div>
@@ -217,7 +199,7 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
     </section>
     {r.verdict.reasons.length > 0 && <div className="err" style={{ fontSize: 13 }}>{r.verdict.reasons.slice(0, 4).map((x) => <div key={x}>{x}</div>)}</div>}
     {(r.verdict.notes?.length ?? 0) > 0 && <div className="panel tb-notes" role="note" style={{ fontSize: 13, padding: '6px 12px', borderLeft: '3px solid var(--warn-text, #B7791F)' }}>
-      <b>참고 (clock ↑ · pipeline latency)</b> {r.verdict.notes!.map((x) => <div key={x} className="mono" style={{ fontSize: 12 }}>{x}</div>)}</div>}
+      <b>참고</b> {r.verdict.notes!.map((x) => <div key={x} className="mono" style={{ fontSize: 12 }}>{x}</div>)}</div>}
     {r.measured_compare && <MeasuredCompareCard data={r.measured_compare} battery={battery} />}
     <div className="tb-grid">
       <Card id="slot" title="① 1 frame 예산 — stage별 slot" note={pipelined ? 'stage는 M2M buffer로 pipeline · 각 SW task / HW stage가 1 frame 안에 · 합이 넘으면 latency만 증가 (fps = 출력 간격)' : 'stage 1 frame 기준 · 각 stage SW+HW가 1 frame 안에 끝나야 함 (보수적)'} defaultWide><SlotBudget report={r} margin={margin} /></Card>
@@ -234,6 +216,7 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
         {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>
       {r.kpis && <Card id="kpis" title="⑤-a KPI 판정 (판정 계약 · 목표)" note="선언한 KPI를 R-6 목표와 비교 · fail이면 verdict fail · 입력 없음은 통과가 아님 · 가정 목표는 제품 요구가 아님" defaultWide><KpiTable rows={r.kpis} /></Card>}
+      {((r.jobs?.length ?? 0) > 0 || !!r.jobs_error) && <Card id="jobs" title="⑤-d Event job (촬영 등)" note="steady scenario 위의 event job · t = 0 trigger · stage 막대 빗금 = 대기 (elapsed − service) · 세로선 = milestone · 아래 P(t) · BW(t)는 같은 시간축" defaultWide><JobCard key={(r.jobs ?? []).map((j) => j.id).join('|')} jobs={r.jobs ?? []} kpis={r.kpis ?? []} error={r.jobs_error} /></Card>}
       {r.pacing && <Card id="pacing" title="⑤-b Frame pacing (panel latch)" note="CPU → GPU frame chain · BufferQueue back-pressure · panel vsync latch Monte Carlo · jank = 기대 vsync 간격 초과 (목표 판정은 ⑤-a)"><PacingSummary pacing={r.pacing} /></Card>}
       {r.bw.mif && <Card id="mif" title="⑤-c GPU memory · MIF floor" note="GPU workload DRAM traffic (sim.workload.mb_per_frame) · catalog mif_min_lock at the GPU clock · MIF level = max(governor, QoS lock, floor) under mif-linear"><MifSummary mif={r.bw.mif} /></Card>}
       <Card id="whatif" title="⑥ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">

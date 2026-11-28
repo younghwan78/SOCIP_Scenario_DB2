@@ -175,6 +175,10 @@ export interface TimingReport {
   pacing?: FramePacing
   /** M-10 declared KPIs against the R-6 targets (absent = none declared) */
   kpis?: KpiResult[]
+  /** R-3 job-v1 event jobs (capture shot …) on top of the steady scenario (absent = none declared) */
+  jobs?: EventJob[]
+  /** R-4 mcps-v1 subsystems by node (ABOX …); only the fields the summary reads are typed */
+  subsystems?: Record<string, { model: string; mw: number; feasible: boolean; domains?: Record<string, { freq_mhz: number | null; pinned?: boolean; max_util?: number }> }>
   eis: { on: boolean; auto: boolean; mode: EisMode; stabilization: unknown }
   mfc_dual: Record<string, number>; growth: { runtime_scale: number; latency_scale: number }
   dvfs: { tables: string[]; applied: boolean; table_ref?: string | null
@@ -183,8 +187,12 @@ export interface TimingReport {
     /** selectable levels per domain used by this variant (slow → fast) */
     ladders?: Record<string, DvfsLadderLevel[]> }
   stages: StageRow[]; ips: IpRow[]
-  intervals: { target_ms: number; tolerance: number; preview: IntervalSeries; video: IntervalSeries; ok: boolean }
+  intervals: { target_ms: number; tolerance: number; preview: IntervalSeries; video: IntervalSeries; ok: boolean
+    /** extra judged sinks (dual / PIP / multi-encoder), only those with a result */
+    streams?: (IntervalSeries & { kind?: string })[] }
   latency: { preview_ms: number | null; video_ms: number | null; preview_frames: number | null; video_frames: number | null }
+  /** a job definition error: jobs is [] and the job KPIs are no_input */
+  jobs_error?: string
   power: PowerSplit; bw: BwSplit; verdict: Verdict; timeline: TimelineRow[]; warnings: string[]; whatif?: WhatIfRow[]
   stage_domains?: Partial<Record<StageId, StageDomain[]>>
   /** SW margin rule applied to RT/Output (and the NRT/Post rule reference); absent before API sw_margin */
@@ -499,6 +507,26 @@ export interface FramePacing {
   latency_ms?: { p50: number | null; p99: number | null }
   gpu_basis?: { distribution: string; sigma?: number; p95_x_gap?: number; [k: string]: unknown }
   gpu_clock_mhz?: number; cpu_tasks?: string[]; value_source?: string; title_class?: string
+}
+
+/** R-3 job-v1: one stage of an event job (start / end on the job clock, t = 0 at the trigger). */
+export interface JobStage {
+  id: string; phase: string; kind: 'hw' | 'sw' | 'transfer' | string; nodes: string[]; chunks: number
+  start_ms: number; end_ms: number; service_ms: number; elapsed_ms: number; clock_mhz: Record<string, number>
+  energy_mj: number | null; mb: number | null; energy_attributed?: boolean; value_source: string
+}
+/** R-3 job-v1 report (``report.jobs[]``). */
+export interface EventJob {
+  id: string; model: string; label?: string | null; params?: Record<string, unknown>
+  /** null = the milestone's stage is not in the job */
+  milestones: Record<string, number | null>; makespan_ms: number
+  phases: { id: string; start_ms: number; end_ms: number }[]
+  stages: JobStage[]
+  energy_mj?: { event: number; by_kind: Record<string, number>; unattributed: string[] }
+  peak?: { window_ms: number; power_mw: number; power_instant_mw: number; bw_mbs: number; bw_instant_mbs: number; footprint_mb: number }
+  background?: { power_mw: number; bw_mbs: number; rt_wait_max_ms: number; dropped_frames: number; priority: string }
+  series?: { dt_ms: number; power_mw: number[]; bw_mbs: number[]; footprint_mb?: number[] }
+  basis?: string; notes?: string[]
 }
 
 /** M-12: fleet KPI sort rank (worst first) and labels. */
