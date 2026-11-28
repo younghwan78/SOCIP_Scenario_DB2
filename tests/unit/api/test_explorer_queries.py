@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from scenario_db.api.routers.explorer import (
+    _contract_summary,
     _count_matching_ips,
     _count_matching_socs,
     _count_matching_sw_profiles,
@@ -356,3 +357,37 @@ def test_variant_matrix_does_not_present_broken_inheritance_as_effective_conditi
         variant_matrix(soc_ref=None, board_type=None, project_ref=None, category=None,
                        domain=None, scenario_id=None, severity=None, limit=10, offset=0, db=session)
     assert error.value.status_code == 422
+
+
+def test_contract_summary_reads_judgement_jobs_and_subsystems():
+    """X-06 / X-15: the catalog carries what a scenario declares for judgement (no simulation)."""
+    pipeline = {
+        "nodes": [{"id": "speaker"}, {"id": "abox", "subsystem": {"model": "mcps-v1"}}],
+        "judgement": {"rate": {"hz": 50.0}, "kpis": ["underrun", "latency"],
+                      "sinks": [{"node": "speaker", "kind": "audio"}],
+                      "targets": [{"id": "aud-slack", "kpi": "underrun", "min": 0.5}]},
+        "jobs": [{"id": "still_shot"}],
+    }
+    assert _contract_summary(pipeline) == {
+        "rate": "hz 50", "sinks": [{"node": "speaker", "kind": "audio"}], "kpis": ["latency", "underrun"],
+        "targets": 1, "jobs": ["still_shot"], "subsystems": ["abox"]}
+    assert _contract_summary({}) == {"rate": None, "sinks": [], "kpis": [], "targets": 0, "jobs": [], "subsystems": []}
+    # a non-numeric rate keeps its value (game: rate.condition = target_fps)
+    game = {"judgement": {"rate": {"condition": "target_fps"}, "sinks": [{"node": "dpu", "kind": "display", "label": "panel"}]}}
+    out = _contract_summary(game)
+    assert out["rate"] == "condition target_fps" and out["sinks"] == [{"node": "dpu", "kind": "display"}]
+
+
+def test_condition_changed_ignores_the_chosen_combination():
+    """X-09 review: a re-run that picks another compression / DVFS case is a value change, not a condition change."""
+    from types import SimpleNamespace
+
+    from scenario_db.api.services.arch_exploration import _condition_changed
+
+    cur = SimpleNamespace(case_key="s=max|x=1|c=-|d=ISP:L3")
+    m = {"statistic": "max", "runtime_scale": 1.0}
+    assert _condition_changed(cur, m, {"_case_key": "s=max|x=1|c=-|d=ISP:L2", "statistic": "max", "runtime_scale": 1}) is False
+    assert _condition_changed(cur, m, {"_case_key": "s=mean|x=1|c=-|d=ISP:L3", "statistic": "mean", "runtime_scale": 1}) is True
+    assert _condition_changed(cur, m, {"_case_key": "s=max|x=1.2|c=-|d=ISP:L3", "statistic": "max", "runtime_scale": 1.2}) is True
+    # an older prediction without statistic / scale in its metrics: the case key's condition part decides
+    assert _condition_changed(cur, m, {"_case_key": "s=max|x=1|c=a:SB|d=-"}) is False

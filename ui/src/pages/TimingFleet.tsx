@@ -13,8 +13,12 @@ import { useSimProfiles } from '../lib/simProfile'
 import { ISSUE_LABEL, ISSUE_ORDER, issueCounts, verdictIssues, type IssueCode } from '../lib/provenance'
 import { KpiCell } from '../components/KpiTable'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
+import { timingAxis } from '../lib/verdictNotes'
+import { kpiPairText } from '../components/VerdictPair'
 
-type Filter = 'all' | 'ok' | 'clock_up' | 'fail' | 'not_applicable'
+type Filter = 'all' | 'ok' | 'clock_up' | 'fail' | 'not_applicable' | 'kpi_fail'
+/** X-04: filters and counts follow the cells — Timing on the timing axis, KPI 미달 on the KPI cell */
+const kpiStatus = (r: FleetRow) => kpiPairText(r.verdict.kpis, r.kpis)?.status ?? 'none'
 
 export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
   const statistic: Statistic = ctx.params.stat === 'max' ? 'max' : DEFAULT_STATISTIC
@@ -29,12 +33,12 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
   const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => q.data?.rows ?? [], [q.data])
   const [issue, setIssue] = useState<IssueCode | null>(null)
-  const byVerdict = filter === 'all' ? rows : rows.filter((r) => r.verdict.status === filter)
+  const byVerdict = filter === 'all' ? rows : filter === 'kpi_fail' ? rows.filter((r) => kpiStatus(r) === 'fail') : rows.filter((r) => timingAxis(r.verdict).status === filter)
   const shown = issue ? byVerdict.filter((r) => verdictIssues(r.verdict.reasons).some((i) => i.code === issue)) : byVerdict
   const issueN = useMemo(() => issueCounts(rows.map((r) => r.verdict.reasons)), [rows])
   const counts = useMemo(() => {
-    const c: Record<string, number> = { ok: 0, clock_up: 0, fail: 0 }
-    rows.forEach((r) => { c[r.verdict.status] = (c[r.verdict.status] ?? 0) + 1 })
+    const c: Record<string, number> = { ok: 0, clock_up: 0, fail: 0, kpi_fail: 0 }
+    rows.forEach((r) => { const s = timingAxis(r.verdict).status; c[s] = (c[s] ?? 0) + 1; if (kpiStatus(r) === 'fail') c.kpi_fail += 1 })
     return c
   }, [rows])
   const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statParam(statistic), cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp })
@@ -54,8 +58,9 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     { key: 'pw', label: 'Power mW', width: 160, firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <PowerMini r={r} /> },
     { key: 'cpu', label: 'CPU %', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.share_pct.cpu, render: (r) => fmt(r.power.share_pct.cpu, 0) },
     { key: 'bw', label: 'BW MB/s', width: 90, align: 'right', firstDir: -1, sort: (r) => r.bw.total_mbs, render: (r) => fmt(r.bw.total_mbs, 0) },
-    { key: 'kpi', label: 'KPI', width: 120, sort: (r) => KPI_RANK[r.verdict.kpis?.status ?? 'none'], title: (r) => kpiTitle(r), render: (r) => <KpiCell r={r} /> },
-    { key: 'verdict', label: '판정', width: 200, sort: (r) => ({ not_applicable: -1, fail: 0, clock_up: 1, ok: 2 }[r.verdict.status]), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <TimingVerdictBadge status={r.verdict.status} /> },
+    { key: 'kpi', label: 'KPI', width: 120, sort: (r) => KPI_RANK[kpiStatus(r)], title: (r) => kpiTitle(r), render: (r) => <KpiCell r={r} /> },
+    // X-04: the Timing column shows the timing axis only; a KPI fail is in the KPI column (the server folds it into status)
+    { key: 'verdict', label: 'Timing', width: 200, sort: (r) => ({ not_applicable: -1, fail: 0, clock_up: 1, ok: 2 }[timingAxis(r.verdict).status]), title: (r) => timingAxis(r.verdict).reasons.join('\n'), render: (r) => <TimingVerdictBadge status={timingAxis(r.verdict).status} /> },
     { key: 'why', label: '원인', width: 260, sort: (r) => verdictIssues(r.verdict.reasons).map((i) => i.code).join(','), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <Issues r={r} /> },
   ]
 
@@ -71,7 +76,8 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
         </div>
         <span className="muted" style={{ fontSize: 13 }}>판정</span>
         <div className="seg" role="group" aria-label="판정 필터">
-          {(['all', 'fail', 'clock_up', 'ok', 'not_applicable'] as Filter[]).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? `전체 ${rows.length}` : `${verdictChip(f).label} ${counts[f] ?? 0}`}</button>)}
+          {(['all', 'fail', 'clock_up', 'ok', 'not_applicable'] as Filter[]).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? `전체 ${rows.length}` : `Timing ${verdictChip(f).label.replace(/^timing /, '')} ${counts[f] ?? 0}`}</button>)}
+          {counts.kpi_fail > 0 && <button className={filter === 'kpi_fail' ? 'on' : ''} onClick={() => setFilter('kpi_fail')} title="KPI 미달 (verdict fail) — Timing 축은 따로">KPI 미달 {counts.kpi_fail}</button>}
         </div>
         {ISSUE_ORDER.some((c) => issueN[c] > 0) && <>
           <span className="muted" style={{ fontSize: 13 }}>Fail 원인</span>

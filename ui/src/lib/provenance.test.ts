@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryFit, issueCounts, powerScope, provText, reportsForProject, statusItems, verdictIssues, type ModelStatus } from './provenance'
+import { categoryFit, issueCounts, powerScope, provText, readableBasis, reportsForProject, statusItems, verdictIssues, type ModelStatus } from './provenance'
 import type { ReportMeta } from './archExplore'
 
 const rep = (id: string, project_ref: string | null) => ({ id, project_ref } as ReportMeta)
@@ -97,7 +97,16 @@ describe('P0 prediction basis in the model status', () => {
       bases: [{ label: '미기록 · e9', key: 'k', recorded: false, predictions: 54, config_profile_ref: null, power_params_ref: null, dvfs_table_ref: 'd', engine_rev: 'arch-exploration/9' }],
       sw: [{ label: '1.2.3', predictions: 54 }] })
     const p = items.find((i) => i.key === 'pred')!
-    expect(p.text).toBe('예측 기준 미기록 · e9 54 · SW 1.2.3 · 이전 engine 54/54')
+    expect(p.text).toBe('⚠ 예측 기준: 설정 미기록 · engine 9 · 54건 · SW 1.2.3 · 이전 engine 54/54')
+    expect(p.title).toContain('설정 선택(config profile · power params)을 기록하지 않은')
     expect(p.level).toBe('warn')
+  })
+  it('spells the basis label out (X-11)', () => {
+    expect(readableBasis('cfg? · pmp2 · e16')).toEqual({ text: 'config 버전 미기록 · power params v2 · engine 16', unknown: ['config profile은 기록됐지만 그 버전이 catalog에 없음'] })
+    expect(readableBasis('cfg 기본 · pmp 기본 · e16').text).toBe('config 기본 · power params 기본 · engine 16')
+    expect(readableBasis('cfg2 · pmp? · e?')).toEqual({ text: 'config v2 · power params 버전 미기록 · engine 미기록',
+      unknown: ['power params는 기록됐지만 그 버전이 catalog에 없음', 'engine revision 미기록'] })
+    // a non-digit engine revision is passed through as is
+    expect(readableBasis('cfg2 · pmp2 · arch-exploration/dev').text).toBe('config v2 · power params v2 · arch-exploration/dev')
   })
 })

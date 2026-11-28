@@ -279,7 +279,9 @@ export interface BoardRow {
   case_key: string; selection_rule: string; selected_by: string; selected_by_user?: string | null; reason: string | null; created_at: string | null
   fps: number; power: Power; bw_mbs: number; distribution: Dist | null; compression: string[]; dvfs: Record<string, number>
   verdict: string; eligible_cases: number; alternatives: number; verified: Verified | null; statistic: Statistic; runtime_scale: number
-  previous: { id: string; total_mw: number; delta_mw: number } | null
+  previous: { id: string; total_mw: number; delta_mw: number
+    /** X-09 (absent on older APIs): the superseded verdict and whether case key / SW statistic / growth differ */
+    verdict?: string | null; condition_changed?: boolean } | null
   power_options?: BoardOptions
   /** why the timing verdict (API ≥ verdict detail); derived = re-built from frozen stages of an older prediction */
   verdict_detail?: VerdictDetail | null
@@ -504,6 +506,19 @@ export function powerParts(p: Power): { key: 'cpu' | 'bwcpu' | 'hw' | 'bw'; labe
   ]
 }
 export const short = (v: string) => v.replace(/^cam-rec-/, '').replace(/^cam-prev-/, 'prev-')
+
+/** X-09: what a re-registration changed. 조건 변경 = case key / SW statistic / growth differ; 값 변경 = |Δ| ≥ 0.05 mW
+ * or the verdict moved; 재계산 동일 = only the engine / input hash moved; first = no superseded prediction. */
+export type ChangeKind = 'first' | 'condition' | 'value' | 'same'
+export const CHANGE_LABEL: Record<ChangeKind, string> = { first: '첫 등록', condition: '조건 변경', value: '값 변경', same: '재계산 동일' }
+export const VALUE_EPS_MW = 0.05
+export function changeKind(r: Pick<BoardRow, 'previous' | 'verdict'>): ChangeKind {
+  const p = r.previous
+  if (!p) return 'first'
+  if (p.condition_changed) return 'condition'
+  const verdictMoved = p.verdict !== undefined && p.verdict !== null && p.verdict !== r.verdict
+  return Math.abs(p.delta_mw) >= VALUE_EPS_MW || verdictMoved ? 'value' : 'same'
+}
 export const levels = (d: Record<string, number> | undefined) => Object.entries(d ?? {}).sort().map(([k, v]) => `${k}:L${v}`).join(' ')
 
 /** Case delta vs the recommended case, per component. */

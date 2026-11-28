@@ -4,7 +4,7 @@ import { ExperimentEntry } from '../components/CandidateReview'
 import { useAsync } from '../lib/route'
 import { api } from '../lib/api'
 import { fmt } from '../lib/timingBudget'
-import { archApi, conditionParams, conditionText, levels, short, variantKey, type BoardRow, type HistoryRow } from '../lib/archExplore'
+import { CHANGE_LABEL, VALUE_EPS_MW, archApi, changeKind, conditionParams, conditionText, levels, short, variantKey, type BoardRow, type ChangeKind, type HistoryRow } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
 import { CompositionBars, RangeBoxes, SplitBar, SplitLegend, Waterfall } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
@@ -20,6 +20,7 @@ import { ThermalWatchView } from '../components/ThermalWatch'
 import { useSimProfiles } from '../lib/simProfile'
 import type { Ctx as AppCtx } from '../App'
 import { RecomputePanel } from '../components/RecomputePanel'
+import { catalogContract, registrationPath } from '../lib/contract'
 import { BasisPanel } from '../components/BasisPanel'
 import { PredictionCollaboration } from '../components/PredictionCollaboration'
 
@@ -36,7 +37,10 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const q = useAsync(() => archApi.board(undefined, ctx.project || undefined), [ctx.project, tick])
   const allRows = q.data?.rows ?? []
   const ppQ = useAsync(() => (ctx.params.rc ? calibrationApi.powerParams().catch(() => []) : Promise.resolve([])), [ctx.params.rc])
-  const rows = sf ? allRows.filter((r) => r.scenario_id === sf) : allRows
+  const scoped = sf ? allRows.filter((r) => r.scenario_id === sf) : allRows
+  // X-09: optional filter by what the last re-registration changed (URL chg)
+  const chg = (['first', 'condition', 'value', 'same'] as ChangeKind[]).find((k) => k === ctx.params.chg) ?? null
+  const rows = chg ? scoped.filter((r) => changeKind(r) === chg) : scoped
   const battery = useBattery(ctx.project, ctx.params.cfg)
   // customer performance / thermal target: URL (shareable) > this viewer's last value
   const [targetPref, setTargetPref] = usePref<string>('pred.target_mw', '')
@@ -56,7 +60,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const scnCount = useMemo(() => { const m = new Map<string, number>(); for (const r of allRows) m.set(r.scenario_id, (m.get(r.scenario_id) ?? 0) + 1); return m }, [allRows])
   const scnName = (sid: string) => (ctx.catalog ?? []).find((c) => c.scenario_id === sid)?.scenario_name ?? sid
   const varsQ = useAsync(() => Promise.all(scopeScenarios.map((sid) => api.variants(sid).then((r) => r.items.filter((v) => !v.derived_from_variant).map((v) => [sid, v.id] as const)).catch(() => [] as (readonly [string, string])[]))).then((x) => x.flat()), [scopeScenarios.join(',')])
-  const registered = new Set(rows.map((r) => `${r.scenario_id}|${r.variant_id}`))
+  const registered = new Set(scoped.map((r) => `${r.scenario_id}|${r.variant_id}`))
   const unregistered = (varsQ.data ?? []).filter(([sid, vid]) => !registered.has(`${sid}|${vid}`))
   const risk = assessAll(rows, { target_mw: target, measured: covQ.data ?? undefined, references: refs?.references,
     tolerance_pct: refs?.tolerance_pct, max_latency_frames: refs?.policy.max_latency_frames, stale })
@@ -65,6 +69,9 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const staleRows = rows.filter((r) => r.throughput_model === 'stage' && refs?.policy.throughput_model === 'pipelined').length
   const sel = rows.find((r) => r.id === ctx.params.v)
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
+  const kinds = new Map<ChangeKind, BoardRow[]>()
+  for (const r of scoped) { const k = changeKind(r); kinds.set(k, [...(kinds.get(k) ?? []), r]) }
+  const valueChanged = kinds.get('value') ?? []
   const changed = rows.filter((r) => r.previous)
   const tot = rows.map((r) => r.power.total_mw)
   const withOpt = rows.filter((r) => r.power_options?.best)
@@ -86,7 +93,12 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     { key: 'bwip', label: 'IP BW', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.bw_ip_mw ?? r.power.bw_mw, render: (r) => fmt(r.power.bw_ip_mw ?? r.power.bw_mw, 0) },
     { key: 'bwcpu', label: 'CPU BW', width: 74, align: 'right', firstDir: -1, sort: (r) => r.power.bw_cpu_mw ?? -1, render: (r) => fmt(r.power.bw_cpu_mw, 1) },
     { key: 'bw', label: 'BW MB/s', width: 84, align: 'right', firstDir: -1, sort: (r) => r.bw_mbs, render: (r) => fmt(r.bw_mbs, 0) },
-    { key: 'd', label: 'Δ 직전', width: 90, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.previous?.delta_mw ?? 0), render: (r) => r.previous ? <span className="mono" style={{ color: r.previous.delta_mw > 0 ? 'var(--del-text)' : 'var(--primary-strong)' }}>{r.previous.delta_mw >= 0 ? '+' : ''}{fmt(r.previous.delta_mw, 1)}</span> : <span className="faint" title="직전 등록 예측 없음 (첫 등록)">—</span> },
+    { key: 'd', label: 'Δ 직전', width: 150, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.previous?.delta_mw ?? 0),
+      title: (r) => { const k = changeKind(r); return k === 'first' ? '직전 등록 예측 없음 (첫 등록)' : `${CHANGE_LABEL[k]}${r.previous?.verdict && r.previous.verdict !== r.verdict ? ` · 판정 ${r.previous.verdict} → ${r.verdict}` : ''}` },
+      render: (r) => { const k = changeKind(r); if (!r.previous) return <span className="faint">—</span>
+        return <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }} data-testid={`chg-${k}`}>
+          <span className={`badge ${k === 'value' ? 'v-warn' : k === 'condition' ? 'v-info' : 'v-na'}`}>{CHANGE_LABEL[k]}</span>
+          <span className={`mono${k === 'same' ? ' faint' : ''}`} style={k === 'same' ? undefined : { color: r.previous.delta_mw > 0 ? 'var(--del-text)' : 'var(--primary-strong)' }}>{r.previous.delta_mw >= 0 ? '+' : ''}{fmt(r.previous.delta_mw, 1)}</span></span> } },
     { key: 'opt', label: '절감 option (IQ)', width: 190, align: 'right', firstDir: 1, sort: (r) => r.power_options?.best?.delta_mw ?? 0,
       title: (r) => r.power_options?.best ? `${r.power_options.best.labels.join(' + ')}\n${r.power_options.results.length}개 조합 · ${OPTION_NOTE}` : (r.power_options?.notes ?? []).join('\n'),
       render: (r) => { const po = r.power_options; const b = po?.best
@@ -110,7 +122,13 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title="과제 전체 등록 예측 중 scenario 하나로 좁히기 (상단 Ctrl K 선택과 무관)">Scenario
           <select value={sf} onChange={(e) => ctx.navigate(undefined, { sf: e.target.value || undefined, v: undefined, all: undefined }, true)} aria-label="scenario filter">
             <option value="">과제 전체 ({allRows.length})</option>
-            {[...new Set([...(ctx.catalog ?? []).map((c) => c.scenario_id), ...scnCount.keys()])].map((sid) => <option key={sid} value={sid}>{scnName(sid)} ({scnCount.get(sid) ?? 0})</option>)}
+            {[...new Set([...(ctx.catalog ?? []).map((c) => c.scenario_id), ...scnCount.keys()])].map((sid) => { const n = scnCount.get(sid) ?? 0; const path = registrationPath(catalogContract(ctx.catalog, sid))
+              return <option key={sid} value={sid} title={n ? undefined : path.text}>{scnName(sid)} ({n}){n ? '' : path.kind === 'event_job' ? ' · 미등록 (job KPI는 Timing Budget)' : path.kind === 'not_judged' ? ' · audio 출력 — 판정 미지원 가능' : ' · 미등록'}</option> })}
+          </select></label>
+        <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title={`직전 등록 대비 무엇이 바뀌었는지 — 값 변경: |Δ| ≥ ${VALUE_EPS_MW} mW 또는 판정 변화 · 재계산 동일: engine · 입력 hash만 바뀜 · 조건 변경: 조합(case) · SW 통계 · 증가 배율이 다름`}>변경
+          <select value={chg ?? ''} onChange={(e) => ctx.navigate(undefined, { chg: e.target.value || undefined }, true)} aria-label="change filter">
+            <option value="">전체 ({scoped.length})</option>
+            {(['value', 'same', 'condition', 'first'] as ChangeKind[]).map((k) => <option key={k} value={k}>{CHANGE_LABEL[k]} ({kinds.get(k)?.length ?? 0})</option>)}
           </select></label>
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title="고객 성능·발열 scenario의 power 목표 (모든 행에 같은 값). 비우면 상대 비교만. URL에 남아 공유 가능">
           {refs?.policy.power_reference ? '목표 (전과제 값 없는 variant)' : '목표 power'} <input className="input" type="number" min={0} step={10} style={{ width: 80, padding: '3px 6px' }} value={targetRaw} placeholder="mW"
@@ -130,7 +148,9 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         onDone={() => setTick((t) => t + 1)} onClose={() => ctx.navigate(undefined, { rc: undefined, pp: undefined }, true)} />}
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && <div className="empty">불러오는 중…</div>}
-      {q.data && !rows.length && <div className="empty">등록된 예측이 없습니다. Timing Budget에서 조건을 정해 “예측으로 등록”하거나 조합 탐색에서 “최저 power 조합 전체 등록”을 실행하세요.</div>}
+      {q.data && !rows.length && (sf && !chg && registrationPath(catalogContract(ctx.catalog, sf)).kind !== 'registrable'
+        ? <div className="empty" data-testid="pred-path">{scnName(sf)}: {registrationPath(catalogContract(ctx.catalog, sf)).text}. <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('timing-fleet', { scenario: sf, variant: undefined }) }}>이 scenario의 전체 variant (Timing fleet) →</a></div>
+        : <div className="empty">{chg ? `${CHANGE_LABEL[chg]}에 해당하는 예측이 없습니다.` : '등록된 예측이 없습니다. Timing Budget에서 조건을 정해 “예측으로 등록”하거나 조합 탐색에서 “최저 power 조합 전체 등록”을 실행하세요.'}</div>)}
       {rows.length > 0 && (notExplored > 0 || firstReg === rows.length) && <div className="lib-note warn">
         {notExplored > 0 && <>등록 예측 {rows.length}건 중 <b>{notExplored}건</b>은 power option(bcrop · L0 skip · IP mode)을 탐색하지 않은 run에서 등록됐습니다. 조합 탐색에서 “Power option”을 켜고 다시 실행하면 절감 후보가 채워집니다. </>}
         {firstReg === rows.length && <>모두 첫 등록이라 직전 대비 변경 원인(Δ 직전)은 아직 없습니다.</>}
@@ -140,7 +160,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         <section className="tb-kpis">
           {[['current 예측', `${rows.length}`, all ? '과제 전체 scenario' : scnName(sf)],
             ['Power 범위', `${fmt(Math.min(...tot), 0)}–${fmt(Math.max(...tot), 0)}`, 'mW (등록 조합)'],
-            ['직전 대비 변경', `${changed.length}`, changed.length ? `평균 ${fmt(changed.reduce((s, r) => s + (r.previous?.delta_mw ?? 0), 0) / changed.length, 1)} mW` : '—'],
+            ['직전 대비 값 변경', `${valueChanged.length}`, `${valueChanged.length ? `평균 ${fmt(valueChanged.reduce((s, r) => s + (r.previous?.delta_mw ?? 0), 0) / valueChanged.length, 1)} mW · ` : ''}재계산 동일 ${kinds.get('same')?.length ?? 0} · 조건 변경 ${kinds.get('condition')?.length ?? 0}${chg ? ' · 변경 필터 전 기준' : ''}`],
             ['사람 선택', `${rows.filter((r) => r.selected_by === 'user').length}`, '추천 외 조합 (사유 기록)'],
             ['Power option', `${withOpt.length}`, withOpt.length ? `최대 절감 ${fmt(Math.min(...optBest), 1)} ~ ${fmt(Math.max(...optBest), 1)} mW · IQ 평가 대상` : 'variant 아님 · IQ 평가 대상']].map(([l, v, n]) =>
             <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}</div><div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{v}</div><div className="faint" style={{ fontSize: 11 }}>{n}</div></div>)}

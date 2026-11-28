@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import type { Ctx } from '../App'
 import { ExperimentEntry } from '../components/CandidateReview'
+import { contractBadges, registrationPath } from '../lib/contract'
 import { api } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { CAMERA_LABEL, MISSING, MODE_LABEL, cameraOf, changedKeys, medoidId, stabOf, valueText } from '../lib/conditions'
@@ -257,6 +258,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                   {behavior.has(s.scenario_id) && <span className="bh-badge" title={`Behavior 등록 variant: ${[...behavior.get(s.scenario_id)!].join(', ')}`}>Behavior {behavior.get(s.scenario_id)!.size}</span>}</span>
                 <span className="ds">{scenarioPurpose(s.scenario_id, s).split(/[·:]/)[1]?.trim().slice(0, 42) ?? ''}</span>
                 <span className="ct">variant {s.variant_count} · node {s.node_count} · buffer {s.buffer_count}</span>
+                {contractBadges(s.contract).length > 0 && <span className="ct contract-badges" data-testid={`contract-${s.scenario_id}`}>{contractBadges(s.contract).map((b) => <span key={b.key} className="chip" title={b.title}>{b.text}</span>)}</span>}
               </button></div> })}
           </div>
         </section>
@@ -287,6 +289,10 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                 {derivedCount > 0 && <span className="focus">파생(explored/timing) <span className="cnt">({derivedCount})</span></span>}</div>}
               {isCamera && <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>검토 초점</span>
                 {(() => { const f = scenarioFocus(selected, rows); return <>{f.slice(0, 6).map((x) => <span key={x} className="focus">{x}</span>)}{f.length > 6 && <span className="faint" style={{ fontSize: 12 }} title={f.slice(6).join(' · ')}>+{f.length - 6}</span>}</> })()}</div>}
+              {selected.contract && <div className="facet-row" data-testid="contract-row"><span className="faint" style={{ fontSize: 12 }}>판정 계약</span>
+                {contractBadges(selected.contract).map((b) => <span key={b.key} className="focus" title={b.title}>{b.text}</span>)}
+                {!contractBadges(selected.contract).length && <span className="faint" style={{ fontSize: 12 }}>선언 없음 — variant target fps · 출력 간격으로 판정</span>}
+                <span className="faint" style={{ fontSize: 12 }}>· 예측 등록: {registrationPath(selected.contract).text}</span></div>}
               <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>Load</span>
                 {Object.entries(selected.severity_counts).map(([k, v]) => <span key={k} className={`badge load-${k}`}>{k} <span className="cnt">({v})</span></span>)}
                 <span className="faint" style={{ fontSize: 12 }}>· 작성자가 저장한 부하 등급이며 KPI 통과 여부가 아닙니다</span></div>
