@@ -3,7 +3,7 @@
 import type { DesignAxes } from '../components/DesignAxes'
 import type { Objectives } from '../components/ObjectiveFront'
 import type { Sensitivity } from '../components/Sensitivity'
-import type { DesignSpace } from './designSpace'
+import type { DesignSpace, LeverAxis } from './designSpace'
 import { API_BASE, ApiError, getJson } from './api'
 import { fetchAdmitted, statParam, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
@@ -387,6 +387,8 @@ export interface RunOptions {
   peak_bw_limit_mbs?: number | null; dram_footprint_limit_mb?: number | null; llc_capacity_mb?: number | null
   /** per variant: previous-project reference × (1 + tolerance) from the project review policy (tighter of the two) */
   budget_from_reference?: boolean
+  /** X-07 re-simulation lever axes (What-if change kinds), their search mode and cap */
+  levers?: LeverAxis[]; lever_search?: 'exhaustive' | 'screen'; lever_max_sets?: number
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
@@ -406,7 +408,9 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
     spec: {
       axes: { statistics: stats, runtime_scales: scales, dvfs_headroom_levels: o.dvfs_headroom_levels,
         compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers, require_declared: o.require_declared },
-        power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets } },
+        power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets },
+        // without lever axes the keys stay out (the server omits them too, so the input hash is unchanged)
+        ...(o.levers?.length ? { levers: o.levers, lever_search: o.lever_search ?? 'exhaustive', lever_max_sets: o.lever_max_sets ?? 64 } : {}) },
       constraints: { allow_lossy: o.allow_lossy,
         ...(o.power_budget_mw ? { power_budget_mw: o.power_budget_mw } : {}), ...(o.bw_budget_mbs ? { bw_budget_mbs: o.bw_budget_mbs } : {}),
         ...(o.peak_bw_limit_mbs ? { peak_bw_limit_mbs: o.peak_bw_limit_mbs } : {}),

@@ -5,6 +5,8 @@ import { DesignAxesTable } from '../components/DesignAxes'
 import { ObjectiveFront } from '../components/ObjectiveFront'
 import { DesignSpaceSummary } from '../components/DesignSpaceSummary'
 import { experimentHref } from '../lib/experimentContext'
+import { axisSummary } from '../lib/designSpace'
+import { clearPendingLevers, leverAxesError, leverSetCount, readPendingLevers, savePendingLevers, type PendingLevers } from '../lib/leverAxes'
 import { useAsync } from '../lib/route'
 import { useRegistrationGuard } from '../lib/registration'
 import { RegistrationBasis } from '../components/RegistrationBasis'
@@ -75,7 +77,7 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
 
   return (
     <div className="page tb-page">
-      <div className="workflow-note"><b>탐색 범위</b><span>SW · 압축 · DVFS 조합을 탐색합니다. 크기 · fps · 센서 · LLC 같은 레버는 범위 탐색의 레버 축(API)으로 주거나, 하나씩은 한 조건 바꿔보기에서 확인합니다.</span><a className="btn" href={experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}>이 variant로 한 조건 바꿔보기 →</a></div>
+      <div className="workflow-note"><b>탐색 범위</b><span>SW · 압축 · DVFS 조합을 탐색합니다. 크기 · fps · 센서 · LLC 같은 레버는 한 조건 바꿔보기의 값 범위 탐색에서 축을 만든 뒤 “범위 탐색 레버 축으로”로 새 탐색에 넣습니다.</span><a className="btn" href={experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}>이 variant로 한 조건 바꿔보기 →</a></div>
       <CandidateReview scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} />
       <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>탐색 run</span>
@@ -128,7 +130,16 @@ function RunForm({ ctx }: { ctx: Ctx }) {
   const eff: RunOptions = iqKeep && !o.modes.includes('lossless') ? { ...o, modes: [...o.modes, 'lossless'] } : o
   const cases = caseCount(eff)
   const variants = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).reduce((s, c) => s + c.variant_count, 0)
-  const estimate = estimatedDuration(variants)
+  // X-07: re-simulation lever axes handed over from What-if (값 범위 탐색 → 범위 탐색 레버 축)
+  const [pending, setPending] = useState<PendingLevers | null>(() => readPendingLevers())
+  const levers = pending?.axes ?? []
+  const leverSearch = o.lever_search ?? 'exhaustive'
+  const leverMax = o.lever_max_sets ?? 64
+  const leverSets = leverSetCount(levers, leverSearch)
+  const leverError = levers.length ? leverAxesError(levers, leverSearch, leverMax) : null
+  const runOpts: RunOptions = levers.length ? { ...eff, levers, lever_search: leverSearch, lever_max_sets: leverMax } : eff
+  // every lever combination is a changed copy of each variant explored on its own
+  const estimate = estimatedDuration(variants * (1 + leverSets))
   const typeLabel = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).map((c) => c.scenario_name).join(' + ')
   const tracked = useExploreJob()
   const jobActive = isActive(tracked?.job)
@@ -136,7 +147,7 @@ function RunForm({ ctx }: { ctx: Ctx }) {
     setBusy(true); setRunningEstimate(estimate)
     try {
       // a server job: progress / cancel here, and the completion notice follows the user to other pages
-      const job = await archApi.createJob(runBody(scenarios, title, typeLabel, eff, sp.ref))
+      const job = await archApi.createJob(runBody(scenarios, title, typeLabel, runOpts, sp.ref))
       trackExploreJob(job, title || `${typeLabel} exploration`, ctx.project || null)
     } catch (e) { notify({ kind: 'error', text: e instanceof Error ? e.message : String(e) }) } finally { setBusy(false) }
   }
@@ -222,14 +233,32 @@ function RunForm({ ctx }: { ctx: Ctx }) {
             <span className="faint" style={{ fontSize: 12 }}>full factorial · 조합별 재시뮬레이션 · variant 아님 (IQ 평가 대상)</span></div>
           </div>
           </details>
+          <div className="ax-row" data-testid="lever-axes"><span className="ax-label">레버 축 (재시뮬레이션)</span>
+            {!levers.length ? <span className="faint" style={{ fontSize: 12 }}>없음 — 크기 · fps · 센서 · LLC 같은 레버는 한 조건 바꿔보기의 <b>값 범위 탐색</b>에서 축을 만든 뒤 “범위 탐색 레버 축으로”를 누르면 여기로 옵니다.{' '}
+              <a href={experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}>한 조건 바꿔보기 →</a></span>
+              : <div style={{ display: 'grid', gap: 4, flex: 1 }}>
+                <span className="faint" style={{ fontSize: 12 }}>{pending!.scenario_id} / {pending!.variant_id}에서 가져옴 · 선택한 scenario의 variant마다 적용 (대상 node가 없는 variant는 적용 불가로 표시)</span>
+                {levers.map((a, i) => { const s = axisSummary(a)
+                  return <span key={`${a.lever}-${i}`} className="row-1" data-testid={`lever-${i}`}><b>{s.label}</b> <span className="mono faint">{s.text}</span>
+                    <button className="btn tb-mini" aria-label={`${s.label} 레버 축 제거`} onClick={() => { const next = levers.filter((_, j) => j !== i); const p = next.length ? { ...pending!, axes: next } : null
+                      setPending(p); if (p) savePendingLevers(p); else clearPendingLevers() }}>×</button></span> })}
+                <span className="row-1">
+                  <div className="seg sm" role="group" aria-label="레버 탐색 방식">{([['exhaustive', '모든 조합'], ['screen', 'screen (값 하나씩 → 큰 효과 조합)']] as const).map(([k, l]) =>
+                    <button key={k} className={leverSearch === k ? 'on' : ''} onClick={() => set('lever_search', k)}>{l}</button>)}</div>
+                  <span className="faint" style={{ fontSize: 12 }}>상한</span>
+                  <input className="input" type="number" min={1} max={256} value={leverMax} style={{ width: 70 }} aria-label="레버 조합 상한"
+                    onChange={(e) => set('lever_max_sets', Math.max(1, Math.min(256, Number(e.target.value) || 1)))} />
+                  <span className={leverError ? 'err' : 'faint'} style={{ fontSize: 12, margin: 0 }} data-testid="lever-count">{leverError ?? `재시뮬레이션 ${leverSets}개 조합 (현재 값 포함 곱 − 1) × variant`}</span>
+                </span></div>}
+          </div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span className="chip" title="catalog 전체 variant 수 기준 상한 · 실행 시 파생(-explored-/-timing-) variant 제외">variant ≤{variants} × 최대 {cases.toLocaleString()} 조합 · 예상 최대 약 {estimate}</span>
+        <span className="chip" title="catalog 전체 variant 수 기준 상한 · 실행 시 파생(-explored-/-timing-) variant 제외 · 레버 축 조합마다 variant를 다시 탐색">variant ≤{variants}{leverSets ? ` × (1 + 레버 ${leverSets})` : ''} × 최대 {cases.toLocaleString()} 조합 · 예상 최대 약 {estimate}</span>
         <span className="faint" style={{ fontSize: 12 }}>SW 통계·증가 = timeline sim · DVFS·compression = analytic · 추천 조합은 재시뮬레이션 검증</span>
         <span className="grow" />
         {sp.error && <span className="err" style={{ margin: 0 }}>{sp.error}</span>}
-        <button className="btn primary" disabled={busy || jobActive || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}
+        <button className="btn primary" disabled={busy || jobActive || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000 || !!leverError} onClick={run}
           title={jobActive ? '진행 중인 탐색이 끝나면 새로 실행할 수 있습니다' : undefined}>
           {busy ? `제출 중… (예상 최대 약 ${runningEstimate})` : jobActive ? '탐색 진행 중' : '탐색 실행'}</button>
       </div>
@@ -290,7 +319,8 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       render: (r) => { const notes = specNotes(r)
         return <span className="stack-1" style={{ minWidth: 0 }}><span className="row-1">{r.baseline.verdict === 'not_applicable' ? <TimingVerdictBadge status="not_applicable" /> : <SpecBadge ok={r.spec_ok} />}
           {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}
-          <Hint label={`${short(r.variant_id)} 판정 근거`} text={notes.length ? notes.join('\n') : null} /></span>
+          {/* X-16: the reason button only where it matters — a failing row, or the selected row */}
+          {(!r.spec_ok || variantKey(r) === ctx.params.v) && <Hint label={`${short(r.variant_id)} 판정 근거`} text={notes.length ? notes.join('\n') : null} />}</span>
           {!r.spec_ok && r.spec_reasons[0] && <span className="reason-line">{r.spec_reasons[0]}</span>}</span> } },
     { key: 'tot', label: '추천 mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.recommended?.total_mw ?? -1, render: (r) => r.recommended ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.recommended} width={70} /><b className="mono">{fmt(r.recommended.total_mw, 1)}</b></span> : '—' },
     { key: 'cpu', label: 'CPU', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.cpu_mw ?? -1, render: (r) => fmt(r.recommended?.cpu_mw, 0) },
