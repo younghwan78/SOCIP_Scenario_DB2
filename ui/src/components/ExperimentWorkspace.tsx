@@ -1,4 +1,5 @@
 import { getJson } from '../lib/api'
+import { Hint } from './Hint'
 import { useExperimentContext } from '../lib/experimentContext'
 import { useAsync, type Page } from '../lib/route'
 import './ExperimentWorkspace.css'
@@ -79,11 +80,11 @@ export function ExperimentWorkspaceBar({ page, project, scenario, variant, exper
         기준: {variant ? <span className="mono">{variant}</span> : 'variant 미선택'}
         {draftNote(page, context)}
       </span>
-      {s && <span className="faint xws-levers">
+      {/* X-16: the catalog sentence moves into a Hint; the bar keeps the question and the baseline */}
+      {s && <span className="faint xws-levers"><Hint label="레버 카탈로그" text={<>
         레버 카탈로그 (공유): 범위 탐색 내장 {s.builtin.length}개 ({s.builtin.join(' · ')}) · 한 조건 바꿔보기 {s.whatif}개
-        {s.as_axes.length > 0 ? `, 그중 ${s.as_axes.length}개는 범위 탐색의 레버 축으로도 사용 (${s.as_axes.slice(0, 5).join(' · ')}${s.as_axes.length > 5 ? ' …' : ''})` : ''}
-        · CPU 배치는 측정 CPU profile 기준 (위 레버와 별개)
-      </span>}
+        {s.as_axes.length > 0 ? `, 그중 ${s.as_axes.length}개는 범위 탐색의 레버 축으로도 사용 (${s.as_axes.join(' · ')}) — 한 조건 바꿔보기의 값 범위 탐색에서 “범위 탐색 레버 축으로”` : ''}
+        · CPU 배치는 측정 CPU profile 기준 (위 레버와 별개)</>}>레버 {s.builtin.length + s.whatif}개</Hint></span>}
     </div>
   </section>
 }

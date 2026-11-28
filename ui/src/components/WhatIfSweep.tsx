@@ -4,6 +4,9 @@ import { PowerCoverage, ResultState } from './WhatIfWorkbench'
 import { fmt } from '../lib/timingBudget'
 import { TimingVerdictBadge } from './TimingVerdictBadge'
 import { readExperimentContext, updateExperimentContext } from '../lib/experimentContext'
+import { savePendingLevers, toLeverAxis } from '../lib/leverAxes'
+import { getJson } from '../lib/api'
+import { useAsync } from '../lib/route'
 import { describeChange, kindsOf, sweepValues, whatIfApi, type ChangeKindMeta, type PreviewRequest, type WhatIfSettings, type SweepConstraints, type SweepJob, type SweepRequest, type SweepResult, type WhatIfChange, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
 
 interface AxisDraft { index: number; identity: string; values: string }
@@ -46,6 +49,10 @@ export function WhatIfSweep({ scope, targets, changes, settings, onLoad }: { sco
     } catch (e) { return { body: null, count: 0, error: errorText(e) } }
   }, [axes, changes, kinds, settings, targets.baseline_hash, targets.analysis_hash, constraints, comparison, scope.project_ref, scope.scenario_id, scope.variant_id])
   const signature = built.body ? JSON.stringify(built.body) : null
+  // X-07: only catalog levers flagged explorable can become exploration axes (the server refuses the others)
+  const leversQ = useAsync(() => getJson<{ levers: { id: string; label: string; explorable: boolean }[] }>('/arch/exploration/levers').catch(() => null), [])
+  const explorable = leversQ.data ? new Set(leversQ.data.levers.filter((l) => l.explorable).map((l) => l.id)) : null
+  const notExplorable = built.body && explorable ? built.body.axes.filter((a) => !explorable.has(String(a.values[0]?.target ?? ''))).map((a) => a.label) : []
   const result = job?.result
   const outdated = !!result && (result.baseline_hash !== targets.baseline_hash || (!!targets.analysis_hash && result.analysis_hash !== targets.analysis_hash) || (!!runSignature && signature !== runSignature))
   useEffect(() => {
@@ -98,6 +105,12 @@ export function WhatIfSweep({ scope, targets, changes, settings, onLoad }: { sco
       <label><input type="checkbox" checked={constraints.allow_iq_required} onChange={(e) => setConstraints({ ...constraints, allow_iq_required: e.target.checked })} /> IQ 미검증 후보도 비교에 포함</label></div>
     {built.error && <p className="faint">{built.error}</p>}
     <button className="btn primary" disabled={!built.body || busy || !finished(job)} onClick={() => { void start() }}>범위 탐색 실행{built.count ? ` (${built.count}개)` : ''}</button>
+    <button className="btn" disabled={!built.body || notExplorable.length > 0} data-testid="sweep-to-explore"
+      title={notExplorable.length ? `범위 탐색 축으로 쓸 수 없는 레버: ${notExplorable.join(', ')}` : '이 축을 조합 탐색(SW · 압축 · DVFS 탐색)의 재시뮬레이션 레버 축으로 — 여러 variant · scenario에 한 번에 적용, 새 탐색 form에 채워짐. 축이 아닌 고정 조건은 넘어가지 않음'}
+      onClick={() => { if (!built.body) return
+        savePendingLevers({ project_ref: scope.project_ref, scenario_id: scope.scenario_id, variant_id: scope.variant_id, at: new Date().toISOString(),
+          axes: built.body.axes.map((a) => toLeverAxis(a.label, a.values)), fixed: built.body.changes.map(describeChange) })
+        window.location.hash = `#/explore?project=${encodeURIComponent(scope.project_ref)}&scenario=${encodeURIComponent(scope.scenario_id)}&variant=${encodeURIComponent(scope.variant_id)}` }}>범위 탐색 레버 축으로 →</button>
     {jobId && <div className="wi-job-status" role="status"><strong>{job ? statusLabels[job.status] ?? job.status : '작업 확인 중'}</strong><progress aria-label="범위 탐색 진행률" max={job?.total_cases || 1} value={job?.completed_cases ?? 0} /><span>{job?.completed_cases ?? 0} / {job?.total_cases ?? '—'}개</span>
       {!finished(job) && <button className="btn" disabled={busy || job?.cancel_requested} onClick={() => { void control('cancel') }}>{job?.cancel_requested ? '중단 요청됨' : '탐색 중단'}</button>}{job?.resumable && finished(job) && <button className="btn" disabled={busy} onClick={() => { void control('resume') }}>남은 계산 재개</button>}<button className="btn tb-mini" disabled={busy} onClick={() => { setMessage(''); setPollTick((n) => n + 1) }}>상태 다시 확인</button><small>작업 {jobId}</small></div>}
     {(message || job?.error) && <p className="err" role="status">{message || job?.error}</p>}
