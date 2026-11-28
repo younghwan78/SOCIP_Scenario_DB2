@@ -104,5 +104,9 @@ describe('P0 prediction basis in the model status', () => {
   it('spells the basis label out (X-11)', () => {
     expect(readableBasis('cfg? · pmp2 · e16')).toEqual({ text: 'config 버전 미기록 · power params v2 · engine 16', unknown: ['config profile은 기록됐지만 그 버전이 catalog에 없음'] })
     expect(readableBasis('cfg 기본 · pmp 기본 · e16').text).toBe('config 기본 · power params 기본 · engine 16')
+    expect(readableBasis('cfg2 · pmp? · e?')).toEqual({ text: 'config v2 · power params 버전 미기록 · engine 미기록',
+      unknown: ['power params는 기록됐지만 그 버전이 catalog에 없음', 'engine revision 미기록'] })
+    // a non-digit engine revision is passed through as is
+    expect(readableBasis('cfg2 · pmp2 · arch-exploration/dev').text).toBe('config v2 · power params v2 · arch-exploration/dev')
   })
 })

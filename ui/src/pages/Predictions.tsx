@@ -123,7 +123,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           <select value={sf} onChange={(e) => ctx.navigate(undefined, { sf: e.target.value || undefined, v: undefined, all: undefined }, true)} aria-label="scenario filter">
             <option value="">과제 전체 ({allRows.length})</option>
             {[...new Set([...(ctx.catalog ?? []).map((c) => c.scenario_id), ...scnCount.keys()])].map((sid) => { const n = scnCount.get(sid) ?? 0; const path = registrationPath(catalogContract(ctx.catalog, sid))
-              return <option key={sid} value={sid} title={n ? undefined : path.text}>{scnName(sid)} ({n}){n ? '' : path.kind === 'event_job' ? ' · event job — Timing Budget' : path.kind === 'not_judged' ? ' · 등록 대상 아님' : ' · 미등록'}</option> })}
+              return <option key={sid} value={sid} title={n ? undefined : path.text}>{scnName(sid)} ({n}){n ? '' : path.kind === 'event_job' ? ' · 미등록 (job KPI는 Timing Budget)' : path.kind === 'not_judged' ? ' · audio 출력 — 판정 미지원 가능' : ' · 미등록'}</option> })}
           </select></label>
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title={`직전 등록 대비 무엇이 바뀌었는지 — 값 변경: |Δ| ≥ ${VALUE_EPS_MW} mW 또는 판정 변화 · 재계산 동일: engine · 입력 hash만 바뀜 · 조건 변경: 조합(case) · SW 통계 · 증가 배율이 다름`}>변경
           <select value={chg ?? ''} onChange={(e) => ctx.navigate(undefined, { chg: e.target.value || undefined }, true)} aria-label="change filter">
@@ -160,7 +160,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         <section className="tb-kpis">
           {[['current 예측', `${rows.length}`, all ? '과제 전체 scenario' : scnName(sf)],
             ['Power 범위', `${fmt(Math.min(...tot), 0)}–${fmt(Math.max(...tot), 0)}`, 'mW (등록 조합)'],
-            ['직전 대비 값 변경', `${valueChanged.length}`, `${valueChanged.length ? `평균 ${fmt(valueChanged.reduce((s, r) => s + (r.previous?.delta_mw ?? 0), 0) / valueChanged.length, 1)} mW · ` : ''}재계산 동일 ${kinds.get('same')?.length ?? 0} · 조건 변경 ${kinds.get('condition')?.length ?? 0}`],
+            ['직전 대비 값 변경', `${valueChanged.length}`, `${valueChanged.length ? `평균 ${fmt(valueChanged.reduce((s, r) => s + (r.previous?.delta_mw ?? 0), 0) / valueChanged.length, 1)} mW · ` : ''}재계산 동일 ${kinds.get('same')?.length ?? 0} · 조건 변경 ${kinds.get('condition')?.length ?? 0}${chg ? ' · 변경 필터 전 기준' : ''}`],
             ['사람 선택', `${rows.filter((r) => r.selected_by === 'user').length}`, '추천 외 조합 (사유 기록)'],
             ['Power option', `${withOpt.length}`, withOpt.length ? `최대 절감 ${fmt(Math.min(...optBest), 1)} ~ ${fmt(Math.max(...optBest), 1)} mW · IQ 평가 대상` : 'variant 아님 · IQ 평가 대상']].map(([l, v, n]) =>
             <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}</div><div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{v}</div><div className="faint" style={{ fontSize: 11 }}>{n}</div></div>)}

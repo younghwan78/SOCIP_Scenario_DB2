@@ -22,9 +22,9 @@ export function contractBadges(c: ScenarioContract | null | undefined): { key: s
  * contract keeps it out (not registered yet); the others name what decides it and where to look. */
 export type RegistrationPath = 'registrable' | 'event_job' | 'not_judged'
 export function registrationPath(c: ScenarioContract | null | undefined): { kind: RegistrationPath; text: string } {
-  if (c?.jobs.length) return { kind: 'event_job', text: 'event job — job KPI는 탐색 · 예측 등록에 들어가지 않음, Timing Budget에서 확인' }
+  if (c?.jobs.length) return { kind: 'event_job', text: 'event job 포함 — job KPI는 탐색 · 예측 등록에 들어가지 않음(Timing Budget에서 확인), steady 부분은 Timing 판정이 OK · Clock ↑이면 등록 가능' }
   if (c && c.sinks.length && c.sinks.every((s) => UNJUDGED_SINK_KINDS.has(s.kind)))
-    return { kind: 'not_judged', text: '출력이 audio · file sink뿐 — timing 판정 미지원이면 예측 등록 대상 아님 (KPI는 Timing Budget에서 확인)' }
+    return { kind: 'not_judged', text: '출력이 audio · file sink뿐 — RT 단계도 없으면 timing 판정 미지원이라 예측 등록 대상 아님 (KPI는 Timing Budget에서 확인)' }
   // no contract-level reason: registration depends on the timing verdict (OK · Clock ↑ registers; 판정 미지원 / Fail do not)
   return { kind: 'registrable', text: '미등록 — 등록 가능 여부는 Timing 판정(OK · Clock ↑만 등록)에 따름' }
 }

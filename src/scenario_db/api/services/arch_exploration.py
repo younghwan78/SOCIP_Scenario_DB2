@@ -812,9 +812,17 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
 
 
 def _condition_changed(p: Prediction, m: dict[str, Any], old: dict[str, Any]) -> bool:
-    """The registered case (axis values) or the SW statistic / growth differs from the superseded prediction."""
-    return (old.get("_case_key") != p.case_key or old.get("statistic") != m.get("statistic")
-            or old.get("runtime_scale") != m.get("runtime_scale"))
+    """The analysis condition — SW statistic / growth, the ``s=`` / ``x=`` part of the case key — differs from
+    the superseded prediction. The chosen combination (``c=`` compression, ``d=`` DVFS) is a result, not a
+    condition: a re-run that picks another case is a value change."""
+    def cond(key: str | None) -> list[str]:
+        return [part for part in str(key or "").split("|") if part.startswith(("s=", "x="))]
+    if old.get("statistic") is not None and m.get("statistic") is not None and old["statistic"] != m["statistic"]:
+        return True
+    old_x, new_x = old.get("runtime_scale"), m.get("runtime_scale")
+    if old_x is not None and new_x is not None and float(old_x) != float(new_x):
+        return True
+    return cond(old.get("_case_key")) != cond(p.case_key)
 
 
 def _condition(run, m: dict[str, Any]) -> dict[str, Any]:

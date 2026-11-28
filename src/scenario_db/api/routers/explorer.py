@@ -775,7 +775,8 @@ def _contract_summary(pipeline: dict) -> dict:
     rate = j.get("rate") or {}
     kpis = sorted({str(k) for k in (j.get("kpis") or [])} | {str(t.get("kpi")) for t in (j.get("targets") or []) if t.get("kpi")})
     return {
-        "rate": next((f"{k} {v:g}" if isinstance(v, (int, float)) else str(k) for k, v in rate.items()), None) if rate else None,
+        "rate": next((f"{k} {v:g}" if isinstance(v, (int, float)) else f"{k} {v}" if v not in (None, "") else str(k)
+                      for k, v in rate.items()), None) if rate else None,
         "sinks": [{"node": str(s.get("node")), "kind": str(s.get("kind"))} for s in (j.get("sinks") or []) if isinstance(s, dict)],
         "kpis": kpis,
         "targets": len(j.get("targets") or []),

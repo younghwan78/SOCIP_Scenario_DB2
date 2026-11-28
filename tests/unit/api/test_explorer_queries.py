@@ -372,3 +372,22 @@ def test_contract_summary_reads_judgement_jobs_and_subsystems():
         "rate": "hz 50", "sinks": [{"node": "speaker", "kind": "audio"}], "kpis": ["latency", "underrun"],
         "targets": 1, "jobs": ["still_shot"], "subsystems": ["abox"]}
     assert _contract_summary({}) == {"rate": None, "sinks": [], "kpis": [], "targets": 0, "jobs": [], "subsystems": []}
+    # a non-numeric rate keeps its value (game: rate.condition = target_fps)
+    game = {"judgement": {"rate": {"condition": "target_fps"}, "sinks": [{"node": "dpu", "kind": "display", "label": "panel"}]}}
+    out = _contract_summary(game)
+    assert out["rate"] == "condition target_fps" and out["sinks"] == [{"node": "dpu", "kind": "display"}]
+
+
+def test_condition_changed_ignores_the_chosen_combination():
+    """X-09 review: a re-run that picks another compression / DVFS case is a value change, not a condition change."""
+    from types import SimpleNamespace
+
+    from scenario_db.api.services.arch_exploration import _condition_changed
+
+    cur = SimpleNamespace(case_key="s=max|x=1|c=-|d=ISP:L3")
+    m = {"statistic": "max", "runtime_scale": 1.0}
+    assert _condition_changed(cur, m, {"_case_key": "s=max|x=1|c=-|d=ISP:L2", "statistic": "max", "runtime_scale": 1}) is False
+    assert _condition_changed(cur, m, {"_case_key": "s=mean|x=1|c=-|d=ISP:L3", "statistic": "mean", "runtime_scale": 1}) is True
+    assert _condition_changed(cur, m, {"_case_key": "s=max|x=1.2|c=-|d=ISP:L3", "statistic": "max", "runtime_scale": 1.2}) is True
+    # an older prediction without statistic / scale in its metrics: the case key's condition part decides
+    assert _condition_changed(cur, m, {"_case_key": "s=max|x=1|c=a:SB|d=-"}) is False

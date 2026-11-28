@@ -198,7 +198,7 @@ export function statusItems(s: ModelStatus, project?: string): StatusItem[] {
             return `  ${rb.text}: ${b.predictions}건${b.recorded ? ` — ${b.config_profile_ref ?? 'config 기본'} · ${b.power_params_ref ?? 'params 기본'} · ${b.dvfs_table_ref ?? 'DVFS ?'} · ${b.engine_rev ?? '?'}` : ' — 이전 engine run이라 설정 선택이 기록되지 않음'}${rb.unknown.length ? `\n    ⚠ ${rb.unknown.join(' · ')}` : ''}` }),
           ...(s.sw?.length ? [`SW timing: ${s.sw.map((x) => `${x.label} ${x.predictions}건`).join(', ')}`] : []),
           ...(p.stale_engine ? [`현재 engine ${s.engine_rev} 이전 run ${p.stale_engine}건 → 재탐색 필요`] : [])].join('\n'),
-        level: p.stale_engine > 0 || s.bases.some((b) => !b.recorded) || s.bases.length > 1 ? 'warn' : 'ok', href: `#/predictions${q}` }
+        level: p.stale_engine > 0 || s.bases.some((b) => !b.recorded || readableBasis(b.label).unknown.length > 0) || s.bases.length > 1 ? 'warn' : 'ok', href: `#/predictions${q}` }
     : p.stale_engine > 0
       ? { key: 'pred', text: `등록 예측 ${p.stale_engine}/${p.current} 이전 model`, title: `현재 engine ${s.engine_rev} 이전 run에서 등록됨: ${Object.entries(p.engines).map(([e, n]) => `${e} ${n}`).join(', ')} → 재탐색 필요`, level: 'warn', href: `#/explore${q}` }
       : { key: 'pred', text: `등록 예측 ${p.current}`, title: `모두 ${s.engine_rev}`, level: 'ok', href: `#/predictions${q}` })
