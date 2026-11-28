@@ -108,7 +108,7 @@ export function assessRisk(r: BoardRow, ctx: RiskContext, peers: BoardRow[] = []
   else if (dominant.part === 'IP') focus.push({ lever: 'ip', text: `IP ${p.hw_mw.toFixed(0)} mW (${(100 * dominant.share).toFixed(0)}%) — DVFS level ±1 · IP mode 검토`, page: 'timing' })
   else focus.push({ lever: 'bw', text: `BW ${p.bw_mw.toFixed(0)} mW (${(100 * dominant.share).toFixed(0)}%) — compression · LLC · buffer 크기`, page: 'pipeline' })
   if (r.verdict === 'clock_up' || r.verdict === 'fail') focus.push({ lever: 'clock', text: 'SW 단축 또는 pipeline buffering으로 clock ↑ 회피 (Timing Budget)', page: 'timing' })
-  else if (slack !== null && slack > 30) focus.push({ lever: 'clock', text: `SW 여유 ${slack.toFixed(0)}% — IP clock level ↓ 여지 (Timing Budget ⑦)`, page: 'timing' })
+  else if (slack !== null && slack > 30) focus.push({ lever: 'clock', text: `SW 여유 ${slack.toFixed(0)}% — IP clock level ↓ 여지 (Timing Budget · IP clock level ±)`, page: 'timing' })
   if (staleWhy?.length) focus.unshift({ lever: 'measure', text: r.condition?.source === 'timing-budget' ? 'Timing Budget에서 같은 조건 재계산 → 다시 등록 (입력 변경)' : '조합 탐색 재실행 → 다시 등록 (입력 변경)', page: r.condition?.source === 'timing-budget' ? 'timing' : 'explore' })
   if (ctx.measured && !meas && nearTarget) focus.push({ lever: 'measure', text: '실측으로 예측 검증 (Calibration)', page: 'calibration' })
 

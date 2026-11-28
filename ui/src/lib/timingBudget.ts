@@ -166,6 +166,25 @@ export interface WhatIfRow {
   /** per stage, one clock per DVFS domain (absent before API stage_domains) */
   domains?: Partial<Record<StageId, DomainClock[]>>
 }
+/** R-4 mcps-v1 subsystem result (report.subsystems[node]); optional fields are absent on older reports */
+export interface SubsystemUnit { id: string; kind: string; value_source?: string | null; load_mcps?: number; freq_mhz?: number; util?: number; target_util?: number
+  clock_domain?: string; mw: number; dynamic_mw?: number; static_mw?: number; mv?: number; gated?: boolean }
+export interface SubsystemStage { id: string; kind: string; unit: string; load_mcps: number; value_source?: string | null; stream?: string; ms_per_period?: number; bind?: string; basis?: string }
+export interface SubsystemRoute { id: string; kind: string; stages: string[]; streams?: string[]; buffering_ms?: number; processing_ms?: number
+  latency_ms: number | null; latency_target_ms?: number | null; latency_ok?: boolean | null }
+export interface Subsystem {
+  model: string; mw: number; feasible: boolean; value_source?: string; basis?: string
+  domains?: Record<string, { units?: string[]; freq_mhz: number | null; levels_mhz?: number[]; pinned?: boolean; max_util?: number }>
+  units?: SubsystemUnit[]; stages?: SubsystemStage[]
+  deadline_slack?: { stream: string; period_ms: number; unit: string; slack_ms: number }[]
+  wake?: { per_s: number; sources: { kind: string; per_s: number; every_ms?: number; mb?: number }[] }
+  unattributed_units?: string[]
+  route?: SubsystemRoute | null; routes?: SubsystemRoute[]
+}
+export interface Residency { model: string; wakeups_per_s: number; screen_on?: boolean; status?: string; note?: string
+  sources: { node: string; kind: string; per_s: number; every_ms?: number; mb?: number; burst_ms?: number; active_ratio?: number }[]
+  /** present only with config.residency coefficients (status ok) */
+  mw?: number; cpu_wake_mw?: number; mif_state_mw?: number; mif_active_ratio?: number; value_source?: string; basis?: string }
 export interface TimingReport {
   condition_hash?: string
   scenario_id: string; variant_id: string; fps: number; period_ms: number; statistic: Statistic
@@ -177,8 +196,10 @@ export interface TimingReport {
   kpis?: KpiResult[]
   /** R-3 job-v1 event jobs (capture shot …) on top of the steady scenario (absent = none declared) */
   jobs?: EventJob[]
-  /** R-4 mcps-v1 subsystems by node (ABOX …); only the fields the summary reads are typed */
-  subsystems?: Record<string, { model: string; mw: number; feasible: boolean; domains?: Record<string, { freq_mhz: number | null; pinned?: boolean; max_util?: number }> }>
+  /** R-4 mcps-v1 subsystems by node (ABOX …) */
+  subsystems?: Record<string, Subsystem>
+  /** M-12 wake-residency-v1 (screen-off wake sources; mW only with config.residency coefficients) */
+  residency?: Residency | null
   eis: { on: boolean; auto: boolean; mode: EisMode; stabilization: unknown }
   mfc_dual: Record<string, number>; growth: { runtime_scale: number; latency_scale: number }
   dvfs: { tables: string[]; applied: boolean; table_ref?: string | null
