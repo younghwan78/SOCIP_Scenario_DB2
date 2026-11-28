@@ -119,20 +119,20 @@ function JobView({ j, kpis }: { j: EventJob; kpis: KpiResult[] }) {
       </div>
       <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
       <table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th>stage</th><th>phase</th><th>node</th><th style={{ textAlign: 'right' }}>start</th><th style={{ textAlign: 'right' }}>service</th><th style={{ textAlign: 'right' }}>elapsed</th><th style={{ textAlign: 'right' }}>대기</th><th>clock MHz</th><th style={{ textAlign: 'right' }}>MB</th><th style={{ textAlign: 'right' }}>mJ</th><th>출처</th></tr></thead>
+        <thead><tr><th>stage</th><th>phase</th><th>node</th><th className="n">start</th><th className="n">service</th><th className="n">elapsed</th><th className="n">대기</th><th>clock MHz</th><th className="n">MB</th><th className="n">mJ</th><th>출처</th></tr></thead>
         <tbody>
           {j.stages.map((s) => (
             <tr key={s.id} data-testid={`job-row-${s.id}`}>
               <td className="mono"><span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: kindColor(s.kind), marginRight: 4 }} />{s.id}{s.chunks > 1 ? <span className="faint"> ×{s.chunks}</span> : null}</td>
               <td className="faint">{s.phase}</td>
               <td className="faint">{s.nodes.join(', ')}</td>
-              <td className="mono" style={{ textAlign: 'right' }}>{fmt(s.start_ms, 2)}</td>
-              <td className="mono" style={{ textAlign: 'right' }}>{fmt(s.service_ms, 2)}</td>
-              <td className="mono" style={{ textAlign: 'right' }}>{fmt(s.elapsed_ms, 2)}</td>
-              <td className="mono" style={{ textAlign: 'right' }}>{waitMs(s) > 0.005 ? fmt(waitMs(s), 2) : '—'}</td>
+              <td className="mono n">{fmt(s.start_ms, 2)}</td>
+              <td className="mono n">{fmt(s.service_ms, 2)}</td>
+              <td className="mono n">{fmt(s.elapsed_ms, 2)}</td>
+              <td className="mono n">{waitMs(s) > 0.005 ? fmt(waitMs(s), 2) : '—'}</td>
               <td className="mono faint">{Object.entries(s.clock_mhz ?? {}).map(([n, f]) => `${n} ${fmt(f, 0)}`).join(' · ') || '—'}</td>
-              <td className="mono" style={{ textAlign: 'right' }}>{fmt(s.mb, 1)}</td>
-              <td className="mono" style={{ textAlign: 'right' }}>{s.energy_attributed === false ? '—' : fmt(s.energy_mj, 2)}</td>
+              <td className="mono n">{fmt(s.mb, 1)}</td>
+              <td className="mono n">{s.energy_attributed === false ? '—' : fmt(s.energy_mj, 2)}</td>
               <td><span className={`badge ${SOURCE_BADGE[s.value_source] ?? 'v-info'}`} title={s.value_source === 'measured' ? 'jobs.measured.yaml 실측 slot' : s.value_source === 'assumed' ? 'E2600 가정값 — 사내 실측 slot으로 교체' : s.value_source}>{s.value_source === 'measured' ? '실측' : s.value_source === 'assumed' ? '가정' : s.value_source}</span></td>
             </tr>
           ))}

@@ -318,7 +318,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
           </div>}
           <div className="table-scroll" style={{ flexGrow: 1 }}>
             {variantsQ.error && <div className="err" style={{ margin: 12 }}>{variantsQ.error}</div>}
-            <DataTable id="explorer.variants" columns={shownColumns} rows={visible} rowKey={(r) => r.variant_id}
+            <DataTable id="explorer.variants" tools columns={shownColumns} rows={visible} rowKey={(r) => r.variant_id}
               rowClass={(r) => (r.variant_id === reference ? 'sel' : '')} stickyTop={isRef} />
             {!variantsQ.loading && !visible.length && <div className="empty">조건에 맞는 variant가 없습니다.</div>}
             {variantsQ.loading && <div className="empty">불러오는 중…</div>}

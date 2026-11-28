@@ -429,13 +429,13 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         ) },
         { id: 'dma', label: <>DMA · Buffer <span className="tab-note">{model?.buffers.length ?? 0} · {model?.totalMBs.toFixed(0) ?? 0} MB/s</span></>, content: (
         <div className="table-scroll" style={{ height: '100%' }}>
-          {model && <DataTable id="pipeline.dma" columns={bufCols} rows={bufsBySeq} rowKey={(b) => b.name}
+          {model && <DataTable id="pipeline.dma" tools columns={bufCols} rows={bufsBySeq} rowKey={(b) => b.name}
             rowClass={(b) => `${selected === `buf:${b.name}` ? 'sel' : ''} ${b.enabled ? (b.llc ? 'row-llc' : b.compression.on ? 'row-sbwc' : '') : 'row-off'}`} onRowClick={(b) => selectNode(`buf:${b.name}`)} />}
         </div>
         ) },
         { id: 'ips', label: <>IP In/Out · Timing <span className="tab-note">{model?.ips.length ?? 0}</span></>, content: (
         <div className="table-scroll" style={{ height: '100%' }}>
-          {model && <DataTable id="pipeline.ips" columns={ipCols} rows={ipsBySeq} rowKey={(i) => i.pid} onRowClick={onIpRow}
+          {model && <DataTable id="pipeline.ips" tools columns={ipCols} rows={ipsBySeq} rowKey={(i) => i.pid} onRowClick={onIpRow}
             rowClass={(i) => (i.pid === selectedPid ? 'sel' : '')} />}
           <div className="faint" style={{ fontSize: 11, padding: '6px 12px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <span># = Sequence 순서 (기본 정렬) · +start = frame의 sensor readout 시작 기준 평균 · * = trace 없음, 정의된 SW time(assumed)</span>
