@@ -6,6 +6,7 @@ import { hasIntervalJudgement, summaryTiles } from '../lib/timingTiles'
 import { JobCard } from '../components/JobCard'
 import { SW_MARGINS, runtimeScaleOf, fmt, marginOf, marginOpts, pct0, timingApi, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { VerdictPair } from '../components/VerdictPair'
+import { Hint } from '../components/Hint'
 import { SubsystemCard } from '../components/SubsystemCard'
 import { groupNotes, NOTE_KIND_LABEL } from '../lib/verdictNotes'
 import type { ReactNode } from 'react'
@@ -113,17 +114,15 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         <button className="btn" aria-expanded={condOpen} data-testid="tb-cond-toggle" onClick={() => setCondOpen(!condOpen)}
           title="SW 통계 · EIS · SW 증가 · CPU 모델 · 처리량 · margin · 설정 profile · 실측 입력 · power params. 지금 값은 아래 예측 조건 줄에 요약">{condOpen ? '조건 접기 ▴' : '조건 바꾸기 ▾'}</button>
         {(condOpen || !!q.error) && <>
-        <span title={STAT_TIP}><Seg label="SW 통계" value={statistic} options={[['mean', 'mean (기본)'], ['max', 'max']]} onPick={(v) => set('stat', v === DEFAULT_STATISTIC ? undefined : v)} /></span>
+        <Seg hint={STAT_TIP} label="SW 통계" value={statistic} options={[['mean', 'mean (기본)'], ['max', 'max']]} onPick={(v) => set('stat', v === DEFAULT_STATISTIC ? undefined : v)} />
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
-        <span title="가정 = 한 cluster·고정 OPP의 coeff·f·V²·util (기존) · 측정 profile = 이 variant의 측정 CPU profile을 EAS + schedutil로 재현, SW 증가에 따라 OPP·DSU·leakage가 함께 변함 (CPU BW도 측정 bus bytes)">
-          <Seg label="CPU 모델" value={cpuModel} options={[['flat', '가정'], ['profile', '측정 profile']]} onPick={(v) => set('cpu', v === 'flat' ? undefined : v)} /></span>
-        <span title={'pipeline (buffer) = stage 사이 M2M buffer로 분리: 각 SW task가 1 frame 안에, NRT/Post HW는 IP rule clock. SW+HW 합이 period를 넘으면 latency만 증가하고 fps는 출력 간격으로 판정 (기본)\nstage 1 frame = NRT · Post SW + HW 합이 1 frame 안에 (보수적, 이전 기준)'}>
-          <Seg label="처리량 기준" value={tpParam ?? (q.data?.report?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : q.data?.report ? 'stage' : policyTp)}
+        <Seg hint="가정 = 한 cluster·고정 OPP의 coeff·f·V²·util (기존) · 측정 profile = 이 variant의 측정 CPU profile을 EAS + schedutil로 재현, SW 증가에 따라 OPP·DSU·leakage가 함께 변함 (CPU BW도 측정 bus bytes)" label="CPU 모델" value={cpuModel} options={[['flat', '가정'], ['profile', '측정 profile']]} onPick={(v) => set('cpu', v === 'flat' ? undefined : v)} />
+        <Seg hint={'pipeline (buffer) = stage 사이 M2M buffer로 분리: 각 SW task가 1 frame 안에, NRT/Post HW는 IP rule clock. SW+HW 합이 period를 넘으면 latency만 증가하고 fps는 출력 간격으로 판정 (기본) · stage 1 frame = NRT · Post SW + HW 합이 1 frame 안에 (보수적, 이전 기준)'} label="처리량 기준" value={tpParam ?? (q.data?.report?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : q.data?.report ? 'stage' : policyTp)}
             options={[['pipelined', `pipeline (buffer)${policyTp === 'pipelined' ? ' · 과제 기준' : ''}`], ['stage', `stage 1 frame${policyTp === 'stage' ? ' · 과제 기준' : ''}`]]}
-            onPick={(v) => set('tp', v === policyTp ? undefined : v)} /></span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="RT · Output HW는 frame period의 (1 − margin) 안에 끝나야 함. NRT · Post 필요 clock의 rule 기준선도 같은 margin을 사용. 기본 25%">
-          <span className="muted" style={{ fontSize: 13 }}>SW margin</span>
+            onPick={(v) => set('tp', v === policyTp ? undefined : v)} />
+        <div className="tb-seg">
+          <span className="muted tb-seg-label">SW margin<Hint label="SW margin 뜻" text="RT · Output HW는 frame period의 (1 − margin) 안에 끝나야 함. NRT · Post 필요 clock의 rule 기준선도 같은 margin을 사용. 기본 25%" /></span>
           <div className="seg" role="group" aria-label="SW margin">
             {SW_MARGINS.map((m) => <button key={m} className={Math.abs(margin - m) < 1e-9 ? 'on' : ''} onClick={() => set('margin', Math.abs(m - 0.25) < 1e-9 ? undefined : String(Math.round(m * 100)))}>{pct0(m)}{Math.abs(m - 0.25) < 1e-9 ? ' (기본)' : ''}</button>)}
           </div>
@@ -151,8 +150,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         {r && <VerdictPair verdict={r.verdict} kpis={r.kpis} fpsSource={r.fps_source} />}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}
           onClick={() => { const d = document.getElementById('tb-warnings') as HTMLDetailsElement | null; if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }) } }}>경고 {r.warnings.length}</button>}
-        {r && <span className="chip" title={r.fps_source ? `판정 주기 출처: ${r.fps_source}` : undefined}>{fmt(r.fps, 0)} fps · P {fmt(r.period_ms, 3)} ms</span>}
-        {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
+        {r && <span className="chip">{fmt(r.fps, 0)} fps · P {fmt(r.period_ms, 3)} ms{r.fps_source && <Hint label="판정 주기 출처" text={`판정 주기 출처: ${r.fps_source}`} />}</span>}
+        {r && <span className="chip">DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}{r.dvfs.tables.length > 0 && <Hint label="DVFS table" text={`사용 table: ${r.dvfs.tables.join(', ')}`} />}</span>}
         <button className="btn" title="현재 scenario의 모든 variant를 같은 모델(CPU · 처리량 · margin · 통계)로" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp, stat: ctx.params.stat })}>전체 variant →</button>
       </div>
       {r && variant && <RegistrationBasis guard={guard} />}
@@ -269,10 +268,10 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
   </>
 }
 
-function Seg({ label, value, options, onPick }: { label: string; value: string; options: string[][]; onPick: (v: string) => void }) {
+function Seg({ label, value, options, onPick, hint }: { label: string; value: string; options: string[][]; onPick: (v: string) => void; hint?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span className="muted" style={{ fontSize: 13 }}>{label}</span>
+    <div className="tb-seg">
+      <span className="muted tb-seg-label">{label}{hint && <Hint label={` 뜻`} text={hint} />}</span>
       <div className="seg" role="group" aria-label={label}>
         {options.map(([v, l]) => <button key={v} className={value === v ? 'on' : ''} onClick={() => onPick(v)}>{l}</button>)}
       </div>

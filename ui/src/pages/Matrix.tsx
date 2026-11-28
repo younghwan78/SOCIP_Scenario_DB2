@@ -140,9 +140,9 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       </div>} main={<>
       {q.error && <div className="err">{q.error}</div>}
       <div className="panel table-scroll" style={{ flexGrow: 1 }}>
-        {grouped ? <DataTable id="matrix" columns={columns} groups={tableGroups.filter((g) => g.rows.length || (!search && !load && !provFilter))} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
+        {grouped ? <DataTable id="matrix" tools columns={columns} groups={tableGroups.filter((g) => g.rows.length || (!search && !load && !provFilter))} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
           rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} pinTop={(r) => r.variant_id === refs.get(r.scenario_id)?.id} />
-          : <DataTable id="matrix.flat" columns={flatCols} rows={flatRows} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
+          : <DataTable id="matrix.flat" tools columns={flatCols} rows={flatRows} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
             rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} />}
         {q.loading && <div className="empty">불러오는 중…</div>}
       </div>

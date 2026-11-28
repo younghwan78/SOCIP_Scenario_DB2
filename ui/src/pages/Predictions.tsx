@@ -24,6 +24,14 @@ import { catalogContract, registrationPath } from '../lib/contract'
 import { BasisPanel } from '../components/BasisPanel'
 import { PredictionCollaboration } from '../components/PredictionCollaboration'
 
+/** X-08: column bundles of the 21-column board (the Variant column is sticky and always shown) */
+const BOARD_PRESETS = [
+  { id: 'power', label: 'Power', keys: ['tot', 'cpu', 'hw', 'bwip', 'bwcpu', 'bw', 'd', 'opt', 'range', 'comp'] },
+  { id: 'timing', label: 'Timing', keys: ['fps', 'risk', 'tot', 'cond', 'dvfs'] },
+  { id: 'verify', label: '검증', keys: ['risk', 'tot', 'range', 'ver', 'd'] },
+  { id: 'register', label: '등록', keys: ['experiment', 'tot', 'd', 'src', 'cond', 'at', 'author'] },
+]
+
 const regProv = (r: BoardRow): Prov => ({
   kind: 'registered', engine: r.condition?.source === 'timing-budget' ? 'Timing Budget 조건' : 'Arch exploration', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
   id: r.id, at: r.created_at, notes: [`run: ${r.run_title ?? r.run_id}`, `선택: ${r.selection_rule} · SW ${r.statistic} ×${r.runtime_scale}`],
@@ -179,7 +187,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           <Card id="pr-table" title="예측 현황 (current)" note="header 클릭 = 정렬 · 행 클릭 = 변경 원인" defaultWide minHeight={260}>
             <SplitLegend />
             <div className="table-x">
-              <DataTable id="arch.board" tools columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => choose(r.id)} defaultSort={{ key: 'tot', dir: -1 }}
+              <DataTable id="arch.board" tools={{ presets: BOARD_PRESETS, filename: 'predictions' }} columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => choose(r.id)} defaultSort={{ key: 'tot', dir: -1 }}
                 rowClass={(r) => (r.id === ctx.params.v ? 'selected' : '')} />
             </div>
           </Card>

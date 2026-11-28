@@ -37,7 +37,7 @@ export function KpiTable({ rows }: { rows: KpiResult[] }) {
   return <>
     {judged.length > 0 && <div style={{ overflowX: 'auto' }}><table className="tb-mini-table" style={{ width: '100%' }}>
       <thead>
-        <tr><th>KPI</th><th>대상</th><th style={{ textAlign: 'right' }}>값</th><th style={{ textAlign: 'right' }}>목표</th><th><Term id="kpi-verdict">판정</Term></th><th>목표 출처</th><th>입력 출처</th><th>note</th></tr>
+        <tr><th>KPI</th><th>대상</th><th className="n">값</th><th className="n">목표</th><th><Term id="kpi-verdict">판정</Term></th><th>목표 출처</th><th>입력 출처</th><th>note</th></tr>
       </thead>
       <tbody>
         {judged.map((r, i) => {
@@ -45,8 +45,8 @@ export function KpiTable({ rows }: { rows: KpiResult[] }) {
           return <tr key={key(r, i)} data-testid={`kpi-${r.status}`}>
             <Name r={r} />
             <td className="faint">{[r.job, r.milestone].filter(Boolean).join(' · ') || '—'}</td>
-            <td className="mono" style={{ textAlign: 'right' }}>{num(r.value)} {r.value != null && r.unit}</td>
-            <td className="mono" style={{ textAlign: 'right' }}>{r.target == null ? '—' : `${r.bound === 'min' ? '≥' : '≤'} ${num(r.target)} ${r.unit}`}</td>
+            <td className="mono n">{num(r.value)} {r.value != null && r.unit}</td>
+            <td className="mono n">{r.target == null ? '—' : `${r.bound === 'min' ? '≥' : '≤'} ${num(r.target)} ${r.unit}`}</td>
             <td><span className={`badge ${BADGE[r.status]}`}>{LABEL[r.status]}</span></td>
             <td>{ts ? <span className={`badge ${ts[0]}`} title={ts[2]}>{ts[1]}</span> : r.value_source && r.target != null ? <span className="badge v-na">{r.value_source}</span> : <span className="faint">—</span>}</td>
             <td><Inputs r={r} /></td>
@@ -60,7 +60,7 @@ export function KpiTable({ rows }: { rows: KpiResult[] }) {
       <div style={{ overflowX: 'auto' }}><table className="tb-mini-table" style={{ width: '100%' }}>
         <tbody>{reference.map((r, i) => <tr key={key(r, i)} data-testid="kpi-no_target">
           <Name r={r} /><td className="faint">{[r.job, r.milestone].filter(Boolean).join(' · ') || '—'}</td>
-          <td className="mono" style={{ textAlign: 'right' }}>{num(r.value)} {r.value != null && r.unit}</td>
+          <td className="mono n">{num(r.value)} {r.value != null && r.unit}</td>
           <td><Inputs r={r} /></td><td><Note r={r} /></td></tr>)}</tbody>
       </table></div>
     </div>}

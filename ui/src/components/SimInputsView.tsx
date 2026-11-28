@@ -55,7 +55,7 @@ export function SimInputsView({ data, error, loading, selected, onSelect }: {
         <span className="chip" title="HW 실행 시간 · power · BW 출처">{data.simulation_ref ? `sim ${data.simulation_ref}` : 'simulation evidence 없음'}</span>
         {data.measurement_ref && <span className="chip" title="SW 실측 비교 대상">실측 {data.measurement_ref}</span>}
       </div>
-      <DataTable id="pipeline.sim-inputs" columns={cols} groups={groups} rowKey={(r) => r.node_id}
+      <DataTable id="pipeline.sim-inputs" tools columns={cols} groups={groups} rowKey={(r) => r.node_id}
         rowClass={(r) => (r.node_id === selected ? 'sel' : '')} onRowClick={(r) => onSelect(r.node_id)} />
       {data.checks.length > 0 && <div className="sim-checks">
         <h5>점검</h5>

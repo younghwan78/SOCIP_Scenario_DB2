@@ -511,6 +511,9 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .tb-page { container-type: inline-size; }
 @container (max-width: 760px) { .tb-grid { grid-template-columns: minmax(0, 1fr); } .tb-card .wide-toggle { display: none; } }
 /* X-04 two-cell verdict · X-10 card groups · X-05 notes · X-03 subsystem */
+.tb-mini-table .n { text-align: right; }
+.tb-seg { display: flex; align-items: center; gap: 8px; }
+.tb-seg-label { font-size: var(--fs-body); display: inline-flex; align-items: center; gap: 2px; }
 .verdict-pair { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .verdict-cell { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .tb-group-head { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 -2px; }

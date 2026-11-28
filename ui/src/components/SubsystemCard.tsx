@@ -24,18 +24,18 @@ export function SubsystemView({ node, s }: { node: string; s: Subsystem }) {
       <div className="faint t-caption">unit 부하 · {s.model} · 합계 {fmt(s.mw, 2)} mW{!s.feasible && <b style={{ color: 'var(--del-text)' }}> · 실행 불가</b>}</div>
       <div style={{ overflowX: 'auto' }}>
         <table className="tb-mini-table" style={{ width: '100%' }}>
-          <thead><tr><th>unit</th><th>kind</th><th style={{ textAlign: 'right' }}>MCPS</th><th>util / 목표</th><th style={{ textAlign: 'right' }}>mW</th><th>출처</th></tr></thead>
+          <thead><tr><th>unit</th><th>kind</th><th className="n">MCPS</th><th>util / 목표</th><th className="n">mW</th><th>출처</th></tr></thead>
           <tbody>
             {(s.units ?? []).map((u) => (
               <tr key={u.id} data-testid={`ss-unit-${u.id}`}>
                 <td className="mono">{u.id}{u.gated && <span className="faint"> · gated</span>}</td>
                 <td className="faint">{u.kind}</td>
-                <td className="mono" style={{ textAlign: 'right' }}>{u.load_mcps == null ? '—' : fmt(u.load_mcps, 1)}</td>
+                <td className="mono n">{u.load_mcps == null ? '—' : fmt(u.load_mcps, 1)}</td>
                 <td>{u.util == null ? <span className="faint">—</span> : <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                   <span className="ss-bar" style={{ width: 80 }}><span className={u.target_util != null && u.util > u.target_util ? 'bad' : ''} style={{ width: `${Math.min(100, u.util * 100)}%` }} />
                     {u.target_util != null && <i style={{ left: `${Math.min(100, u.target_util * 100)}%` }} />}</span>
                   <span className="mono t-caption">{pct(u.util)}{u.target_util != null && <span className="faint"> / {pct(u.target_util)}</span>}</span></span>}</td>
-                <td className="mono" style={{ textAlign: 'right' }}>{fmt(u.mw, 2)}</td>
+                <td className="mono n">{fmt(u.mw, 2)}</td>
                 <td><SourceBadge source={u.value_source} /></td>
               </tr>))}
           </tbody>
@@ -89,12 +89,12 @@ export function ResidencyView({ r }: { r: Residency }) {
       <SourceBadge source={r.value_source} />
     </div> : <div className="faint">{r.note ?? '계수 없음: wake 횟수만 보고'}</div>}
     <table className="tb-mini-table" style={{ width: '100%', marginTop: 4 }}>
-      <thead><tr><th>node</th><th>kind</th><th style={{ textAlign: 'right' }}>/s</th><th style={{ textAlign: 'right' }}>주기</th><th style={{ textAlign: 'right' }}>MB</th><th style={{ textAlign: 'right' }}>burst</th></tr></thead>
+      <thead><tr><th>node</th><th>kind</th><th className="n">/s</th><th className="n">주기</th><th className="n">MB</th><th className="n">burst</th></tr></thead>
       <tbody>{r.sources.map((s, i) => <tr key={`${s.node}-${s.kind}-${i}`}>
-        <td className="mono">{s.node}</td><td className="faint">{s.kind}</td><td className="mono" style={{ textAlign: 'right' }}>{fmt(s.per_s, 2)}</td>
-        <td className="mono" style={{ textAlign: 'right' }}>{s.every_ms == null ? '—' : `${fmt(s.every_ms, 0)} ms`}</td>
-        <td className="mono" style={{ textAlign: 'right' }}>{s.mb == null ? '—' : fmt(s.mb, 2)}</td>
-        <td className="mono" style={{ textAlign: 'right' }}>{s.burst_ms == null ? '—' : `${fmt(s.burst_ms, 2)} ms`}</td></tr>)}</tbody>
+        <td className="mono">{s.node}</td><td className="faint">{s.kind}</td><td className="mono n">{fmt(s.per_s, 2)}</td>
+        <td className="mono n">{s.every_ms == null ? '—' : `${fmt(s.every_ms, 0)} ms`}</td>
+        <td className="mono n">{s.mb == null ? '—' : fmt(s.mb, 2)}</td>
+        <td className="mono n">{s.burst_ms == null ? '—' : `${fmt(s.burst_ms, 2)} ms`}</td></tr>)}</tbody>
     </table>
   </div>
 }

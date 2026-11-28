@@ -316,7 +316,7 @@ export function IpInternalView({ model, selectedPid, onSelect }: { model: Pipeli
           <span className="faint">예: stat WDMA = 주황 실선(DMA) + STAT · ↓/↑ = 입력 대비 출력 scale · 회색 점선 칸 = catalog에 있으나 이 variant 미사용</span>
         </div>
         <div className="ipv-svg"><IpDiagram ip={ip} /></div>
-        <div className="ipv-table"><DataTable id="ip.ports" columns={portCols} rows={rows} rowKey={(p) => `${p.dir}|${p.port}|${p.buffer ?? ''}|${p.peer ?? ''}`} /></div>
+        <div className="ipv-table"><DataTable id="ip.ports" tools columns={portCols} rows={rows} rowKey={(p) => `${p.dir}|${p.port}|${p.buffer ?? ''}|${p.peer ?? ''}`} /></div>
       </section> : <div className="empty">IP 정보가 없습니다.</div>}
     </div>
   )

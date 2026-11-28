@@ -26,10 +26,10 @@ export function DecisionCard({ title, verdict, reasons = [], target, delta, caut
   return <section className="decision" aria-label={title}>
     <div className="decision-head">
       <b>{title}</b>
-      {verdict === 'not_applicable' ? <TimingVerdictBadge status="not_applicable" /> : <Term id="spec"><SpecBadge ok={verdict === 'ok'} /></Term>}
+      {verdict === 'not_applicable' ? <Term id="timing-verdict"><TimingVerdictBadge status="not_applicable" /></Term> : <Term id="spec"><SpecBadge ok={verdict === 'ok'} /></Term>}
     </div>
     <dl className="decision-facts">
-      <dt>등록 대상</dt><dd>{target}</dd>
+      <dt><Term id="eligible">등록 대상</Term></dt><dd>{target}</dd>
       {delta && <><dt><Term id="baseline">baseline 대비</Term></dt><dd>{delta}</dd></>}
       {reasons.length > 0 && <><dt>판정 사유</dt><dd className="err">{reasons.slice(0, 2).join(' · ')}</dd></>}
     </dl>
@@ -47,7 +47,7 @@ export function ExplorationDecision({ c, action }: { c: Conclusion; action?: Rea
   const t = c.target
   return <DecisionCard title="결론" verdict={c.verdict} reasons={c.reasons} cautions={c.cautions} more={c.more} action={action}
     target={t ? <><span className="mono"><b>{fmt(t.total_mw, 1)}</b> mW</span> · {c.targetLabel} <span className="faint mono">({c.rule})</span>
-      <div className="faint mono" style={{ fontSize: 12 }}>{t.statistic} ×{t.runtime_scale} · {t.compression.length ? `${t.compression.length} buffer 압축` : '무압축'} · DVFS {Object.entries(t.dvfs).map(([d, l]) => `${d}:${l}`).join(' ') || '—'}</div></>
+      <div className="faint mono t-caption">{t.statistic} ×{t.runtime_scale} · {t.compression.length ? `${t.compression.length} buffer 압축` : '무압축'} · DVFS {Object.entries(t.dvfs).map(([d, l]) => `${d}:${l}`).join(' ') || '—'}</div></>
       : <span className="err">등록 가능한 조합 없음</span>}
     delta={c.delta ? <span className="mono">{signed(c.delta.total_mw)} mW{c.delta.total_pct != null ? ` (${signed(c.delta.total_pct)}%)` : ''} · BW {signed(c.delta.bw_mbs, 0)} MB/s</span> : undefined} />
 }
