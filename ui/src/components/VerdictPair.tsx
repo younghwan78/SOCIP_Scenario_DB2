@@ -9,7 +9,7 @@ const ORDER: KpiStatus[] = ['fail', 'no_input', 'unmodeled', 'pass', 'no_target'
 /** "KPI 통과 2" / "KPI 미달 1 (heap) · 통과 3" / "KPI 통과 4 · 목표 없음 2" / null when no KPI is declared.
  * Every status with a count is listed (a reference-only "목표 없음" must not hide the passes); the colour is
  * the worst judged status — a target-less KPI alone never colours the cell. */
-export function kpiPairText(k: Verdict['kpis'], rows?: KpiResult[] | null): { cls: string; text: string; status: KpiStatus } | null {
+export function kpiPairText(k: Verdict['kpis'], rows?: Pick<KpiResult, 'status' | 'kpi' | 'id' | 'job' | 'milestone' | 'metric'>[] | null): { cls: string; text: string; status: KpiStatus } | null {
   if (!k?.status) return null
   const count = (s: KpiStatus) => k[s] ?? (rows ?? []).filter((r) => r.status === s).length
   const present = ORDER.filter((s) => count(s) > 0)

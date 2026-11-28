@@ -13,6 +13,7 @@ import { useSimProfiles } from '../lib/simProfile'
 import { ISSUE_LABEL, ISSUE_ORDER, issueCounts, verdictIssues, type IssueCode } from '../lib/provenance'
 import { KpiCell } from '../components/KpiTable'
 import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
+import { timingAxis } from '../lib/verdictNotes'
 
 type Filter = 'all' | 'ok' | 'clock_up' | 'fail' | 'not_applicable'
 
@@ -55,7 +56,8 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     { key: 'cpu', label: 'CPU %', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.share_pct.cpu, render: (r) => fmt(r.power.share_pct.cpu, 0) },
     { key: 'bw', label: 'BW MB/s', width: 90, align: 'right', firstDir: -1, sort: (r) => r.bw.total_mbs, render: (r) => fmt(r.bw.total_mbs, 0) },
     { key: 'kpi', label: 'KPI', width: 120, sort: (r) => KPI_RANK[r.verdict.kpis?.status ?? 'none'], title: (r) => kpiTitle(r), render: (r) => <KpiCell r={r} /> },
-    { key: 'verdict', label: '판정', width: 200, sort: (r) => ({ not_applicable: -1, fail: 0, clock_up: 1, ok: 2 }[r.verdict.status]), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <TimingVerdictBadge status={r.verdict.status} /> },
+    // X-04: the Timing column shows the timing axis only; a KPI fail is in the KPI column (the server folds it into status)
+    { key: 'verdict', label: 'Timing', width: 200, sort: (r) => ({ not_applicable: -1, fail: 0, clock_up: 1, ok: 2 }[timingAxis(r.verdict).status]), title: (r) => timingAxis(r.verdict).reasons.join('\n'), render: (r) => <TimingVerdictBadge status={timingAxis(r.verdict).status} /> },
     { key: 'why', label: '원인', width: 260, sort: (r) => verdictIssues(r.verdict.reasons).map((i) => i.code).join(','), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <Issues r={r} /> },
   ]
 

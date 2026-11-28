@@ -526,6 +526,8 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .ss-bar > span.bad { background: var(--del-text); }
 .ss-bar > i { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed var(--muted); }
 .kpi-src { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.contract-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.contract-badges .chip { font-size: 10.5px; padding: 0 5px; }
 
 /* ---------- architecture exploration / predictions / reports ---------- */
 .ax-form { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 18px; }

@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from scenario_db.api.routers.explorer import (
+    _contract_summary,
     _count_matching_ips,
     _count_matching_socs,
     _count_matching_sw_profiles,
@@ -356,3 +357,18 @@ def test_variant_matrix_does_not_present_broken_inheritance_as_effective_conditi
         variant_matrix(soc_ref=None, board_type=None, project_ref=None, category=None,
                        domain=None, scenario_id=None, severity=None, limit=10, offset=0, db=session)
     assert error.value.status_code == 422
+
+
+def test_contract_summary_reads_judgement_jobs_and_subsystems():
+    """X-06 / X-15: the catalog carries what a scenario declares for judgement (no simulation)."""
+    pipeline = {
+        "nodes": [{"id": "speaker"}, {"id": "abox", "subsystem": {"model": "mcps-v1"}}],
+        "judgement": {"rate": {"hz": 50.0}, "kpis": ["underrun", "latency"],
+                      "sinks": [{"node": "speaker", "kind": "audio"}],
+                      "targets": [{"id": "aud-slack", "kpi": "underrun", "min": 0.5}]},
+        "jobs": [{"id": "still_shot"}],
+    }
+    assert _contract_summary(pipeline) == {
+        "rate": "hz 50", "sinks": [{"node": "speaker", "kind": "audio"}], "kpis": ["latency", "underrun"],
+        "targets": 1, "jobs": ["still_shot"], "subsystems": ["abox"]}
+    assert _contract_summary({}) == {"rate": None, "sinks": [], "kpis": [], "targets": 0, "jobs": [], "subsystems": []}

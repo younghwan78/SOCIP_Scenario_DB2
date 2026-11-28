@@ -171,6 +171,7 @@ def scenario_catalog(
                 buffer_count=len(pipeline.get("buffers") or {}),
                 default_variant_id=default_variant_id,
                 viewer_query=_viewer_query(project, scenario.id, default_variant_id),
+                contract=_contract_summary(pipeline),
             )
         )
     # O-05: content ETag — the UI reloads the catalog on every start; an unchanged DB answers 304
@@ -765,6 +766,22 @@ def _unique_strings(values: list[Any]) -> list[str]:
         seen.add(key)
         result.append(text)
     return result
+
+
+def _contract_summary(pipeline: dict) -> dict:
+    """X-06 / X-15: what the scenario declares for judgement (rate, sinks, KPIs) and which result kinds it has
+    (event jobs, subsystems). Read from the stored pipeline only; no simulation."""
+    j = pipeline.get("judgement") or {}
+    rate = j.get("rate") or {}
+    kpis = sorted({str(k) for k in (j.get("kpis") or [])} | {str(t.get("kpi")) for t in (j.get("targets") or []) if t.get("kpi")})
+    return {
+        "rate": next((f"{k} {v:g}" if isinstance(v, (int, float)) else str(k) for k, v in rate.items()), None) if rate else None,
+        "sinks": [{"node": str(s.get("node")), "kind": str(s.get("kind"))} for s in (j.get("sinks") or []) if isinstance(s, dict)],
+        "kpis": kpis,
+        "targets": len(j.get("targets") or []),
+        "jobs": [str(x.get("id")) for x in (pipeline.get("jobs") or []) if isinstance(x, dict) and x.get("id")],
+        "subsystems": [str(n.get("id")) for n in (pipeline.get("nodes") or []) if isinstance(n, dict) and n.get("subsystem")],
+    }
 
 
 def _viewer_query(project: Project, scenario_id: str, variant_id: str | None) -> dict[str, str]:

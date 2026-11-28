@@ -772,7 +772,9 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
         q = q.filter(Prediction.project_ref == project_ref)
     current = q.order_by(Prediction.scenario_ref, Prediction.variant_ref).all()
     prev_ids = [p.supersedes_ref for p, _ in current if p.supersedes_ref]
-    prev = {pid: m for pid, m in db.query(Prediction.id, _metrics_subset(("power", "model_lineage")))
+    prev = {pid: m | {"_case_key": ck} for pid, ck, m in db.query(
+                Prediction.id, Prediction.case_key,
+                _metrics_subset(("power", "model_lineage", "verdict", "statistic", "runtime_scale")))
             .filter(Prediction.id.in_(prev_ids)).all()} if prev_ids else {}
     runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.title, ArchExplorationRun.created_at,
                                        ArchExplorationRun.scenario_type,
@@ -797,13 +799,22 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
             "previous": ({"id": old["id"], "total_mw": old["metrics"]["power"]["total_mw"],
                           "delta_mw": round(m["power"]["total_mw"] - old["metrics"]["power"]["total_mw"], 3),
                           "lineage_changes": lineage_differences(old["metrics"].get("model_lineage"),
-                                                                 m.get("model_lineage"))} if old else None),
+                                                                 m.get("model_lineage")),
+                          # X-09: what the change is — value, verdict or the analysis condition itself
+                          "verdict": old["metrics"].get("verdict"),
+                          "condition_changed": _condition_changed(p, m, old["metrics"])} if old else None),
             "power_options": board_options(m.get("power_options"), reviews.get(p.scenario_ref, {}), p.variant_ref),
             "verdict_detail": verdict_detail(m),
             "throughput_model": m.get("throughput_model") or "stage",
             "condition": _condition(run, m),
         })
     return {"rows": rows, "review_statuses": list(POWER_OPTION_STATUSES)}
+
+
+def _condition_changed(p: Prediction, m: dict[str, Any], old: dict[str, Any]) -> bool:
+    """The registered case (axis values) or the SW statistic / growth differs from the superseded prediction."""
+    return (old.get("_case_key") != p.case_key or old.get("statistic") != m.get("statistic")
+            or old.get("runtime_scale") != m.get("runtime_scale"))
 
 
 def _condition(run, m: dict[str, Any]) -> dict[str, Any]:

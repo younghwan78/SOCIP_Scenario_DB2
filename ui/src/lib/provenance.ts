@@ -146,6 +146,25 @@ export interface ModelStatus {
 export type StatusLevel = 'ok' | 'warn' | 'info'
 export interface StatusItem { key: string; text: string; title: string; level: StatusLevel; href?: string }
 
+/** X-11: the server's short basis label (``cfg2 · pmp2 · e16``, ``cfg? · …``, ``미기록 · e9``) spelled out, one
+ * token one meaning, plus whether something is unrecorded (shown with a warning mark and explained). */
+export function readableBasis(label: string): { text: string; unknown: string[] } {
+  const unknown: string[] = []
+  const text = label.split(' · ').map((t) => {
+    if (t === '미기록') { unknown.push('이 run은 설정 선택(config profile · power params)을 기록하지 않은 이전 engine run'); return '설정 미기록' }
+    if (t === 'cfg?') { unknown.push('config profile은 기록됐지만 그 버전이 catalog에 없음'); return 'config 버전 미기록' }
+    if (t === 'pmp?') { unknown.push('power params는 기록됐지만 그 버전이 catalog에 없음'); return 'power params 버전 미기록' }
+    if (t === 'e?') { unknown.push('engine revision 미기록'); return 'engine 미기록' }
+    let m = /^cfg(\d+)$/.exec(t); if (m) return `config v${m[1]}`
+    m = /^pmp(\d+)$/.exec(t); if (m) return `power params v${m[1]}`
+    m = /^e(\d+)$/.exec(t); if (m) return `engine ${m[1]}`
+    if (t === 'cfg 기본') return 'config 기본'
+    if (t === 'pmp 기본') return 'power params 기본'
+    return t
+  }).join(' · ')
+  return { text, unknown }
+}
+
 export function statusItems(s: ModelStatus, project?: string): StatusItem[] {
   const q = project ? `?project=${encodeURIComponent(project)}` : ''
   const items: StatusItem[] = []
@@ -173,9 +192,10 @@ export function statusItems(s: ModelStatus, project?: string): StatusItem[] {
   items.push(p.current === 0
     ? { key: 'pred', text: '등록 예측 없음', title: '조합 탐색에서 등록', level: 'info', href: `#/explore${q}` }
     : s.bases?.length
-      ? { key: 'pred', text: `예측 기준 ${s.bases.slice(0, 2).map((b) => `${b.label} ${b.predictions}`).join(' · ')}${s.bases.length > 2 ? ` 외 ${s.bases.length - 2}` : ''}${s.sw?.length ? ` · SW ${s.sw.map((x) => x.label).join('/')}` : ''}${p.stale_engine ? ` · 이전 engine ${p.stale_engine}/${p.current}` : ''}`,
+      ? { key: 'pred', text: `${s.bases.some((b) => readableBasis(b.label).unknown.length) ? '⚠ ' : ''}예측 기준: ${s.bases.slice(0, 2).map((b) => `${readableBasis(b.label).text} · ${b.predictions}건`).join(' / ')}${s.bases.length > 2 ? ` 외 ${s.bases.length - 2}` : ''}${s.sw?.length ? ` · SW ${s.sw.map((x) => x.label).join('/')}` : ''}${p.stale_engine ? ` · 이전 engine ${p.stale_engine}/${p.current}` : ''}`,
         title: [`등록 예측 ${p.current}건의 기준 (config profile · power params · engine):`,
-          ...s.bases.map((b) => `  ${b.label}: ${b.predictions}건${b.recorded ? ` — ${b.config_profile_ref ?? 'config 기본'} · ${b.power_params_ref ?? 'params 기본'} · ${b.dvfs_table_ref ?? 'DVFS ?'} · ${b.engine_rev ?? '?'}` : ' — 이전 engine run이라 설정 선택이 기록되지 않음'}`),
+          ...s.bases.map((b) => { const rb = readableBasis(b.label)
+            return `  ${rb.text}: ${b.predictions}건${b.recorded ? ` — ${b.config_profile_ref ?? 'config 기본'} · ${b.power_params_ref ?? 'params 기본'} · ${b.dvfs_table_ref ?? 'DVFS ?'} · ${b.engine_rev ?? '?'}` : ' — 이전 engine run이라 설정 선택이 기록되지 않음'}${rb.unknown.length ? `\n    ⚠ ${rb.unknown.join(' · ')}` : ''}` }),
           ...(s.sw?.length ? [`SW timing: ${s.sw.map((x) => `${x.label} ${x.predictions}건`).join(', ')}`] : []),
           ...(p.stale_engine ? [`현재 engine ${s.engine_rev} 이전 run ${p.stale_engine}건 → 재탐색 필요`] : [])].join('\n'),
         level: p.stale_engine > 0 || s.bases.some((b) => !b.recorded) || s.bases.length > 1 ? 'warn' : 'ok', href: `#/predictions${q}` }

@@ -45,6 +45,17 @@ def test_condition_evidence_register_and_board(api_client, engine, demo_cleanup)
     fresh = api_client.get("/api/v1/arch/predictions/freshness", params={"scenario_id": S}).json()["rows"]
     assert next(r for r in fresh if r["prediction_id"] == pid)["status"] == "fresh"
 
+    # X-09: a same-condition re-registration is "재계산 동일" — Δ 0, same verdict, condition unchanged
+    again = api_client.post("/api/v1/timing-budget/register",
+                            json={**base, "reason": "same condition", "expected_current_prediction_id": pid})
+    assert again.status_code == 200, again.text
+    pid2 = again.json()["promoted"][0]["id"]
+    rows = api_client.get("/api/v1/arch/predictions/board", params={"scenario_id": S}).json()["rows"]
+    prev = next(r for r in rows if r["id"] == pid2)["previous"]
+    cur = next(r for r in rows if r["id"] == pid2)
+    assert prev["id"] == pid and prev["delta_mw"] == 0 and prev["verdict"] == cur["verdict"]
+    assert prev["condition_changed"] is False
+
 
 def test_measurement_as_input_and_reference(api_client, demo_cleanup):
     """S4: measured-inputs listing, compare-only reference and measured SW runtime as input."""

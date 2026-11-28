@@ -782,6 +782,9 @@ Each resolved IP (`dvfs_breakdown[].clock_ledger`) keeps every clock tier side b
   (power/BW model, params ref/hash, clock basis) with warnings
   (`CLOCK_BASIS_SUBSTITUTED`, `CIRCULAR_MEASURED_CLOCK`, `CODE_CONSTANT_COEFFICIENTS`).
   Predictions store `metrics.model_lineage`; prediction compare / board report
-  `lineage_changes` when the model, coefficients or clock basis changed.
+  `lineage_changes` when the model, coefficients or clock basis changed. The board
+  `previous` also carries the superseded `verdict` and `condition_changed` (case key,
+  SW statistic or growth differs), so a same-value re-registration is told apart from
+  a value or condition change.
 - Reports: `ip_detail_rows` gains `Calc/Cfg/Meas Clk` + `Clk Gap`, and the HTML report a
   "Clock Ledger" section, only when a configured/measured tier or non-default basis exists.

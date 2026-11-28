@@ -31,6 +31,11 @@ export interface CatalogItem {
   purpose?: string | null
   review_focus?: string[]
   default_sw_profile_ref?: string | null
+  /** X-06 / X-15: judgement contract summary from the stored pipeline (absent on older APIs) */
+  contract?: ScenarioContract | null
+}
+export interface ScenarioContract {
+  rate: string | null; sinks: { node: string; kind: string }[]; kpis: string[]; targets: number; jobs: string[]; subsystems: string[]
 }
 
 export interface VariantRow {

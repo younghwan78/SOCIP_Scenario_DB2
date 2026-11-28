@@ -59,6 +59,8 @@ class ScenarioCatalogItem(BaseModel):
     buffer_count: int
     default_variant_id: str | None = None
     viewer_query: dict[str, str] = Field(default_factory=dict)
+    # X-06 / X-15: judgement contract summary (rate, sinks, KPIs, event jobs, subsystem nodes)
+    contract: dict[str, Any] | None = None
 
 
 class ScenarioCatalogResponse(BaseModel):
