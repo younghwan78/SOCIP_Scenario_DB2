@@ -26,10 +26,11 @@ import { PredictionCollaboration } from '../components/PredictionCollaboration'
 
 /** X-08: column bundles of the 21-column board (the Variant column is sticky and always shown) */
 const BOARD_PRESETS = [
-  { id: 'power', label: 'Power', keys: ['tot', 'cpu', 'hw', 'bwip', 'bwcpu', 'bw', 'd', 'opt', 'range', 'comp'] },
-  { id: 'timing', label: 'Timing', keys: ['fps', 'risk', 'tot', 'cond', 'dvfs'] },
-  { id: 'verify', label: '검증', keys: ['risk', 'tot', 'range', 'ver', 'd'] },
-  { id: 'register', label: '등록', keys: ['experiment', 'tot', 'd', 'src', 'cond', 'at', 'author'] },
+  // 's' (Scenario) exists only in the all-scenario view; every preset keeps it so rows stay distinguishable
+  { id: 'power', label: 'Power', keys: ['s', 'tot', 'cpu', 'hw', 'bwip', 'bwcpu', 'bw', 'd', 'opt', 'range', 'comp'] },
+  { id: 'timing', label: 'Timing', keys: ['s', 'fps', 'risk', 'tot', 'cond', 'dvfs'] },
+  { id: 'verify', label: '검증', keys: ['s', 'risk', 'tot', 'range', 'ver', 'd'] },
+  { id: 'register', label: '등록', keys: ['s', 'experiment', 'tot', 'd', 'src', 'cond', 'at', 'author'] },
 ]
 
 const regProv = (r: BoardRow): Prov => ({

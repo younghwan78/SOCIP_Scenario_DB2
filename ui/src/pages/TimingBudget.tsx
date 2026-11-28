@@ -271,7 +271,7 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
 function Seg({ label, value, options, onPick, hint }: { label: string; value: string; options: string[][]; onPick: (v: string) => void; hint?: string }) {
   return (
     <div className="tb-seg">
-      <span className="muted tb-seg-label">{label}{hint && <Hint label={` 뜻`} text={hint} />}</span>
+      <span className="muted tb-seg-label">{label}{hint && <Hint label={`${label} 뜻`} text={hint} />}</span>
       <div className="seg" role="group" aria-label={label}>
         {options.map(([v, l]) => <button key={v} className={value === v ? 'on' : ''} onClick={() => onPick(v)}>{l}</button>)}
       </div>

@@ -10,13 +10,18 @@ const source = Object.entries(files).filter(([p]) => !p.includes('.test.'))
 
 const count = (text: string, re: RegExp) => (text.match(re) ?? []).length
 const INLINE = /style=\{\{/g
-const COLOUR = /#[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{3}\b/g
+// hex colours (3 / 4 / 6 / 8 digits, not an HTML entity like &#123;) and rgb() / rgba()
+const COLOUR = /(?<!&)#(?:[0-9A-Fa-f]{8}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{3,4})\b|rgba?\(/g
 
 describe('style budget (X-08)', () => {
   it('no file adds inline styles', () => {
     const over = source.map(([p, t]) => [p.replace(/^\.\//, ''), count(t, INLINE)] as const)
       .filter(([p, n]) => n > ((budget.inline as Record<string, number>)[p] ?? 0))
     expect(over, `inline style ceiling exceeded (style={{ count): ${JSON.stringify(Object.fromEntries(over))}`).toEqual([])
+  })
+  it('lists only files that exist', () => {
+    const known = new Set(source.map(([p]) => p.replace(/^\.\//, '')))
+    expect(Object.keys(budget.inline).filter((k) => !known.has(k)), 'styleBudget.json names files that no longer exist').toEqual([])
   })
   it('colour literals do not grow', () => {
     const total = source.reduce((n, [, t]) => n + count(t, COLOUR), 0)
