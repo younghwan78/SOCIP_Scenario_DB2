@@ -29,8 +29,10 @@ export function sourceGrade(r: Pick<SensitivityRow, 'key' | 'source'>): SourceGr
 export function SensitivityTornado({ data, top = 8 }: { data: Sensitivity; top?: number }) {
   const [all, setAll] = useState(false)
   const graded = data.rows.map((r) => ({ r, g: sourceGrade(r) }))
-  const hidden = graded.filter((x) => x.g !== 'assumed').length
-  const rows = (all ? graded : graded.filter((x) => x.g === 'assumed')).slice(0, top)
+  // a row that changes a verdict (crosses a limit, fails timing at +step) always shows, whatever its grade
+  const decisive = (r: SensitivityRow) => r.crosses.length > 0 || !!r.timing?.fails_at_high
+  const hidden = graded.filter((x) => x.g !== 'assumed' && !decisive(x.r)).length
+  const rows = graded.filter((x) => all || x.g === 'assumed' || decisive(x.r)).slice(0, top)
   const toggle = hidden > 0 && <label className="faint t-caption" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
     <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} data-testid="sens-all" />전체 입력 (실측 · spec {hidden}개 포함)</label>
   if (!rows.length) return <div className="empty">흔들 가정 입력이 없습니다.{toggle}</div>

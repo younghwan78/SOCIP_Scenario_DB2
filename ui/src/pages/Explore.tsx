@@ -8,6 +8,7 @@ import { experimentHref } from '../lib/experimentContext'
 import { axisSummary } from '../lib/designSpace'
 import { clearPendingLevers, leverAxesError, leverSetCount, readPendingLevers, savePendingLevers, type PendingLevers } from '../lib/leverAxes'
 import { useAsync } from '../lib/route'
+import { getJson } from '../lib/api'
 import { useRegistrationGuard } from '../lib/registration'
 import { RegistrationBasis } from '../components/RegistrationBasis'
 import { fmt, type Statistic } from '../lib/timingBudget'
@@ -123,7 +124,8 @@ function RunForm({ ctx }: { ctx: Ctx }) {
   const sp = useSimProfiles(ctx.project, cfgSel)
   const edited = () => { setPreset(null); setAdvancedOpen(true) }
   const set = <K extends keyof RunOptions>(k: K, v: RunOptions[K]) => { edited(); setO((p) => ({ ...p, [k]: v })) }
-  const applyPreset = (key: Preset) => { setO(PRESETS[key].options); setPreset(key); setAdvancedOpen(false) }
+  // a preset sets the SW / compression / DVFS axes; the lever axes' search mode and cap stay as chosen
+  const applyPreset = (key: Preset) => { setO((p) => ({ ...PRESETS[key].options, lever_search: p.lever_search, lever_max_sets: p.lever_max_sets })); setPreset(key); setAdvancedOpen(false) }
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   // project policy iq_keep registers the IQ-keeping optimum: lossless SBWC must stay in the explored space
   const iqKeep = useReferences(ctx.project)?.policy.register_baseline === 'iq_keep'
@@ -131,15 +133,18 @@ function RunForm({ ctx }: { ctx: Ctx }) {
   const cases = caseCount(eff)
   const variants = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).reduce((s, c) => s + c.variant_count, 0)
   // X-07: re-simulation lever axes handed over from What-if (값 범위 탐색 → 범위 탐색 레버 축)
-  const [pending, setPending] = useState<PendingLevers | null>(() => readPendingLevers())
+  const [pending, setPending] = useState<PendingLevers | null>(() => readPendingLevers(ctx.project))
   const levers = pending?.axes ?? []
   const leverSearch = o.lever_search ?? 'exhaustive'
   const leverMax = o.lever_max_sets ?? 64
   const leverSets = leverSetCount(levers, leverSearch)
-  const leverError = levers.length ? leverAxesError(levers, leverSearch, leverMax) : null
+  const leverCatalog = useAsync(() => (levers.length ? getJson<{ levers: { id: string; explorable: boolean }[] }>('/arch/exploration/levers').catch(() => null) : Promise.resolve(null)), [levers.length])
+  const explorable = leverCatalog.data ? new Set(leverCatalog.data.levers.filter((l) => l.explorable).map((l) => l.id)) : null
+  const leverError = levers.length ? leverAxesError(levers, leverSearch, leverMax, explorable) : null
   const runOpts: RunOptions = levers.length ? { ...eff, levers, lever_search: leverSearch, lever_max_sets: leverMax } : eff
-  // every lever combination is a changed copy of each variant explored on its own
-  const estimate = estimatedDuration(variants * (1 + leverSets))
+  // every lever combination is a changed copy of each variant explored on its own; screen then widens to
+  // combinations of the strongest levers up to the cap, so its time is an upper bound at the cap
+  const estimate = estimatedDuration(variants * (1 + (leverSearch === 'screen' && levers.length ? Math.max(leverSets, leverMax) : leverSets)))
   const typeLabel = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).map((c) => c.scenario_name).join(' + ')
   const tracked = useExploreJob()
   const jobActive = isActive(tracked?.job)
@@ -149,6 +154,8 @@ function RunForm({ ctx }: { ctx: Ctx }) {
       // a server job: progress / cancel here, and the completion notice follows the user to other pages
       const job = await archApi.createJob(runBody(scenarios, title, typeLabel, runOpts, sp.ref))
       trackExploreJob(job, title || `${typeLabel} exploration`, ctx.project || null)
+      // the hand-over is used: the next new exploration starts without these axes
+      if (levers.length) { clearPendingLevers(); setPending(null) }
     } catch (e) { notify({ kind: 'error', text: e instanceof Error ? e.message : String(e) }) } finally { setBusy(false) }
   }
   const byCat = useMemo(() => {
@@ -237,7 +244,8 @@ function RunForm({ ctx }: { ctx: Ctx }) {
             {!levers.length ? <span className="faint" style={{ fontSize: 12 }}>없음 — 크기 · fps · 센서 · LLC 같은 레버는 한 조건 바꿔보기의 <b>값 범위 탐색</b>에서 축을 만든 뒤 “범위 탐색 레버 축으로”를 누르면 여기로 옵니다.{' '}
               <a href={experimentHref('whatif', { project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant })}>한 조건 바꿔보기 →</a></span>
               : <div style={{ display: 'grid', gap: 4, flex: 1 }}>
-                <span className="faint" style={{ fontSize: 12 }}>{pending!.scenario_id} / {pending!.variant_id}에서 가져옴 · 선택한 scenario의 variant마다 적용 (대상 node가 없는 variant는 적용 불가로 표시)</span>
+                <span className="faint" style={{ fontSize: 12 }}>{pending!.scenario_id} / {pending!.variant_id}에서 가져옴 · 선택한 scenario의 variant마다 적용 (대상 node가 없는 variant는 적용 불가로 표시)
+                  {(pending!.fixed?.length ?? 0) > 0 && <> · What-if의 고정 조건 {pending!.fixed!.length}개({pending!.fixed!.join(', ')})는 넘어오지 않음 — 각 variant 자체 조건에서 축만 바꿈</>}</span>
                 {levers.map((a, i) => { const s = axisSummary(a)
                   return <span key={`${a.lever}-${i}`} className="row-1" data-testid={`lever-${i}`}><b>{s.label}</b> <span className="mono faint">{s.text}</span>
                     <button className="btn tb-mini" aria-label={`${s.label} 레버 축 제거`} onClick={() => { const next = levers.filter((_, j) => j !== i); const p = next.length ? { ...pending!, axes: next } : null

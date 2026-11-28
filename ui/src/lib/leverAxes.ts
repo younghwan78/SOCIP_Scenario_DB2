@@ -12,7 +12,8 @@ export function toLeverAxis(label: string, values: WhatIfChange[]): LeverAxis {
   const params: Record<string, unknown> = {}
   for (const k of SELECTORS) if (first?.[k] != null) params[k] = first[k]
   return {
-    lever: String(first?.target ?? ''), label, params,
+    // LeverAxis.label has max_length 120 (a node / buffer id may be longer)
+    lever: String(first?.target ?? ''), label: label.length > 120 ? `${label.slice(0, 119)}…` : label, params,
     values: values.map((v) => Object.fromEntries(Object.entries(v).filter(([k, x]) => k !== 'target' && !(SELECTORS as readonly string[]).includes(k) && x != null))),
   }
 }
@@ -24,7 +25,10 @@ export function leverSetCount(axes: LeverAxis[], search: 'exhaustive' | 'screen'
 }
 
 /** The server's caps (ExplorationAxes._levers): at most 8 axes, 16 values each, sets ≤ lever_max_sets (≤ 256). */
-export function leverAxesError(axes: LeverAxis[], search: 'exhaustive' | 'screen', maxSets: number): string | null {
+export function leverAxesError(axes: LeverAxis[], search: 'exhaustive' | 'screen', maxSets: number, explorable?: Set<string> | null): string | null {
+  // the catalog's explorable flag (GET /arch/exploration/levers): other kinds are refused by the server at run time
+  const bad = explorable ? axes.filter((a) => !explorable.has(a.lever)).map((a) => a.label || a.lever) : []
+  if (bad.length) return `범위 탐색 축으로 쓸 수 없는 레버: ${bad.join(', ')} — 한 조건 바꿔보기에서만 비교`
   if (axes.length > 8) return '레버 축은 8개까지입니다.'
   if (axes.some((a) => !a.values.length || a.values.length > 16)) return '레버 축마다 값 1–16개.'
   const n = leverSetCount(axes, search)
@@ -35,12 +39,19 @@ export function leverAxesError(axes: LeverAxis[], search: 'exhaustive' | 'screen
 /** Hand-over from What-if (one variant's value-range axes) to the exploration form. Browser storage only:
  * a convenience, never required (the form works without it). */
 const KEY = 'explore.pendingLevers'
-export interface PendingLevers { scenario_id: string; variant_id: string; axes: LeverAxis[]; at: string }
+export interface PendingLevers { project_ref?: string; scenario_id: string; variant_id: string; axes: LeverAxis[]; at: string
+  /** the What-if conditions that were held fixed in the sweep: not carried over (the exploration changes the variant's own condition) */
+  fixed?: string[] }
 export function savePendingLevers(p: PendingLevers): void {
   try { window.localStorage.setItem(KEY, JSON.stringify(p)) } catch { /* storage unavailable */ }
 }
-export function readPendingLevers(): PendingLevers | null {
-  try { const raw = window.localStorage.getItem(KEY); return raw ? (JSON.parse(raw) as PendingLevers) : null } catch { return null }
+/** Pending axes of this project only (another project's node ids would not apply). */
+export function readPendingLevers(project?: string | null): PendingLevers | null {
+  try {
+    const raw = window.localStorage.getItem(KEY)
+    const p = raw ? (JSON.parse(raw) as PendingLevers) : null
+    return p && (!p.project_ref || !project || p.project_ref === project) ? p : null
+  } catch { return null }
 }
 export function clearPendingLevers(): void {
   try { window.localStorage.removeItem(KEY) } catch { /* storage unavailable */ }

@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { leverAxesError, leverSetCount, toLeverAxis } from './leverAxes'
+import { clearPendingLevers, leverAxesError, leverSetCount, readPendingLevers, savePendingLevers, toLeverAxis } from './leverAxes'
 import { DEFAULT_RUN, runBody } from './archExplore'
 import { companionPresets, conditionSummary } from '../components/ConcurrentCard'
 import type { WhatIfChange } from './scenarioWhatIf'
@@ -18,6 +19,16 @@ describe('lever axes for a range exploration (X-07)', () => {
     expect(leverSetCount(axes, 'screen')).toBe(4)
     expect(leverAxesError(axes, 'exhaustive', 4)).toContain('조합 8개 > 상한 4')
     expect(leverAxesError(axes, 'screen', 4)).toBeNull()
+    // a kind the catalog does not flag explorable is refused before the run
+    expect(leverAxesError(axes, 'screen', 4, new Set(['fps']))).toContain('범위 탐색 축으로 쓸 수 없는 레버: size')
+    expect(toLeverAxis('x'.repeat(200), fps).label?.length).toBe(120)
+  })
+  it('keeps pending axes per project', () => {
+    savePendingLevers({ project_ref: 'p1', scenario_id: 's', variant_id: 'v', at: 't', axes: [toLeverAxis('FPS', fps)] })
+    expect(readPendingLevers('p1')?.axes).toHaveLength(1)
+    expect(readPendingLevers('p2')).toBeNull()
+    clearPendingLevers()
+    expect(readPendingLevers('p1')).toBeNull()
   })
   it('puts the axes into the run spec only when there are some', () => {
     const plain = runBody(['s'], '', 't', DEFAULT_RUN)

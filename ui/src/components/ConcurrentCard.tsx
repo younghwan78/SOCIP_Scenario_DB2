@@ -77,7 +77,7 @@ export function ConcurrentCard({ ctx, options, configProfileRef, blocked }: {
           </select>
           <button className="btn tb-mini" onClick={add} disabled={!pickVariant}>추가</button>
           {presets.length > 0 && <span className="faint t-caption" data-testid="concurrent-presets">자주 쓰는 조합:{' '}
-            {presets.map((p) => <button key={p.label} className="btn tb-mini" title={`${p.name} · ${p.member.variant_id} (기본 variant)`} onClick={() => addMember(p.member)}>+ {p.label}</button>)}</span>}
+            {presets.map((p) => <button key={p.label} className="btn tb-mini" title={`${p.name} · ${p.member.variant_id} (catalog 기본 = id 순 첫 variant)`} onClick={() => addMember(p.member)}>+ {p.label}</button>)}</span>}
         </>}
         <button className="btn tb-mini primary" onClick={run} disabled={!others.length || busy || !!blocked}>{busy ? '계산 중…' : '합성'}</button>
       </div>
