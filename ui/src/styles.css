@@ -510,6 +510,22 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 /* 1 column only when the page content itself is narrow (container, not viewport); the width toggle is then meaningless -> hidden */
 .tb-page { container-type: inline-size; }
 @container (max-width: 760px) { .tb-grid { grid-template-columns: minmax(0, 1fr); } .tb-card .wide-toggle { display: none; } }
+/* X-04 two-cell verdict · X-10 card groups · X-05 notes · X-03 subsystem */
+.verdict-pair { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.verdict-cell { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+.tb-group-head { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 -2px; }
+.tb-group-head h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--muted); }
+.tb-notes { font-size: var(--fs-body); padding: 6px 12px; border-left: 3px solid var(--warn-text); display: grid; gap: 4px; }
+.tb-notes .note-kind { font-weight: 600; margin-right: 6px; }
+.tb-notes .mono { font-size: var(--fs-caption); }
+.tb-cond { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tb-cond .chip.off { border-color: var(--warn-text); color: var(--warn-text); }
+.ss-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.ss-bar { position: relative; height: 8px; background: var(--line-soft); border-radius: 4px; min-width: 80px; }
+.ss-bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--primary); }
+.ss-bar > span.bad { background: var(--del-text); }
+.ss-bar > i { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed var(--muted); }
+.kpi-src { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 
 /* ---------- architecture exploration / predictions / reports ---------- */
 .ax-form { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 18px; }

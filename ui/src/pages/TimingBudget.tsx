@@ -5,7 +5,10 @@ import { useAsync } from '../lib/route'
 import { summaryTiles } from '../lib/timingTiles'
 import { JobCard } from '../components/JobCard'
 import { SW_MARGINS, runtimeScaleOf, fmt, marginOf, marginOpts, pct0, timingApi, DEFAULT_STATISTIC, STAT_TIP, appliedCpuModel, statisticOf, type CpuModel, type EisMode, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
-import { TimingVerdictBadge } from '../components/TimingVerdictBadge'
+import { VerdictPair } from '../components/VerdictPair'
+import { SubsystemCard } from '../components/SubsystemCard'
+import { groupNotes, NOTE_KIND_LABEL } from '../lib/verdictNotes'
+import type { ReactNode } from 'react'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -79,6 +82,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
     [scenario, variant, extrasOn, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   // ⑤ SW-variance box plot: last, after ⑦ (one simulation slot at a time)
   const [distOn, setDistOn] = usePref<boolean>('tb.dist', false)
+  // X-10: the condition controls fold behind one button; the ConditionBar chips are the summary
+  const [condOpen, setCondOpen] = usePref<boolean>('tb.cond.open', false)
   const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
     [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   const r = q.data?.report
@@ -105,6 +110,9 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
     <div className="page tb-page">
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: 14 }}>
         <button className="btn" disabled={!r || !!experimentBlocked} title={experimentBlocked ?? '현재 SW·DVFS·power 설정을 한 조건 바꿔보기의 기준으로 전달'} onClick={startExperiment}>이 조건으로 한 조건 바꿔보기 →</button>
+        <button className="btn" aria-expanded={condOpen} data-testid="tb-cond-toggle" onClick={() => setCondOpen(!condOpen)}
+          title="SW 통계 · EIS · SW 증가 · CPU 모델 · 처리량 · margin · 설정 profile · 실측 입력 · power params. 지금 값은 아래 예측 조건 줄에 요약">{condOpen ? '조건 접기 ▴' : '조건 바꾸기 ▾'}</button>
+        {condOpen && <>
         <span title={STAT_TIP}><Seg label="SW 통계" value={statistic} options={[['mean', 'mean (기본)'], ['max', 'max']]} onPick={(v) => set('stat', v === DEFAULT_STATISTIC ? undefined : v)} /></span>
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
@@ -138,8 +146,9 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         <TimingInputsHelp inputs={{ statistic, throughput: effTp, margin, profile: prof, basisCode: sp.basis?.code ?? null, measured,
           measuredOption: (measQ.data ?? []).find((o) => o.id === measured?.measurement_ref) ?? null, powerParams: pp, defaultPowerParams: defaultPp,
           pinnedDomains: Object.keys(overrides).sort(), cpuModel: appliedCpuModel(r, measured?.cpu ? 'profile' : cpuModel) }} />
+        </>}
         <span className="grow" />
-        {r && <TimingVerdictBadge status={r.verdict.status} reasons={r.verdict.reasons} />}
+        {r && <VerdictPair verdict={r.verdict} kpis={r.kpis} fpsSource={r.fps_source} />}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}
           onClick={() => { const d = document.getElementById('tb-warnings') as HTMLDetailsElement | null; if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }) } }}>경고 {r.warnings.length}</button>}
         {r && <span className="chip" title={r.fps_source ? `판정 주기 출처: ${r.fps_source}` : undefined}>{fmt(r.fps, 0)} fps · P {fmt(r.period_ms, 3)} ms</span>}
@@ -161,19 +170,31 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
       {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} extrasOn={extrasOn} whatif={whatif} battery={battery} dvfs={dq.data ?? null} dvfsLoading={dq.loading || wq.loading} dvfsError={dq.error ?? null} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} margin={r.sw_margin?.rt ?? margin}
         frames={frames} setFrames={(n) => set('frames', n === 20 ? undefined : String(n))} warmup={warmup} setWarmup={(n) => set('warmup', n ? String(n) : undefined)}
         overrides={overrides} setOverrides={(o) => set('dvo', formatOverrides(o))}
-        dist={distQ.data ?? null} distLoading={distQ.loading} distError={distQ.error ?? null} distOn={distOn} setDistOn={setDistOn} />}
-      {r && <Card id="concurrent" title="⑧ 동시 실행 (정적 합성)" note="이 variant + 다른 variant 1~3개 · 전력 · BW 합산, 공유 DVFS domain은 최고 clock · 경합은 미반영" defaultWide>
-        <ConcurrentCard ctx={ctx} options={baseOpts} configProfileRef={cfg}
-          blocked={config ? '조건 변경(DVFS override · power params · 실측 입력) 중에는 합성할 수 없습니다 — 합성은 각 member의 기본 조건으로 계산하므로 위 결과와 달라집니다. 조건을 기본으로 되돌리면 합성할 수 있습니다.' : null} />
-      </Card>}
+        dist={distQ.data ?? null} distLoading={distQ.loading} distError={distQ.error ?? null} distOn={distOn} setDistOn={setDistOn}
+        concurrent={<Card id="concurrent" title="동시 실행 (정적 합성)" note="이 variant + 다른 variant 1~3개 · 전력 · BW 합산, 공유 DVFS domain은 최고 clock · 경합은 미반영" defaultWide>
+          <ConcurrentCard ctx={ctx} options={baseOpts} configProfileRef={cfg}
+            blocked={config ? '조건 변경(DVFS override · power params · 실측 입력) 중에는 합성할 수 없습니다 — 합성은 각 member의 기본 조건으로 계산하므로 위 결과와 달라집니다. 조건을 기본으로 되돌리면 합성할 수 있습니다.' : null} />
+        </Card>} />}
     </div>
   )
 }
 
-function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, setFrames, warmup, setWarmup, battery, dvfs, dvfsLoading, dvfsError, overrides, setOverrides, dist, distLoading, distError, distOn, setDistOn }: { r: TimingReport; cfg: string | null; ctx: Ctx; extrasOn: boolean; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
+/** X-10: interval card only when an output is judged by frame interval (camera / video sinks, extra streams). */
+export function hasIntervalJudgement(r: TimingReport): boolean {
+  return r.intervals.preview.ok !== null || r.intervals.video.ok !== null || (r.intervals.streams?.length ?? 0) > 0
+}
+
+function Group({ title, note, children }: { title: string; note: string; children: ReactNode }) {
+  return <>
+    <div className="tb-group-head" role="heading" aria-level={2}><h2>{title}</h2><span className="faint t-caption">{note}</span></div>
+    {children}
+  </>
+}
+
+function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, setFrames, warmup, setWarmup, battery, dvfs, dvfsLoading, dvfsError, overrides, setOverrides, dist, distLoading, distError, distOn, setDistOn, concurrent }: { r: TimingReport; cfg: string | null; ctx: Ctx; extrasOn: boolean; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
   margin: number; frames: number; setFrames: (n: number) => void; warmup: number; setWarmup: (n: number) => void; battery: Battery; dvfs: DvfsWhatIf | null; dvfsLoading: boolean; dvfsError: string | null
   overrides: Record<string, number>; setOverrides: (o: Record<string, number>) => void
-  dist: IntervalDistribution | null; distLoading: boolean; distError: string | null; distOn: boolean; setDistOn: (v: boolean) => void }) {
+  dist: IntervalDistribution | null; distLoading: boolean; distError: string | null; distOn: boolean; setDistOn: (v: boolean) => void; concurrent: ReactNode }) {
   const [ganttDetail, setGanttDetail] = usePref<boolean>('tb.gantt.detail', true)
   const pipelined = r.stages.some((s) => s.throughput === 'pipelined')
   const prov: Prov = {
@@ -187,7 +208,12 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
     ],
   }
   const kpis = summaryTiles(r, margin, battery, prov)
+  // X-05: the scope notes sit in the verdict badge's Hint; the box keeps clock-up / latency / other, by kind
+  const noteGroups = groupNotes(r.verdict.notes).filter((g) => g.kind !== 'scope')
+  const intervalCard = hasIntervalJudgement(r)
+  const hasSubsystem = Object.keys(r.subsystems ?? {}).length > 0 || !!r.residency
   return <>
+    <Group title="판정" note="요약 · 사유 · domain에 맞는 판정 카드만 (간격 · KPI · event job · pacing · subsystem)">
     <section className="tb-kpis" aria-label="요약">
       {kpis.map((k) => (
         <div key={k.id} className="panel tb-kpi" data-testid={`tile-${k.id}`}>
@@ -198,34 +224,51 @@ function Body({ r, cfg, extrasOn, whatif, whatLoading, current, margin, frames, 
       ))}
     </section>
     {r.verdict.reasons.length > 0 && <div className="err" style={{ fontSize: 13 }}>{r.verdict.reasons.slice(0, 4).map((x) => <div key={x}>{x}</div>)}</div>}
-    {(r.verdict.notes?.length ?? 0) > 0 && <div className="panel tb-notes" role="note" style={{ fontSize: 13, padding: '6px 12px', borderLeft: '3px solid var(--warn-text, #B7791F)' }}>
-      <b>참고</b> {r.verdict.notes!.map((x) => <div key={x} className="mono" style={{ fontSize: 12 }}>{x}</div>)}</div>}
+    {noteGroups.length > 0 && <div className="panel tb-notes" role="note" data-testid="tb-notes">
+      {noteGroups.map((g) => <div key={g.kind} data-testid={`notes-${g.kind}`}><span className="note-kind">{NOTE_KIND_LABEL[g.kind]}</span>
+        {g.notes.map((x) => <div key={x} className="mono">{x}</div>)}</div>)}</div>}
     {r.measured_compare && <MeasuredCompareCard data={r.measured_compare} battery={battery} />}
     <div className="tb-grid">
-      <Card id="slot" title="① 1 frame 예산 — stage별 slot" note={pipelined ? 'stage는 M2M buffer로 pipeline · 각 SW task / HW stage가 1 frame 안에 · 합이 넘으면 latency만 증가 (fps = 출력 간격)' : 'stage 1 frame 기준 · 각 stage SW+HW가 1 frame 안에 끝나야 함 (보수적)'} defaultWide><SlotBudget report={r} margin={margin} /></Card>
-      <Card id="clock" title="② IP별 필요 clock · DVFS level (계산 / override)" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}>
+      {intervalCard && <Card id="interval" title="출력 frame 간격 · pipeline latency" defaultWide note="합격 기준 = 간격 · latency는 참고 · jitter · drop · SW 편차 분포는 참고 지표"
+        actions={<div className="seg sm" role="group" aria-label="warm-up 제외" title="앞쪽 출력 간격 N개를 판정에서 제외 (pipeline fill · AE/AWB 안정화). 0 = 모두 판정">{[0, 1, 2, 4].map((n) => <button key={n} className={warmup === n ? 'on' : ''} onClick={() => setWarmup(n)}>{n ? `warm-up ${n}` : 'warm-up 없음'}</button>)}</div>}><Intervals report={r} />
+        <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
+        {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>}
+      {r.kpis && <Card id="kpis" title="KPI 판정 (판정 계약 · 목표)" note="선언한 KPI를 R-6 목표와 비교 · fail이면 verdict fail · 입력 없음은 통과가 아님 · 가정 목표는 제품 요구가 아님" defaultWide><KpiTable rows={r.kpis} /></Card>}
+      {((r.jobs?.length ?? 0) > 0 || !!r.jobs_error) && <Card id="jobs" title="Event job (촬영 등)" note="steady scenario 위의 event job · t = 0 trigger · stage 막대 빗금 = 대기 (elapsed − service) · 세로선 = milestone · 아래 P(t) · BW(t)는 같은 시간축" defaultWide><JobCard key={(r.jobs ?? []).map((j) => j.id).join('|')} jobs={r.jobs ?? []} kpis={r.kpis ?? []} error={r.jobs_error} /></Card>}
+      {r.pacing && <Card id="pacing" title="Frame pacing (panel latch)" note="CPU → GPU frame chain · BufferQueue back-pressure · panel vsync latch Monte Carlo · jank = 기대 vsync 간격 초과 (목표 판정은 KPI 카드)"><PacingSummary pacing={r.pacing} /></Card>}
+      {hasSubsystem && <Card id="subsystem" title="Subsystem · wake residency" note="mcps-v1 unit 부하 · domain 운영점 · stream deadline 여유 · route latency · wake source (report.subsystems · residency)" defaultWide>
+        <SubsystemCard subsystems={r.subsystems} residency={r.residency} /></Card>}
+    </div>
+    </Group>
+    <Group title="비용" note="power · BW · memory">
+    <div className="tb-grid">
+      <Card id="power" title="예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
+      {r.bw.mif && <Card id="mif" title="GPU memory · MIF floor" note="GPU workload DRAM traffic (sim.workload.mb_per_frame) · catalog mif_min_lock at the GPU clock · MIF level = max(governor, QoS lock, floor) under mif-linear"><MifSummary mif={r.bw.mif} /></Card>}
+    </div>
+    </Group>
+    <Group title="구조" note="1 frame slot · IP clock · pipeline timeline">
+    <div className="tb-grid">
+      <Card id="slot" title="1 frame 예산 — stage별 slot" note={pipelined ? 'stage는 M2M buffer로 pipeline · 각 SW task / HW stage가 1 frame 안에 · 합이 넘으면 latency만 증가 (fps = 출력 간격)' : 'stage 1 frame 기준 · 각 stage SW+HW가 1 frame 안에 끝나야 함 (보수적)'} defaultWide><SlotBudget report={r} margin={margin} /></Card>
+      <Card id="clock" title="IP별 필요 clock · DVFS level (계산 / override)" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}>
         <ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} margin={margin} />
         <DvfsOverrideTable report={r} overrides={overrides} onChange={setOverrides} /></Card>
-      <Card id="power" title="③ 예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
-      <Card id="gantt" title="④ Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 점선 = ${fmt(r.fps, 0)} fps frame 경계 (${fmt(r.period_ms, 2)} ms)`} defaultWide
+      <Card id="gantt" title="Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 점선 = ${fmt(r.fps, 0)} fps frame 경계 (${fmt(r.period_ms, 2)} ms)`} defaultWide
         actions={<span style={{ display: 'inline-flex', gap: 6 }}>
           <div className="seg sm" role="group" aria-label="timeline 상세도"><button className={ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(true)} title="IP · SW task별 행">상세</button><button className={!ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(false)} title="stage별 묶음">요약</button></div>
           <div className="seg sm" role="group" aria-label="timeline frame 수">{[6, 12, 20].map((n) => <button key={n} className={frames === n ? 'on' : ''} onClick={() => setFrames(n)}>{n} frame</button>)}</div></span>}><Gantt report={r} detail={ganttDetail} /></Card>
-      <Card id="interval" title="⑤ 출력 frame 간격 · pipeline latency" defaultWide note="합격 기준 = 간격 · latency는 참고 · jitter · drop · SW 편차 분포는 참고 지표"
-        actions={<div className="seg sm" role="group" aria-label="warm-up 제외" title="앞쪽 출력 간격 N개를 판정에서 제외 (pipeline fill · AE/AWB 안정화). 0 = 모두 판정">{[0, 1, 2, 4].map((n) => <button key={n} className={warmup === n ? 'on' : ''} onClick={() => setWarmup(n)}>{n ? `warm-up ${n}` : 'warm-up 없음'}</button>)}</div>}><Intervals report={r} />
-        <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
-        {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>
-      {r.kpis && <Card id="kpis" title="⑤-a KPI 판정 (판정 계약 · 목표)" note="선언한 KPI를 R-6 목표와 비교 · fail이면 verdict fail · 입력 없음은 통과가 아님 · 가정 목표는 제품 요구가 아님" defaultWide><KpiTable rows={r.kpis} /></Card>}
-      {((r.jobs?.length ?? 0) > 0 || !!r.jobs_error) && <Card id="jobs" title="⑤-d Event job (촬영 등)" note="steady scenario 위의 event job · t = 0 trigger · stage 막대 빗금 = 대기 (elapsed − service) · 세로선 = milestone · 아래 P(t) · BW(t)는 같은 시간축" defaultWide><JobCard key={(r.jobs ?? []).map((j) => j.id).join('|')} jobs={r.jobs ?? []} kpis={r.kpis ?? []} error={r.jobs_error} /></Card>}
-      {r.pacing && <Card id="pacing" title="⑤-b Frame pacing (panel latch)" note="CPU → GPU frame chain · BufferQueue back-pressure · panel vsync latch Monte Carlo · jank = 기대 vsync 간격 초과 (목표 판정은 ⑤-a)"><PacingSummary pacing={r.pacing} /></Card>}
-      {r.bw.mif && <Card id="mif" title="⑤-c GPU memory · MIF floor" note="GPU workload DRAM traffic (sim.workload.mb_per_frame) · catalog mif_min_lock at the GPU clock · MIF level = max(governor, QoS lock, floor) under mif-linear"><MifSummary mif={r.bw.mif} /></Card>}
-      <Card id="whatif" title="⑥ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
+    </div>
+    </Group>
+    <Group title="탐색" note="SW 증가 · DVFS level ± · 동시 실행 (보조 탐색 계산을 켜면 순서대로)">
+    <div className="tb-grid">
+      <Card id="whatif" title="차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
         {!extrasOn ? <div className="empty">위의 보조 탐색 계산을 켜면 SW 증가 조건을 비교합니다.</div> : whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
       </Card>
-      <Card id="dvfs" title="⑦ IP clock level ±1 / ±2 → SW 여유 · Power · BW" note={`DVFS domain (RT / NRT / M2M) 하나를 L±1·L±2로 고정, 나머지는 현재 그대로 · ${batteryNote(battery)}`} defaultWide>
+      <Card id="dvfs" title="IP clock level ±1 / ±2 → SW 여유 · Power · BW" note={`DVFS domain (RT / NRT / M2M) 하나를 L±1·L±2로 고정, 나머지는 현재 그대로 · ${batteryNote(battery)}`} defaultWide>
         {!extrasOn ? <div className="empty">위의 보조 탐색 계산을 켜면 DVFS 조합을 비교합니다.</div> : dvfsError ? <div className="err">{dvfsError}</div> : !dvfs ? <div className="empty">{dvfsLoading ? 'level what-if 계산 중…' : '—'}</div> : <DvfsWhatIfTable data={dvfs} battery={battery} />}
       </Card>
+      {concurrent}
     </div>
+    </Group>
     {r.warnings.length > 0 && <details id="tb-warnings" className="panel" style={{ padding: '8px 12px', fontSize: 12 }}><summary>경고 {r.warnings.length}</summary>{r.warnings.map((w) => <div key={w} className="faint">{w}</div>)}</details>}
   </>
 }
