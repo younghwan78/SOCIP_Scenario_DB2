@@ -57,6 +57,15 @@ describe('JobCard (X-02)', () => {
     expect(el.querySelector('[data-testid="job-burst"]')).not.toBeNull()
   })
 
+  it('an unresolved milestone draws no line and no pass badge; a job error is shown', () => {
+    const el = render([job({ milestones: { saved: null, thumbnail: 22.974 } })])
+    expect(el.textContent).toContain('saved —')
+    expect(el.querySelector('.badge.v-ok')?.textContent ?? '').not.toContain('saved')
+    const err = document.createElement('div')
+    act(() => createRoot(err).render(<JobCard jobs={[]} kpis={[]} error="bad stage" />))
+    expect(err.querySelector('[data-testid="job-error"]')?.textContent).toContain('bad stage')
+  })
+
   it('span and peak window follow the series', () => {
     expect(jobSpan(job())).toBe(58)
     // samples 10 and 11 are high: the first 10 ms window that holds both starts at 2

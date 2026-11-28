@@ -187,8 +187,12 @@ export interface TimingReport {
     /** selectable levels per domain used by this variant (slow → fast) */
     ladders?: Record<string, DvfsLadderLevel[]> }
   stages: StageRow[]; ips: IpRow[]
-  intervals: { target_ms: number; tolerance: number; preview: IntervalSeries; video: IntervalSeries; ok: boolean }
+  intervals: { target_ms: number; tolerance: number; preview: IntervalSeries; video: IntervalSeries; ok: boolean
+    /** extra judged sinks (dual / PIP / multi-encoder), only those with a result */
+    streams?: (IntervalSeries & { kind?: string })[] }
   latency: { preview_ms: number | null; video_ms: number | null; preview_frames: number | null; video_frames: number | null }
+  /** a job definition error: jobs is [] and the job KPIs are no_input */
+  jobs_error?: string
   power: PowerSplit; bw: BwSplit; verdict: Verdict; timeline: TimelineRow[]; warnings: string[]; whatif?: WhatIfRow[]
   stage_domains?: Partial<Record<StageId, StageDomain[]>>
   /** SW margin rule applied to RT/Output (and the NRT/Post rule reference); absent before API sw_margin */
@@ -514,7 +518,8 @@ export interface JobStage {
 /** R-3 job-v1 report (``report.jobs[]``). */
 export interface EventJob {
   id: string; model: string; label?: string | null; params?: Record<string, unknown>
-  milestones: Record<string, number>; makespan_ms: number
+  /** null = the milestone's stage is not in the job */
+  milestones: Record<string, number | null>; makespan_ms: number
   phases: { id: string; start_ms: number; end_ms: number }[]
   stages: JobStage[]
   energy_mj?: { event: number; by_kind: Record<string, number>; unattributed: string[] }

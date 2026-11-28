@@ -52,7 +52,7 @@ describe('summaryTiles (X-01)', () => {
   it('still flags a real interval miss', () => {
     const r = report({ stages: [stage('output', { nodes: ['dpu'], hw_ms: 4 })], intervals: { target_ms: 33.333, tolerance: 0.02, preview: series('dpu', 40, false), video: series(null, null, null), ok: false } })
     const t = summaryTiles(r, 0.25, DEFAULT_BATTERY).find((x) => x.id === 'interval')
-    expect(t).toMatchObject({ label: 'Preview 간격', value: '40.00', note: '목표 이탈', bad: true })
+    expect(t).toMatchObject({ label: 'Preview 간격', value: '40.00', note: '목표 이탈 · Preview', bad: true })
   })
 
   it('capture: no interval tile without a judged output; job milestones and KPI targets instead', () => {
@@ -111,6 +111,32 @@ describe('summaryTiles (X-01)', () => {
     expect(t.find((x) => x.id === 'slack')?.note).toMatch(/^NRT — /)
     expect(t.find((x) => x.id === 'pacing')?.value).toBe('119.8 / 120')
     expect(bad(r)).toEqual([])
+  })
+
+  it('judges the extra streams and skips a declared sink without a result', () => {
+    const base = { target_ms: 33.333, tolerance: 0.02, video: series('mfc_enc', null, null) }
+    const miss = report({ stages: [stage('output', { nodes: ['dpu'], hw_ms: 4 })],
+      intervals: { ...base, preview: series('dpu', 33.33, true), ok: false, streams: [{ ...series('mfc_enc2', 40, false), kind: 'video' }] } })
+    const t = summaryTiles(miss, 0.25, DEFAULT_BATTERY).find((x) => x.id === 'interval')
+    expect(t).toMatchObject({ label: 'Preview / 외 1 간격', value: '33.33', bad: true })
+    expect(t?.note).toContain('mfc_enc2')
+    // a video node with ok: null (no events in this variant) is not shown as passing
+    const pass = report({ stages: [stage('output', { nodes: ['dpu'], hw_ms: 4 })], intervals: { ...base, preview: series('dpu', 33.33, true), ok: true } })
+    expect(summaryTiles(pass, 0.25, DEFAULT_BATTERY).find((x) => x.id === 'interval')).toMatchObject({ label: 'Preview 간격', bad: false })
+    // only an extra stream judged: the server's ok is false, the tile follows the stream
+    const only = report({ stages: [], intervals: { ...base, preview: series(null, null, null), ok: false, streams: [{ ...series('dpu2', 33.33, true), kind: 'display' }] } })
+    expect(summaryTiles(only, 0.25, DEFAULT_BATTERY).find((x) => x.id === 'interval')).toMatchObject({ label: '외 1 간격', bad: false })
+  })
+
+  it('a job evaluation error is a red tile', () => {
+    const r = report({ stages: [], jobs: [], jobs_error: 'still_shot: unknown stage' })
+    expect(summaryTiles(r, 0.25, DEFAULT_BATTERY).find((x) => x.id === 'job-error')).toMatchObject({ bad: true, note: 'still_shot: unknown stage' })
+  })
+
+  it('takes a subsystem clock only for its own nodes', () => {
+    const r = report({ stages: [stage('nrt', { nodes: ['x'] })], stage_domains: { nrt: [dom('AUD', ['x'], 0)] },
+      subsystems: { abox: { model: 'mcps-v1', mw: 1, feasible: true, domains: { AUD: { freq_mhz: 200 } } } } })
+    expect(domainPoints(r, 'nrt')[0].source).toBe('none')
   })
 
   it('a domain with no operating point says so instead of 0 MHz', () => {

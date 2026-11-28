@@ -32,6 +32,7 @@ export function domainPoints(r: Pick<TimingReport, 'ips' | 'stage_domains' | 'po
       }
     }
     for (const [node, s] of Object.entries(r.subsystems ?? {})) {
+      if (!d.nodes.includes(node)) continue
       const dom = s.domains?.[d.domain]
       if (dom?.freq_mhz != null && dom.freq_mhz > 0) {
         return { domain: d.domain, mhz: dom.freq_mhz, source: 'subsystem', row: d, note: `${d.domain} ${node.toUpperCase()} subsystem${dom.pinned ? ' 고정' : ''}` }
@@ -59,6 +60,11 @@ export function judgedKpis(rows: KpiResult[] | undefined, limit: number): { show
   const targeted = (rows ?? []).filter((k) => k.target != null && (k.status === 'pass' || k.status === 'fail'))
   const ordered = [...targeted.filter((k) => k.status === 'fail'), ...targeted.filter((k) => k.status !== 'fail')]
   return { shown: ordered.slice(0, limit), rest: Math.max(0, ordered.length - limit) }
+}
+
+/** Milestones in time order, unresolved (null) ones last. */
+export function milestoneList(ms: Record<string, number | null> | undefined): [string, number | null][] {
+  return Object.entries(ms ?? {}).sort((a, b) => (a[1] ?? Infinity) - (b[1] ?? Infinity))
 }
 
 export function summaryTiles(r: TimingReport, margin: number, battery: Battery, prov?: Prov): SummaryTile[] {
@@ -93,15 +99,23 @@ export function summaryTiles(r: TimingReport, margin: number, battery: Battery, 
       bad: slackStages.some((s) => slack[s] < 0), small: true })
   }
   const iv = r.intervals
-  const streams = ([['Preview', iv.preview], ['Video', iv.video]] as const).filter(([, s]) => !!s.node)
-  if (streams.length) {
-    const bad = streams.some(([, s]) => s.ok === false)
-    out.push({ id: 'interval', label: `${streams.map(([n]) => n).join(' / ')} 간격`, value: streams.map(([, s]) => fmt(s.max_ms, 2)).join(' / '), unit: 'ms',
-      note: bad ? '목표 이탈' : `목표 ${fmt(iv.target_ms, 2)} ±${fmt(iv.tolerance * 100, 1)}% ✓`, bad })
+  // only judged outputs (ok !== null): a declared sink without events in this variant is not judged
+  const main = ([['Preview', iv.preview], ['Video', iv.video]] as const).filter(([, s]) => s.ok !== null && s.ok !== undefined)
+  const extra = (iv.streams ?? []).filter((s) => s.ok !== null && s.ok !== undefined)
+  if (main.length || extra.length) {
+    const misses = [...main.filter(([, s]) => s.ok === false).map(([n]) => n), ...extra.filter((s) => s.ok === false).map((s) => s.node ?? s.kind ?? '?')]
+    // backstop on iv.ok only with a judged preview / video (the server's ok is false when only extra streams are judged)
+    const bad = misses.length > 0 || (main.length > 0 && !iv.ok)
+    const labels = [...main.map(([n]) => n), ...(extra.length ? [`외 ${extra.length}`] : [])]
+    out.push({ id: 'interval', label: `${labels.join(' / ')} 간격`, value: main.length ? main.map(([, s]) => fmt(s.max_ms, 2)).join(' / ') : extra.map((s) => fmt(s.max_ms, 2)).join(' / '), unit: 'ms',
+      note: bad ? `목표 이탈${misses.length ? ` · ${misses.join(', ')}` : ''}` : `목표 ${fmt(iv.target_ms, 2)} ±${fmt(iv.tolerance * 100, 1)}% ✓${extra.length ? ` · ${extra.map((s) => s.node).join(', ')} 포함` : ''}`, bad })
   }
   // judging subjects other than the frame interval: event jobs, KPI targets, frame pacing
+  if (r.jobs_error) {
+    out.push({ id: 'job-error', label: 'Event job', value: '평가 오류', unit: '', note: r.jobs_error, bad: true, small: true })
+  }
   for (const j of (r.jobs ?? []).slice(0, 1)) {
-    const ms = Object.entries(j.milestones ?? {}).sort((a, b) => a[1] - b[1])
+    const ms = milestoneList(j.milestones)
     out.push({ id: `job-${j.id}`, label: `Event job · ${j.id}`, value: fmt(j.makespan_ms, 1), unit: 'ms',
       note: [ms.map(([k, v]) => `${k} ${fmt(v, 1)}`).join(' · '), j.peak ? `peak ${fmt(j.peak.power_mw, 0)} mW / ${fmt(j.peak.window_ms, 0)} ms 창` : '', (r.jobs?.length ?? 0) > 1 ? `외 job ${(r.jobs?.length ?? 1) - 1}개` : ''].filter(Boolean).join(' · '),
       bad: false })
@@ -118,7 +132,9 @@ export function summaryTiles(r: TimingReport, margin: number, battery: Battery, 
       note: `목표 ${k.bound === 'min' ? '≥' : '≤'} ${num(k.target)} ${k.unit}${k.job ? ` · ${k.job}` : ''}${k.value_source === 'assumed' ? ' · 가정 목표' : ''}${k.status === 'fail' ? ' · 미달' : ''}${last ? ` · 외 KPI ${kp.rest}개 (⑤-a)` : ''}`,
       bad: k.status === 'fail' })
   })
-  for (const [node, l] of Object.entries(r.power.domain_loads ?? {}).slice(0, 2)) {
+  // infeasible loads first so a red one is never cut
+  const loads = Object.entries(r.power.domain_loads ?? {}).sort((a, b) => Number(a[1].feasible) - Number(b[1].feasible))
+  for (const [node, l] of loads.slice(0, 2)) {
     const how = l.model === 'util-vf-v1' ? (l.freq_by === 'fixed' ? '고정' : 'governor') : 'subsystem'
     out.push({ id: `load-${node}`, label: `${node.toUpperCase()} (domain load)`, value: fmt(l.mw, 1), unit: 'mW',
       note: `${l.freq_mhz != null ? `${fmt(l.freq_mhz, 0)} MHz ${how}` : '운영점 없음'} · util ${fmt(l.util * 100, 0)}%${l.value_source === 'assumed' ? ' · 가정' : ''}`, bad: !l.feasible })

@@ -1,11 +1,12 @@
 import { useState, type CSSProperties } from 'react'
 import { fmt, type EventJob, type JobStage, type KpiResult } from '../lib/timingBudget'
+import { milestoneList } from '../lib/timingTiles'
 
 // R-3 job-v1 event job (X-02): stage Gantt on the job clock (t = 0 = trigger) with phase bands and milestone lines,
 // P(t) · BW(t) on the same axis with the steady background and the peak window, and the stage table with its value source.
 
-const KIND_COLOR: Record<string, string> = { hw: 'var(--ip-line)', sw: 'var(--primary)', transfer: 'var(--buf-line)', fixed: 'var(--ext-line)' }
-const KIND_LABEL: Record<string, string> = { hw: 'HW', sw: 'SW', transfer: '전송', fixed: '고정' }
+const KIND_COLOR: Record<string, string> = { hw: 'var(--ip-line)', sw: 'var(--primary)', transfer: 'var(--buf-line)', sensor: 'var(--ext-line)' }
+const KIND_LABEL: Record<string, string> = { hw: 'HW', sw: 'SW', transfer: '전송', sensor: 'sensor' }
 const kindColor = (k: string) => KIND_COLOR[k] ?? 'var(--ext-line)'
 const SOURCE_BADGE: Record<string, string> = { measured: 'v-ok', assumed: 'v-na' }
 
@@ -35,7 +36,7 @@ export function peakWindow(j: EventJob): { start_ms: number; end_ms: number } | 
 const waitMs = (s: JobStage) => Math.max(0, s.elapsed_ms - s.service_ms)
 
 function Milestones({ j, span }: { j: EventJob; span: number }) {
-  return <>{Object.entries(j.milestones ?? {}).map(([k, v]) => (
+  return <>{milestoneList(j.milestones).filter((m): m is [string, number] => m[1] != null).map(([k, v]) => (
     <span key={k} aria-hidden style={{ position: 'absolute', left: pct(v, span), top: 0, bottom: 0, borderLeft: '2px dashed var(--del-text)', opacity: 0.6 }} />
   ))}</>
 }
@@ -68,7 +69,7 @@ function Series({ j, span, field, color, label, unit, base }: { j: EventJob; spa
 function JobView({ j, kpis }: { j: EventJob; kpis: KpiResult[] }) {
   const span = jobSpan(j)
   const mine = kpis.filter((k) => k.job === j.id)
-  const ms = Object.entries(j.milestones ?? {}).sort((a, b) => a[1] - b[1])
+  const ms = milestoneList(j.milestones)
   const grid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(90px, 160px) 1fr minmax(64px, 110px)', gap: '4px 8px', alignItems: 'center', fontSize: 12 }
   const measured = j.stages.filter((s) => s.value_source === 'measured').length
   return (
@@ -78,7 +79,9 @@ function JobView({ j, kpis }: { j: EventJob; kpis: KpiResult[] }) {
         <span className="chip mono">makespan {fmt(j.makespan_ms, 2)} ms</span>
         {ms.map(([k, v]) => {
           const kp = mine.find((x) => x.milestone === k && x.target != null)
-          return <span key={k} className={`badge ${kp ? (kp.status === 'fail' ? 'v-fail' : 'v-ok') : 'v-info'}`} title={kp ? `${kp.id ?? kp.kpi}: 목표 ${kp.bound === 'min' ? '≥' : '≤'} ${fmt(kp.target, 0)} ${kp.unit}${kp.value_source === 'assumed' ? ' (가정 목표)' : ''}` : '목표 없음'}>
+          const cls = v == null ? 'v-na' : kp?.status === 'fail' ? 'v-fail' : kp?.status === 'pass' ? 'v-ok' : kp ? 'v-na' : 'v-info'
+          if (v == null) return <span key={k} className={`badge ${cls}`} title="milestone의 stage가 job에 없음">{k} —</span>
+          return <span key={k} className={`badge ${cls}`} title={kp ? `${kp.id ?? kp.kpi}: 목표 ${kp.bound === 'min' ? '≥' : '≤'} ${fmt(kp.target, 0)} ${kp.unit}${kp.value_source === 'assumed' ? ' (가정 목표)' : ''}` : '목표 없음'}>
             {k} {fmt(v, 2)} ms{kp ? ` ${kp.bound === 'min' ? '≥' : '≤'} ${fmt(kp.target, 0)}` : ''}</span>
         })}
         <span className="faint">stage 출처: 실측 {measured} / {j.stages.length}</span>
@@ -112,7 +115,7 @@ function JobView({ j, kpis }: { j: EventJob; kpis: KpiResult[] }) {
         <Series j={j} span={span} field="bw_mbs" color="var(--add-text)" label="BW(t)" unit="MB/s" base={j.background?.bw_mbs ?? null} />
       </div>
       <div className="faint" style={{ fontSize: 11, margin: '4px 0 10px' }}>
-        점선 가로선 = steady background · 노란 음영 = peak {fmt(j.peak?.window_ms ?? null, 0)} ms 창 · 붉은 세로 점선 = milestone ({ms.map(([k]) => k).join(', ') || '—'})
+        빗금 = 대기 (elapsed − service: 선행 frame · 자원 대기) · 점선 가로선 = steady background · 노란 음영 = peak {fmt(j.peak?.window_ms ?? null, 0)} ms 창 (1 ms sample 기준 위치, 값은 서버 계산) · 붉은 세로 점선 = milestone ({ms.map(([k]) => k).join(', ') || '—'})
       </div>
       <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
       <table className="tb-mini-table" style={{ width: '100%' }}>
@@ -159,10 +162,10 @@ function JobView({ j, kpis }: { j: EventJob; kpis: KpiResult[] }) {
 }
 
 /** Event jobs of the report; a picker when there is more than one. */
-export function JobCard({ jobs, kpis }: { jobs: EventJob[]; kpis: KpiResult[] }) {
+export function JobCard({ jobs, kpis, error }: { jobs: EventJob[]; kpis: KpiResult[]; error?: string | null }) {
   const [pick, setPick] = useState(0)
   const at = Math.min(pick, jobs.length - 1)
-  if (!jobs.length) return null
+  if (!jobs.length) return error ? <div className="err" data-testid="job-error">job 평가 오류 — job KPI는 입력 없음으로 판정: {error}</div> : null
   return (
     <div>
       {jobs.length > 1 && <div className="seg sm" role="group" aria-label="event job" style={{ marginBottom: 8 }}>
